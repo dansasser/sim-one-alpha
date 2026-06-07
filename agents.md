@@ -3,6 +3,8 @@
 ## Project Overview
 
 This repository contains the GOROMBO multi-purpose orchestrating agent.
+Never edit the main branch.
+Always create a new branch for your work, and open a pull request when ready.  
 
 The system is built with Flue. A Typescript-based agent framework built by the Astro team.
 
