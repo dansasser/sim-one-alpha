@@ -417,6 +417,8 @@ Select another project-owned model profile when needed:
 
 ```env
 GOROMBO_MODEL_PROFILE=deepseek-v4-pro-cloud
+# or
+GOROMBO_MODEL_PROFILE=qwen3-5-cloud
 ```
 
 Register a local or DT1-hosted Codex Brain model when it is exposed through an Ollama-compatible endpoint:
@@ -446,7 +448,7 @@ Open an interactive Flue agent session:
 npm run connect
 ```
 
-The `chat` workflow initializes the `orchestrator` Flue agent, loads `.env` through the Flue CLI, and prompts the configured model with the normalized message event. The agent uses `GOROMBO_MODEL` when an exact Flue model specifier is set. Otherwise it selects a project-owned profile from `GOROMBO_MODEL_PROFILE`, defaulting to `minimax-m3-cloud`, which resolves to `ollama-cloud/minimax-m3` and calls Ollama Cloud through `https://ollama.com/v1`. The model profiles live in `src/models`, where non-built-in providers are registered with Flue before the agent references them. The agent currently has minimal tool flow wired for protocol loading, memory retrieval, and RAG/context retrieval. The protocol, memory, web search, and document-index providers are still typed placeholders so they can be replaced one layer at a time.
+The `chat` workflow initializes the `orchestrator` Flue agent, loads `.env` through the Flue CLI, and prompts the configured model with the normalized message event. The agent uses `GOROMBO_MODEL` when an exact Flue model specifier is set. Otherwise it selects a project-owned card from `GOROMBO_MODEL_PROFILE`, defaulting to `minimax-m3-cloud`, which resolves to `ollama-cloud/minimax-m3` and calls Ollama Cloud through `https://ollama.com/v1`. Model cards live in `src/models/cards`; custom provider transport is registered from `src/app.ts` through `src/models/providers`. The agent currently has minimal tool flow wired for protocol loading, memory retrieval, and RAG/context retrieval. The protocol, memory, web search, and document-index providers are still typed placeholders so they can be replaced one layer at a time.
 
 ## Configuration
 
@@ -460,6 +462,7 @@ GOROMBO_MODEL_PROFILE
 OPENAI_API_KEY
 ANTHROPIC_API_KEY
 OLLAMA_API_KEY
+OLLAMA_CLOUD_API_KEY
 OLLAMA_CLOUD_BASE_URL
 OLLAMA_LOCAL_BASE_URL
 OLLAMA_LOCAL_API_KEY

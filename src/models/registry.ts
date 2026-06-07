@@ -1,13 +1,5 @@
-import { registerProvider } from '@flue/runtime';
-import {
-  createCodexBrainProfile,
-  deepseekV4ProCloud,
-  minimaxM3Cloud,
-  ollamaCloudDefaultBaseUrl,
-  ollamaCloudProviderId,
-  ollamaLocalDefaultBaseUrl,
-  ollamaLocalProviderId,
-} from './ollama.js';
+import { createCodexBrainCard, deepseekV4ProCard, minimaxM3Card, qwen35Card } from './cards/index.js';
+import { ollamaCloudProviderId } from './provider-ids.js';
 import type { AgentModelProfile, ModelRegistry, ModelRole } from './types.js';
 
 const defaultModelProfileKey = 'minimax-m3-cloud';
@@ -15,7 +7,7 @@ const defaultModelProfileKey = 'minimax-m3-cloud';
 export function configureRuntimeModels(env: Record<string, unknown>): ModelRegistry {
   const profiles = createModelProfiles(env);
   const registry = createModelRegistry(env, profiles);
-  registerOllamaProviders(env, profiles, registry);
+  validateSelectedModel(env, registry);
 
   return registry;
 }
@@ -44,85 +36,30 @@ export function selectModelForRole(registry: ModelRegistry, role: ModelRole): st
 
 function createModelProfiles(env: Record<string, unknown>): AgentModelProfile[] {
   return [
-    minimaxM3Cloud,
-    deepseekV4ProCloud,
+    minimaxM3Card,
+    deepseekV4ProCard,
+    qwen35Card,
     optionalCodexBrainProfile(env),
   ].filter((profile): profile is AgentModelProfile => Boolean(profile));
 }
 
 function optionalCodexBrainProfile(env: Record<string, unknown>): AgentModelProfile | undefined {
   const modelId = readString(env.OLLAMA_CODEX_BRAIN_MODEL);
-  return modelId ? createCodexBrainProfile(modelId) : undefined;
-}
-
-function registerOllamaProviders(
-  env: Record<string, unknown>,
-  profiles: AgentModelProfile[],
-  registry: ModelRegistry,
-): void {
-  const selectedProviderId = readProviderId(registry.defaultAgentModel);
-
-  if (selectedProviderId === ollamaCloudProviderId || readString(env.OLLAMA_API_KEY)) {
-    registerOllamaCloudProvider(env, profiles);
-  }
-
-  if (
-    selectedProviderId === ollamaLocalProviderId ||
-    readString(env.OLLAMA_LOCAL_BASE_URL) ||
-    readString(env.OLLAMA_LOCAL_API_KEY) ||
-    readString(env.OLLAMA_CODEX_BRAIN_MODEL)
-  ) {
-    registerOllamaLocalProvider(env, profiles);
-  }
-}
-
-function registerOllamaCloudProvider(env: Record<string, unknown>, profiles: AgentModelProfile[]): void {
-  const apiKey = readString(env.OLLAMA_API_KEY);
-  if (!apiKey) {
-    throw new Error('OLLAMA_API_KEY is required for Ollama Cloud model profiles.');
-  }
-
-  registerProvider(ollamaCloudProviderId, {
-    api: 'openai-completions',
-    baseUrl: readString(env.OLLAMA_CLOUD_BASE_URL) ?? ollamaCloudDefaultBaseUrl,
-    apiKey,
-    contextWindow: 1000000,
-    maxTokens: 40000,
-    models: modelsForProvider(profiles, ollamaCloudProviderId),
-  });
-}
-
-function registerOllamaLocalProvider(env: Record<string, unknown>, profiles: AgentModelProfile[]): void {
-  registerProvider(ollamaLocalProviderId, {
-    api: 'openai-completions',
-    baseUrl: readString(env.OLLAMA_LOCAL_BASE_URL) ?? ollamaLocalDefaultBaseUrl,
-    apiKey: readString(env.OLLAMA_LOCAL_API_KEY) ?? 'ollama',
-    contextWindow: 128000,
-    maxTokens: 32000,
-    models: modelsForProvider(profiles, ollamaLocalProviderId),
-  });
-}
-
-function modelsForProvider(
-  profiles: AgentModelProfile[],
-  providerId: string,
-): Record<string, { contextWindow?: number; maxTokens?: number }> {
-  return Object.fromEntries(
-    profiles
-      .filter((profile) => profile.providerId === providerId)
-      .map((profile) => [
-        profile.modelId,
-        {
-          contextWindow: profile.contextWindow,
-          maxTokens: profile.maxTokens,
-        },
-      ]),
-  );
+  return modelId ? createCodexBrainCard(modelId) : undefined;
 }
 
 function readProviderId(modelSpecifier: string): string | undefined {
   const slashIndex = modelSpecifier.indexOf('/');
   return slashIndex > 0 ? modelSpecifier.slice(0, slashIndex) : undefined;
+}
+
+function validateSelectedModel(env: Record<string, unknown>, registry: ModelRegistry): void {
+  const providerId = readProviderId(registry.defaultAgentModel);
+  const cloudKey = readString(env.OLLAMA_API_KEY) ?? readString(env.OLLAMA_CLOUD_API_KEY);
+
+  if (providerId === ollamaCloudProviderId && !cloudKey) {
+    throw new Error('OLLAMA_API_KEY or OLLAMA_CLOUD_API_KEY is required for Ollama Cloud model profiles.');
+  }
 }
 
 function resolveDefaultAgentModel(env: Record<string, unknown>, byKey: Map<string, AgentModelProfile>): string {

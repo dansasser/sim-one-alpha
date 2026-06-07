@@ -2,6 +2,9 @@ import { flue } from '@flue/runtime/routing';
 import { Hono } from 'hono';
 import { createDefaultOrchestrator } from './orchestrator/orchestrator.js';
 import { receiveNormalizedChatEvent } from './gateway/secure-web-api.js';
+import { configureModelProviders } from './models/providers/index.js';
+
+configureModelProviders(process.env);
 
 const app = new Hono();
 

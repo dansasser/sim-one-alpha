@@ -4,7 +4,8 @@ export type ModelRole =
   | 'coding'
   | 'rag'
   | 'protocol-reasoning'
-  | 'memory-synthesis';
+  | 'memory-synthesis'
+  | 'embedding';
 
 export type ModelCapability =
   | 'tools'
@@ -12,6 +13,8 @@ export type ModelCapability =
   | 'coding'
   | 'long-context'
   | 'vision'
+  | 'video'
+  | 'embedding'
   | 'local'
   | 'cloud';
 
@@ -25,8 +28,17 @@ export interface AgentModelProfile {
   roles: ModelRole[];
   capabilities: ModelCapability[];
   contextWindow: number;
+  guaranteedContextWindow?: number;
+  providerReportedContextWindow?: number;
+  maxOutputTokens: number;
   maxTokens: number;
   enabled: boolean;
+  source?: {
+    name: string;
+    url?: string;
+    checkedAt: string;
+    notes?: string;
+  };
   env?: {
     baseUrl?: string;
     apiKey?: string;

@@ -8,7 +8,7 @@ provider-id/model-id
 
 Built-in providers such as OpenAI and Anthropic can be referenced directly when their provider credentials are available. Non-built-in or OpenAI-compatible providers, such as Ollama and local model gateways, must be registered in project code before an agent references them.
 
-This project keeps model definitions in `src/models` so the orchestrator does not hardcode model IDs.
+This project keeps model cards in `src/models/cards` so the orchestrator does not hardcode model IDs, context limits, or provider-specific capabilities.
 
 ## Ollama Cloud vs Local
 
@@ -24,17 +24,29 @@ ollama-cloud  -> direct Ollama Cloud API
 ollama-local  -> local or DT1 Ollama-compatible endpoint
 ```
 
-Cloud model profiles use the direct Ollama Cloud model IDs, such as `minimax-m3` and `deepseek-v4-pro`. The `:cloud` suffix is for the local Ollama CLI/daemon path.
+Cloud model cards use the direct Ollama Cloud model IDs, such as `minimax-m3` and `deepseek-v4-pro`. The `:cloud` suffix is for the local Ollama CLI/daemon path.
 
-## Current Profiles
+## Current Cards
 
 ```text
 minimax-m3-cloud       -> ollama-cloud/minimax-m3
 deepseek-v4-pro-cloud  -> ollama-cloud/deepseek-v4-pro
+qwen3-5-cloud          -> ollama-cloud/qwen3.5:397b
 codex-brain            -> ollama-local/<OLLAMA_CODEX_BRAIN_MODEL>
 ```
 
 `minimax-m3-cloud` is the default agentic chat profile.
+
+The current card context limits are:
+
+```text
+minimax-m3-cloud       advertised=1,000,000  guaranteed=512,000  ollama-reported=524,288  max-output=131,072
+deepseek-v4-pro-cloud  context=1,048,576     max-output=1,048,576
+qwen3-5-cloud          context=262,144       max-output=65,536
+codex-brain            context=128,000       max-output=32,000 until DT1 metadata is confirmed
+```
+
+MiniMax M3 intentionally tracks more than one limit because MiniMax advertises 1M context with a guaranteed 512K minimum, while Ollama Cloud currently reports 524288 for both direct `/api/show` and local `minimax-m3:cloud` metadata.
 
 ## Selection Rules
 
@@ -45,7 +57,7 @@ codex-brain            -> ollama-local/<OLLAMA_CODEX_BRAIN_MODEL>
 
 ## Adding Models
 
-Add model metadata to `src/models`, including:
+Add a card file to `src/models/cards`, including:
 
 - provider id
 - model id
@@ -53,7 +65,10 @@ Add model metadata to `src/models`, including:
 - roles
 - capabilities
 - context window
-- max tokens
+- guaranteed or provider-reported context limits when they differ from the advertised limit
+- max output tokens
 - provider env requirements
 
-Then register the provider in `configureRuntimeModels(...)` before any agent uses the profile.
+Provider transport belongs in `src/models/providers`. Register custom providers from `src/app.ts` before any agent uses the card specifier.
+
+As of June 7, 2026, Ollama Cloud's live model list did not expose a dedicated embedding model, so no embedding card is added yet.
