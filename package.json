@@ -6,6 +6,11 @@
   "description": "GOROMBO Flue-based multi-purpose orchestrating agent foundation.",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "chat": "flue run chat --target node",
+    "chat:local": "node scripts/chat.mjs",
+    "connect": "flue connect orchestrator local --target node --session local",
+    "dev": "flue dev --target node",
+    "flue:build": "flue build --target node",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test \"dist/tests/*.test.js\""
   },

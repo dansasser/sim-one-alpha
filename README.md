@@ -395,6 +395,44 @@ Use the actual scripts defined in `package.json`.
 
 Do not assume a command exists unless it is configured in the project.
 
+## Local Chat
+
+Create a local `.env` from `.env.example` and set the provider key for the model you want to test:
+
+```env
+GOROMBO_MODEL=openai/gpt-5.5
+OPENAI_API_KEY=your_key_here
+API_SECRET=local_testing_secret
+```
+
+For Ollama local or cloud-compatible testing:
+
+```env
+OLLAMA_API_KEY=your_key_here
+OLLAMA_BASE_URL=http://localhost:11434/v1
+OLLAMA_MODEL=deepseek-v4-pro:cloud
+```
+
+Run a one-shot chat workflow:
+
+```sh
+npm run chat:local -- "Hello"
+```
+
+Run the underlying Flue workflow with a full normalized payload:
+
+```sh
+npm run chat -- --payload "{\"text\":\"Hello\",\"actorId\":\"local-user\",\"conversationId\":\"local-thread\"}"
+```
+
+Open an interactive Flue agent session:
+
+```sh
+npm run connect
+```
+
+The `chat` workflow initializes the `orchestrator` Flue agent, loads `.env` through the Flue CLI, and prompts the configured model with the normalized message event. The agent uses `GOROMBO_MODEL` when set, otherwise it defaults to `ollama/deepseek-v4-pro:cloud` when Ollama env vars are present, and then falls back to `openai/gpt-5.5`. The agent currently has minimal tool flow wired for protocol loading, memory retrieval, and RAG/context retrieval. The protocol, memory, web search, and document-index providers are still typed placeholders so they can be replaced one layer at a time.
+
 ## Configuration
 
 Environment variables are used for secrets and service configuration.
@@ -402,12 +440,19 @@ Environment variables are used for secrets and service configuration.
 Expected future environment values may include:
 
 ```text
+GOROMBO_MODEL
+OPENAI_API_KEY
+ANTHROPIC_API_KEY
+OLLAMA_API_KEY
+OLLAMA_BASE_URL
+OLLAMA_MODEL
 TELEGRAM_BOT_TOKEN
 DATABASE_URL
 PROTOCOL_DB_PATH
 MEMORY_DB_URL
 API_SECRET
-MODEL_PROVIDER_API_KEY
+TAVILY_API_KEY
+BRAVE_SEARCH_API_KEY
 ```
 
 Do not commit real secrets.
