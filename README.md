@@ -400,17 +400,32 @@ Do not assume a command exists unless it is configured in the project.
 Create a local `.env` from `.env.example` and set the provider key for the model you want to test:
 
 ```env
-GOROMBO_MODEL=openai/gpt-5.5
-OPENAI_API_KEY=your_key_here
+GOROMBO_MODEL_PROFILE=minimax-m3-cloud
+OLLAMA_API_KEY=your_ollama_cloud_key_here
 API_SECRET=local_testing_secret
 ```
 
-For Ollama local or cloud-compatible testing:
+The default profile uses Ollama's direct cloud API:
 
 ```env
 OLLAMA_API_KEY=your_key_here
-OLLAMA_BASE_URL=http://localhost:11434/v1
-OLLAMA_MODEL=minimax-m3:cloud
+OLLAMA_CLOUD_BASE_URL=https://ollama.com/v1
+GOROMBO_MODEL_PROFILE=minimax-m3-cloud
+```
+
+Select another project-owned model profile when needed:
+
+```env
+GOROMBO_MODEL_PROFILE=deepseek-v4-pro-cloud
+```
+
+Register a local or DT1-hosted Codex Brain model when it is exposed through an Ollama-compatible endpoint:
+
+```env
+OLLAMA_LOCAL_BASE_URL=http://dt1.example.local:11434/v1
+OLLAMA_LOCAL_API_KEY=
+OLLAMA_CODEX_BRAIN_MODEL=codex-brain:latest
+GOROMBO_MODEL_PROFILE=codex-brain
 ```
 
 Run a one-shot chat workflow:
@@ -431,7 +446,7 @@ Open an interactive Flue agent session:
 npm run connect
 ```
 
-The `chat` workflow initializes the `orchestrator` Flue agent, loads `.env` through the Flue CLI, and prompts the configured model with the normalized message event. The agent uses `GOROMBO_MODEL` when set, otherwise it defaults to `ollama/minimax-m3:cloud` when Ollama env vars are present. If no agentic model is configured, startup fails instead of silently selecting a stale or unsuitable fallback. The agent currently has minimal tool flow wired for protocol loading, memory retrieval, and RAG/context retrieval. The protocol, memory, web search, and document-index providers are still typed placeholders so they can be replaced one layer at a time.
+The `chat` workflow initializes the `orchestrator` Flue agent, loads `.env` through the Flue CLI, and prompts the configured model with the normalized message event. The agent uses `GOROMBO_MODEL` when an exact Flue model specifier is set. Otherwise it selects a project-owned profile from `GOROMBO_MODEL_PROFILE`, defaulting to `minimax-m3-cloud`, which resolves to `ollama-cloud/minimax-m3` and calls Ollama Cloud through `https://ollama.com/v1`. The model profiles live in `src/models`, where non-built-in providers are registered with Flue before the agent references them. The agent currently has minimal tool flow wired for protocol loading, memory retrieval, and RAG/context retrieval. The protocol, memory, web search, and document-index providers are still typed placeholders so they can be replaced one layer at a time.
 
 ## Configuration
 
@@ -441,11 +456,14 @@ Expected future environment values may include:
 
 ```text
 GOROMBO_MODEL
+GOROMBO_MODEL_PROFILE
 OPENAI_API_KEY
 ANTHROPIC_API_KEY
 OLLAMA_API_KEY
-OLLAMA_BASE_URL
-OLLAMA_MODEL
+OLLAMA_CLOUD_BASE_URL
+OLLAMA_LOCAL_BASE_URL
+OLLAMA_LOCAL_API_KEY
+OLLAMA_CODEX_BRAIN_MODEL
 TELEGRAM_BOT_TOKEN
 DATABASE_URL
 PROTOCOL_DB_PATH
