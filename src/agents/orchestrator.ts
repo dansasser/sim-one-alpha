@@ -8,6 +8,8 @@ import { loadProtocolsTool, retrieveContextTool, retrieveMemoryTool } from '../t
 
 export const route: AgentRouteHandler = async (_c, next) => next();
 
+const defaultOllamaAgentModel = 'minimax-m3:cloud';
+
 const codingWorker = defineAgentProfile({
   name: 'coding_worker',
   model: false,
@@ -40,10 +42,12 @@ function resolveAgentModel(env: Record<string, unknown>): string {
   }
 
   if (readString(env.OLLAMA_API_KEY) || readString(env.OLLAMA_BASE_URL)) {
-    return `ollama/${readString(env.OLLAMA_MODEL) ?? 'deepseek-v4-pro:cloud'}`;
+    return `ollama/${readString(env.OLLAMA_MODEL) ?? defaultOllamaAgentModel}`;
   }
 
-  return 'openai/gpt-5.5';
+  throw new Error(
+    `No agentic model configured. Set GOROMBO_MODEL explicitly or configure Ollama with OLLAMA_MODEL=${defaultOllamaAgentModel}.`,
+  );
 }
 
 function registerConfiguredProviders(env: Record<string, unknown>): void {
@@ -51,7 +55,7 @@ function registerConfiguredProviders(env: Record<string, unknown>): void {
     return;
   }
 
-  const modelId = readString(env.OLLAMA_MODEL) ?? 'deepseek-v4-pro:cloud';
+  const modelId = readString(env.OLLAMA_MODEL) ?? defaultOllamaAgentModel;
 
   registerProvider('ollama', {
     api: 'openai-completions',

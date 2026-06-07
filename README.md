@@ -410,7 +410,7 @@ For Ollama local or cloud-compatible testing:
 ```env
 OLLAMA_API_KEY=your_key_here
 OLLAMA_BASE_URL=http://localhost:11434/v1
-OLLAMA_MODEL=deepseek-v4-pro:cloud
+OLLAMA_MODEL=minimax-m3:cloud
 ```
 
 Run a one-shot chat workflow:
@@ -431,7 +431,7 @@ Open an interactive Flue agent session:
 npm run connect
 ```
 
-The `chat` workflow initializes the `orchestrator` Flue agent, loads `.env` through the Flue CLI, and prompts the configured model with the normalized message event. The agent uses `GOROMBO_MODEL` when set, otherwise it defaults to `ollama/deepseek-v4-pro:cloud` when Ollama env vars are present, and then falls back to `openai/gpt-5.5`. The agent currently has minimal tool flow wired for protocol loading, memory retrieval, and RAG/context retrieval. The protocol, memory, web search, and document-index providers are still typed placeholders so they can be replaced one layer at a time.
+The `chat` workflow initializes the `orchestrator` Flue agent, loads `.env` through the Flue CLI, and prompts the configured model with the normalized message event. The agent uses `GOROMBO_MODEL` when set, otherwise it defaults to `ollama/minimax-m3:cloud` when Ollama env vars are present. If no agentic model is configured, startup fails instead of silently selecting a stale or unsuitable fallback. The agent currently has minimal tool flow wired for protocol loading, memory retrieval, and RAG/context retrieval. The protocol, memory, web search, and document-index providers are still typed placeholders so they can be replaced one layer at a time.
 
 ## Configuration
 
