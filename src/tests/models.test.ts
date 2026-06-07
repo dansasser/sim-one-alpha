@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { deepseekV4ProCard, minimaxM3Card, qwen35Card } from '../models/cards/index.js';
+import { deepseekV4ProCard, minimaxM3Card, qwen35Card, resolveModelCard } from '../models/cards/index.js';
 import { configureRuntimeModels, createModelRegistry, selectModelForRole } from '../models/index.js';
 
 test('model registry defaults agentic chat to MiniMax M3', () => {
@@ -62,4 +62,14 @@ test('model registry includes optional local Codex Brain profile when configured
 
 test('runtime config requires an API key for Ollama Cloud profiles', () => {
   assert.throws(() => configureRuntimeModels({}), /OLLAMA_API_KEY or OLLAMA_CLOUD_API_KEY is required/);
+});
+
+test('model cards can be resolved from Flue specifier', () => {
+  assert.equal(resolveModelCard('ollama-cloud/minimax-m3')?.key, 'minimax-m3-cloud');
+  assert.equal(resolveModelCard('ollama-cloud/deepseek-v4-pro')?.key, 'deepseek-v4-pro-cloud');
+  assert.equal(resolveModelCard('ollama-cloud/qwen3.5:397b')?.key, 'qwen3-5-cloud');
+});
+
+test('unknown model specifier returns undefined', () => {
+  assert.equal(resolveModelCard('unknown/model'), undefined);
 });

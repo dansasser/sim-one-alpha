@@ -466,7 +466,7 @@ Each card lives in `src/models/cards` and owns the details that are specific to 
 
 Provider files live separately in `src/models/providers`. Providers describe transport: base URLs, API key environment variables, Flue `registerProvider(...)` calls, and per-provider model registration. This keeps provider setup out of agent files and lets the agent reference a card by specifier.
 
-Cards exist because session management, compaction, and RAG all need model-specific token limits. MiniMax M3, DeepSeek V4 Pro, and Qwen 3.5 do not have the same usable context or output budgets. The next context-budget layer should read the selected card instead of hardcoding token limits in the agent, workflow, or RAG router.
+Cards exist because session management, compaction, and RAG all need model-specific token limits. MiniMax M3, DeepSeek V4 Pro, and Qwen 3.5 do not have the same usable context or output budgets. The context-budget layer reads the selected card instead of hardcoding token limits in the agent, workflow, or RAG router.
 
 Current cards:
 
@@ -478,6 +478,23 @@ codex-brain            -> ollama-local/<OLLAMA_CODEX_BRAIN_MODEL>
 ```
 
 MiniMax M3 is intentionally recorded with multiple limits: MiniMax advertises up to 1M context with a guaranteed 512K minimum, while Ollama Cloud currently reports 524288 through both direct cloud metadata and the local `:cloud` path. Session budget code must treat those as separate facts.
+
+## Session Budget And Compaction
+
+The chat workflow now reports and enforces a card-driven context budget before it sends a prompt to the LLM provider.
+
+Implemented pieces:
+
+- `resolveModelCard(...)` maps a Flue model specifier back to a project model card.
+- `calculateContextBudget(...)` chooses the provider-safe context window, reserves output tokens, and calculates warning, compaction, and hard-stop thresholds.
+- `evaluateCompaction(...)` returns `normal`, `warn`, `compact`, or `stop`.
+- `chatSessionBudgetStore` tracks in-process session usage estimates from `PromptResponse.usage`.
+- The `chat` workflow calls `session.compact()` before prompting when the estimate crosses the compaction threshold.
+- The workflow returns a guard response instead of calling the provider when the prompt still exceeds the hard input budget after compaction.
+
+Flue's native automatic compaction remains enabled on the orchestrator agent with card-derived `reserveTokens` and `keepRecentTokens`. The GOROMBO layer adds pre-send protection and budget telemetry for future RAG allocation.
+
+Architecture details live in `docs/architecture/session-context-budget.md`.
 
 ## Configuration
 

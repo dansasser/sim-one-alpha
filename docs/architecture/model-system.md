@@ -25,7 +25,7 @@ Runtime setup has two layers:
 1. Provider modules in `src/models/providers` register Flue provider IDs from `src/app.ts`.
 2. Model cards in `src/models/cards` provide the model IDs and per-model metadata used by those provider registrations and by the orchestrator model registry.
 
-The orchestrator should not register providers itself. It selects a model through `GOROMBO_MODEL` or `GOROMBO_MODEL_PROFILE`, then uses the card specifier as the Flue model string. Future session-budget and compaction code should resolve the selected card before estimating, reserving, or compacting context.
+The orchestrator should not register providers itself. It selects a model through `GOROMBO_MODEL` or `GOROMBO_MODEL_PROFILE`, then uses the card specifier as the Flue model string. Session-budget and compaction code resolves the selected card before estimating, reserving, or compacting context.
 
 ## Ollama Cloud vs Local
 
@@ -92,13 +92,13 @@ As of June 7, 2026, Ollama Cloud's live model list did not expose a dedicated em
 
 ## Budget Policy
 
-The next session-management layer should use cards in this order:
+The session-management layer uses cards in this order:
 
 1. Resolve the selected model card from the active Flue model specifier.
 2. Use the provider-reported context window for safety when available.
-3. Reserve max output tokens before calculating usable input budget.
+3. Reserve output tokens before calculating usable input budget.
 4. Warn before the prompt approaches the compaction threshold.
-5. Trigger or request compaction before Flue or the provider rejects the prompt.
+5. Trigger `session.compact()` before Flue or the provider rejects the prompt.
 6. Give RAG only the remaining context budget after system instructions, protocol context, memory, current user input, and output reserve are accounted for.
 
 RAG should come after this budget layer because retrieved context must fit into the selected card's remaining budget.

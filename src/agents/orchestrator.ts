@@ -3,8 +3,10 @@ import {
   defineAgentProfile,
   type AgentRouteHandler,
 } from '@flue/runtime';
-import { configureRuntimeModels } from '../models/index.js';
+import { configureRuntimeModels, resolveModelCard } from '../models/index.js';
+import { calculateContextBudget } from '../session/context-budget.js';
 import { loadProtocolsTool, retrieveContextTool, retrieveMemoryTool } from '../tools/index.js';
+import type { AgentModelProfile } from '../models/types.js';
 
 export const route: AgentRouteHandler = async (_c, next) => next();
 
@@ -24,11 +26,27 @@ Use the configured model profile from the project model registry. Do not claim p
 
 export default createAgent(({ env }) => {
   const models = configureRuntimeModels(env);
+  const defaultModelCard = resolveModelCard(models.defaultAgentModel);
 
   return {
     model: models.defaultAgentModel,
     instructions,
+    compaction: defaultModelCard ? createFlueCompactionConfig(defaultModelCard) : undefined,
     tools: [loadProtocolsTool, retrieveMemoryTool, retrieveContextTool],
     subagents: [codingWorker],
   };
 });
+
+export function createFlueCompactionConfig(modelCard: AgentModelProfile): {
+  reserveTokens: number;
+  keepRecentTokens: number;
+  model: string;
+} {
+  const budget = calculateContextBudget(modelCard);
+
+  return {
+    reserveTokens: budget.compactionReserveTokens,
+    keepRecentTokens: budget.keepRecentTokens,
+    model: modelCard.specifier,
+  };
+}

@@ -1,6 +1,18 @@
 import type { FlueContext, PromptResponse, WorkflowRouteHandler } from '@flue/runtime';
 import orchestratorAgent from '../agents/orchestrator.js';
 import { normalizeWebApiMessage, type WebApiMessageInput } from '../connectors/web-api.js';
+import {
+  configureRuntimeModels,
+  modelSpecifierFromParts,
+  resolveModelCard,
+} from '../models/index.js';
+import { calculateContextBudget, estimateTextTokens } from '../session/context-budget.js';
+import {
+  createSessionBudgetReport,
+  recordManualCompaction,
+  recordPromptUsage,
+  type SessionBudgetReport,
+} from '../session/session-budget.js';
 
 export const route: WorkflowRouteHandler = async (_c, next) => next();
 
@@ -13,23 +25,113 @@ export interface ChatWorkflowResponse {
   model: PromptResponse['model'];
   usage: PromptResponse['usage'];
   event: ReturnType<typeof normalizeWebApiMessage>;
+  contextBudget?: ChatWorkflowContextBudget;
+}
+
+export interface ChatWorkflowContextBudget extends SessionBudgetReport {
+  compactedBeforePrompt: boolean;
+  prePromptStatus: SessionBudgetReport['status'];
+  prePromptEstimatedUsedTokens: number;
+  lastPromptEstimateTokens: number;
 }
 
 export async function run({
+  env,
   init,
   payload,
 }: FlueContext<ChatWorkflowPayload>): Promise<ChatWorkflowResponse> {
   const event = normalizeWebApiMessage(payload);
+  const sessionId = payload.session ?? event.conversation.id;
+  const prompt = createChatPrompt(event);
+  const runtimeModels = configureRuntimeModels(env);
+  const selectedModelCard = resolveModelCard(runtimeModels.defaultAgentModel);
   const harness = await init(orchestratorAgent, { name: 'gorombo-orchestrator' });
-  const session = await harness.session(payload.session ?? event.conversation.id);
-  const response = await session.prompt(createChatPrompt(event));
+  const session = await harness.session(sessionId);
+  let compactedBeforePrompt = false;
+  let contextBudget = selectedModelCard
+    ? createSessionBudgetReport({
+        sessionId,
+        modelCard: selectedModelCard,
+        promptText: prompt,
+      })
+    : undefined;
+  let promptBudget = contextBudget;
+
+  if (contextBudget?.shouldCompactBeforePrompt && selectedModelCard) {
+    await session.compact();
+    recordManualCompaction({
+      sessionId,
+      modelSpecifier: selectedModelCard.specifier,
+      budget: calculateContextBudget(selectedModelCard),
+    });
+    compactedBeforePrompt = true;
+    contextBudget = createSessionBudgetReport({
+      sessionId,
+      modelCard: selectedModelCard,
+      promptText: prompt,
+    });
+    promptBudget = contextBudget;
+  }
+
+  if (contextBudget?.status === 'stop' && selectedModelCard) {
+    return {
+      text:
+        `This message is too large for ${selectedModelCard.displayName}'s safe input budget after session compaction. ` +
+        'Send a shorter message or switch to a larger model profile.',
+      model: {
+        provider: selectedModelCard.providerId,
+        id: selectedModelCard.modelId,
+      },
+      usage: emptyPromptUsage(),
+      event,
+      contextBudget: {
+        ...contextBudget,
+        compactedBeforePrompt,
+        prePromptStatus: contextBudget.status,
+        prePromptEstimatedUsedTokens: contextBudget.estimatedUsedTokens,
+        lastPromptEstimateTokens: contextBudget.estimatedPromptTokens,
+      },
+    };
+  }
+
+  const response = await session.prompt(prompt);
+  const responseSpecifier = modelSpecifierFromParts(response.model.provider, response.model.id);
+  const responseModelCard = resolveModelCard(responseSpecifier) ?? selectedModelCard;
+
+  if (responseModelCard) {
+    recordPromptUsage({
+      sessionId,
+      modelSpecifier: responseModelCard.specifier,
+      promptEstimateTokens: contextBudget?.estimatedPromptTokens ?? estimateTextTokens(prompt),
+      usage: response.usage,
+    });
+
+    contextBudget = createSessionBudgetReport({
+      sessionId,
+      modelCard: responseModelCard,
+    });
+  }
 
   return {
     text: response.text,
     model: response.model,
     usage: response.usage,
     event,
+    contextBudget: contextBudget
+      ? {
+          ...contextBudget,
+          compactedBeforePrompt,
+          prePromptStatus: promptBudget?.status ?? contextBudget.status,
+          prePromptEstimatedUsedTokens: promptBudget?.estimatedUsedTokens ?? contextBudget.estimatedUsedTokens,
+          lastPromptEstimateTokens: promptBudget?.estimatedPromptTokens ?? 0,
+        }
+      : undefined,
   };
+}
+
+export function createContextBudgetReport(modelSpecifier: string): SessionBudgetReport | undefined {
+  const modelCard = resolveModelCard(modelSpecifier);
+  return modelCard ? createSessionBudgetReport({ modelCard }) : undefined;
 }
 
 export function createChatPrompt(event: ReturnType<typeof normalizeWebApiMessage>): string {
@@ -46,4 +148,21 @@ ${JSON.stringify(event, null, 2)}
 
 Answer the user message naturally and keep the response concise.
 `;
+}
+
+function emptyPromptUsage(): PromptResponse['usage'] {
+  return {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: 0,
+    cost: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      total: 0,
+    },
+  };
 }
