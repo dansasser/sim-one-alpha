@@ -450,6 +450,35 @@ npm run connect
 
 The `chat` workflow initializes the `orchestrator` Flue agent, loads `.env` through the Flue CLI, and prompts the configured model with the normalized message event. The agent uses `GOROMBO_MODEL` when an exact Flue model specifier is set. Otherwise it selects a project-owned card from `GOROMBO_MODEL_PROFILE`, defaulting to `minimax-m3-cloud`, which resolves to `ollama-cloud/minimax-m3` and calls Ollama Cloud through `https://ollama.com/v1`. Model cards live in `src/models/cards`; custom provider transport is registered from `src/app.ts` through `src/models/providers`. The agent currently has minimal tool flow wired for protocol loading, memory retrieval, and RAG/context retrieval. The protocol, memory, web search, and document-index providers are still typed placeholders so they can be replaced one layer at a time.
 
+## Model Cards
+
+Model cards are the project-owned source of truth for models the agent can intentionally use.
+
+Each card lives in `src/models/cards` and owns the details that are specific to one model:
+
+- provider id and model id
+- Flue model specifier
+- roles and capabilities
+- context window limits
+- maximum output tokens
+- advertised, guaranteed, and provider-reported limits when those differ
+- source notes for where the metadata came from
+
+Provider files live separately in `src/models/providers`. Providers describe transport: base URLs, API key environment variables, Flue `registerProvider(...)` calls, and per-provider model registration. This keeps provider setup out of agent files and lets the agent reference a card by specifier.
+
+Cards exist because session management, compaction, and RAG all need model-specific token limits. MiniMax M3, DeepSeek V4 Pro, and Qwen 3.5 do not have the same usable context or output budgets. The next context-budget layer should read the selected card instead of hardcoding token limits in the agent, workflow, or RAG router.
+
+Current cards:
+
+```text
+minimax-m3-cloud       -> ollama-cloud/minimax-m3
+deepseek-v4-pro-cloud  -> ollama-cloud/deepseek-v4-pro
+qwen3-5-cloud          -> ollama-cloud/qwen3.5:397b
+codex-brain            -> ollama-local/<OLLAMA_CODEX_BRAIN_MODEL>
+```
+
+MiniMax M3 is intentionally recorded with multiple limits: MiniMax advertises up to 1M context with a guaranteed 512K minimum, while Ollama Cloud currently reports 524288 through both direct cloud metadata and the local `:cloud` path. Session budget code must treat those as separate facts.
+
 ## Configuration
 
 Environment variables are used for secrets and service configuration.

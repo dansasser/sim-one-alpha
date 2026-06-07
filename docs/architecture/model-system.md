@@ -10,6 +10,23 @@ Built-in providers such as OpenAI and Anthropic can be referenced directly when 
 
 This project keeps model cards in `src/models/cards` so the orchestrator does not hardcode model IDs, context limits, or provider-specific capabilities.
 
+## Why Cards Exist
+
+Cards are the boundary between model selection and runtime behavior. They make model metadata explicit before the agent, session manager, RAG router, or compaction layer makes token-budget decisions.
+
+The same provider can expose models with very different limits. MiniMax M3, DeepSeek V4 Pro, and Qwen 3.5 all run through `ollama-cloud`, but they do not have the same context window, output ceiling, modalities, or long-context reliability profile. Keeping those facts in card files lets downstream systems ask the selected card for limits instead of spreading hardcoded numbers across the codebase.
+
+Cards also preserve conflicting-but-useful metadata. For example, MiniMax advertises M3 as a 1M-context model with a guaranteed 512K minimum, while Ollama Cloud currently reports 524288. The card stores each value separately so session budgeting can choose the conservative operational budget while still retaining the advertised/native capability.
+
+## Runtime Use
+
+Runtime setup has two layers:
+
+1. Provider modules in `src/models/providers` register Flue provider IDs from `src/app.ts`.
+2. Model cards in `src/models/cards` provide the model IDs and per-model metadata used by those provider registrations and by the orchestrator model registry.
+
+The orchestrator should not register providers itself. It selects a model through `GOROMBO_MODEL` or `GOROMBO_MODEL_PROFILE`, then uses the card specifier as the Flue model string. Future session-budget and compaction code should resolve the selected card before estimating, reserving, or compacting context.
+
 ## Ollama Cloud vs Local
 
 Ollama has two different API paths:
@@ -72,3 +89,16 @@ Add a card file to `src/models/cards`, including:
 Provider transport belongs in `src/models/providers`. Register custom providers from `src/app.ts` before any agent uses the card specifier.
 
 As of June 7, 2026, Ollama Cloud's live model list did not expose a dedicated embedding model, so no embedding card is added yet.
+
+## Budget Policy
+
+The next session-management layer should use cards in this order:
+
+1. Resolve the selected model card from the active Flue model specifier.
+2. Use the provider-reported context window for safety when available.
+3. Reserve max output tokens before calculating usable input budget.
+4. Warn before the prompt approaches the compaction threshold.
+5. Trigger or request compaction before Flue or the provider rejects the prompt.
+6. Give RAG only the remaining context budget after system instructions, protocol context, memory, current user input, and output reserve are accounted for.
+
+RAG should come after this budget layer because retrieved context must fit into the selected card's remaining budget.
