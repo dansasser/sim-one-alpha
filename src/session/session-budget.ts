@@ -1,4 +1,4 @@
-import type { PromptUsage } from '@flue/runtime';
+import type { PromptUsage, SessionData } from '@flue/runtime';
 import type { AgentModelProfile } from '../models/types.js';
 import { type CompactionStatus, evaluateCompaction } from './compaction-policy.js';
 import { calculateContextBudget, estimateTextTokens, type ContextBudget } from './context-budget.js';
@@ -36,6 +36,7 @@ export interface CreateSessionBudgetReportInput {
   modelCard: AgentModelProfile;
   promptText?: string;
   store?: SessionBudgetStore;
+  sessionData?: SessionData | null;
 }
 
 export interface RecordPromptUsageInput {
@@ -98,7 +99,13 @@ export function createSessionBudgetReport(input: CreateSessionBudgetReportInput)
   const budget = calculateContextBudget(input.modelCard);
   const sessionId = input.sessionId ?? 'stateless';
   const store = input.store ?? chatSessionBudgetStore;
-  const state = store.get(sessionId, input.modelCard.specifier);
+  const state = input.sessionData
+    ? deriveSessionBudgetStateFromData({
+        sessionId,
+        modelSpecifier: input.modelCard.specifier,
+        data: input.sessionData,
+      })
+    : store.get(sessionId, input.modelCard.specifier);
   const estimatedPromptTokens = estimateTextTokens(input.promptText ?? '');
   const estimatedUsedTokens = state.estimatedHistoryTokens + estimatedPromptTokens;
   const decision = evaluateCompaction({
@@ -125,6 +132,24 @@ export function createSessionBudgetReport(input: CreateSessionBudgetReportInput)
     shouldCompactBeforePrompt: decision.shouldCompactBeforePrompt,
     turns: state.turns,
     compactions: state.compactions,
+  };
+}
+
+export function deriveSessionBudgetStateFromData(input: {
+  sessionId: string;
+  modelSpecifier: string;
+  data: SessionData;
+}): SessionBudgetState {
+  const activePath = getActivePath(input.data);
+  const contextEntries = getContextEntries(activePath);
+
+  return {
+    sessionId: input.sessionId,
+    modelSpecifier: input.modelSpecifier,
+    estimatedHistoryTokens: estimateSessionContextTokens(contextEntries),
+    turns: activePath.filter(isAssistantMessageEntry).length,
+    compactions: activePath.filter((entry) => entry.type === 'compaction').length,
+    updatedAt: input.data.updatedAt,
   };
 }
 
@@ -168,4 +193,191 @@ function promptUsageTokens(usage: PromptUsage): number {
 
 function storeKey(sessionId: string, modelSpecifier: string): string {
   return `${sessionId}\u0000${modelSpecifier}`;
+}
+
+type SessionEntry = SessionData['entries'][number];
+interface ContextBudgetEntry {
+  entry: SessionEntry;
+  useProviderUsage: boolean;
+}
+
+function getActivePath(data: SessionData): SessionEntry[] {
+  if (!data.leafId) {
+    return [];
+  }
+
+  const byId = new Map(data.entries.map((entry) => [entry.id, entry]));
+  const path: SessionEntry[] = [];
+  let cursor: string | null = data.leafId;
+
+  while (cursor) {
+    const entry = byId.get(cursor);
+    if (!entry) {
+      return data.entries;
+    }
+    path.unshift(entry);
+    cursor = entry.parentId;
+  }
+
+  return path;
+}
+
+function getContextEntries(path: SessionEntry[]): ContextBudgetEntry[] {
+  const latestCompactionIndex = findLatestCompactionIndex(path);
+  if (latestCompactionIndex === -1) {
+    return path.map((entry) => ({ entry, useProviderUsage: true }));
+  }
+
+  const compaction = path[latestCompactionIndex];
+  if (!compaction || compaction.type !== 'compaction') {
+    return path.map((entry) => ({ entry, useProviderUsage: true }));
+  }
+
+  const firstKeptIndex = path.findIndex((entry) => entry.id === compaction.firstKeptEntryId);
+  const keptStart = firstKeptIndex >= 0 ? firstKeptIndex : latestCompactionIndex + 1;
+
+  return [
+    { entry: compaction, useProviderUsage: false },
+    ...path
+      .slice(keptStart, latestCompactionIndex)
+      .map((entry) => ({ entry, useProviderUsage: false })),
+    ...path.slice(latestCompactionIndex + 1).map((entry) => ({ entry, useProviderUsage: true })),
+  ];
+}
+
+function estimateSessionContextTokens(entries: ContextBudgetEntry[]): number {
+  const latestCompactionIndex = findLatestCompactionIndex(entries);
+  const latestUsableAssistantIndex = findLatestAssistantUsageIndex(entries, latestCompactionIndex);
+
+  if (latestUsableAssistantIndex === -1) {
+    return entries.reduce((total, entry) => total + estimateEntryTokens(entry), 0);
+  }
+
+  const assistant = entries[latestUsableAssistantIndex];
+  const usageTokens =
+    assistant && assistant.useProviderUsage && isAssistantMessageEntry(assistant.entry)
+      ? readUsageTokens(assistant.entry.message.usage)
+      : 0;
+  const trailingTokens = entries
+    .slice(latestUsableAssistantIndex + 1)
+    .reduce((total, entry) => total + estimateEntryTokens(entry), 0);
+
+  return usageTokens + trailingTokens;
+}
+
+function findLatestCompactionIndex(entries: readonly (SessionEntry | ContextBudgetEntry)[]): number {
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const entry = unwrapContextEntry(entries[i]);
+    if (entry?.type === 'compaction') {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+function findLatestAssistantUsageIndex(entries: ContextBudgetEntry[], latestCompactionIndex: number): number {
+  for (let i = entries.length - 1; i > latestCompactionIndex; i -= 1) {
+    const entry = entries[i];
+    if (
+      entry?.useProviderUsage &&
+      isAssistantMessageEntry(entry.entry) &&
+      readUsageTokens(entry.entry.message.usage) > 0
+    ) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+type StoredMessageEntry = Extract<SessionEntry, { type: 'message' }>;
+type StoredAssistantMessageEntry = StoredMessageEntry & {
+  message: { role: 'assistant'; usage?: unknown; content?: unknown };
+};
+
+function isAssistantMessageEntry(entry: SessionEntry): entry is StoredAssistantMessageEntry {
+  return entry.type === 'message' && entry.message.role === 'assistant';
+}
+
+function estimateEntryTokens(input: SessionEntry | ContextBudgetEntry): number {
+  const entry = unwrapContextEntry(input);
+  if (!entry) {
+    return 0;
+  }
+
+  if (entry.type === 'compaction') {
+    return estimateTextTokens(entry.summary);
+  }
+
+  if (entry.type === 'branch_summary') {
+    return estimateTextTokens(entry.summary);
+  }
+
+  if (entry.type === 'message') {
+    return estimateMessageTokens(entry.message);
+  }
+
+  return 0;
+}
+
+function unwrapContextEntry(input: SessionEntry | ContextBudgetEntry | undefined): SessionEntry | undefined {
+  if (!input) {
+    return undefined;
+  }
+
+  return 'entry' in input ? input.entry : input;
+}
+
+function estimateMessageTokens(message: unknown): number {
+  const content =
+    message && typeof message === 'object' && 'content' in message
+      ? (message as { content?: unknown }).content
+      : undefined;
+  if (typeof content === 'string') {
+    return estimateTextTokens(content);
+  }
+
+  if (Array.isArray(content)) {
+    return content.reduce((total, block) => {
+      if (!block || typeof block !== 'object') {
+        return total;
+      }
+
+      const candidate = block as { text?: unknown; thinking?: unknown; name?: unknown; arguments?: unknown };
+      if (typeof candidate.text === 'string') {
+        return total + estimateTextTokens(candidate.text);
+      }
+      if (typeof candidate.thinking === 'string') {
+        return total + estimateTextTokens(candidate.thinking);
+      }
+      if (typeof candidate.name === 'string') {
+        return total + estimateTextTokens(`${candidate.name} ${JSON.stringify(candidate.arguments ?? {})}`);
+      }
+
+      return total;
+    }, 0);
+  }
+
+  return estimateTextTokens(JSON.stringify(content ?? ''));
+}
+
+function readUsageTokens(usage: unknown): number {
+  if (!usage || typeof usage !== 'object') {
+    return 0;
+  }
+
+  const candidate = usage as Partial<PromptUsage>;
+  return Math.max(
+    readTokenCount(candidate.totalTokens),
+    readTokenCount(candidate.input) +
+      readTokenCount(candidate.output) +
+      readTokenCount(candidate.cacheRead) +
+      readTokenCount(candidate.cacheWrite),
+    readTokenCount(candidate.input) + readTokenCount(candidate.output),
+  );
+}
+
+function readTokenCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
 }

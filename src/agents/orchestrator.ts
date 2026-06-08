@@ -5,6 +5,7 @@ import {
 } from '@flue/runtime';
 import { configureRuntimeModels, resolveModelCard } from '../models/index.js';
 import { calculateContextBudget } from '../session/context-budget.js';
+import { goromboFlueSessionStore } from '../session/flue-session-store.js';
 import { loadProtocolsTool, retrieveContextTool, retrieveMemoryTool } from '../tools/index.js';
 import type { AgentModelProfile } from '../models/types.js';
 
@@ -32,6 +33,7 @@ export default createAgent(({ env }) => {
     model: models.defaultAgentModel,
     instructions,
     compaction: defaultModelCard ? createFlueCompactionConfig(defaultModelCard) : undefined,
+    persist: goromboFlueSessionStore,
     tools: [loadProtocolsTool, retrieveMemoryTool, retrieveContextTool],
     subagents: [codingWorker],
   };

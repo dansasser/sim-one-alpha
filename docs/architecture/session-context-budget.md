@@ -26,7 +26,7 @@ Flue exposes compaction in two ways:
 
 `CompactionConfig` has `reserveTokens`, `keepRecentTokens`, and `model`. Flue automatic threshold compaction triggers when the current context token count is greater than `contextWindow - reserveTokens`. The installed runtime estimates context with provider usage from the latest assistant message plus a character-count estimate for trailing messages. It also has overflow recovery that compacts and retries after a provider context overflow.
 
-Flue does not expose a public pre-prompt exact token count for application code in the installed `@flue/runtime` package. GOROMBO owns the pre-prompt budget layer by estimating the next prompt and previously recorded session usage before calling `session.prompt(...)`.
+Flue does not expose a public pre-prompt exact token count for application code in the installed `@flue/runtime` package. GOROMBO owns the pre-prompt budget layer by estimating the next prompt and the persisted session context before calling `session.prompt(...)`.
 
 ## Implemented GOROMBO Layer
 
@@ -35,25 +35,52 @@ The selected model card now drives context budgeting and compaction:
 - `src/models/cards/index.ts` resolves a Flue model specifier to a project-owned model card.
 - `src/session/context-budget.ts` calculates enforced context, output reserve, usable input, warning threshold, compaction threshold, and hard-stop threshold.
 - `src/session/compaction-policy.ts` converts token estimates into `normal`, `warn`, `compact`, or `stop`.
-- `src/session/session-budget.ts` keeps an in-process per-session ledger for prompt usage estimates.
+- `src/session/flue-session-store.ts` implements the project-owned Flue `SessionStore` boundary.
+- `src/session/session-budget.ts` derives budget state from stored Flue `SessionData` and keeps an in-process fallback ledger for cases where session data is unavailable.
 - `src/workflows/chat.ts` evaluates the next prompt before calling `session.prompt(...)`.
-- `src/agents/orchestrator.ts` passes card-derived Flue compaction settings to `createAgent(...)`.
+- `src/agents/orchestrator.ts` passes card-derived Flue compaction settings and the project session store to `createAgent(...)`.
+
+The session store preserves Flue's exact `SessionData` shape while also indexing the latest data by logical harness/session name. That lets the chat workflow recover the latest `gorombo-orchestrator` conversation state even when a workflow invocation receives a new Flue run id.
 
 The chat workflow sequence is:
 
 ```text
 normalize message
+-> initialize orchestrator with project SessionStore
+-> load latest logical Flue SessionData
 -> resolve selected model card
 -> estimate session history plus next prompt
 -> warn, compact, or stop
 -> call session.compact() when compaction is required
 -> refuse the prompt when the hard input budget is still exceeded
 -> session.prompt(...)
--> record PromptResponse.usage into the session budget ledger
+-> read updated Flue SessionData
 -> return contextBudget telemetry
 ```
 
 This keeps Flue's native automatic compaction enabled and adds a GOROMBO pre-send guard before the provider receives an oversized prompt.
+
+## Session Store Boundary
+
+`src/session/flue-session-store.ts` is the first storage seam for the natural memory and RAG pipeline.
+
+Current behavior:
+
+- Implements Flue's public `SessionStore` contract.
+- Saves and loads exact Flue `SessionData`.
+- Parses Flue storage keys shaped as `agent-session:[instanceId,harnessName,sessionName]`.
+- Indexes the latest session by `harnessName + sessionName` so chat continuity can survive workflow run id changes.
+- Exposes `getLatestSessionData(harnessName, sessionName)` for budget derivation.
+
+The current implementation is in-process. A database-backed implementation should keep the same public interface and store:
+
+- the raw Flue `SessionData`
+- logical session indexes
+- derived budget snapshots if useful for fast lookup
+- future memory extraction events
+- future RAG chunk references
+
+Memory should not fork conversation truth into a separate transcript. It should read from or subscribe to this session-store boundary, extract durable memory records, and then let RAG allocate retrieved context through the same budget layer.
 
 ## Budget Inputs
 
@@ -103,8 +130,8 @@ RAG must receive only the remaining input budget after these items are accounted
 - memory context
 - output reserve
 
-Future RAG work should ask the budget layer for remaining tokens before adding search results, document chunks, or memory summaries to the prompt.
+Future RAG work should ask the budget layer for remaining tokens before adding search results, document chunks, or memory summaries to the prompt. Web search should enter the system as a retrieval provider whose returned snippets are sized by this remaining-token budget.
 
 ## Open Questions
 
-No unresolved implementation questions remain for the current in-process session budget layer. The next storage decision is whether to persist `SessionBudgetState` beside Flue `SessionStore` for multi-process deployments.
+The remaining storage decision is the durable backend for `SessionStore`: SQLite, MongoDB, or another deployment-owned database. The in-process implementation defines the interface and behavior but does not survive process restarts.

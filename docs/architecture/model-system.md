@@ -98,7 +98,8 @@ The session-management layer uses cards in this order:
 2. Use the provider-reported context window for safety when available.
 3. Reserve output tokens before calculating usable input budget.
 4. Warn before the prompt approaches the compaction threshold.
-5. Trigger `session.compact()` before Flue or the provider rejects the prompt.
-6. Give RAG only the remaining context budget after system instructions, protocol context, memory, current user input, and output reserve are accounted for.
+5. Derive current session usage from stored Flue `SessionData` when available.
+6. Trigger `session.compact()` before Flue or the provider rejects the prompt.
+7. Give RAG only the remaining context budget after system instructions, protocol context, memory, current user input, and output reserve are accounted for.
 
 RAG should come after this budget layer because retrieved context must fit into the selected card's remaining budget.

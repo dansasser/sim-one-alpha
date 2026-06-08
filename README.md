@@ -488,11 +488,15 @@ Implemented pieces:
 - `resolveModelCard(...)` maps a Flue model specifier back to a project model card.
 - `calculateContextBudget(...)` chooses the provider-safe context window, reserves output tokens, and calculates warning, compaction, and hard-stop thresholds.
 - `evaluateCompaction(...)` returns `normal`, `warn`, `compact`, or `stop`.
-- `chatSessionBudgetStore` tracks in-process session usage estimates from `PromptResponse.usage`.
+- `goromboFlueSessionStore` stores Flue `SessionData` and indexes the latest logical chat session by harness/session name.
+- `deriveSessionBudgetStateFromData(...)` estimates budget from the stored Flue conversation tree, including compaction entries.
+- `chatSessionBudgetStore` remains as an in-process fallback when stored session data is not available.
 - The `chat` workflow calls `session.compact()` before prompting when the estimate crosses the compaction threshold.
 - The workflow returns a guard response instead of calling the provider when the prompt still exceeds the hard input budget after compaction.
 
 Flue's native automatic compaction remains enabled on the orchestrator agent with card-derived `reserveTokens` and `keepRecentTokens`. The GOROMBO layer adds pre-send protection and budget telemetry for future RAG allocation.
+
+The session store is now the natural boundary for future memory and RAG work: durable memory should be extracted from stored `SessionData`, and web search/document chunks should be injected only after the budget layer reports remaining context capacity.
 
 Architecture details live in `docs/architecture/session-context-budget.md`.
 

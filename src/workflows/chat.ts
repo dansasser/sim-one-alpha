@@ -13,12 +13,15 @@ import {
   recordPromptUsage,
   type SessionBudgetReport,
 } from '../session/session-budget.js';
+import { goromboFlueSessionStore } from '../session/flue-session-store.js';
 
 export const route: WorkflowRouteHandler = async (_c, next) => next();
 
 export interface ChatWorkflowPayload extends WebApiMessageInput {
   session?: string;
 }
+
+const orchestratorHarnessName = 'gorombo-orchestrator';
 
 export interface ChatWorkflowResponse {
   text: string;
@@ -45,30 +48,36 @@ export async function run({
   const prompt = createChatPrompt(event);
   const runtimeModels = configureRuntimeModels(env);
   const selectedModelCard = resolveModelCard(runtimeModels.defaultAgentModel);
-  const harness = await init(orchestratorAgent, { name: 'gorombo-orchestrator' });
+  const harness = await init(orchestratorAgent, { name: orchestratorHarnessName });
   const session = await harness.session(sessionId);
+  let sessionData = goromboFlueSessionStore.getLatestSessionData(orchestratorHarnessName, sessionId);
   let compactedBeforePrompt = false;
   let contextBudget = selectedModelCard
     ? createSessionBudgetReport({
         sessionId,
         modelCard: selectedModelCard,
         promptText: prompt,
+        sessionData,
       })
     : undefined;
   let promptBudget = contextBudget;
 
   if (contextBudget?.shouldCompactBeforePrompt && selectedModelCard) {
     await session.compact();
-    recordManualCompaction({
-      sessionId,
-      modelSpecifier: selectedModelCard.specifier,
-      budget: calculateContextBudget(selectedModelCard),
-    });
+    sessionData = goromboFlueSessionStore.getLatestSessionData(orchestratorHarnessName, sessionId);
+    if (!sessionData) {
+      recordManualCompaction({
+        sessionId,
+        modelSpecifier: selectedModelCard.specifier,
+        budget: calculateContextBudget(selectedModelCard),
+      });
+    }
     compactedBeforePrompt = true;
     contextBudget = createSessionBudgetReport({
       sessionId,
       modelCard: selectedModelCard,
       promptText: prompt,
+      sessionData,
     });
     promptBudget = contextBudget;
   }
@@ -95,6 +104,7 @@ export async function run({
   }
 
   const response = await session.prompt(prompt);
+  sessionData = goromboFlueSessionStore.getLatestSessionData(orchestratorHarnessName, sessionId);
   const responseSpecifier = modelSpecifierFromParts(response.model.provider, response.model.id);
   const responseModelCard = resolveModelCard(responseSpecifier) ?? selectedModelCard;
 
@@ -109,6 +119,7 @@ export async function run({
     contextBudget = createSessionBudgetReport({
       sessionId,
       modelCard: responseModelCard,
+      sessionData,
     });
   }
 
