@@ -51,6 +51,10 @@ test('orchestrator uses the project Flue session store', async () => {
   });
 
   assert.equal(config.persist, goromboFlueSessionStore);
+  assert.equal(config.subagents?.some((agent) => agent.name === 'researcher'), true);
+  assert.equal(config.tools?.some((tool) => tool.name === 'retrieve_context'), true);
+  assert.match(config.instructions ?? '', /agent: "researcher"/);
+  assert.match(config.instructions ?? '', /task/);
 });
 
 function createStoredSessionData(): SessionData {

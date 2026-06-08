@@ -11,6 +11,7 @@
     "connect": "flue connect orchestrator local --target node --session local",
     "dev": "flue dev --target node",
     "flue:build": "flue build --target node",
+    "research:local": "node scripts/research.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test \"dist/tests/*.test.js\""
   },

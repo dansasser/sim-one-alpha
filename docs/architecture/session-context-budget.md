@@ -140,6 +140,8 @@ Current retrieval controls:
 - `GOROMBO_RAG_WEB_FETCH_TOP_K`: default number of top web results to expand through fetch
 - `metadata.providerFailures`: non-fatal provider errors, including search outages or authentication failures
 
+The `researcher` subagent uses the same retrieval controls through `retrieve_context`. This keeps context packing and provider failures in the retrieval workflow while letting the researcher perform multi-step source comparison in its own Flue task context.
+
 ## Open Questions
 
 The remaining storage decision is the durable backend for `SessionStore`: SQLite, MongoDB, or another deployment-owned database. The in-process implementation defines the interface and behavior but does not survive process restarts.

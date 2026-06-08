@@ -8,6 +8,7 @@ import { calculateContextBudget } from '../session/context-budget.js';
 import { goromboFlueSessionStore } from '../session/flue-session-store.js';
 import { loadProtocolsTool, retrieveContextTool, retrieveMemoryTool } from '../tools/index.js';
 import type { AgentModelProfile } from '../models/types.js';
+import { createResearcherProfile } from './researcher.js';
 
 export const route: AgentRouteHandler = async (_c, next) => next();
 
@@ -23,12 +24,16 @@ You are the GOROMBO main orchestrator.
 
 Load protocols before final reasoning, retrieve memory/context when useful, use registry-backed tools, and delegate only to defined workers.
 Use the configured model profile from the project model registry. Do not claim protocol, memory, RAG, or search integrations are live beyond the tools that are actually wired.
-The retrieve_context tool is wired to the RAG router. Web search uses Ollama Search when an Ollama API key is configured, while memory and document-index providers remain placeholders.
+The retrieve_context tool is wired to the RAG workflow. Web search uses Ollama Search when an Ollama API key is configured, while memory and document-index providers remain placeholders.
+For one-step lookups, use retrieve_context directly.
+For multi-step research, source comparison, or when a user asks to research something, delegate with the Flue task tool using agent: "researcher".
+Pass the researcher's findings into your final answer and mention provider failures when they affect confidence.
 `;
 
 export default createAgent(({ env }) => {
   const models = configureRuntimeModels(env);
   const defaultModelCard = resolveModelCard(models.defaultAgentModel);
+  const researcher = createResearcherProfile(models.defaultAgentModel);
 
   return {
     model: models.defaultAgentModel,
@@ -36,7 +41,7 @@ export default createAgent(({ env }) => {
     compaction: defaultModelCard ? createFlueCompactionConfig(defaultModelCard) : undefined,
     persist: goromboFlueSessionStore,
     tools: [loadProtocolsTool, retrieveMemoryTool, retrieveContextTool],
-    subagents: [codingWorker],
+    subagents: [codingWorker, researcher],
   };
 });
 

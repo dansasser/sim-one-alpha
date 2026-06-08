@@ -105,3 +105,5 @@ The session-management layer uses cards in this order:
 RAG should come after this budget layer because retrieved context must fit into the selected card's remaining budget.
 
 The default web retrieval provider is Ollama Search through `POST https://ollama.com/api/web_search`, authenticated with the existing `OLLAMA_API_KEY`. The agent-facing RAG tool calls the `retrieval` Flue workflow boundary, which selects providers, optionally expands top web results through fetch, packs contexts to a token budget, and records non-fatal provider failures. Other providers can be added behind the same RAG provider interface.
+
+The main orchestrator registers a Flue subagent named `researcher`. The orchestrator should call `retrieve_context` directly for one-step lookup and use Flue `task` delegation with `agent: "researcher"` for multi-step research or source comparison. The researcher still uses the same retrieval workflow; it owns research strategy, not low-level provider error handling.

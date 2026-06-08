@@ -440,6 +440,12 @@ Run a one-shot chat workflow:
 npm run chat:local -- "Hello"
 ```
 
+Run a one-shot research workflow:
+
+```sh
+npm run research:local -- "Find the official Ollama web search API docs URL."
+```
+
 Run the underlying Flue workflow with a full normalized payload:
 
 ```sh
@@ -539,6 +545,29 @@ The retrieval workflow now handles:
 The `retrieve_context` tool accepts optional `limit`, `maxContextTokens`, `webFetch`, and `fetchTopK` controls.
 
 Future RAG providers such as local SearXNG, GitHub, company documents, and durable memory should plug into the same `RagProvider` interface and then be ranked by the retrieval workflow and RAG router.
+
+## Research Subagent
+
+The main orchestrator has a registered Flue subagent named `researcher`.
+
+Use the boundaries this way:
+
+- one-step lookup: main orchestrator calls `retrieve_context` directly
+- multi-step research or source comparison: main orchestrator delegates through Flue `task` with `agent: "researcher"`
+- low-level provider errors: retrieval workflow records failures in `metadata.providerFailures`
+- research strategy: researcher decides which retrieval calls to make, when to fetch pages, and how to compare sources
+
+The researcher profile lives in `src/agents/researcher.ts` and uses the same `retrieve_context` tool as the main agent. The standalone `research` workflow in `src/workflows/research.ts` initializes the researcher directly for CLI or API research runs. Use `npm run research:local -- "..."` for local one-shot research testing.
+
+```text
+chat workflow
+-> orchestrator agent
+-> task tool with agent: "researcher"
+-> researcher subagent
+-> retrieve_context
+-> retrieval workflow
+-> Ollama Search / future RAG providers
+```
 
 ## Configuration
 
