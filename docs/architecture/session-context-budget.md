@@ -130,7 +130,15 @@ RAG must receive only the remaining input budget after these items are accounted
 - memory context
 - output reserve
 
-Future RAG work should ask the budget layer for remaining tokens before adding search results, document chunks, or memory summaries to the prompt. Web search enters the system through the `retrieval` Flue workflow as a retrieval provider whose returned snippets are sized by this remaining-token budget. Ollama Search is the default web provider because it uses the existing Ollama API key already needed for cloud model testing.
+RAG asks the budget layer for remaining tokens before adding search results, document chunks, or memory summaries to the prompt. Web search enters the system through the `retrieval` Flue workflow as a retrieval provider whose returned snippets and fetched pages are packed to the configured retrieval budget before they are returned to the agent. Ollama Search is the default web provider because it uses the existing Ollama API key already needed for cloud model testing.
+
+Current retrieval controls:
+
+- `maxContextTokens`: per-call returned-context budget
+- `GOROMBO_RAG_MAX_CONTEXT_TOKENS`: default returned-context budget when the call does not provide one
+- `webFetch`: `auto`, `always`, or `never`
+- `GOROMBO_RAG_WEB_FETCH_TOP_K`: default number of top web results to expand through fetch
+- `metadata.providerFailures`: non-fatal provider errors, including search outages or authentication failures
 
 ## Open Questions
 

@@ -10,15 +10,32 @@ export class RagRouter {
 
   async retrieve(query: RagQuery): Promise<RagResult> {
     const contexts: RetrievedContext[] = [];
+    const providerFailures: NonNullable<RagResult['metadata']>['providerFailures'] = [];
     const enabled = new Set(query.providers ?? ['memory', 'web-search', 'document-index']);
 
     if (enabled.has('memory')) {
-      contexts.push(...(await this.memoryRouter.retrieve(query)));
+      try {
+        contexts.push(...(await this.memoryRouter.retrieve(query)));
+      } catch (error) {
+        providerFailures.push({
+          provider: 'memory',
+          name: 'memory',
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     for (const provider of this.providers) {
-      if (enabled.has(provider.id as never)) {
-        contexts.push(...(await provider.retrieve(query)));
+      if (enabled.has(provider.id)) {
+        try {
+          contexts.push(...(await provider.retrieve(query)));
+        } catch (error) {
+          providerFailures.push({
+            provider: provider.id,
+            name: provider.name,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
     }
 
@@ -30,7 +47,11 @@ export class RagRouter {
       query,
       retrievedAt: new Date().toISOString(),
       contexts: limited,
+      metadata: providerFailures.length
+        ? {
+            providerFailures,
+          }
+        : undefined,
     };
   }
 }
-

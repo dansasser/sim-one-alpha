@@ -1,7 +1,7 @@
-import type { RagQuery, RetrievedContext } from '../types/index.js';
+import type { RagProviderKind, RagQuery, RetrievedContext } from '../types/index.js';
 
 export interface RagProvider {
-  readonly id: string;
+  readonly id: RagProviderKind;
   readonly name?: string;
   retrieve(query: RagQuery): Promise<RetrievedContext[]>;
 }

@@ -412,6 +412,8 @@ OLLAMA_API_KEY=your_key_here
 OLLAMA_CLOUD_BASE_URL=https://ollama.com/v1
 GOROMBO_WEB_SEARCH_PROVIDER=ollama
 OLLAMA_WEB_SEARCH_BASE_URL=https://ollama.com
+GOROMBO_RAG_MAX_CONTEXT_TOKENS=4000
+GOROMBO_RAG_WEB_FETCH_TOP_K=1
 GOROMBO_MODEL_PROFILE=minimax-m3-cloud
 ```
 
@@ -450,7 +452,7 @@ Open an interactive Flue agent session:
 npm run connect
 ```
 
-The `chat` workflow initializes the `orchestrator` Flue agent, loads `.env` through the Flue CLI, and prompts the configured model with the normalized message event. The agent uses `GOROMBO_MODEL` when an exact Flue model specifier is set. Otherwise it selects a project-owned card from `GOROMBO_MODEL_PROFILE`, defaulting to `minimax-m3-cloud`, which resolves to `ollama-cloud/minimax-m3` and calls Ollama Cloud through `https://ollama.com/v1`. Model cards live in `src/models/cards`; custom provider transport is registered from `src/app.ts` through `src/models/providers`. The agent currently has minimal tool flow wired for protocol loading, memory retrieval, and RAG/context retrieval. The protocol, memory, web search, and document-index providers are still typed placeholders so they can be replaced one layer at a time.
+The `chat` workflow initializes the `orchestrator` Flue agent, loads `.env` through the Flue CLI, and prompts the configured model with the normalized message event. The agent uses `GOROMBO_MODEL` when an exact Flue model specifier is set. Otherwise it selects a project-owned card from `GOROMBO_MODEL_PROFILE`, defaulting to `minimax-m3-cloud`, which resolves to `ollama-cloud/minimax-m3` and calls Ollama Cloud through `https://ollama.com/v1`. Model cards live in `src/models/cards`; custom provider transport is registered from `src/app.ts` through `src/models/providers`. The agent currently has tool flow wired for protocol loading, memory retrieval, and RAG/context retrieval. The protocol, memory, and document-index providers remain typed placeholders; web search is live through Ollama Search when an Ollama API key is configured.
 
 ## Model Cards
 
@@ -512,6 +514,8 @@ The provider uses the existing Ollama API key:
 GOROMBO_WEB_SEARCH_PROVIDER=ollama
 OLLAMA_API_KEY=your_key_here
 OLLAMA_WEB_SEARCH_BASE_URL=https://ollama.com
+GOROMBO_RAG_MAX_CONTEXT_TOKENS=4000
+GOROMBO_RAG_WEB_FETCH_TOP_K=1
 ```
 
 Implemented endpoints:
@@ -524,6 +528,15 @@ POST https://ollama.com/api/web_fetch
 `web_search` results are normalized into the project `RetrievedContext` shape with `provider: "web-search"` and `metadata.provider: "ollama"`. If no Ollama key is configured, the RAG router falls back to the web-search placeholder instead of failing startup.
 
 The agent-facing `retrieve_context` tool calls the `retrieval` Flue workflow boundary, so web search, memory, document index, and future source selection can be coordinated from a workflow file instead of embedding provider setup inside the tool.
+
+The retrieval workflow now handles:
+
+- provider selection: memory by default, web search for current/external/source-backed prompts, and document index for project-document prompts
+- search-to-fetch enrichment: `webFetch: "auto"` fetches the top web page for source-backed prompts when the provider supports `fetchPage(...)`
+- context packing: returned contexts are packed to `maxContextTokens`, defaulting to `GOROMBO_RAG_MAX_CONTEXT_TOKENS` or `4000`
+- provider failures: web-search failures are returned in `metadata.providerFailures` instead of failing the whole chat path
+
+The `retrieve_context` tool accepts optional `limit`, `maxContextTokens`, `webFetch`, and `fetchTopK` controls.
 
 Future RAG providers such as local SearXNG, GitHub, company documents, and durable memory should plug into the same `RagProvider` interface and then be ranked by the retrieval workflow and RAG router.
 
@@ -572,7 +585,7 @@ Early development focuses on:
 - Memory Tool
 - RAG Router
 - document-index retrieval placeholder
-- web search provider placeholder
+- Ollama web search provider
 - registry interfaces
 - worker interfaces
 
@@ -608,7 +621,7 @@ Near-term:
 - protocol loading tool
 - memory retrieval interface
 - initial RAG architecture
-- web search placeholder
+- Ollama web search provider
 - document-index placeholder
 - registry interfaces
 - worker interfaces

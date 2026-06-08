@@ -145,9 +145,32 @@ export interface RetrievedContext {
   metadata?: Record<string, unknown>;
 }
 
+export interface RagResultMetadata {
+  providerFailures?: Array<{
+    provider: RagProviderKind;
+    name?: string;
+    message: string;
+  }>;
+  retrieval?: {
+    selectedProviders: RagProviderKind[];
+  };
+  webFetch?: {
+    mode: 'auto' | 'always' | 'never';
+    attempted: number;
+    succeeded: number;
+    failed: number;
+  };
+  budget?: {
+    maxContextTokens: number;
+    usedContextTokens: number;
+    truncatedContextCount: number;
+    omittedContextCount: number;
+  };
+}
+
 export interface RagResult {
   query: RagQuery;
   retrievedAt: string;
   contexts: RetrievedContext[];
+  metadata?: RagResultMetadata;
 }
-

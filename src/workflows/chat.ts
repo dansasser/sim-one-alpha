@@ -151,9 +151,10 @@ You are handling a normalized GOROMBO chat event.
 
 Before you answer:
 1. Use the load_protocols tool for this event.
-2. Use retrieve_context when the user asks for current, external, web, or source-backed information. Web search uses Ollama Search when configured.
+2. Use retrieve_context when the user asks for current, external, web, or source-backed information. Web search uses Ollama Search when configured. The tool can pack results with maxContextTokens and can use webFetch auto, always, or never.
 3. Use retrieve_memory when stored conversation or project memory would help.
-4. If a specific provider is still a placeholder, say that plainly and continue with the best available answer.
+4. If metadata.providerFailures reports a failed source, say that plainly when it affects confidence and continue with the best available context.
+5. If a specific provider is still a placeholder, say that plainly and continue with the best available answer.
 
 Event:
 ${JSON.stringify(event, null, 2)}
