@@ -2,7 +2,7 @@ import type { MemoryRouter } from '../memory/memory-router.js';
 import type { ProtocolProvider } from '../protocols/protocol-provider.js';
 import { SqliteProtocolProviderPlaceholder } from '../protocols/sqlite-protocol-provider-placeholder.js';
 import { createDefaultRegistries, type DefaultRegistries } from '../registries/default-registries.js';
-import { DocumentIndexProviderPlaceholder, WebSearchProviderPlaceholder } from '../rag/providers.js';
+import { DocumentIndexProviderPlaceholder, createDefaultWebSearchProvider, type RagProvider } from '../rag/providers.js';
 import { RagRouter } from '../rag/rag-router.js';
 import { DatabaseMemoryProviderPlaceholder } from '../memory/memory-provider.js';
 import type { NormalizedMessageEvent, OrchestratorResponse } from '../types/index.js';
@@ -12,6 +12,11 @@ export interface OrchestratorDependencies {
   protocols: ProtocolProvider;
   rag: RagRouter;
   registries: DefaultRegistries;
+}
+
+export interface DefaultOrchestratorOptions {
+  env?: Record<string, unknown>;
+  webSearchProvider?: RagProvider;
 }
 
 export class Orchestrator {
@@ -52,7 +57,8 @@ export class Orchestrator {
   }
 }
 
-export function createDefaultOrchestrator(): Orchestrator {
+export function createDefaultOrchestrator(options: DefaultOrchestratorOptions = {}): Orchestrator {
+  const env = options.env ?? process.env;
   const memoryRouter: MemoryRouter = new DefaultMemoryRouter(
     new DatabaseMemoryProviderPlaceholder('memory-db-placeholder'),
   );
@@ -60,10 +66,9 @@ export function createDefaultOrchestrator(): Orchestrator {
   return new Orchestrator({
     protocols: new SqliteProtocolProviderPlaceholder('protocols.sqlite'),
     rag: new RagRouter(memoryRouter, [
-      new WebSearchProviderPlaceholder(),
+      options.webSearchProvider ?? createDefaultWebSearchProvider(env),
       new DocumentIndexProviderPlaceholder(),
     ]),
     registries: createDefaultRegistries(),
   });
 }
-

@@ -103,3 +103,5 @@ The session-management layer uses cards in this order:
 7. Give RAG only the remaining context budget after system instructions, protocol context, memory, current user input, and output reserve are accounted for.
 
 RAG should come after this budget layer because retrieved context must fit into the selected card's remaining budget.
+
+The default web retrieval provider is Ollama Search through `POST https://ollama.com/api/web_search`, authenticated with the existing `OLLAMA_API_KEY`. The agent-facing RAG tool calls the `retrieval` Flue workflow boundary, and other providers can be added behind the same RAG provider interface.

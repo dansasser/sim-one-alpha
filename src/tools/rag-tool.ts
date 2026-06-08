@@ -1,17 +1,10 @@
 import { Type, defineTool } from '@flue/runtime';
-import { DatabaseMemoryProviderPlaceholder } from '../memory/memory-provider.js';
-import { MemoryRouter } from '../memory/memory-router.js';
-import { DocumentIndexProviderPlaceholder, WebSearchProviderPlaceholder } from '../rag/providers.js';
-import { RagRouter } from '../rag/rag-router.js';
-
-const ragRouter = new RagRouter(new MemoryRouter(new DatabaseMemoryProviderPlaceholder('memory-db-placeholder')), [
-  new WebSearchProviderPlaceholder(),
-  new DocumentIndexProviderPlaceholder(),
-]);
+import { retrieveContext } from '../workflows/retrieval.js';
 
 export const retrieveContextTool = defineTool({
   name: 'retrieve_context',
-  description: 'Retrieve context through the RAG router across memory, web, and document-index placeholders.',
+  description:
+    'Retrieve context through the RAG router. Web search uses Ollama Search when configured; memory and document-index providers are placeholders.',
   parameters: Type.Object({
     eventId: Type.String(),
     text: Type.String(),
@@ -20,7 +13,7 @@ export const retrieveContextTool = defineTool({
   }),
   execute: async ({ eventId, text, actorId, conversationId }) => {
     return JSON.stringify(
-      await ragRouter.retrieve({
+      await retrieveContext({
         eventId: String(eventId),
         text: String(text),
         actorId: String(actorId),
@@ -29,4 +22,3 @@ export const retrieveContextTool = defineTool({
     );
   },
 });
-

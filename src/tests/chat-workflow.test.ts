@@ -13,7 +13,9 @@ test('chat workflow prompt requires minimal tool flow before answering', () => {
   const prompt = createChatPrompt(event);
 
   assert.match(prompt, /load_protocols/);
-  assert.match(prompt, /retrieve_context or retrieve_memory/);
+  assert.match(prompt, /retrieve_context/);
+  assert.match(prompt, /Ollama Search/);
+  assert.match(prompt, /retrieve_memory/);
   assert.match(prompt, /placeholder/);
   assert.match(prompt, /What can you do\?/);
 });

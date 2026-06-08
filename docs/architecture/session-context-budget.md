@@ -130,7 +130,7 @@ RAG must receive only the remaining input budget after these items are accounted
 - memory context
 - output reserve
 
-Future RAG work should ask the budget layer for remaining tokens before adding search results, document chunks, or memory summaries to the prompt. Web search should enter the system as a retrieval provider whose returned snippets are sized by this remaining-token budget.
+Future RAG work should ask the budget layer for remaining tokens before adding search results, document chunks, or memory summaries to the prompt. Web search enters the system through the `retrieval` Flue workflow as a retrieval provider whose returned snippets are sized by this remaining-token budget. Ollama Search is the default web provider because it uses the existing Ollama API key already needed for cloud model testing.
 
 ## Open Questions
 

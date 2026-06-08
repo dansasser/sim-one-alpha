@@ -410,6 +410,8 @@ The default profile uses Ollama's direct cloud API:
 ```env
 OLLAMA_API_KEY=your_key_here
 OLLAMA_CLOUD_BASE_URL=https://ollama.com/v1
+GOROMBO_WEB_SEARCH_PROVIDER=ollama
+OLLAMA_WEB_SEARCH_BASE_URL=https://ollama.com
 GOROMBO_MODEL_PROFILE=minimax-m3-cloud
 ```
 
@@ -499,6 +501,31 @@ Flue's native automatic compaction remains enabled on the orchestrator agent wit
 The session store is now the natural boundary for future memory and RAG work: durable memory should be extracted from stored `SessionData`, and web search/document chunks should be injected only after the budget layer reports remaining context capacity.
 
 Architecture details live in `docs/architecture/session-context-budget.md`.
+
+## Web Search
+
+Ollama Search is the default web-search provider for the RAG router.
+
+The provider uses the existing Ollama API key:
+
+```env
+GOROMBO_WEB_SEARCH_PROVIDER=ollama
+OLLAMA_API_KEY=your_key_here
+OLLAMA_WEB_SEARCH_BASE_URL=https://ollama.com
+```
+
+Implemented endpoints:
+
+```text
+POST https://ollama.com/api/web_search
+POST https://ollama.com/api/web_fetch
+```
+
+`web_search` results are normalized into the project `RetrievedContext` shape with `provider: "web-search"` and `metadata.provider: "ollama"`. If no Ollama key is configured, the RAG router falls back to the web-search placeholder instead of failing startup.
+
+The agent-facing `retrieve_context` tool calls the `retrieval` Flue workflow boundary, so web search, memory, document index, and future source selection can be coordinated from a workflow file instead of embedding provider setup inside the tool.
+
+Future RAG providers such as local SearXNG, GitHub, company documents, and durable memory should plug into the same `RagProvider` interface and then be ranked by the retrieval workflow and RAG router.
 
 ## Configuration
 

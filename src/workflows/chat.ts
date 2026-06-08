@@ -151,8 +151,9 @@ You are handling a normalized GOROMBO chat event.
 
 Before you answer:
 1. Use the load_protocols tool for this event.
-2. Use either retrieve_context or retrieve_memory if context would help.
-3. If a provider is still a placeholder, say that plainly and continue with the best available answer.
+2. Use retrieve_context when the user asks for current, external, web, or source-backed information. Web search uses Ollama Search when configured.
+3. Use retrieve_memory when stored conversation or project memory would help.
+4. If a specific provider is still a placeholder, say that plainly and continue with the best available answer.
 
 Event:
 ${JSON.stringify(event, null, 2)}

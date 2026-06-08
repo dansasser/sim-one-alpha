@@ -20,3 +20,35 @@ test('orchestrator handles a simple chat event without external providers', asyn
   assert.deepEqual(response.toolCalls, ['protocol.load', 'rag.retrieve']);
 });
 
+test('default orchestrator uses Ollama search when an Ollama API key is configured', async () => {
+  const orchestrator = createDefaultOrchestrator({
+    env: {
+      OLLAMA_API_KEY: 'test-key',
+    },
+    webSearchProvider: {
+      id: 'web-search',
+      name: 'ollama',
+      retrieve: async () => [
+        {
+          id: 'ollama-web:event-1:0',
+          provider: 'web-search',
+          title: 'Ollama Search Result',
+          content: 'Ollama search content',
+          score: 0.8,
+          metadata: {
+            provider: 'ollama',
+          },
+        },
+      ],
+    },
+  });
+  const response = await orchestrator.handle(
+    normalizeWebApiMessage({
+      text: 'Hello from the test suite',
+      actorId: 'user-1',
+      conversationId: 'conversation-1',
+    }),
+  );
+
+  assert.equal(response.retrievedContext.contexts.some((context) => context.metadata?.provider === 'ollama'), true);
+});

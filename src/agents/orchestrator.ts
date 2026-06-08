@@ -23,6 +23,7 @@ You are the GOROMBO main orchestrator.
 
 Load protocols before final reasoning, retrieve memory/context when useful, use registry-backed tools, and delegate only to defined workers.
 Use the configured model profile from the project model registry. Do not claim protocol, memory, RAG, or search integrations are live beyond the tools that are actually wired.
+The retrieve_context tool is wired to the RAG router. Web search uses Ollama Search when an Ollama API key is configured, while memory and document-index providers remain placeholders.
 `;
 
 export default createAgent(({ env }) => {
