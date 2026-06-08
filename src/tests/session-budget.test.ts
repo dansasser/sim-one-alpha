@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SessionData } from '@flue/runtime';
-import { minimaxM3Card } from '../models/cards/index.js';
+import { minimaxM3Card } from '../models/catalog.js';
 import { calculateContextBudget } from '../session/context-budget.js';
 import {
   InMemorySessionBudgetStore,

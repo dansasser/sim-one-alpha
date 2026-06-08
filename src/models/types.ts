@@ -41,7 +41,7 @@ export interface AgentModelProfile {
   };
   env?: {
     baseUrl?: string;
-    apiKey?: string;
+    apiKey?: string | string[];
   };
 }
 

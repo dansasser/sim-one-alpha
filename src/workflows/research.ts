@@ -45,11 +45,11 @@ export function createResearchPrompt(payload: ResearchWorkflowPayload): string {
   return `
 You are running the GOROMBO research workflow.
 
-Use retrieve_context for source-backed research before answering.
-Call retrieve_context with maxContextTokens: ${maxContextTokens}, webFetch: "${webFetch}", and fetchTopK: ${fetchTopK}.
+Use web_research for source-backed research before answering.
+Call web_research with maxContextTokens: ${maxContextTokens}, webFetch: "${webFetch}", maxFetches: ${fetchTopK}, and enough maxQueries for the task complexity.
 Compare sources before writing the final findings.
 Preserve source URLs from retrieved context metadata when available.
-If metadata.providerFailures reports a failed source, include that limitation in the findings.
+If providerFailures reports a failed source, include that limitation in the findings.
 Return concise findings that the main orchestrator can use directly.
 
 Research request:

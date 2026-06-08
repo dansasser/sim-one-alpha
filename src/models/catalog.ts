@@ -1,0 +1,22 @@
+export { providerContextWindow } from './card-limits.js';
+export { codexBrainCard, codexBrainCards } from './providers/codex-brain/index.js';
+export {
+  deepseekV4ProCard,
+  minimaxM3Card,
+  ollamaCloudCards,
+  qwen35Card,
+} from './providers/ollama-cloud/index.js';
+
+import { codexBrainCards } from './providers/codex-brain/index.js';
+import { ollamaCloudCards } from './providers/ollama-cloud/index.js';
+import type { AgentModelProfile } from './types.js';
+
+export const allModelCards = [...ollamaCloudCards, ...codexBrainCards] as const;
+
+export function resolveModelCard(specifier: string): AgentModelProfile | undefined {
+  return allModelCards.find((card) => card.specifier === specifier);
+}
+
+export function modelSpecifierFromParts(provider: string, modelId: string): string {
+  return `${provider}/${modelId}`;
+}

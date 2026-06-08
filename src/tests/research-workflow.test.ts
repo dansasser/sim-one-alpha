@@ -12,12 +12,12 @@ test('research workflow prompt instructs the researcher to use retrieval control
     fetchTopK: 2,
   });
 
-  assert.match(prompt, /retrieve_context/);
+  assert.match(prompt, /web_research/);
   assert.match(prompt, /maxContextTokens: 2000/);
   assert.match(prompt, /webFetch: "always"/);
-  assert.match(prompt, /fetchTopK: 2/);
+  assert.match(prompt, /maxFetches: 2/);
   assert.match(prompt, /Compare sources/);
-  assert.match(prompt, /metadata.providerFailures/);
+  assert.match(prompt, /providerFailures/);
   assert.match(prompt, /source URLs/);
   assert.match(prompt, /Find the official Ollama web search API docs URL/);
 });

@@ -1,10 +1,6 @@
 import { flue } from '@flue/runtime/routing';
 import { Hono } from 'hono';
-import { createDefaultOrchestrator } from './orchestrator/orchestrator.js';
-import { receiveNormalizedChatEvent } from './gateway/secure-web-api.js';
-import { configureModelProviders } from './models/providers/index.js';
-
-configureModelProviders(process.env);
+import './models/runtime.js';
 
 const app = new Hono();
 
@@ -12,13 +8,23 @@ app.get('/health', (c) => c.json({ ok: true }));
 
 app.post('/api/chat/events', async (c) => {
   const env = c.env as { API_SECRET?: string };
-  const response = await receiveNormalizedChatEvent(await c.req.json(), {
-    apiSecret: env.API_SECRET,
-    requestSecret: c.req.header('x-api-secret') ?? null,
-    orchestrator: createDefaultOrchestrator(),
-  });
+  const requestSecret = c.req.header('x-api-secret') ?? null;
+  if (env.API_SECRET && requestSecret !== env.API_SECRET) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
 
-  return c.json(response, 202);
+  return app.request(
+    '/workflows/chat',
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(await c.req.json()),
+    },
+    c.env,
+    c.executionCtx,
+  );
 });
 
 app.route('/', flue());

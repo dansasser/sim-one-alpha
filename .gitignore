@@ -6,4 +6,4 @@ dist-flue/
 !.env.example
 coverage/
 *.tsbuildinfo
-
+.gorombo/

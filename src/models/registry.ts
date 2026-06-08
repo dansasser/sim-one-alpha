@@ -1,5 +1,6 @@
-import { createCodexBrainCard, deepseekV4ProCard, minimaxM3Card, qwen35Card } from './cards/index.js';
-import { ollamaCloudProviderId } from './provider-ids.js';
+import { codexBrainCard, deepseekV4ProCard, minimaxM3Card, qwen35Card } from './catalog.js';
+import { resolveModelCardEnv } from './env.js';
+import { codexBrainProviderId, ollamaCloudProviderId } from './provider-ids.js';
 import type { AgentModelProfile, ModelRegistry, ModelRole } from './types.js';
 
 const defaultModelProfileKey = 'minimax-m3-cloud';
@@ -39,13 +40,8 @@ function createModelProfiles(env: Record<string, unknown>): AgentModelProfile[] 
     minimaxM3Card,
     deepseekV4ProCard,
     qwen35Card,
-    optionalCodexBrainProfile(env),
-  ].filter((profile): profile is AgentModelProfile => Boolean(profile));
-}
-
-function optionalCodexBrainProfile(env: Record<string, unknown>): AgentModelProfile | undefined {
-  const modelId = readString(env.OLLAMA_CODEX_BRAIN_MODEL);
-  return modelId ? createCodexBrainCard(modelId) : undefined;
+    codexBrainCard,
+  ];
 }
 
 function readProviderId(modelSpecifier: string): string | undefined {
@@ -55,10 +51,18 @@ function readProviderId(modelSpecifier: string): string | undefined {
 
 function validateSelectedModel(env: Record<string, unknown>, registry: ModelRegistry): void {
   const providerId = readProviderId(registry.defaultAgentModel);
-  const cloudKey = readString(env.OLLAMA_API_KEY) ?? readString(env.OLLAMA_CLOUD_API_KEY);
+  const profile = registry.profiles.find((candidate) => candidate.specifier === registry.defaultAgentModel);
+  const cloudKey = profile ? resolveModelCardEnv(profile, env).apiKey : undefined;
 
   if (providerId === ollamaCloudProviderId && !cloudKey) {
     throw new Error('OLLAMA_API_KEY or OLLAMA_CLOUD_API_KEY is required for Ollama Cloud model profiles.');
+  }
+
+  if (providerId === codexBrainProviderId) {
+    const resolved = profile ? resolveModelCardEnv(profile, env) : {};
+    if (!resolved.apiKey || !resolved.baseUrl) {
+      throw new Error('CODEX_BRAIN_LOCAL_API_KEY and CODEX_BRAIN_LOCAL_API_URL are required for Codex Brain profiles.');
+    }
   }
 }
 

@@ -1,5 +1,5 @@
-import { ollamaCloudProviderId } from '../provider-ids.js';
-import type { AgentModelProfile } from '../types.js';
+import { ollamaCloudProviderId } from '../../../provider-ids.js';
+import type { AgentModelProfile } from '../../../types.js';
 
 export const minimaxM3Card: AgentModelProfile = {
   key: 'minimax-m3-cloud',
@@ -16,6 +16,10 @@ export const minimaxM3Card: AgentModelProfile = {
   maxOutputTokens: 131_072,
   maxTokens: 131_072,
   enabled: true,
+  env: {
+    apiKey: ['OLLAMA_API_KEY', 'OLLAMA_CLOUD_API_KEY'],
+    baseUrl: 'OLLAMA_CLOUD_BASE_URL',
+  },
   source: {
     name: 'MiniMax M3 model page and Ollama Cloud metadata',
     url: 'https://www.minimax.io/models/text/m3',

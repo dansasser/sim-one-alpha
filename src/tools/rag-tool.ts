@@ -4,7 +4,7 @@ import { retrieveContext } from '../workflows/retrieval.js';
 export const retrieveContextTool = defineTool({
   name: 'retrieve_context',
   description:
-    'Retrieve context through the RAG workflow. Web search uses Ollama Search when configured, can fetch top web pages, and packs returned context to a token budget.',
+    'Researcher-only retrieval tool. It can call the RAG workflow, use Ollama Search when configured, fetch top web pages, and pack returned context to a token budget.',
   parameters: Type.Object({
     eventId: Type.String(),
     text: Type.String(),
@@ -22,6 +22,7 @@ export const retrieveContextTool = defineTool({
         text: String(text),
         actorId: String(actorId),
         conversationId: String(conversationId),
+        caller: 'researcher',
         limit: readPositiveInteger(limit),
         maxContextTokens: readPositiveInteger(maxContextTokens),
         webFetch: readWebFetchMode(webFetch),

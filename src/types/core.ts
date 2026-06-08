@@ -10,6 +10,8 @@ export type WorkerStatus = 'completed' | 'failed' | 'not_implemented';
 
 export type RagProviderKind = 'memory' | 'web-search' | 'document-index' | 'future-vector';
 
+export type RetrievalCaller = 'orchestrator' | 'researcher' | 'research-workflow' | 'system';
+
 export interface RegistryDefinition {
   id: string;
   name: string;
@@ -133,6 +135,7 @@ export interface RagQuery {
   actorId: string;
   conversationId: string;
   providers?: RagProviderKind[];
+  caller?: RetrievalCaller;
   limit?: number;
 }
 

@@ -16,39 +16,21 @@ test('orchestrator handles a simple chat event without external providers', asyn
   assert.equal(response.status, 'ok');
   assert.equal(response.routedTo, 'main-orchestrator');
   assert.ok(response.protocolBundle.protocols.length >= 1);
-  assert.ok(response.retrievedContext.contexts.length >= 1);
-  assert.deepEqual(response.toolCalls, ['protocol.load', 'rag.retrieve']);
+  assert.equal(response.retrievedContext.contexts.length, 0);
+  assert.deepEqual(response.toolCalls, ['protocol.load']);
 });
 
-test('default orchestrator uses Ollama search when an Ollama API key is configured', async () => {
-  const orchestrator = createDefaultOrchestrator({
-    env: {
-      OLLAMA_API_KEY: 'test-key',
-    },
-    webSearchProvider: {
-      id: 'web-search',
-      name: 'ollama',
-      retrieve: async () => [
-        {
-          id: 'ollama-web:event-1:0',
-          provider: 'web-search',
-          title: 'Ollama Search Result',
-          content: 'Ollama search content',
-          score: 0.8,
-          metadata: {
-            provider: 'ollama',
-          },
-        },
-      ],
-    },
-  });
+test('default orchestrator scaffold does not expose a direct web-search path', async () => {
+  const orchestrator = createDefaultOrchestrator();
   const response = await orchestrator.handle(
     normalizeWebApiMessage({
-      text: 'Hello from the test suite',
+      text: 'Find the latest official source.',
       actorId: 'user-1',
       conversationId: 'conversation-1',
     }),
   );
 
-  assert.equal(response.retrievedContext.contexts.some((context) => context.metadata?.provider === 'ollama'), true);
+  assert.equal(response.retrievedContext.contexts.length, 0);
+  assert.deepEqual(response.retrievedContext.query.providers, ['memory']);
+  assert.deepEqual(response.toolCalls, ['protocol.load']);
 });

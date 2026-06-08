@@ -160,6 +160,7 @@ test('retrieval workflow selects web search for source-backed prompts', async ()
       text: 'Find the official Ollama web search API docs URL.',
       actorId: 'user-1',
       conversationId: 'thread-1',
+      caller: 'researcher',
     },
     {
       memoryProvider,
@@ -211,6 +212,7 @@ test('retrieval workflow enriches top web results with fetched page content', as
       text: 'Use web search for the current source.',
       actorId: 'user-1',
       conversationId: 'thread-1',
+      caller: 'researcher',
       providers: ['web-search'],
       webFetch: 'always',
       fetchTopK: 1,
@@ -258,6 +260,7 @@ test('retrieval workflow packs returned contexts inside the requested token budg
       text: 'Use web search for source-backed context.',
       actorId: 'user-1',
       conversationId: 'thread-1',
+      caller: 'researcher',
       providers: ['web-search'],
       webFetch: 'never',
       maxContextTokens: 25,
@@ -324,6 +327,7 @@ test('retrieval workflow reads string budget controls from environment values', 
       text: 'Use web search for an official source.',
       actorId: 'user-1',
       conversationId: 'thread-1',
+      caller: 'researcher',
       providers: ['web-search'],
       webFetch: 'always',
       limit: 2,
@@ -369,6 +373,7 @@ test('retrieval workflow records web search failures without failing the whole r
       text: 'Use web search to find the official source.',
       actorId: 'user-1',
       conversationId: 'thread-1',
+      caller: 'researcher',
     },
     {
       memoryProvider,
@@ -384,6 +389,25 @@ test('retrieval workflow records web search failures without failing the whole r
       message: 'search provider unavailable',
     },
   ]);
+});
+
+test('retrieval workflow rejects web search outside the researcher boundary', async () => {
+  await assert.rejects(
+    retrieveContext(
+      {
+        eventId: 'event-1',
+        text: 'Find the official source.',
+        actorId: 'user-1',
+        conversationId: 'thread-1',
+        caller: 'orchestrator',
+      },
+      {
+        memoryProvider: emptyMemoryProvider,
+        providers: [],
+      },
+    ),
+    /Web search retrieval is restricted to the researcher subagent or research workflow/,
+  );
 });
 
 function restoreEnv(env: Record<string, string | undefined>): void {

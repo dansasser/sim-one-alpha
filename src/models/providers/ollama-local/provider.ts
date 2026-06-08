@@ -1,21 +1,23 @@
 import { registerProvider } from '@flue/runtime';
-import { ollamaLocalProviderId } from '../provider-ids.js';
-import type { AgentModelProfile } from '../types.js';
+import { resolveProviderCardEnv } from '../../env.js';
+import { ollamaLocalProviderId } from '../../provider-ids.js';
+import type { AgentModelProfile } from '../../types.js';
 
 export const ollamaLocalDefaultBaseUrl = 'http://localhost:11434/v1';
 
 export function registerOllamaLocalProvider(
-  env: Record<string, unknown>,
+  env: Record<string, unknown> = process.env,
   cards: readonly AgentModelProfile[] = [],
 ): void {
   if (!shouldRegisterLocalProvider(env, cards)) {
     return;
   }
+  const resolvedEnv = resolveProviderCardEnv(cards, env);
 
   registerProvider(ollamaLocalProviderId, {
     api: 'openai-completions',
-    baseUrl: readString(env.OLLAMA_LOCAL_BASE_URL) ?? ollamaLocalDefaultBaseUrl,
-    apiKey: readString(env.OLLAMA_LOCAL_API_KEY) ?? 'ollama',
+    baseUrl: resolvedEnv.baseUrl ?? ollamaLocalDefaultBaseUrl,
+    apiKey: resolvedEnv.apiKey ?? 'ollama',
     contextWindow: maxOrDefault(cards.map((card) => card.providerReportedContextWindow ?? card.contextWindow), 128_000),
     maxTokens: maxOrDefault(cards.map((card) => card.maxOutputTokens), 32_000),
     models: Object.fromEntries(
@@ -34,8 +36,7 @@ function shouldRegisterLocalProvider(env: Record<string, unknown>, cards: readon
   return Boolean(
     cards.length ||
       readString(env.OLLAMA_LOCAL_BASE_URL) ||
-      readString(env.OLLAMA_LOCAL_API_KEY) ||
-      readString(env.OLLAMA_CODEX_BRAIN_MODEL),
+      readString(env.OLLAMA_LOCAL_API_KEY),
   );
 }
 

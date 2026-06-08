@@ -32,7 +32,7 @@ Flue does not expose a public pre-prompt exact token count for application code 
 
 The selected model card now drives context budgeting and compaction:
 
-- `src/models/cards/index.ts` resolves a Flue model specifier to a project-owned model card.
+- `src/models/catalog.ts` resolves a Flue model specifier to a project-owned model card from provider-owned card directories.
 - `src/session/context-budget.ts` calculates enforced context, output reserve, usable input, warning threshold, compaction threshold, and hard-stop threshold.
 - `src/session/compaction-policy.ts` converts token estimates into `normal`, `warn`, `compact`, or `stop`.
 - `src/session/flue-session-store.ts` implements the project-owned Flue `SessionStore` boundary.
@@ -130,7 +130,7 @@ RAG must receive only the remaining input budget after these items are accounted
 - memory context
 - output reserve
 
-RAG asks the budget layer for remaining tokens before adding search results, document chunks, or memory summaries to the prompt. Web search enters the system through the `retrieval` Flue workflow as a retrieval provider whose returned snippets and fetched pages are packed to the configured retrieval budget before they are returned to the agent. Ollama Search is the default web provider because it uses the existing Ollama API key already needed for cloud model testing.
+RAG asks the budget layer for remaining tokens before adding search results, document chunks, or memory summaries to the prompt. Web search enters through the researcher-owned `web-research` workflow, which uses the retrieval workflow as lower-level machinery. Returned snippets and fetched pages are packed to the configured retrieval budget before they are returned to the researcher. Ollama Search is the default web provider because it uses the existing Ollama API key already needed for cloud model testing.
 
 Current retrieval controls:
 
@@ -140,7 +140,7 @@ Current retrieval controls:
 - `GOROMBO_RAG_WEB_FETCH_TOP_K`: default number of top web results to expand through fetch
 - `metadata.providerFailures`: non-fatal provider errors, including search outages or authentication failures
 
-The `researcher` subagent uses the same retrieval controls through `retrieve_context`. This keeps context packing and provider failures in the retrieval workflow while letting the researcher perform multi-step source comparison in its own Flue task context.
+The `researcher` subagent uses these controls through `web_research`. This keeps context packing and provider failures in workflow machinery while preserving the ownership boundary: the orchestrator delegates web/current/source-backed work to the researcher, and the researcher owns web search decisions.
 
 ## Open Questions
 

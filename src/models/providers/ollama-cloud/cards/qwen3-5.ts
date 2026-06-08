@@ -1,5 +1,5 @@
-import { ollamaCloudProviderId } from '../provider-ids.js';
-import type { AgentModelProfile } from '../types.js';
+import { ollamaCloudProviderId } from '../../../provider-ids.js';
+import type { AgentModelProfile } from '../../../types.js';
 
 export const qwen35Card: AgentModelProfile = {
   key: 'qwen3-5-cloud',
@@ -15,6 +15,10 @@ export const qwen35Card: AgentModelProfile = {
   maxOutputTokens: 65_536,
   maxTokens: 65_536,
   enabled: true,
+  env: {
+    apiKey: ['OLLAMA_API_KEY', 'OLLAMA_CLOUD_API_KEY'],
+    baseUrl: 'OLLAMA_CLOUD_BASE_URL',
+  },
   source: {
     name: 'Ollama Cloud /api/show and models.dev metadata',
     checkedAt: '2026-06-07',

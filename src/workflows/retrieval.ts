@@ -1,4 +1,4 @@
-import type { FlueContext, WorkflowRouteHandler } from '@flue/runtime';
+import type { FlueContext } from '@flue/runtime';
 import type { MemoryProvider } from '../memory/memory-provider.js';
 import { DatabaseMemoryProviderPlaceholder } from '../memory/memory-provider.js';
 import { MemoryRouter } from '../memory/memory-router.js';
@@ -10,9 +10,7 @@ import {
 } from '../rag/providers.js';
 import { RagRouter } from '../rag/rag-router.js';
 import { estimateTextTokens } from '../session/context-budget.js';
-import type { RagProviderKind, RagResult, RetrievedContext } from '../types/index.js';
-
-export const route: WorkflowRouteHandler = async (_c, next) => next();
+import type { RagProviderKind, RagResult, RetrievedContext, RetrievalCaller } from '../types/index.js';
 
 export type WebFetchMode = 'auto' | 'always' | 'never';
 
@@ -22,6 +20,7 @@ export interface RetrievalWorkflowPayload {
   actorId: string;
   conversationId: string;
   providers?: RagProviderKind[];
+  caller?: RetrievalCaller;
   limit?: number;
   maxContextTokens?: number;
   webFetch?: WebFetchMode;
@@ -48,6 +47,9 @@ export async function retrieveContext(
   const env = options.env ?? process.env;
   const providers = options.providers ?? createDefaultRetrievalProviders(env);
   const selectedProviders = payload.providers ?? selectProvidersForPrompt(payload.text);
+
+  assertWebSearchCaller(selectedProviders, payload.caller);
+
   const router = createRetrievalRouter(env, { ...options, providers });
   const result = await router.retrieve({
     eventId: String(payload.eventId),
@@ -55,6 +57,7 @@ export async function retrieveContext(
     actorId: String(payload.actorId),
     conversationId: String(payload.conversationId),
     providers: selectedProviders,
+    caller: payload.caller,
     limit: payload.limit,
   });
   const webFetchMode = payload.webFetch ?? 'auto';
@@ -122,6 +125,18 @@ export function selectProvidersForPrompt(text: string): RagProviderKind[] {
   }
 
   return providers;
+}
+
+function assertWebSearchCaller(providers: RagProviderKind[], caller: RetrievalCaller | undefined): void {
+  if (!providers.includes('web-search')) {
+    return;
+  }
+
+  if (caller === 'researcher' || caller === 'research-workflow') {
+    return;
+  }
+
+  throw new Error('Web search retrieval is restricted to the researcher subagent or research workflow.');
 }
 
 interface WebFetchProvider extends RagProvider {

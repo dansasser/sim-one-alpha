@@ -6,7 +6,7 @@ import {
 import { configureRuntimeModels, resolveModelCard } from '../models/index.js';
 import { calculateContextBudget } from '../session/context-budget.js';
 import { goromboFlueSessionStore } from '../session/flue-session-store.js';
-import { loadProtocolsTool, retrieveContextTool, retrieveMemoryTool } from '../tools/index.js';
+import { loadProtocolsTool, retrieveMemoryTool } from '../tools/index.js';
 import type { AgentModelProfile } from '../models/types.js';
 import { createResearcherProfile } from './researcher.js';
 
@@ -22,11 +22,11 @@ const codingWorker = defineAgentProfile({
 const instructions = `
 You are the GOROMBO main orchestrator.
 
-Load protocols before final reasoning, retrieve memory/context when useful, use registry-backed tools, and delegate only to defined workers.
+Load protocols before final reasoning, retrieve memory when useful, use registry-backed tools, and delegate only to defined workers.
 Use the configured model profile from the project model registry. Do not claim protocol, memory, RAG, or search integrations are live beyond the tools that are actually wired.
-The retrieve_context tool is wired to the RAG workflow. Web search uses Ollama Search when an Ollama API key is configured, while memory and document-index providers remain placeholders.
-For one-step lookups, use retrieve_context directly.
-For multi-step research, source comparison, or when a user asks to research something, delegate with the Flue task tool using agent: "researcher".
+You do not perform web search directly and you do not call web-capable retrieval tools.
+For any current, external, web, source-backed, or research task, delegate with the Flue task tool using agent: "researcher".
+Simple internal memory lookup may use retrieve_memory. Web search uses Ollama Search only inside the researcher-owned research workflow.
 Pass the researcher's findings into your final answer and mention provider failures when they affect confidence.
 `;
 
@@ -40,7 +40,7 @@ export default createAgent(({ env }) => {
     instructions,
     compaction: defaultModelCard ? createFlueCompactionConfig(defaultModelCard) : undefined,
     persist: goromboFlueSessionStore,
-    tools: [loadProtocolsTool, retrieveMemoryTool, retrieveContextTool],
+    tools: [loadProtocolsTool, retrieveMemoryTool],
     subagents: [codingWorker, researcher],
   };
 });

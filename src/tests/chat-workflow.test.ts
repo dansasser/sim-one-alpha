@@ -13,12 +13,10 @@ test('chat workflow prompt requires minimal tool flow before answering', () => {
   const prompt = createChatPrompt(event);
 
   assert.match(prompt, /load_protocols/);
-  assert.match(prompt, /retrieve_context/);
-  assert.match(prompt, /Ollama Search/);
-  assert.match(prompt, /maxContextTokens/);
-  assert.match(prompt, /webFetch/);
+  assert.doesNotMatch(prompt, /Use retrieve_context/);
+  assert.match(prompt, /Do not perform web search directly/);
   assert.match(prompt, /agent: "researcher"/);
-  assert.match(prompt, /multi-step web/);
+  assert.match(prompt, /researcher owns web_research/);
   assert.match(prompt, /providerFailures/);
   assert.match(prompt, /retrieve_memory/);
   assert.match(prompt, /placeholder/);

@@ -1,5 +1,5 @@
-import { ollamaCloudProviderId } from '../provider-ids.js';
-import type { AgentModelProfile } from '../types.js';
+import { ollamaCloudProviderId } from '../../../provider-ids.js';
+import type { AgentModelProfile } from '../../../types.js';
 
 export const deepseekV4ProCard: AgentModelProfile = {
   key: 'deepseek-v4-pro-cloud',
@@ -15,6 +15,10 @@ export const deepseekV4ProCard: AgentModelProfile = {
   maxOutputTokens: 1_048_576,
   maxTokens: 1_048_576,
   enabled: true,
+  env: {
+    apiKey: ['OLLAMA_API_KEY', 'OLLAMA_CLOUD_API_KEY'],
+    baseUrl: 'OLLAMA_CLOUD_BASE_URL',
+  },
   source: {
     name: 'Ollama Cloud /api/show and models.dev metadata',
     checkedAt: '2026-06-07',

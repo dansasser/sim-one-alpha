@@ -425,14 +425,15 @@ GOROMBO_MODEL_PROFILE=deepseek-v4-pro-cloud
 GOROMBO_MODEL_PROFILE=qwen3-5-cloud
 ```
 
-Register a local or DT1-hosted Codex Brain model when it is exposed through an Ollama-compatible endpoint:
+Register the DT1-hosted Codex Brain model through its own provider when needed:
 
 ```env
-OLLAMA_LOCAL_BASE_URL=http://dt1.example.local:11434/v1
-OLLAMA_LOCAL_API_KEY=
-OLLAMA_CODEX_BRAIN_MODEL=codex-brain:latest
+CODEX_BRAIN_LOCAL_API_URL=https://dt1.example.local/v1
+CODEX_BRAIN_LOCAL_API_KEY=your_codex_brain_key_here
 GOROMBO_MODEL_PROFILE=codex-brain
 ```
+
+`CODEX_BRAIN_LOCAL_API_URL` must be the OpenAI-compatible base URL including `/v1`.
 
 Run a one-shot chat workflow:
 
@@ -458,13 +459,13 @@ Open an interactive Flue agent session:
 npm run connect
 ```
 
-The `chat` workflow initializes the `orchestrator` Flue agent, loads `.env` through the Flue CLI, and prompts the configured model with the normalized message event. The agent uses `GOROMBO_MODEL` when an exact Flue model specifier is set. Otherwise it selects a project-owned card from `GOROMBO_MODEL_PROFILE`, defaulting to `minimax-m3-cloud`, which resolves to `ollama-cloud/minimax-m3` and calls Ollama Cloud through `https://ollama.com/v1`. Model cards live in `src/models/cards`; custom provider transport is registered from `src/app.ts` through `src/models/providers`. The agent currently has tool flow wired for protocol loading, memory retrieval, and RAG/context retrieval. The protocol, memory, and document-index providers remain typed placeholders; web search is live through Ollama Search when an Ollama API key is configured.
+The `chat` workflow initializes the `orchestrator` Flue agent, loads `.env` through the Flue CLI, and prompts the configured model with the normalized message event. The agent uses `GOROMBO_MODEL` when an exact Flue model specifier is set. Otherwise it selects a project-owned card from `GOROMBO_MODEL_PROFILE`, defaulting to `minimax-m3-cloud`, which resolves to `ollama-cloud/minimax-m3` and calls Ollama Cloud through `https://ollama.com/v1`. Model cards live inside each provider directory under `src/models/providers/<provider>/cards`; the catalog in `src/models/catalog.ts` aggregates them for model selection and budget lookup. The agent currently has tool flow wired for protocol loading, memory retrieval, and RAG/context retrieval. The protocol, memory, and document-index providers remain typed placeholders; web search is live through Ollama Search when an Ollama API key is configured.
 
 ## Model Cards
 
 Model cards are the project-owned source of truth for models the agent can intentionally use.
 
-Each card lives in `src/models/cards` and owns the details that are specific to one model:
+Each card lives under its owning provider directory, for example `src/models/providers/ollama-cloud/cards/minimax-m3.ts`, and owns the details that are specific to one model:
 
 - provider id and model id
 - Flue model specifier
@@ -474,7 +475,7 @@ Each card lives in `src/models/cards` and owns the details that are specific to 
 - advertised, guaranteed, and provider-reported limits when those differ
 - source notes for where the metadata came from
 
-Provider files live separately in `src/models/providers`. Providers describe transport: base URLs, API key environment variables, Flue `registerProvider(...)` calls, and per-provider model registration. This keeps provider setup out of agent files and lets the agent reference a card by specifier.
+Provider files live next to their cards in `src/models/providers/<provider>`. Providers describe transport: base URLs, API key environment variables, Flue `registerProvider(...)` calls, and per-provider model registration. When a provider has multiple model cards, those cards live in that provider's `cards/` subdirectory. This keeps provider setup out of agent files and lets the agent reference a card by specifier.
 
 Cards exist because session management, compaction, and RAG all need model-specific token limits. MiniMax M3, DeepSeek V4 Pro, and Qwen 3.5 do not have the same usable context or output budgets. The context-budget layer reads the selected card instead of hardcoding token limits in the agent, workflow, or RAG router.
 
@@ -484,7 +485,7 @@ Current cards:
 minimax-m3-cloud       -> ollama-cloud/minimax-m3
 deepseek-v4-pro-cloud  -> ollama-cloud/deepseek-v4-pro
 qwen3-5-cloud          -> ollama-cloud/qwen3.5:397b
-codex-brain            -> ollama-local/<OLLAMA_CODEX_BRAIN_MODEL>
+codex-brain            -> codex-brain/gpt-5.5
 ```
 
 MiniMax M3 is intentionally recorded with multiple limits: MiniMax advertises up to 1M context with a guaranteed 512K minimum, while Ollama Cloud currently reports 524288 through both direct cloud metadata and the local `:cloud` path. Session budget code must treat those as separate facts.
@@ -510,9 +511,9 @@ The session store is now the natural boundary for future memory and RAG work: du
 
 Architecture details live in `docs/architecture/session-context-budget.md`.
 
-## Web Search
+## Web Search And Research
 
-Ollama Search is the default web-search provider for the RAG router.
+Ollama Search is the default web-search provider for the researcher-owned web research path.
 
 The provider uses the existing Ollama API key:
 
@@ -522,6 +523,9 @@ OLLAMA_API_KEY=your_key_here
 OLLAMA_WEB_SEARCH_BASE_URL=https://ollama.com
 GOROMBO_RAG_MAX_CONTEXT_TOKENS=4000
 GOROMBO_RAG_WEB_FETCH_TOP_K=1
+GOROMBO_RESEARCH_MAX_QUERIES=3
+GOROMBO_RESEARCH_MAX_FETCHES=2
+GOROMBO_RESEARCH_CACHE_DB=.gorombo/research-cache.sqlite
 ```
 
 Implemented endpoints:
@@ -531,18 +535,19 @@ POST https://ollama.com/api/web_search
 POST https://ollama.com/api/web_fetch
 ```
 
-`web_search` results are normalized into the project `RetrievedContext` shape with `provider: "web-search"` and `metadata.provider: "ollama"`. If no Ollama key is configured, the RAG router falls back to the web-search placeholder instead of failing startup.
+`web_search` results are normalized into the project `RetrievedContext` shape with `provider: "web-search"` and `metadata.provider: "ollama"`. If no Ollama key is configured, the web provider falls back to the web-search placeholder instead of failing startup.
 
-The agent-facing `retrieve_context` tool calls the `retrieval` Flue workflow boundary, so web search, memory, document index, and future source selection can be coordinated from a workflow file instead of embedding provider setup inside the tool.
+The researcher-facing `web_research` tool calls the `web-research` Flue workflow boundary, which owns query planning, search/fetch budget, cache use, evidence packing, confidence, and provider failures. The low-level `retrieve_context` tool remains researcher-only and must not be attached to the orchestrator.
 
-The retrieval workflow now handles:
+The researcher-owned web research path handles:
 
-- provider selection: memory by default, web search for current/external/source-backed prompts, and document index for project-document prompts
-- search-to-fetch enrichment: `webFetch: "auto"` fetches the top web page for source-backed prompts when the provider supports `fetchPage(...)`
+- query planning: one search for simple lookups, multiple searches for complex research/comparison prompts
+- cache: per-run in-memory cache plus optional SQLite persistent cache
+- search-to-fetch enrichment: `webFetch: "auto"` or `"always"` fetches top pages when the provider supports `fetchPage(...)`
 - context packing: returned contexts are packed to `maxContextTokens`, defaulting to `GOROMBO_RAG_MAX_CONTEXT_TOKENS` or `4000`
-- provider failures: web-search failures are returned in `metadata.providerFailures` instead of failing the whole chat path
+- provider failures: web-search failures are returned in `providerFailures` instead of failing the whole chat path
 
-The `retrieve_context` tool accepts optional `limit`, `maxContextTokens`, `webFetch`, and `fetchTopK` controls.
+The `web_research` tool accepts optional `limit`, `maxContextTokens`, `webFetch`, `maxQueries`, `maxFetches`, and `freshness` controls.
 
 Future RAG providers such as local SearXNG, GitHub, company documents, and durable memory should plug into the same `RagProvider` interface and then be ranked by the retrieval workflow and RAG router.
 
@@ -552,21 +557,22 @@ The main orchestrator has a registered Flue subagent named `researcher`.
 
 Use the boundaries this way:
 
-- one-step lookup: main orchestrator calls `retrieve_context` directly
-- multi-step research or source comparison: main orchestrator delegates through Flue `task` with `agent: "researcher"`
-- low-level provider errors: retrieval workflow records failures in `metadata.providerFailures`
-- research strategy: researcher decides which retrieval calls to make, when to fetch pages, and how to compare sources
+- no web needed: main orchestrator may answer, use protocols, or use safe memory lookup
+- any web/current/source-backed information: main orchestrator delegates through Flue `task` with `agent: "researcher"`
+- low-level provider errors: the research workflow records failures in `providerFailures`
+- research strategy: researcher decides which searches to run, when to fetch pages, when to stop, and how to compare sources
 
-The researcher profile lives in `src/agents/researcher.ts` and uses the same `retrieve_context` tool as the main agent. The standalone `research` workflow in `src/workflows/research.ts` initializes the researcher directly for CLI or API research runs. Use `npm run research:local -- "..."` for local one-shot research testing.
+The researcher profile lives in `src/agents/researcher.ts` and owns the `web_research` tool. The standalone `research` workflow in `src/workflows/research.ts` initializes the researcher directly for CLI or API research runs. Use `npm run research:local -- "..."` for local one-shot research testing.
 
 ```text
 chat workflow
 -> orchestrator agent
 -> task tool with agent: "researcher"
 -> researcher subagent
--> retrieve_context
+-> web_research
+-> web-research workflow
 -> retrieval workflow
--> Ollama Search / future RAG providers
+-> cache / Ollama Search / future RAG providers
 ```
 
 ## Configuration
@@ -585,7 +591,8 @@ OLLAMA_CLOUD_API_KEY
 OLLAMA_CLOUD_BASE_URL
 OLLAMA_LOCAL_BASE_URL
 OLLAMA_LOCAL_API_KEY
-OLLAMA_CODEX_BRAIN_MODEL
+CODEX_BRAIN_LOCAL_API_URL
+CODEX_BRAIN_LOCAL_API_KEY
 TELEGRAM_BOT_TOKEN
 DATABASE_URL
 PROTOCOL_DB_PATH
