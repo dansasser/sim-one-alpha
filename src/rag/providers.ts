@@ -19,6 +19,7 @@ export interface OllamaWebSearchProviderOptions {
   apiKey: string;
   baseUrl?: string;
   fetch?: typeof fetch;
+  timeoutMs?: number;
 }
 
 export class WebSearchProviderPlaceholder implements RagProvider {
@@ -48,10 +49,12 @@ export class OllamaWebSearchProvider implements RagProvider {
 
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly timeoutMs: number;
 
   constructor(private readonly options: OllamaWebSearchProviderOptions) {
     this.baseUrl = options.baseUrl ?? 'https://ollama.com';
     this.fetchImpl = options.fetch ?? fetch;
+    this.timeoutMs = options.timeoutMs ?? 8_000;
   }
 
   async retrieve(query: RagQuery): Promise<RetrievedContext[]> {
@@ -114,14 +117,29 @@ export class OllamaWebSearchProvider implements RagProvider {
   }
 
   private async postJson(path: string, body: Record<string, unknown>): Promise<Response> {
-    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.options.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    let response: Response;
+
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.options.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(`Ollama web search request timed out after ${this.timeoutMs}ms.`);
+      }
+
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
 
     if (!response.ok) {
       throw new Error(`Ollama web search request failed with status ${response.status}.`);
@@ -162,6 +180,7 @@ export function createDefaultWebSearchProvider(env: Record<string, unknown>): Ra
     return new OllamaWebSearchProvider({
       apiKey: ollamaKey,
       baseUrl: readString(env.OLLAMA_WEB_SEARCH_BASE_URL) ?? 'https://ollama.com',
+      timeoutMs: readPositiveInteger(env.OLLAMA_WEB_SEARCH_TIMEOUT_MS),
     });
   }
 
@@ -174,4 +193,17 @@ function clampMaxResults(value: number): number {
 
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function readPositiveInteger(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return Math.floor(value);
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
+  }
+
+  return undefined;
 }

@@ -5,19 +5,42 @@ import type { AgentModelCard } from '../../types.js';
 
 export const ollamaLocalDefaultBaseUrl = 'http://localhost:11434/v1';
 
+export interface OllamaLocalProviderRegistration {
+  api: 'openai-completions';
+  baseUrl: string;
+  apiKey: string;
+  contextWindow: number;
+  maxTokens: number;
+  models: Record<string, { contextWindow: number; maxTokens: number }>;
+}
+
 export function registerOllamaLocalProvider(
   env: Record<string, unknown> = process.env,
   cards: readonly AgentModelCard[] = [],
 ): void {
-  if (!shouldRegisterLocalProvider(env, cards)) {
+  const registration = resolveOllamaLocalProviderRegistration(env, cards);
+
+  if (!registration) {
     return;
   }
+
+  registerProvider(ollamaLocalProviderId, registration);
+}
+
+export function resolveOllamaLocalProviderRegistration(
+  env: Record<string, unknown> = process.env,
+  cards: readonly AgentModelCard[] = [],
+): OllamaLocalProviderRegistration | undefined {
+  if (!shouldRegisterLocalProvider(env, cards)) {
+    return undefined;
+  }
+
   const resolvedEnv = resolveProviderCardEnv(cards, env);
 
-  registerProvider(ollamaLocalProviderId, {
+  return {
     api: 'openai-completions',
-    baseUrl: resolvedEnv.baseUrl ?? ollamaLocalDefaultBaseUrl,
-    apiKey: resolvedEnv.apiKey ?? 'ollama',
+    baseUrl: resolvedEnv.baseUrl ?? readString(env.OLLAMA_LOCAL_BASE_URL) ?? ollamaLocalDefaultBaseUrl,
+    apiKey: resolvedEnv.apiKey ?? readString(env.OLLAMA_LOCAL_API_KEY) ?? 'ollama',
     contextWindow: maxOrDefault(cards.map((card) => card.providerReportedContextWindow ?? card.contextWindow), 128_000),
     maxTokens: maxOrDefault(cards.map((card) => card.maxOutputTokens), 32_000),
     models: Object.fromEntries(
@@ -29,7 +52,7 @@ export function registerOllamaLocalProvider(
         },
       ]),
     ),
-  });
+  };
 }
 
 function shouldRegisterLocalProvider(env: Record<string, unknown>, cards: readonly AgentModelCard[]): boolean {

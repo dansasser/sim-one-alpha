@@ -1,4 +1,5 @@
 import { Type, defineTool } from '@flue/runtime';
+import { readNonNegativeInteger, readPositiveInteger, readWebFetchMode } from '../utils/input.js';
 import { retrieveContext } from '../workflows/retrieval.js';
 
 export const retrieveContextTool = defineTool({
@@ -26,25 +27,8 @@ export const retrieveContextTool = defineTool({
         limit: readPositiveInteger(limit),
         maxContextTokens: readPositiveInteger(maxContextTokens),
         webFetch: readWebFetchMode(webFetch),
-        fetchTopK: readPositiveInteger(fetchTopK),
+        fetchTopK: readNonNegativeInteger(fetchTopK),
       }),
     );
   },
 });
-
-function readPositiveInteger(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-    return Math.floor(value);
-  }
-
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value.trim());
-    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
-  }
-
-  return undefined;
-}
-
-function readWebFetchMode(value: unknown): 'auto' | 'always' | 'never' | undefined {
-  return value === 'auto' || value === 'always' || value === 'never' ? value : undefined;
-}

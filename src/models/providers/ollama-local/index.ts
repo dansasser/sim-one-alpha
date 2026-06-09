@@ -1,1 +1,6 @@
-export { ollamaLocalDefaultBaseUrl, registerOllamaLocalProvider } from './provider.js';
+export {
+  ollamaLocalDefaultBaseUrl,
+  registerOllamaLocalProvider,
+  resolveOllamaLocalProviderRegistration,
+  type OllamaLocalProviderRegistration,
+} from './provider.js';

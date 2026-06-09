@@ -23,7 +23,7 @@ export class InMemoryRegistry<TDefinition extends RegistryDefinition>
       throw new Error(`Registry definition already exists: ${definition.id}`);
     }
 
-    this.definitions.set(definition.id, Object.freeze({ ...definition }));
+    this.definitions.set(definition.id, deepFreeze(cloneDefinition(definition)));
   }
 
   get(id: string): RegistryLookupResult<TDefinition> {
@@ -52,3 +52,18 @@ export class InMemoryRegistry<TDefinition extends RegistryDefinition>
   }
 }
 
+function cloneDefinition<TDefinition extends RegistryDefinition>(definition: TDefinition): TDefinition {
+  return structuredClone(definition);
+}
+
+function deepFreeze<T>(value: T): T {
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  for (const child of Object.values(value)) {
+    deepFreeze(child);
+  }
+
+  return Object.freeze(value);
+}

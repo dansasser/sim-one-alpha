@@ -34,6 +34,7 @@ export interface ResearchCache {
   setSearch(entry: CachedSearchResult): Promise<void>;
   getPage(url: string, now?: Date): Promise<CachedPageResult | null>;
   setPage(entry: CachedPageResult): Promise<void>;
+  close?(): void | Promise<void>;
 }
 
 export class InMemoryResearchCache implements ResearchCache {
@@ -117,6 +118,10 @@ export class ResearchRunCache implements ResearchCache {
     this.runPages.set(entry.url, entry);
     await this.persistent.setPage(entry);
   }
+
+  async close(): Promise<void> {
+    await this.persistent.close?.();
+  }
 }
 
 export class SqliteResearchCache implements ResearchCache {
@@ -136,6 +141,7 @@ export class SqliteResearchCache implements ResearchCache {
         expires_at TEXT NOT NULL
       );
 
+      -- content_hash is kept for later page deduplication and integrity checks.
       CREATE TABLE IF NOT EXISTS research_page_cache (
         url TEXT PRIMARY KEY,
         page_json TEXT NOT NULL,
@@ -159,12 +165,22 @@ export class SqliteResearchCache implements ResearchCache {
       return null;
     }
 
+    const contexts = parseJson<RetrievedContext[]>(row.contexts_json, {
+      cacheKind: 'search',
+      key: row.key,
+      provider: row.provider,
+    });
+
+    if (!contexts) {
+      return null;
+    }
+
     return {
       key: row.key,
       query: row.query,
       provider: row.provider,
       limit: row.limit_value,
-      contexts: JSON.parse(row.contexts_json) as RetrievedContext[],
+      contexts,
       retrievedAt: row.retrieved_at,
       expiresAt: row.expires_at,
     };
@@ -201,9 +217,18 @@ export class SqliteResearchCache implements ResearchCache {
       return null;
     }
 
+    const page = parseJson<WebFetchResult>(row.page_json, {
+      cacheKind: 'page',
+      url: row.url,
+    });
+
+    if (!page) {
+      return null;
+    }
+
     return {
       url: row.url,
-      page: JSON.parse(row.page_json) as WebFetchResult,
+      page,
       retrievedAt: row.retrieved_at,
       expiresAt: row.expires_at,
     };
@@ -223,6 +248,10 @@ export class SqliteResearchCache implements ResearchCache {
         entry.retrievedAt,
         entry.expiresAt,
       );
+  }
+
+  close(): void {
+    this.database.close();
   }
 }
 
@@ -251,6 +280,26 @@ function isExpired(expiresAt: string, now: Date): boolean {
 
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function parseJson<T>(
+  value: string,
+  context: { cacheKind: 'search'; key: string; provider: string } | { cacheKind: 'page'; url: string },
+): T | null {
+  try {
+    return JSON.parse(value) as T;
+  } catch (error) {
+    const details =
+      context.cacheKind === 'search'
+        ? `key=${context.key} provider=${context.provider}`
+        : `url=${context.url}`;
+    console.warn(
+      `Ignoring corrupted research ${context.cacheKind} cache entry (${details}): ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return null;
+  }
 }
 
 interface SearchCacheRow {

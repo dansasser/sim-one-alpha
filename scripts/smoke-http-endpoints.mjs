@@ -1,13 +1,14 @@
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const port = Number(process.env.GOROMBO_HTTP_SMOKE_PORT || 3991);
 const liveChat = process.argv.includes('--live-chat');
 
 const envFileValues = parseEnvFile('.env');
 const requestSecret = process.env.GOROMBO_HTTP_SMOKE_API_SECRET || envFileValues.API_SECRET || 'http-smoke-secret';
+const nodeArgs = existsSync('.env') ? ['--env-file=.env', 'dist/server.mjs'] : ['dist/server.mjs'];
 
-const child = spawn(process.execPath, ['--env-file=.env', 'dist/server.mjs'], {
+const child = spawn(process.execPath, nodeArgs, {
   cwd: process.cwd(),
   env: {
     PATH: process.env.PATH,
@@ -81,6 +82,10 @@ try {
 
 function parseEnvFile(path) {
   const values = {};
+  if (!existsSync(path)) {
+    return values;
+  }
+
   for (const line of readFileSync(path, 'utf8').split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) {

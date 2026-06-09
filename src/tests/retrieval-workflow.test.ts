@@ -15,15 +15,15 @@ test('retrieve_context tool reads Ollama search configuration at execution time'
     OLLAMA_WEB_SEARCH_BASE_URL: process.env.OLLAMA_WEB_SEARCH_BASE_URL,
   };
 
-  delete process.env.OLLAMA_API_KEY;
-  delete process.env.OLLAMA_CLOUD_API_KEY;
-  process.env.GOROMBO_WEB_SEARCH_PROVIDER = 'ollama';
-  process.env.OLLAMA_WEB_SEARCH_BASE_URL = 'https://ollama.test';
-
-  const module = (await import(`../tools/rag-tool.js?late-env=${Date.now()}`)) as typeof import('../tools/rag-tool.js');
   const requests: Array<{ url: string; init?: RequestInit }> = [];
 
   try {
+    delete process.env.OLLAMA_API_KEY;
+    delete process.env.OLLAMA_CLOUD_API_KEY;
+    process.env.GOROMBO_WEB_SEARCH_PROVIDER = 'ollama';
+    process.env.OLLAMA_WEB_SEARCH_BASE_URL = 'https://ollama.test';
+
+    const module = (await import(`../tools/rag-tool.js?late-env=${Date.now()}`)) as typeof import('../tools/rag-tool.js');
     process.env.OLLAMA_API_KEY = 'late-key';
     globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
       requests.push({ url: String(url), init });
@@ -345,6 +345,50 @@ test('retrieval workflow reads string budget controls from environment values', 
   assert.deepEqual(fetchCalls, ['https://example.com/first', 'https://example.com/second']);
   assert.equal(result.metadata?.budget?.maxContextTokens, 13);
   assert.ok((result.metadata?.budget?.usedContextTokens ?? Number.POSITIVE_INFINITY) <= 13);
+});
+
+test('retrieval workflow honors an explicit zero web fetch budget', async () => {
+  const webProvider: RagProvider & { fetchPage(url: string): Promise<WebFetchResult> } = {
+    id: 'web-search',
+    name: 'test-web',
+    retrieve: async () => [
+      makeContext({
+        id: 'web:event-1:0',
+        provider: 'web-search',
+        title: 'Search Snippet',
+        content: 'Short search snippet.',
+        score: 0.8,
+        metadata: {
+          provider: 'test-web',
+          url: 'https://example.com/full-page',
+        },
+      }),
+    ],
+    fetchPage: async () => {
+      throw new Error('fetchPage should not run when fetchTopK is zero');
+    },
+  };
+
+  const result = await retrieveContext(
+    {
+      eventId: 'event-1',
+      text: 'Use web search for the current source.',
+      actorId: 'user-1',
+      conversationId: 'thread-1',
+      caller: 'researcher',
+      providers: ['web-search'],
+      webFetch: 'always',
+      fetchTopK: 0,
+    },
+    {
+      memoryProvider: emptyMemoryProvider,
+      providers: [webProvider],
+    },
+  );
+
+  assert.equal(result.metadata?.webFetch?.attempted, 0);
+  assert.equal(result.contexts[0]?.title, 'Search Snippet');
+  assert.equal(result.contexts[0]?.metadata?.webFetch, undefined);
 });
 
 test('retrieval workflow records web search failures without failing the whole retrieval', async () => {

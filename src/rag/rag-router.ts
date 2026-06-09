@@ -41,7 +41,7 @@ export class RagRouter {
 
     const limited = contexts
       .sort((left, right) => right.score - left.score)
-      .slice(0, query.limit ?? 5);
+      .slice(0, readLimit(query.limit));
 
     return {
       query,
@@ -54,4 +54,10 @@ export class RagRouter {
         : undefined,
     };
   }
+}
+
+function readLimit(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.floor(value))
+    : 5;
 }

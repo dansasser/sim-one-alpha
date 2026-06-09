@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { codexBrainCard, deepseekV4ProCard, minimaxM3Card, qwen35Card, resolveModelCard } from '../models/catalog.js';
 import { configureRuntimeModels, createModelRegistry, selectModelCardForRole } from '../models/index.js';
+import { registerOllamaCloudProvider } from '../models/providers/ollama-cloud/index.js';
+import { resolveOllamaLocalProviderRegistration } from '../models/providers/ollama-local/index.js';
 
 test('model registry defaults agentic chat to MiniMax M3', () => {
   const registry = createModelRegistry({
@@ -192,4 +194,20 @@ test('model cards can be resolved from Flue specifier', () => {
 
 test('unknown model specifier returns undefined', () => {
   assert.equal(resolveModelCard('unknown/model'), undefined);
+});
+
+test('Ollama Local provider registration uses local endpoint environment values without cards', () => {
+  const registration = resolveOllamaLocalProviderRegistration({
+    OLLAMA_LOCAL_BASE_URL: 'http://localhost:11435/v1',
+    OLLAMA_LOCAL_API_KEY: 'local-key',
+  });
+
+  assert.equal(registration?.baseUrl, 'http://localhost:11435/v1');
+  assert.equal(registration?.apiKey, 'local-key');
+  assert.equal(registration?.contextWindow, 128_000);
+  assert.equal(registration?.maxTokens, 32_000);
+});
+
+test('Ollama Cloud provider registration tolerates an empty card list', () => {
+  assert.doesNotThrow(() => registerOllamaCloudProvider({ OLLAMA_API_KEY: 'test-key' }, []));
 });

@@ -11,6 +11,7 @@ import {
 import { RagRouter } from '../rag/rag-router.js';
 import { estimateTextTokens } from '../session/context-budget.js';
 import type { RagProviderKind, RagResult, RetrievedContext, RetrievalCaller } from '../types/index.js';
+import { readNonNegativeInteger, readPositiveInteger } from '../utils/input.js';
 
 export type WebFetchMode = 'auto' | 'always' | 'never';
 
@@ -65,7 +66,7 @@ export async function retrieveContext(
     contexts: result.contexts,
     providers,
     mode: webFetchMode,
-    fetchTopK: readPositiveInteger(payload.fetchTopK) ?? readPositiveInteger(env.GOROMBO_RAG_WEB_FETCH_TOP_K) ?? 1,
+    fetchTopK: readNonNegativeInteger(payload.fetchTopK) ?? readNonNegativeInteger(env.GOROMBO_RAG_WEB_FETCH_TOP_K) ?? 1,
     shouldFetch:
       selectedProviders.includes('web-search') &&
       (webFetchMode === 'always' || (webFetchMode === 'auto' && isSourceBackedPrompt(payload.text))),
@@ -340,19 +341,6 @@ function isProjectDocumentPrompt(text: string): boolean {
     'knowledge base',
     'uploaded document',
   ].some((term) => normalized.includes(term));
-}
-
-function readPositiveInteger(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-    return Math.floor(value);
-  }
-
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value.trim());
-    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
-  }
-
-  return undefined;
 }
 
 function readString(value: unknown): string | undefined {

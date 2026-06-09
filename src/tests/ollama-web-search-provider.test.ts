@@ -101,6 +101,29 @@ test('Ollama web fetch provider returns fetched page content', async () => {
   assert.match(result.retrievedAt, /^\d{4}-\d{2}-\d{2}T/);
 });
 
+test('Ollama web search provider times out stalled requests', async () => {
+  const provider = new OllamaWebSearchProvider({
+    apiKey: 'test-key',
+    timeoutMs: 1,
+    fetch: async (_url: string | URL | Request, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        });
+      }),
+  });
+
+  await assert.rejects(
+    provider.retrieve({
+      eventId: 'event-1',
+      text: 'ollama web search api',
+      actorId: 'user-1',
+      conversationId: 'thread-1',
+    }),
+    /timed out after 1ms/,
+  );
+});
+
 test('default web search provider uses Ollama when an Ollama API key is configured', () => {
   const provider = createDefaultWebSearchProvider({
     OLLAMA_API_KEY: 'test-key',

@@ -13,7 +13,7 @@ import { createResearcherSubagent } from './researcher.js';
 export const route: AgentRouteHandler = async (_c, next) => next();
 
 const codingWorker = defineAgentProfile({
-  name: 'coding_worker',
+  name: 'coding-worker',
   model: false,
   instructions:
     'Placeholder coding worker subagent. Do not autonomously edit code yet; future phases add plan, edit, test, debug loop, diff, and approval behavior.',

@@ -4,11 +4,14 @@ import { protocolSchemaSql } from './schema.js';
 
 export class SqliteProtocolProviderPlaceholder implements ProtocolProvider {
   readonly schema = protocolSchemaSql;
+  private readonly protocols: ProtocolDefinition[];
 
   constructor(
     readonly dbPath: string,
-    private readonly protocols: ProtocolDefinition[] = baseProtocolSeeds,
-  ) {}
+    protocols: ProtocolDefinition[] = baseProtocolSeeds,
+  ) {
+    this.protocols = protocols.map(cloneProtocol);
+  }
 
   async loadApplicable(event: NormalizedMessageEvent): Promise<ProtocolBundle> {
     const protocols = this.protocols
@@ -18,13 +21,13 @@ export class SqliteProtocolProviderPlaceholder implements ProtocolProvider {
 
     return {
       eventId: event.id,
-      protocols,
+      protocols: protocols.map(cloneProtocol),
       loadedAt: new Date().toISOString(),
     };
   }
 
   listSeedProtocols(): ProtocolDefinition[] {
-    return [...this.protocols];
+    return this.protocols.map(cloneProtocol);
   }
 }
 
@@ -46,3 +49,11 @@ function matches(expected: string | undefined, actual: string | undefined): bool
   return expected === undefined || expected === actual;
 }
 
+function cloneProtocol(protocol: ProtocolDefinition): ProtocolDefinition {
+  return {
+    ...protocol,
+    appliesTo: { ...protocol.appliesTo },
+    rules: [...protocol.rules],
+    ...(protocol.tags ? { tags: [...protocol.tags] } : {}),
+  };
+}

@@ -10,6 +10,7 @@ export interface CachedWebSearchProviderOptions {
   cache: ResearchRunCache;
   searchTtlMs: number;
   pageTtlMs: number;
+  bypassCacheReads?: boolean;
   now?: Date;
 }
 
@@ -32,7 +33,7 @@ export class CachedWebSearchProvider implements RagProvider {
       limit,
     });
     const now = this.options.now ?? new Date();
-    const cached = await this.options.cache.getSearch(key, now);
+    const cached = this.options.bypassCacheReads ? null : await this.options.cache.getSearch(key, now);
 
     if (cached) {
       return cached.contexts.map((context) => ({
@@ -73,7 +74,7 @@ export class CachedWebSearchProvider implements RagProvider {
     }
 
     const now = this.options.now ?? new Date();
-    const cached = await this.options.cache.getPage(url, now);
+    const cached = this.options.bypassCacheReads ? null : await this.options.cache.getPage(url, now);
     if (cached) {
       return {
         ...cached.page,

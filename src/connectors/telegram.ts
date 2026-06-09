@@ -5,6 +5,7 @@ export interface TelegramUpdateLike {
   update_id?: number;
   message?: {
     message_id?: number;
+    message_thread_id?: number;
     text?: string;
     chat?: {
       id?: number | string;
@@ -34,9 +35,8 @@ export function normalizeTelegramUpdate(update: TelegramUpdateLike): NormalizedM
     },
     conversation: {
       id: conversationId,
-      threadId: message?.message_id ? String(message.message_id) : undefined,
+      threadId: message?.message_thread_id ? String(message.message_thread_id) : undefined,
     },
     raw: update,
   };
 }
-

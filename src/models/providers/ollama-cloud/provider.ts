@@ -11,6 +11,10 @@ export function registerOllamaCloudProvider(
   env: Record<string, unknown> = process.env,
   cards: readonly AgentModelCard[] = ollamaCloudCards,
 ): void {
+  if (!cards.length) {
+    return;
+  }
+
   const resolvedEnv = resolveProviderCardEnv(cards, env);
   const apiKey = resolvedEnv.apiKey;
   if (!apiKey) {

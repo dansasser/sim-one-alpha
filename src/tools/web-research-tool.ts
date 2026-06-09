@@ -1,4 +1,10 @@
 import { Type, defineTool } from '@flue/runtime';
+import {
+  readNonNegativeInteger,
+  readPositiveInteger,
+  readResearchFreshness,
+  readWebFetchMode,
+} from '../utils/input.js';
 import { runWebResearch } from '../workflows/web-research.js';
 
 export const webResearchTool = defineTool({
@@ -36,33 +42,12 @@ export const webResearchTool = defineTool({
         actorId: String(actorId),
         conversationId: String(conversationId),
         maxQueries: readPositiveInteger(maxQueries),
-        maxFetches: readPositiveInteger(maxFetches),
+        maxFetches: readNonNegativeInteger(maxFetches),
         maxContextTokens: readPositiveInteger(maxContextTokens),
         webFetch: readWebFetchMode(webFetch),
         limit: readPositiveInteger(limit),
-        freshness: readFreshness(freshness),
+        freshness: readResearchFreshness(freshness),
       }),
     );
   },
 });
-
-function readPositiveInteger(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-    return Math.floor(value);
-  }
-
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value.trim());
-    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
-  }
-
-  return undefined;
-}
-
-function readWebFetchMode(value: unknown): 'auto' | 'always' | 'never' | undefined {
-  return value === 'auto' || value === 'always' || value === 'never' ? value : undefined;
-}
-
-function readFreshness(value: unknown): 'auto' | 'fresh' | 'cached' | undefined {
-  return value === 'auto' || value === 'fresh' || value === 'cached' ? value : undefined;
-}

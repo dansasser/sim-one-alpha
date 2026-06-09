@@ -28,6 +28,22 @@ test('chat event ingress uses runtime API_SECRET when Hono env bindings are empt
   });
 });
 
+test('chat event ingress returns 400 for invalid JSON after auth passes', async () => {
+  await withApiSecret('test-secret', async () => {
+    const response = await app.request('/api/chat/events', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-secret': 'test-secret',
+      },
+      body: '{not valid json',
+    });
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: 'Invalid JSON payload' });
+  });
+});
+
 async function withApiSecret(secret: string | undefined, fn: () => Promise<void>): Promise<void> {
   const previous = process.env.API_SECRET;
 
