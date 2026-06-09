@@ -9,8 +9,19 @@ src/app.ts
   Hono application shell.
   Mounts Flue with app.route('/', flue()).
   May expose health checks and app-owned ingress.
+  Applies imported API-secret middleware to public Flue route families.
   Custom chat ingress forwards to the Flue chat workflow.
   Must not call the old non-Flue orchestrator.
+
+src/middleware/api-secret.ts
+  Imported Hono middleware for API-secret auth.
+  Reads runtime env bindings and Node process env.
+  Fails closed when API_SECRET is missing.
+
+src/routes/chat-events.ts
+  App-owned /api/chat/events ingress alias.
+  Verifies API-secret middleware, normalizes the HTTP boundary, and forwards to /workflows/chat.
+  Does not call c.executionCtx or a non-Flue orchestrator.
 
 src/agents/orchestrator.ts
   Main Flue orchestrator agent.
@@ -18,13 +29,20 @@ src/agents/orchestrator.ts
   Does not own web search.
 
 src/agents/researcher.ts
-  Research subagent profile and direct researcher agent.
+  Research subagent and direct researcher agent.
   Owns web research behavior.
   May use tools, skills, and workflows.
 
 src/workflows/chat.ts
   Finite chat workflow.
-  Normalizes a web/API message, initializes the orchestrator, checks session budget, compacts before oversize prompts, and prompts the orchestrator.
+  Normalizes a web/API message, initializes the orchestrator, checks session budget, compacts before oversize prompts, prompts the orchestrator, and retries with the configured backup model card when the primary model is recoverably unavailable.
+  Exposes its Flue HTTP route through imported API-secret middleware.
+
+src/config/
+  Typed loader and source JSON for the main GOROMBO runtime config file.
+
+dist/gorombo.config.json
+  Built editable runtime config shipped with the product. Starts with primary and backup model card keys.
 
 src/workflows/research.ts
   Finite direct research harness for testing or direct research runs.
@@ -116,14 +134,30 @@ The researcher may implement that behavior through tools, skills, and workflow f
 import { flue } from '@flue/runtime/routing';
 import { Hono } from 'hono';
 import './models/runtime.js';
+import { requireApiSecret } from './middleware/api-secret.js';
+import { registerChatEventRoutes } from './routes/chat-events.js';
 
 const app = new Hono();
 
 app.get('/health', (c) => c.json({ ok: true }));
 
+app.use('/agents/*', requireApiSecret);
+app.use('/workflows/*', requireApiSecret);
+app.use('/runs/*', requireApiSecret);
+registerChatEventRoutes(app);
 app.route('/', flue());
 
 export default app;
 ```
 
 Custom ingress may be added only if it enters the Flue agent/workflow path.
+
+The built HTTP chat path is asynchronous because it uses Flue workflow routing:
+
+```text
+POST /api/chat/events
+-> POST /workflows/chat
+-> 202 { runId }
+-> GET /runs/:runId
+-> completed workflow result
+```

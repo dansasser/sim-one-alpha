@@ -10,11 +10,10 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "rootDir": "src",
-    "outDir": "dist",
+    "outDir": ".tmp/tsc",
     "declaration": true,
     "sourceMap": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["dist", "node_modules"]
+  "exclude": ["dist", ".tmp", "node_modules"]
 }
-

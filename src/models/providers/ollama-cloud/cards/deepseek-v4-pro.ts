@@ -1,7 +1,7 @@
 import { ollamaCloudProviderId } from '../../../provider-ids.js';
-import type { AgentModelProfile } from '../../../types.js';
+import type { AgentModelCard } from '../../../types.js';
 
-export const deepseekV4ProCard: AgentModelProfile = {
+export const deepseekV4ProCard: AgentModelCard = {
   key: 'deepseek-v4-pro-cloud',
   providerId: ollamaCloudProviderId,
   modelId: 'deepseek-v4-pro',

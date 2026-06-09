@@ -2,12 +2,12 @@ import { registerProvider } from '@flue/runtime';
 import { providerContextWindow } from '../../card-limits.js';
 import { resolveProviderCardEnv } from '../../env.js';
 import { codexBrainProviderId } from '../../provider-ids.js';
-import type { AgentModelProfile } from '../../types.js';
+import type { AgentModelCard } from '../../types.js';
 import { codexBrainCards } from './cards/index.js';
 
 export function registerCodexBrainProvider(
   env: Record<string, unknown> = process.env,
-  cards: readonly AgentModelProfile[] = codexBrainCards,
+  cards: readonly AgentModelCard[] = codexBrainCards,
 ): void {
   const resolvedEnv = resolveProviderCardEnv(cards, env);
   if (!resolvedEnv.apiKey || !resolvedEnv.baseUrl) {

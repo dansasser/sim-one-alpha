@@ -4,7 +4,7 @@
 
 **Goal:** Add a Flue research subagent and research workflow that use the existing retrieval workflow for multi-step web research, and wire the main orchestrator to delegate correctly.
 
-**Architecture:** The reusable `researcher` profile lives in `src/agents/researcher.ts` and includes the existing `retrieve_context` tool. The main `orchestrator` registers that profile in `subagents` and instructs the model to use the Flue `task` tool with `agent: "researcher"` for multi-step research, while single lookups continue to use `retrieve_context` directly. A standalone `research` workflow initializes the researcher agent for direct CLI testing.
+**Architecture:** The reusable `researcher` subagent lives in `src/agents/researcher.ts` and includes the existing `retrieve_context` tool. The main `orchestrator` registers that subagent in `subagents` and instructs the model to use the Flue `task` tool with `agent: "researcher"` for multi-step research, while single lookups continue to use `retrieve_context` directly. A standalone `research` workflow initializes the researcher agent for direct CLI testing.
 
 **Tech Stack:** TypeScript, Flue `createAgent`, Flue `defineAgentProfile`, Flue `session.task`, Node test runner, existing Ollama Search retrieval workflow.
 
@@ -18,19 +18,19 @@
 
 - [x] **Step 1: Write the failing test**
 
-Add a test that imports `createResearcherProfile` and verifies the profile name is `researcher`, the configured model is preserved, and the profile exposes `retrieve_context`.
+Add a test that imports `createResearcherSubagent` and verifies the subagent name is `researcher`, the configured model is preserved, and the subagent exposes `retrieve_context`.
 
 - [x] **Step 2: Run the test to verify it fails**
 
 Run `npm test` and verify TypeScript reports that `src/agents/researcher.ts` does not exist.
 
-- [x] **Step 3: Implement the researcher profile**
+- [x] **Step 3: Implement the researcher subagent**
 
-Create `src/agents/researcher.ts` with `createResearcherProfile(model: string)` returning a `defineAgentProfile(...)` profile with the `retrieveContextTool`, research-specific instructions, and the supplied model.
+Create `src/agents/researcher.ts` with `createResearcherSubagent(model: string)` returning a `defineAgentProfile(...)` subagent with the `retrieveContextTool`, research-specific instructions, and the supplied model.
 
 - [x] **Step 4: Verify the test passes**
 
-Run `npm test` and verify the new profile test passes.
+Run `npm test` and verify the new subagent test passes.
 
 ### Task 2: Main Orchestrator Subagent Wiring
 
@@ -46,9 +46,9 @@ Extend the orchestrator initialization test to verify `config.subagents` include
 
 Run `npm test` and verify the assertion fails because only `coding_worker` is registered.
 
-- [x] **Step 3: Register the researcher profile**
+- [x] **Step 3: Register the researcher subagent**
 
-Update `src/agents/orchestrator.ts` so runtime config creates a researcher profile with the selected model and includes it in `subagents`.
+Update `src/agents/orchestrator.ts` so runtime config creates a researcher subagent with the selected model and includes it in `subagents`.
 
 - [x] **Step 4: Verify the test passes**
 

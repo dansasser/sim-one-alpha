@@ -1,7 +1,7 @@
 import { ollamaCloudProviderId } from '../../../provider-ids.js';
-import type { AgentModelProfile } from '../../../types.js';
+import type { AgentModelCard } from '../../../types.js';
 
-export const qwen35Card: AgentModelProfile = {
+export const qwen35Card: AgentModelCard = {
   key: 'qwen3-5-cloud',
   providerId: ollamaCloudProviderId,
   modelId: 'qwen3.5:397b',

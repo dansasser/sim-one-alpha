@@ -1,5 +1,5 @@
-import type { AgentModelProfile } from './types.js';
+import type { AgentModelCard } from './types.js';
 
-export function providerContextWindow(card: AgentModelProfile): number {
+export function providerContextWindow(card: AgentModelCard): number {
   return card.providerReportedContextWindow ?? card.guaranteedContextWindow ?? card.contextWindow;
 }

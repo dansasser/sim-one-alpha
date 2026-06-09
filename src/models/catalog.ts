@@ -9,11 +9,11 @@ export {
 
 import { codexBrainCards } from './providers/codex-brain/index.js';
 import { ollamaCloudCards } from './providers/ollama-cloud/index.js';
-import type { AgentModelProfile } from './types.js';
+import type { AgentModelCard } from './types.js';
 
 export const allModelCards = [...ollamaCloudCards, ...codexBrainCards] as const;
 
-export function resolveModelCard(specifier: string): AgentModelProfile | undefined {
+export function resolveModelCard(specifier: string): AgentModelCard | undefined {
   return allModelCards.find((card) => card.specifier === specifier);
 }
 

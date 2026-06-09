@@ -9,7 +9,7 @@ Flue applications are built from these components:
 ```text
 app.ts
 agents
-agent profiles
+Flue agent profiles
 subagents
 workflows
 tools
@@ -39,6 +39,7 @@ Allowed in `src/app.ts`:
 Hono app creation
 health checks
 auth and middleware
+imported route registration
 custom ingress that forwards into Flue architecture
 app.route('/', flue())
 side-effect import of model runtime bootstrap
@@ -55,11 +56,11 @@ passing process.env into model-provider setup
 agent business logic
 ```
 
-If app-owned ingress is needed, it must dispatch or invoke the Flue agent/workflow path. It must not call a separate non-Flue orchestrator.
+If app-owned ingress is needed, it must dispatch or invoke the Flue agent/workflow path. It must not call a separate non-Flue orchestrator. Auth checks should live in imported middleware modules, not inline route bodies.
 
 ## Agents
 
-An agent file is a Flue `createAgent(...)` entrypoint. Every agent has a main file. A subagent is just another agent profile called by an agent.
+An agent file is a Flue `createAgent(...)` entrypoint. Every agent has a main file. A subagent is a Flue agent profile called by an agent. In this project, that Flue term is not a model-selection concept; model selection always goes through project model cards.
 
 Agents own:
 
@@ -95,6 +96,8 @@ return structured results
 
 Workflows are first-class Flue architecture. Complex research machinery may live in workflow files when the owning agent is the researcher.
 
+Workflow files expose HTTP by exporting `route`. Flue workflow HTTP invocation is asynchronous: accepted calls return a workflow `runId`, and clients inspect `/runs/:runId` for the completed result.
+
 ## Tools
 
 Tools are executable capabilities created with `defineTool(...)`.
@@ -107,7 +110,7 @@ Skills are reusable workflow knowledge and instructions. Skills do not execute a
 
 ## Subagents
 
-Subagents are named agent profiles available to a parent agent through Flue task delegation. They run in child sessions and return results to the parent.
+Subagents are named Flue agent profiles available to a parent agent through Flue task delegation. They run in child sessions and return results to the parent. They still use model specifiers supplied by project model cards.
 
 The orchestrator may delegate to subagents. Subagents may use their own tools, skills, workflows, model, and instructions.
 

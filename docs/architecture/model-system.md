@@ -14,7 +14,7 @@ This project keeps model cards under their owning provider directories in `src/m
 
 Cards are the boundary between model selection and runtime behavior. They make model metadata explicit before the agent, session manager, RAG router, or compaction layer makes token-budget decisions.
 
-The same provider can expose models with very different limits. MiniMax M3, DeepSeek V4 Pro, and Qwen 3.5 all run through `ollama-cloud`, but they do not have the same context window, output ceiling, modalities, or long-context reliability profile. Keeping those facts in card files lets downstream systems ask the selected card for limits instead of spreading hardcoded numbers across the codebase.
+The same provider can expose models with very different limits. MiniMax M3, DeepSeek V4 Pro, and Qwen 3.5 all run through `ollama-cloud`, but they do not have the same context window, output ceiling, modalities, or long-context reliability notes. Keeping those facts in card files lets downstream systems ask the selected card for limits instead of spreading hardcoded numbers across the codebase.
 
 Cards also preserve conflicting-but-useful metadata. For example, MiniMax advertises M3 as a 1M-context model with a guaranteed 512K minimum, while Ollama Cloud currently reports 524288. The card stores each value separately so session budgeting can choose the conservative operational budget while still retaining the advertised/native capability.
 
@@ -24,9 +24,10 @@ Runtime setup has two layers:
 
 1. Provider modules in `src/models/providers/<provider>` register Flue provider IDs from `src/app.ts`.
 2. Model cards in each provider's `cards/` directory provide the model IDs and per-model metadata used by those provider registrations and by the orchestrator model registry.
-3. `src/models/catalog.ts` aggregates provider-owned cards for lookup by Flue model specifier.
+3. The shipped `gorombo.config.json` runtime file selects active project model card keys for the running deployment.
+4. `src/models/catalog.ts` aggregates provider-owned cards for lookup by Flue model specifier.
 
-The orchestrator should not register providers itself. It selects a model through `GOROMBO_MODEL` or `GOROMBO_MODEL_PROFILE`, then uses the card specifier as the Flue model string. Session-budget and compaction code resolves the selected card before estimating, reserving, or compacting context.
+The orchestrator should not register providers itself. Runtime config selects a primary project model card and an optional backup card. The workflow uses the active card's specifier as the Flue model string. Session-budget and compaction code uses the selected card before estimating, reserving, or compacting context.
 
 ## Ollama Cloud, Ollama Local, And Codex Brain
 
@@ -55,7 +56,7 @@ qwen3-5-cloud          -> ollama-cloud/qwen3.5:397b
 codex-brain            -> codex-brain/gpt-5.5
 ```
 
-`minimax-m3-cloud` is the default agentic chat profile.
+`minimax-m3-cloud` is the default agentic chat model card.
 
 The current card context limits are:
 
@@ -70,10 +71,24 @@ MiniMax M3 intentionally tracks more than one limit because MiniMax advertises 1
 
 ## Selection Rules
 
-1. `GOROMBO_MODEL` wins when set. Use it only for an exact Flue model specifier.
-2. Otherwise `GOROMBO_MODEL_PROFILE` selects a project-owned profile.
-3. If no profile is set, `minimax-m3-cloud` is used.
-4. If a requested profile is missing, startup fails instead of choosing an unreviewed fallback.
+1. The shipped `gorombo.config.json` runtime file is the source of truth for model choice.
+2. `models.primary` selects the primary project-owned model card key.
+3. `models.backup` optionally selects a different backup model card key.
+4. `GOROMBO_MODEL`, `GOROMBO_MODEL_BACKUP`, and `GOROMBO_CONFIG_PATH` are rejected.
+5. Raw Flue model specifiers are not accepted as configuration.
+6. If a requested card key is missing, startup fails instead of choosing an unreviewed fallback.
+
+Current default runtime config:
+
+```json
+{
+  "version": 1,
+  "models": {
+    "primary": "minimax-m3-cloud",
+    "backup": "codex-brain"
+  }
+}
+```
 
 ## Adding Models
 
@@ -97,13 +112,15 @@ As of June 7, 2026, Ollama Cloud's live model list did not expose a dedicated em
 
 The session-management layer uses cards in this order:
 
-1. Resolve the selected model card from the active Flue model specifier.
+1. Resolve the primary and backup model cards from runtime config.
 2. Use the provider-reported context window for safety when available.
 3. Reserve output tokens before calculating usable input budget.
 4. Warn before the prompt approaches the compaction threshold.
 5. Derive current session usage from stored Flue `SessionData` when available.
 6. Trigger `session.compact()` before Flue or the provider rejects the prompt.
 7. Give RAG only the remaining context budget after system instructions, protocol context, memory, current user input, and output reserve are accounted for.
+
+The chat workflow prompts with the primary card first. If that model/provider fails with a recoverable availability error, the workflow evaluates the backup card's context budget and retries the same Flue session with the backup card. Context overflow, aborts, and hard budget stops do not trigger blind backup retries.
 
 RAG should come after this budget layer because retrieved context must fit into the selected card's remaining budget.
 

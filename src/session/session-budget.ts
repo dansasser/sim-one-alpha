@@ -1,5 +1,5 @@
 import type { PromptUsage, SessionData } from '@flue/runtime';
-import type { AgentModelProfile } from '../models/types.js';
+import type { AgentModelCard } from '../models/types.js';
 import { type CompactionStatus, evaluateCompaction } from './compaction-policy.js';
 import { calculateContextBudget, estimateTextTokens, type ContextBudget } from './context-budget.js';
 
@@ -33,7 +33,7 @@ export interface SessionBudgetReport {
 
 export interface CreateSessionBudgetReportInput {
   sessionId?: string;
-  modelCard: AgentModelProfile;
+  modelCard: AgentModelCard;
   promptText?: string;
   store?: SessionBudgetStore;
   sessionData?: SessionData | null;

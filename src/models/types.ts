@@ -18,7 +18,7 @@ export type ModelCapability =
   | 'local'
   | 'cloud';
 
-export interface AgentModelProfile {
+export interface AgentModelCard {
   key: string;
   providerId: string;
   modelId: string;
@@ -46,7 +46,9 @@ export interface AgentModelProfile {
 }
 
 export interface ModelRegistry {
-  defaultAgentModel: string;
-  profiles: AgentModelProfile[];
-  byKey: Map<string, AgentModelProfile>;
+  selectedModelCard: AgentModelCard;
+  backupModelCard?: AgentModelCard;
+  modelCandidates: AgentModelCard[];
+  cards: AgentModelCard[];
+  byKey: Map<string, AgentModelCard>;
 }

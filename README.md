@@ -397,15 +397,38 @@ Do not assume a command exists unless it is configured in the project.
 
 ## Local Chat
 
-Create a local `.env` from `.env.example` and set the provider key for the model you want to test:
+Model choice lives in the shipped runtime config file. In source it is:
+
+```text
+src/config/gorombo.config.json
+```
+
+After build it is copied to:
+
+```text
+dist/gorombo.config.json
+```
+
+```json
+{
+  "version": 1,
+  "models": {
+    "primary": "minimax-m3-cloud",
+    "backup": "codex-brain"
+  }
+}
+```
+
+Create a local `.env` from `.env.example` and set provider secrets only:
 
 ```env
-GOROMBO_MODEL_PROFILE=minimax-m3-cloud
 OLLAMA_API_KEY=your_ollama_cloud_key_here
+CODEX_BRAIN_LOCAL_API_URL=http://192.168.0.131:4180/v1
+CODEX_BRAIN_LOCAL_API_KEY=your_codex_brain_key_here
 API_SECRET=local_testing_secret
 ```
 
-The default profile uses Ollama's direct cloud API:
+The default primary and backup model cards use Ollama's direct cloud API:
 
 ```env
 OLLAMA_API_KEY=your_key_here
@@ -414,15 +437,18 @@ GOROMBO_WEB_SEARCH_PROVIDER=ollama
 OLLAMA_WEB_SEARCH_BASE_URL=https://ollama.com
 GOROMBO_RAG_MAX_CONTEXT_TOKENS=4000
 GOROMBO_RAG_WEB_FETCH_TOP_K=1
-GOROMBO_MODEL_PROFILE=minimax-m3-cloud
 ```
 
-Select another project-owned model profile when needed:
+Select another project-owned model card by changing the shipped `gorombo.config.json` runtime file and restarting the runtime:
 
-```env
-GOROMBO_MODEL_PROFILE=deepseek-v4-pro-cloud
-# or
-GOROMBO_MODEL_PROFILE=qwen3-5-cloud
+```json
+{
+  "version": 1,
+  "models": {
+    "primary": "qwen3-5-cloud",
+    "backup": "deepseek-v4-pro-cloud"
+  }
+}
 ```
 
 Register the DT1-hosted Codex Brain model through its own provider when needed:
@@ -430,8 +456,9 @@ Register the DT1-hosted Codex Brain model through its own provider when needed:
 ```env
 CODEX_BRAIN_LOCAL_API_URL=https://dt1.example.local/v1
 CODEX_BRAIN_LOCAL_API_KEY=your_codex_brain_key_here
-GOROMBO_MODEL_PROFILE=codex-brain
 ```
+
+Then select it by card key in `gorombo.config.json`.
 
 `CODEX_BRAIN_LOCAL_API_URL` must be the OpenAI-compatible base URL including `/v1`.
 
@@ -459,11 +486,49 @@ Open an interactive Flue agent session:
 npm run connect
 ```
 
-The `chat` workflow initializes the `orchestrator` Flue agent, loads `.env` through the Flue CLI, and prompts the configured model with the normalized message event. The agent uses `GOROMBO_MODEL` when an exact Flue model specifier is set. Otherwise it selects a project-owned card from `GOROMBO_MODEL_PROFILE`, defaulting to `minimax-m3-cloud`, which resolves to `ollama-cloud/minimax-m3` and calls Ollama Cloud through `https://ollama.com/v1`. Model cards live inside each provider directory under `src/models/providers/<provider>/cards`; the catalog in `src/models/catalog.ts` aggregates them for model selection and budget lookup. The agent currently has tool flow wired for protocol loading, memory retrieval, and RAG/context retrieval. The protocol, memory, and document-index providers remain typed placeholders; web search is live through Ollama Search when an Ollama API key is configured.
+Start the built Node HTTP runtime:
+
+```sh
+npm run build
+npm start
+```
+
+The HTTP runtime uses the Flue routing model:
+
+- `GET /health` is public.
+- `POST /api/chat/events` is the app-owned chat ingress alias.
+- `POST /workflows/chat` is the Flue workflow route.
+- `GET /runs/:runId` reads the Flue workflow run.
+
+Protected routes require:
+
+```text
+x-api-secret: <API_SECRET>
+```
+
+`API_SECRET` must be set in `.env` or by the deployment secret manager. If it is missing, protected endpoints fail closed with `503`.
+
+Flue workflow HTTP invocation is asynchronous. A successful chat event returns `202` with a `runId`; clients then read `/runs/:runId` with the same secret header to retrieve the completed result.
+
+The `chat` workflow initializes the `orchestrator` Flue agent, loads `.env` through the Flue CLI for secrets, loads the shipped `gorombo.config.json` runtime file for deployment/runtime choices, and prompts the configured primary model with the normalized message event. `models.primary` and `models.backup` are project model card keys. Raw Flue specifiers and `GOROMBO_MODEL` env selection are rejected. The default primary card is `minimax-m3-cloud`, which resolves through its card to `ollama-cloud/minimax-m3` and calls Ollama Cloud through `https://ollama.com/v1`. If the primary prompt fails with a recoverable model/provider error, the workflow checks the backup card budget and retries the same session with `models.backup`. Model cards live inside each provider directory under `src/models/providers/<provider>/cards`; the catalog in `src/models/catalog.ts` aggregates them for model selection and budget lookup. The agent currently has tool flow wired for protocol loading, memory retrieval, and RAG/context retrieval. The protocol, memory, and document-index providers remain typed placeholders; web search is live through Ollama Search when an Ollama API key is configured.
 
 ## Model Cards
 
 Model cards are the project-owned source of truth for models the agent can intentionally use.
+
+Runtime model choice is separate from card definition. The shipped `gorombo.config.json` runtime file chooses active card keys:
+
+```json
+{
+  "version": 1,
+  "models": {
+    "primary": "minimax-m3-cloud",
+    "backup": "codex-brain"
+  }
+}
+```
+
+`.env` stores provider credentials. It must not choose models.
 
 Each card lives under its owning provider directory, for example `src/models/providers/ollama-cloud/cards/minimax-m3.ts`, and owns the details that are specific to one model:
 
@@ -562,7 +627,7 @@ Use the boundaries this way:
 - low-level provider errors: the research workflow records failures in `providerFailures`
 - research strategy: researcher decides which searches to run, when to fetch pages, when to stop, and how to compare sources
 
-The researcher profile lives in `src/agents/researcher.ts` and owns the `web_research` tool. The standalone `research` workflow in `src/workflows/research.ts` initializes the researcher directly for CLI or API research runs. Use `npm run research:local -- "..."` for local one-shot research testing.
+The researcher subagent lives in `src/agents/researcher.ts` and owns the `web_research` tool. The standalone `research` workflow in `src/workflows/research.ts` initializes the researcher directly for CLI or API research runs. Use `npm run research:local -- "..."` for local one-shot research testing.
 
 ```text
 chat workflow
@@ -579,11 +644,38 @@ chat workflow
 
 Environment variables are used for secrets and service configuration.
 
+The main agent runtime config is a real JSON file shipped with the product:
+
+```text
+src/config/gorombo.config.json -> source
+dist/gorombo.config.json       -> built/package runtime file
+```
+
+It starts with model selection and is intended to grow into the deployment-level config for the agent:
+
+```json
+{
+  "version": 1,
+  "models": {
+    "primary": "minimax-m3-cloud",
+    "backup": "codex-brain"
+  }
+}
+```
+
+Change model choices in the shipped runtime JSON file, then restart the runtime/gateway. Keep API keys and service credentials in `.env` or the deployment secret manager.
+
+For Node distribution, `.env` lives beside `package.json` at the runtime root. `npm start` runs:
+
+```sh
+node --env-file=.env dist/server.mjs
+```
+
+This loads provider keys, `API_SECRET`, and service settings before the built server starts.
+
 Expected future environment values may include:
 
 ```text
-GOROMBO_MODEL
-GOROMBO_MODEL_PROFILE
 OPENAI_API_KEY
 ANTHROPIC_API_KEY
 OLLAMA_API_KEY
@@ -602,9 +694,11 @@ TAVILY_API_KEY
 BRAVE_SEARCH_API_KEY
 ```
 
+`GOROMBO_MODEL`, `GOROMBO_MODEL_BACKUP`, and `GOROMBO_CONFIG_PATH` are not supported. Model choices must be card keys in the shipped `gorombo.config.json` runtime file.
+
 Do not commit real secrets.
 
-Use local `.env` files or the deployment platform’s secret manager.
+Use local `.env` files or the deployment platform's secret manager.
 
 ## Development
 
@@ -639,6 +733,13 @@ Common commands:
 npm test
 npm run typecheck
 npm run build
+npm run smoke:http
+```
+
+For a live built-server chat smoke through `/api/chat/events`, run:
+
+```sh
+npm run smoke:http -- --live-chat
 ```
 
 If the project defines other scripts in `package.json`, use those exact scripts.

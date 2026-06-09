@@ -1,13 +1,13 @@
 import { registerProvider } from '@flue/runtime';
 import { resolveProviderCardEnv } from '../../env.js';
 import { ollamaLocalProviderId } from '../../provider-ids.js';
-import type { AgentModelProfile } from '../../types.js';
+import type { AgentModelCard } from '../../types.js';
 
 export const ollamaLocalDefaultBaseUrl = 'http://localhost:11434/v1';
 
 export function registerOllamaLocalProvider(
   env: Record<string, unknown> = process.env,
-  cards: readonly AgentModelProfile[] = [],
+  cards: readonly AgentModelCard[] = [],
 ): void {
   if (!shouldRegisterLocalProvider(env, cards)) {
     return;
@@ -32,7 +32,7 @@ export function registerOllamaLocalProvider(
   });
 }
 
-function shouldRegisterLocalProvider(env: Record<string, unknown>, cards: readonly AgentModelProfile[]): boolean {
+function shouldRegisterLocalProvider(env: Record<string, unknown>, cards: readonly AgentModelCard[]): boolean {
   return Boolean(
     cards.length ||
       readString(env.OLLAMA_LOCAL_BASE_URL) ||

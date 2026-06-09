@@ -1,24 +1,42 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { codexBrainCard, deepseekV4ProCard, minimaxM3Card, qwen35Card, resolveModelCard } from '../models/catalog.js';
-import { configureRuntimeModels, createModelRegistry, selectModelForRole } from '../models/index.js';
+import { configureRuntimeModels, createModelRegistry, selectModelCardForRole } from '../models/index.js';
 
 test('model registry defaults agentic chat to MiniMax M3', () => {
   const registry = createModelRegistry({
     OLLAMA_API_KEY: 'test-key',
+  }, undefined, {
+    config: {
+      version: 1,
+      models: {
+        primary: 'minimax-m3-cloud',
+        backup: 'deepseek-v4-pro-cloud',
+      },
+    },
   });
 
-  assert.equal(registry.defaultAgentModel, 'ollama-cloud/minimax-m3');
-  assert.equal(selectModelForRole(registry, 'agentic-chat'), 'ollama-cloud/minimax-m3');
+  assert.equal(registry.selectedModelCard.key, 'minimax-m3-cloud');
+  assert.equal(registry.selectedModelCard.specifier, 'ollama-cloud/minimax-m3');
+  assert.equal(registry.backupModelCard?.key, 'deepseek-v4-pro-cloud');
+  assert.deepEqual(registry.modelCandidates.map((card) => card.key), ['minimax-m3-cloud', 'deepseek-v4-pro-cloud']);
+  assert.equal(selectModelCardForRole(registry, 'agentic-chat').specifier, 'ollama-cloud/minimax-m3');
 });
 
-test('model registry can select DeepSeek profile by key', () => {
+test('model registry selects DeepSeek by config model card key', () => {
   const registry = createModelRegistry({
     OLLAMA_API_KEY: 'test-key',
-    GOROMBO_MODEL_PROFILE: 'deepseek-v4-pro-cloud',
+  }, undefined, {
+    config: {
+      version: 1,
+      models: {
+        primary: 'deepseek-v4-pro-cloud',
+      },
+    },
   });
 
-  assert.equal(registry.defaultAgentModel, 'ollama-cloud/deepseek-v4-pro');
+  assert.equal(registry.selectedModelCard.key, 'deepseek-v4-pro-cloud');
+  assert.equal(registry.selectedModelCard.specifier, 'ollama-cloud/deepseek-v4-pro');
 });
 
 test('MiniMax M3 card tracks advertised and operational context limits', () => {
@@ -45,19 +63,78 @@ test('Qwen 3.5 card tracks cloud context limits', () => {
   assert.equal(qwen35Card.maxOutputTokens, 65_536);
 });
 
-test('explicit GOROMBO_MODEL overrides named model profiles', () => {
+test('runtime model config must use model card keys and cannot bypass cards', () => {
   const registry = createModelRegistry({
     OLLAMA_API_KEY: 'test-key',
-    GOROMBO_MODEL_PROFILE: 'minimax-m3-cloud',
-    GOROMBO_MODEL: 'openrouter/example-agent-model',
+  }, undefined, {
+    config: {
+      version: 1,
+      models: {
+        primary: 'qwen3-5-cloud',
+      },
+    },
   });
 
-  assert.equal(registry.defaultAgentModel, 'openrouter/example-agent-model');
+  assert.equal(registry.selectedModelCard.key, 'qwen3-5-cloud');
+  assert.equal(registry.selectedModelCard.specifier, 'ollama-cloud/qwen3.5:397b');
+
+  assert.throws(
+    () =>
+      createModelRegistry({
+        OLLAMA_API_KEY: 'test-key',
+      }, undefined, {
+        config: {
+          version: 1,
+          models: {
+            primary: 'ollama-cloud/minimax-m3',
+          },
+        },
+      }),
+    /No model card named "ollama-cloud\/minimax-m3" is configured for models.primary/,
+  );
 });
 
-test('model registry includes Codex Brain as a separate non-Ollama provider profile', () => {
+test('model choice env vars are rejected in favor of the runtime config file', () => {
+  assert.throws(
+    () =>
+      createModelRegistry({
+        OLLAMA_API_KEY: 'test-key',
+        GOROMBO_MODEL: 'qwen3-5-cloud',
+      }, undefined, {
+        config: {
+          version: 1,
+          models: {
+            primary: 'minimax-m3-cloud',
+          },
+        },
+      }),
+    /GOROMBO_MODEL is no longer supported/,
+  );
+});
+
+test('backup model card must be different from primary', () => {
+  assert.throws(
+    () =>
+      createModelRegistry({
+        OLLAMA_API_KEY: 'test-key',
+      }, undefined, {
+        config: {
+          version: 1,
+          models: {
+            primary: 'minimax-m3-cloud',
+            backup: 'minimax-m3-cloud',
+          },
+        },
+      }),
+    /models.backup must be different from models.primary/,
+  );
+});
+
+test('model registry includes Codex Brain as a separate non-Ollama provider card', () => {
   const registry = createModelRegistry({
     OLLAMA_API_KEY: 'test-key',
+    CODEX_BRAIN_LOCAL_API_KEY: 'test-key',
+    CODEX_BRAIN_LOCAL_API_URL: 'https://dt1.example.test/v1',
   });
 
   assert.equal(registry.byKey.get('codex-brain')?.specifier, 'codex-brain/gpt-5.5');
@@ -70,7 +147,7 @@ test('model registry includes Codex Brain as a separate non-Ollama provider prof
   assert.doesNotMatch(codexBrainCard.source?.notes ?? '', /Override this card|DT1 exposes|metadata is confirmed/);
 });
 
-test('runtime config requires an API key for Ollama Cloud profiles', () => {
+test('runtime config requires an API key for Ollama Cloud model cards', () => {
   assert.throws(() => configureRuntimeModels({}), /OLLAMA_API_KEY or OLLAMA_CLOUD_API_KEY is required/);
 });
 
@@ -79,19 +156,31 @@ test('runtime config requires Codex Brain endpoint values when Codex Brain is se
     () =>
       configureRuntimeModels({
         OLLAMA_API_KEY: 'test-key',
-        GOROMBO_MODEL_PROFILE: 'codex-brain',
+      }, {
+        config: {
+          version: 1,
+          models: {
+            primary: 'codex-brain',
+          },
+        },
       }),
     /CODEX_BRAIN_LOCAL_API_KEY and CODEX_BRAIN_LOCAL_API_URL are required/,
   );
 
   const registry = configureRuntimeModels({
     OLLAMA_API_KEY: 'test-key',
-    GOROMBO_MODEL_PROFILE: 'codex-brain',
     CODEX_BRAIN_LOCAL_API_KEY: 'test-key',
     CODEX_BRAIN_LOCAL_API_URL: 'https://dt1.example.test/v1',
+  }, {
+    config: {
+      version: 1,
+      models: {
+        primary: 'codex-brain',
+      },
+    },
   });
 
-  assert.equal(registry.defaultAgentModel, 'codex-brain/gpt-5.5');
+  assert.equal(registry.selectedModelCard.specifier, 'codex-brain/gpt-5.5');
 });
 
 test('model cards can be resolved from Flue specifier', () => {

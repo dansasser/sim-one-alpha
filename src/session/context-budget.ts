@@ -1,4 +1,4 @@
-import type { AgentModelProfile } from '../models/types.js';
+import type { AgentModelCard } from '../models/types.js';
 
 export interface ContextBudgetInput {
   contextWindow: number;
@@ -28,7 +28,7 @@ const defaultCompactionRatio = 0.85;
 const defaultOutputReserveRatio = 0.25;
 const defaultKeepRecentTokens = 8_000;
 
-export function calculateContextBudget(input: ContextBudgetInput | AgentModelProfile): ContextBudget {
+export function calculateContextBudget(input: ContextBudgetInput | AgentModelCard): ContextBudget {
   const options = input as Partial<ContextBudgetInput>;
   const advertisedContextWindow = positiveInteger(input.contextWindow, 'contextWindow');
   const enforcedContextWindow =

@@ -8,6 +8,7 @@ The flow is intentionally simple and testable:
 Connector
 -> NormalizedMessageEvent
 -> Secure Web API / Gateway
+-> Flue chat workflow
 -> Orchestrator
 -> Protocol Provider
 -> RAG Router
@@ -15,7 +16,6 @@ Connector
 -> OrchestratorResponse
 ```
 
-The orchestrator must load protocols before it performs final routing or response synthesis. Current providers are typed placeholders so the system can route a basic chat message without real external credentials.
+The orchestrator must load protocols before it performs final routing or response synthesis. The current chat path is live through the Flue `chat` workflow, which initializes the orchestrator, applies session budget checks, and delegates web/current/source-backed research to the researcher subagent.
 
-The first response path does not call a live model. It proves the architecture can normalize an event, load protocol directives, retrieve context through the RAG architecture, and return a structured response.
-
+HTTP workflow invocation returns a Flue run pointer first. Clients read the run result through the protected `/runs/:runId` route.

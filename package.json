@@ -4,16 +4,23 @@
   "private": true,
   "type": "module",
   "description": "GOROMBO Flue-based multi-purpose orchestrating agent foundation.",
+  "files": [
+    "dist/**",
+    "scripts/smoke-http-endpoints.mjs",
+    "README.md",
+    ".env.example"
+  ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "flue build --target node && node scripts/copy-runtime-config.mjs",
     "chat": "flue run chat --target node",
     "chat:local": "node scripts/chat.mjs",
     "connect": "flue connect orchestrator local --target node --session local",
     "dev": "flue dev --target node",
-    "flue:build": "flue build --target node",
+    "smoke:http": "node scripts/smoke-http-endpoints.mjs",
     "research:local": "node scripts/research.mjs",
+    "start": "node --env-file=.env dist/server.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && node --test \"dist/tests/*.test.js\""
+    "test": "tsc -p tsconfig.json && node scripts/copy-runtime-config.mjs --tsc && node --test \".tmp/tsc/tests/*.test.js\""
   },
   "engines": {
     "node": ">=22.18.0"

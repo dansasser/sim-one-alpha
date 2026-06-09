@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createResearcherProfile, researcherAgentName } from '../agents/researcher.js';
+import { createResearcherSubagent, researcherAgentName } from '../agents/researcher.js';
 
-test('researcher profile is a Flue subagent with web research tools', () => {
-  const profile = createResearcherProfile('ollama-cloud/minimax-m3');
+test('researcher subagent has web research tools', () => {
+  const subagent = createResearcherSubagent('ollama-cloud/minimax-m3');
 
-  assert.equal(profile.name, researcherAgentName);
-  assert.equal(profile.model, 'ollama-cloud/minimax-m3');
-  assert.match(profile.description ?? '', /source-backed research/);
-  assert.match(profile.instructions ?? '', /web_research/);
-  assert.match(profile.instructions ?? '', /providerFailures/);
-  assert.equal(profile.tools?.some((tool) => tool.name === 'web_research'), true);
-  assert.equal(profile.tools?.some((tool) => tool.name === 'retrieve_context'), false);
+  assert.equal(subagent.name, researcherAgentName);
+  assert.equal(subagent.model, 'ollama-cloud/minimax-m3');
+  assert.match(subagent.description ?? '', /source-backed research/);
+  assert.match(subagent.instructions ?? '', /web_research/);
+  assert.match(subagent.instructions ?? '', /providerFailures/);
+  assert.equal(subagent.tools?.some((tool) => tool.name === 'web_research'), true);
+  assert.equal(subagent.tools?.some((tool) => tool.name === 'retrieve_context'), false);
 });

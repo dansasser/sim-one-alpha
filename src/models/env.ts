@@ -1,4 +1,4 @@
-import type { AgentModelProfile } from './types.js';
+import type { AgentModelCard } from './types.js';
 
 export interface ResolvedModelEnv {
   apiKey?: string;
@@ -6,7 +6,7 @@ export interface ResolvedModelEnv {
 }
 
 export function resolveModelCardEnv(
-  card: AgentModelProfile,
+  card: AgentModelCard,
   env: Record<string, unknown> = process.env,
 ): ResolvedModelEnv {
   return {
@@ -16,7 +16,7 @@ export function resolveModelCardEnv(
 }
 
 export function resolveProviderCardEnv(
-  cards: readonly AgentModelProfile[],
+  cards: readonly AgentModelCard[],
   env: Record<string, unknown> = process.env,
 ): ResolvedModelEnv {
   for (const card of cards) {

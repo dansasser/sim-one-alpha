@@ -1,7 +1,7 @@
 import { codexBrainProviderId } from '../../../provider-ids.js';
-import type { AgentModelProfile } from '../../../types.js';
+import type { AgentModelCard } from '../../../types.js';
 
-export const codexBrainCard: AgentModelProfile = {
+export const codexBrainCard: AgentModelCard = {
   key: 'codex-brain',
   providerId: codexBrainProviderId,
   modelId: 'gpt-5.5',

@@ -1,11 +1,13 @@
-import type { FlueContext, PromptResponse, WorkflowRouteHandler } from '@flue/runtime';
+import type { FlueContext, FlueSession, PromptResponse, WorkflowRouteHandler } from '@flue/runtime';
 import orchestratorAgent from '../agents/orchestrator.js';
 import { normalizeWebApiMessage, type WebApiMessageInput } from '../connectors/web-api.js';
+import { requireApiSecret } from '../middleware/api-secret.js';
 import {
   configureRuntimeModels,
   modelSpecifierFromParts,
   resolveModelCard,
 } from '../models/index.js';
+import type { AgentModelCard } from '../models/types.js';
 import { calculateContextBudget, estimateTextTokens } from '../session/context-budget.js';
 import {
   createSessionBudgetReport,
@@ -15,7 +17,7 @@ import {
 } from '../session/session-budget.js';
 import { goromboFlueSessionStore } from '../session/flue-session-store.js';
 
-export const route: WorkflowRouteHandler = async (_c, next) => next();
+export const route: WorkflowRouteHandler = async (c, next) => requireApiSecret(c, next);
 
 export interface ChatWorkflowPayload extends WebApiMessageInput {
   session?: string;
@@ -29,6 +31,7 @@ export interface ChatWorkflowResponse {
   usage: PromptResponse['usage'];
   event: ReturnType<typeof normalizeWebApiMessage>;
   contextBudget?: ChatWorkflowContextBudget;
+  modelFailover?: ChatWorkflowModelFailover;
 }
 
 export interface ChatWorkflowContextBudget extends SessionBudgetReport {
@@ -36,6 +39,21 @@ export interface ChatWorkflowContextBudget extends SessionBudgetReport {
   prePromptStatus: SessionBudgetReport['status'];
   prePromptEstimatedUsedTokens: number;
   lastPromptEstimateTokens: number;
+}
+
+export interface ChatWorkflowModelFailover {
+  fallbackUsed: boolean;
+  attempts: ChatWorkflowModelAttempt[];
+}
+
+export interface ChatWorkflowModelAttempt {
+  role: 'primary' | 'backup';
+  modelCardKey: string;
+  modelSpecifier: string;
+  displayName: string;
+  status: 'failed' | 'used' | 'skipped';
+  error?: string;
+  reason?: string;
 }
 
 export async function run({
@@ -47,94 +65,103 @@ export async function run({
   const sessionId = payload.session ?? event.conversation.id;
   const prompt = createChatPrompt(event);
   const runtimeModels = configureRuntimeModels(env);
-  const selectedModelCard = resolveModelCard(runtimeModels.defaultAgentModel);
+  const selectedModelCard = runtimeModels.selectedModelCard;
+  const backupModelCard = runtimeModels.backupModelCard;
   const harness = await init(orchestratorAgent, { name: orchestratorHarnessName });
   const session = await harness.session(sessionId);
-  let sessionData = goromboFlueSessionStore.getLatestSessionData(orchestratorHarnessName, sessionId);
-  let compactedBeforePrompt = false;
-  let contextBudget = selectedModelCard
-    ? createSessionBudgetReport({
-        sessionId,
-        modelCard: selectedModelCard,
-        promptText: prompt,
-        sessionData,
-      })
-    : undefined;
-  let promptBudget = contextBudget;
+  const attempts: ChatWorkflowModelAttempt[] = [];
+  let preparedPrompt = await preparePromptBudget({
+    session,
+    sessionId,
+    modelCard: selectedModelCard,
+    prompt,
+  });
 
-  if (contextBudget?.shouldCompactBeforePrompt && selectedModelCard) {
-    await session.compact();
-    sessionData = goromboFlueSessionStore.getLatestSessionData(orchestratorHarnessName, sessionId);
-    if (!sessionData) {
-      recordManualCompaction({
-        sessionId,
-        modelSpecifier: selectedModelCard.specifier,
-        budget: calculateContextBudget(selectedModelCard),
+  if (preparedPrompt.contextBudget.status === 'stop') {
+    return createBudgetStopResponse({
+      event,
+      preparedPrompt,
+    });
+  }
+
+  let response: PromptResponse;
+
+  try {
+    response = await promptWithModelCard({
+      session,
+      prompt,
+      modelCard: selectedModelCard,
+      role: 'primary',
+      attempts,
+    });
+  } catch (error) {
+    if (!backupModelCard || !isRecoverableModelFailure(error)) {
+      throw error;
+    }
+
+    preparedPrompt = await preparePromptBudget({
+      session,
+      sessionId,
+      modelCard: backupModelCard,
+      prompt,
+      compactedBeforePrompt: preparedPrompt.compactedBeforePrompt,
+    });
+
+    if (preparedPrompt.contextBudget.status === 'stop') {
+      attempts.push(createSkippedAttempt(backupModelCard, 'backup', 'backup model context budget would be exceeded'));
+      return createBudgetStopResponse({
+        event,
+        preparedPrompt,
+        modelFailover: {
+          fallbackUsed: false,
+          attempts,
+        },
+        textPrefix: `${selectedModelCard.displayName} was unavailable, but `,
       });
     }
-    compactedBeforePrompt = true;
-    contextBudget = createSessionBudgetReport({
-      sessionId,
-      modelCard: selectedModelCard,
-      promptText: prompt,
-      sessionData,
+
+    response = await promptWithModelCard({
+      session,
+      prompt,
+      modelCard: backupModelCard,
+      role: 'backup',
+      attempts,
     });
-    promptBudget = contextBudget;
   }
 
-  if (contextBudget?.status === 'stop' && selectedModelCard) {
-    return {
-      text:
-        `This message is too large for ${selectedModelCard.displayName}'s safe input budget after session compaction. ` +
-        'Send a shorter message or switch to a larger model profile.',
-      model: {
-        provider: selectedModelCard.providerId,
-        id: selectedModelCard.modelId,
-      },
-      usage: emptyPromptUsage(),
-      event,
-      contextBudget: {
-        ...contextBudget,
-        compactedBeforePrompt,
-        prePromptStatus: contextBudget.status,
-        prePromptEstimatedUsedTokens: contextBudget.estimatedUsedTokens,
-        lastPromptEstimateTokens: contextBudget.estimatedPromptTokens,
-      },
-    };
-  }
-
-  const response = await session.prompt(prompt);
-  sessionData = goromboFlueSessionStore.getLatestSessionData(orchestratorHarnessName, sessionId);
+  let sessionData = goromboFlueSessionStore.getLatestSessionData(orchestratorHarnessName, sessionId);
   const responseSpecifier = modelSpecifierFromParts(response.model.provider, response.model.id);
-  const responseModelCard = resolveModelCard(responseSpecifier) ?? selectedModelCard;
+  const responseModelCard = resolveModelCard(responseSpecifier) ?? preparedPrompt.modelCard;
 
-  if (responseModelCard) {
-    recordPromptUsage({
-      sessionId,
-      modelSpecifier: responseModelCard.specifier,
-      promptEstimateTokens: contextBudget?.estimatedPromptTokens ?? estimateTextTokens(prompt),
-      usage: response.usage,
-    });
+  recordPromptUsage({
+    sessionId,
+    modelSpecifier: responseModelCard.specifier,
+    promptEstimateTokens: preparedPrompt.contextBudget.estimatedPromptTokens ?? estimateTextTokens(prompt),
+    usage: response.usage,
+  });
 
-    contextBudget = createSessionBudgetReport({
-      sessionId,
-      modelCard: responseModelCard,
-      sessionData,
-    });
-  }
+  const contextBudget = createSessionBudgetReport({
+    sessionId,
+    modelCard: responseModelCard,
+    sessionData,
+  });
 
   return {
     text: response.text,
     model: response.model,
     usage: response.usage,
     event,
-    contextBudget: contextBudget
+    contextBudget: {
+      ...contextBudget,
+      compactedBeforePrompt: preparedPrompt.compactedBeforePrompt,
+      prePromptStatus: preparedPrompt.promptBudget.status,
+      prePromptEstimatedUsedTokens: preparedPrompt.promptBudget.estimatedUsedTokens,
+      lastPromptEstimateTokens: preparedPrompt.promptBudget.estimatedPromptTokens,
+    },
+    modelFailover: attempts.some((attempt) => attempt.role === 'backup' && attempt.status === 'used')
       ? {
-          ...contextBudget,
-          compactedBeforePrompt,
-          prePromptStatus: promptBudget?.status ?? contextBudget.status,
-          prePromptEstimatedUsedTokens: promptBudget?.estimatedUsedTokens ?? contextBudget.estimatedUsedTokens,
-          lastPromptEstimateTokens: promptBudget?.estimatedPromptTokens ?? 0,
+          fallbackUsed: true,
+          attempts,
         }
       : undefined,
   };
@@ -179,4 +206,171 @@ function emptyPromptUsage(): PromptResponse['usage'] {
       total: 0,
     },
   };
+}
+
+interface PreparedPromptBudget {
+  modelCard: AgentModelCard;
+  contextBudget: SessionBudgetReport;
+  promptBudget: SessionBudgetReport;
+  compactedBeforePrompt: boolean;
+}
+
+async function preparePromptBudget(input: {
+  session: FlueSession;
+  sessionId: string;
+  modelCard: AgentModelCard;
+  prompt: string;
+  compactedBeforePrompt?: boolean;
+}): Promise<PreparedPromptBudget> {
+  let sessionData = goromboFlueSessionStore.getLatestSessionData(orchestratorHarnessName, input.sessionId);
+  let compactedBeforePrompt = input.compactedBeforePrompt ?? false;
+  let contextBudget = createSessionBudgetReport({
+    sessionId: input.sessionId,
+    modelCard: input.modelCard,
+    promptText: input.prompt,
+    sessionData,
+  });
+  let promptBudget = contextBudget;
+
+  if (contextBudget.shouldCompactBeforePrompt) {
+    await input.session.compact();
+    sessionData = goromboFlueSessionStore.getLatestSessionData(orchestratorHarnessName, input.sessionId);
+    if (!sessionData) {
+      recordManualCompaction({
+        sessionId: input.sessionId,
+        modelSpecifier: input.modelCard.specifier,
+        budget: calculateContextBudget(input.modelCard),
+      });
+    }
+    compactedBeforePrompt = true;
+    contextBudget = createSessionBudgetReport({
+      sessionId: input.sessionId,
+      modelCard: input.modelCard,
+      promptText: input.prompt,
+      sessionData,
+    });
+    promptBudget = contextBudget;
+  }
+
+  return {
+    modelCard: input.modelCard,
+    contextBudget,
+    promptBudget,
+    compactedBeforePrompt,
+  };
+}
+
+async function promptWithModelCard(input: {
+  session: FlueSession;
+  prompt: string;
+  modelCard: AgentModelCard;
+  role: 'primary' | 'backup';
+  attempts: ChatWorkflowModelAttempt[];
+}): Promise<PromptResponse> {
+  try {
+    const response = await input.session.prompt(input.prompt, { model: input.modelCard.specifier });
+    input.attempts.push(createUsedAttempt(input.modelCard, input.role));
+    return response;
+  } catch (error) {
+    input.attempts.push(createFailedAttempt(input.modelCard, input.role, errorMessage(error)));
+    throw error;
+  }
+}
+
+export function isRecoverableModelFailure(error: unknown): boolean {
+  const message = errorMessage(error);
+  const name = error instanceof Error ? error.name : '';
+  const text = `${name} ${message}`.toLowerCase();
+
+  if (text.includes('abort')) {
+    return false;
+  }
+
+  return ![
+    'context length',
+    'context window',
+    'context limit',
+    'maximum context',
+    'token limit',
+    'too many tokens',
+    'maximum input',
+    'max input',
+    'too large',
+    'budget',
+    'result unavailable',
+    'schema validation',
+  ].some((pattern) => text.includes(pattern));
+}
+
+function createBudgetStopResponse(input: {
+  event: ReturnType<typeof normalizeWebApiMessage>;
+  preparedPrompt: PreparedPromptBudget;
+  modelFailover?: ChatWorkflowModelFailover;
+  textPrefix?: string;
+}): ChatWorkflowResponse {
+  const { modelCard, contextBudget, compactedBeforePrompt, promptBudget } = input.preparedPrompt;
+
+  return {
+    text:
+      `${input.textPrefix ?? ''}this message is too large for ${modelCard.displayName}'s safe input budget after session compaction. ` +
+      'Send a shorter message or switch to a larger model card.',
+    model: {
+      provider: modelCard.providerId,
+      id: modelCard.modelId,
+    },
+    usage: emptyPromptUsage(),
+    event: input.event,
+    contextBudget: {
+      ...contextBudget,
+      compactedBeforePrompt,
+      prePromptStatus: promptBudget.status,
+      prePromptEstimatedUsedTokens: promptBudget.estimatedUsedTokens,
+      lastPromptEstimateTokens: promptBudget.estimatedPromptTokens,
+    },
+    ...(input.modelFailover ? { modelFailover: input.modelFailover } : {}),
+  };
+}
+
+function createUsedAttempt(modelCard: AgentModelCard, role: 'primary' | 'backup'): ChatWorkflowModelAttempt {
+  return {
+    role,
+    modelCardKey: modelCard.key,
+    modelSpecifier: modelCard.specifier,
+    displayName: modelCard.displayName,
+    status: 'used',
+  };
+}
+
+function createFailedAttempt(
+  modelCard: AgentModelCard,
+  role: 'primary' | 'backup',
+  error: string,
+): ChatWorkflowModelAttempt {
+  return {
+    role,
+    modelCardKey: modelCard.key,
+    modelSpecifier: modelCard.specifier,
+    displayName: modelCard.displayName,
+    status: 'failed',
+    error,
+  };
+}
+
+function createSkippedAttempt(
+  modelCard: AgentModelCard,
+  role: 'primary' | 'backup',
+  reason: string,
+): ChatWorkflowModelAttempt {
+  return {
+    role,
+    modelCardKey: modelCard.key,
+    modelSpecifier: modelCard.specifier,
+    displayName: modelCard.displayName,
+    status: 'skipped',
+    reason,
+  };
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

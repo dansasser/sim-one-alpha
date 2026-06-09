@@ -1,7 +1,7 @@
 import { ollamaCloudProviderId } from '../../../provider-ids.js';
-import type { AgentModelProfile } from '../../../types.js';
+import type { AgentModelCard } from '../../../types.js';
 
-export const minimaxM3Card: AgentModelProfile = {
+export const minimaxM3Card: AgentModelCard = {
   key: 'minimax-m3-cloud',
   providerId: ollamaCloudProviderId,
   modelId: 'minimax-m3',

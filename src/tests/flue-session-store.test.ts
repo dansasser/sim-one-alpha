@@ -46,7 +46,7 @@ test('project Flue session store deletes the logical session when called from a 
 test('orchestrator uses the project Flue session store', async () => {
   const config = await orchestratorAgent.initialize({
     id: 'workflow-run-1',
-    env: { OLLAMA_API_KEY: 'test-key' },
+    env: createModelEnv(),
     payload: undefined,
   });
 
@@ -79,4 +79,12 @@ function createStoredSessionData(): SessionData {
     createdAt: '2026-06-07T00:00:00.000Z',
     updatedAt: '2026-06-07T00:00:00.000Z',
   } as SessionData;
+}
+
+function createModelEnv(): Record<string, string> {
+  return {
+    OLLAMA_API_KEY: 'test-key',
+    CODEX_BRAIN_LOCAL_API_KEY: 'test-key',
+    CODEX_BRAIN_LOCAL_API_URL: 'https://dt1.example.test/v1',
+  };
 }

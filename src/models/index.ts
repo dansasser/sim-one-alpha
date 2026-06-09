@@ -9,5 +9,6 @@ export {
   resolveModelCard,
 } from './catalog.js';
 export { configureModelProviders } from './providers/index.js';
-export { configureRuntimeModels, createModelRegistry, selectModelForRole } from './registry.js';
-export type { AgentModelProfile, ModelCapability, ModelRegistry, ModelRole } from './types.js';
+export { configureRuntimeModels, createModelRegistry, selectModelCardForRole } from './registry.js';
+export type { ModelRegistryOptions } from './registry.js';
+export type { AgentModelCard, ModelCapability, ModelRegistry, ModelRole } from './types.js';

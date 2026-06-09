@@ -123,7 +123,7 @@ Expected: TypeScript build fails because `resolveModelCard` does not exist.
 Export a function shaped like:
 
 ```ts
-export function resolveModelCard(specifier: string): AgentModelProfile | undefined {
+export function resolveModelCard(specifier: string): AgentModelCard | undefined {
   return allModelCards.find((card) => card.specifier === specifier);
 }
 ```

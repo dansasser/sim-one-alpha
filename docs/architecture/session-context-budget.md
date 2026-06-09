@@ -30,9 +30,10 @@ Flue does not expose a public pre-prompt exact token count for application code 
 
 ## Implemented GOROMBO Layer
 
-The selected model card now drives context budgeting and compaction:
+The active runtime model card now drives context budgeting, backup failover, and compaction:
 
 - `src/models/catalog.ts` resolves a Flue model specifier to a project-owned model card from provider-owned card directories.
+- the shipped `gorombo.config.json` runtime file selects the primary model card and optional backup model card for the deployment.
 - `src/session/context-budget.ts` calculates enforced context, output reserve, usable input, warning threshold, compaction threshold, and hard-stop threshold.
 - `src/session/compaction-policy.ts` converts token estimates into `normal`, `warn`, `compact`, or `stop`.
 - `src/session/flue-session-store.ts` implements the project-owned Flue `SessionStore` boundary.
@@ -48,12 +49,13 @@ The chat workflow sequence is:
 normalize message
 -> initialize orchestrator with project SessionStore
 -> load latest logical Flue SessionData
--> resolve selected model card
+-> resolve primary and backup model cards from runtime config
 -> estimate session history plus next prompt
 -> warn, compact, or stop
 -> call session.compact() when compaction is required
 -> refuse the prompt when the hard input budget is still exceeded
--> session.prompt(...)
+-> session.prompt(..., primary model card)
+-> retry same session with backup model card when the primary model/provider is recoverably unavailable
 -> read updated Flue SessionData
 -> return contextBudget telemetry
 ```
@@ -84,7 +86,9 @@ Memory should not fork conversation truth into a separate transcript. It should 
 
 ## Budget Inputs
 
-- selected model card
+- primary model card
+- backup model card
+- active model card for the current prompt attempt
 - Flue model specifier
 - advertised model context window
 - guaranteed context window
@@ -118,6 +122,8 @@ pre-prompt estimate
 ```
 
 Flue's own threshold and overflow compaction still run during and after the prompt. The GOROMBO layer exists to reduce provider rejections and to give RAG a real remaining-token budget before retrieved context is injected.
+
+Backup model failover is an availability path, not a way to bypass context budgeting. If the primary model fails with a recoverable provider/model availability error, the chat workflow checks the backup card's budget and retries with the backup specifier on the same Flue session. Context-length errors, aborts, and hard-stop budget failures do not trigger a backup retry.
 
 ## RAG Allocation Rule
 
