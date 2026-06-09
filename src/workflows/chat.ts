@@ -16,6 +16,7 @@ import {
   type SessionBudgetReport,
 } from '../session/session-budget.js';
 import { goromboFlueSessionStore } from '../session/flue-session-store.js';
+import { rememberProtocolLookupEvent } from '../tools/protocol-tool.js';
 
 export const route: WorkflowRouteHandler = async (c, next) => requireApiSecret(c, next);
 
@@ -63,6 +64,7 @@ export async function run({
 }: FlueContext<ChatWorkflowPayload>): Promise<ChatWorkflowResponse> {
   const event = normalizeWebApiMessage(payload);
   const sessionId = payload.session ?? event.conversation.id;
+  rememberProtocolLookupEvent(event);
   const prompt = createChatPrompt(event);
   const runtimeModels = configureRuntimeModels(env);
   const selectedModelCard = runtimeModels.selectedModelCard;
@@ -173,35 +175,29 @@ export function createContextBudgetReport(modelSpecifier: string): SessionBudget
 }
 
 export function createChatPrompt(event: ReturnType<typeof normalizeWebApiMessage>): string {
-  const protocolSelector = {
-    eventId: event.id,
+  const safeEvent = {
     connector: event.connector,
     messageKind: event.kind,
-    actorId: event.actor.id,
-    conversationId: event.conversation.id,
-    ...(event.conversation.threadId ? { threadId: event.conversation.threadId } : {}),
-    ...(event.context?.clientId ? { clientId: event.context.clientId } : {}),
-    ...(event.context?.projectId ? { projectId: event.context.projectId } : {}),
+    receivedAt: event.receivedAt,
+    ...(event.actor.displayName ? { actorDisplayName: event.actor.displayName } : {}),
     ...(event.context?.workflow ? { workflow: event.context.workflow } : {}),
     ...(event.context?.task ? { task: event.context.task } : {}),
+    text: event.text,
   };
 
   return `
 You are handling a normalized GOROMBO chat event.
 
 Before you answer:
-1. Use the load_protocols tool for this event. Pass eventId, connector, messageKind, actorId, conversationId, threadId, clientId, projectId, workflow, and task when present in the normalized event.
+1. Use the load_protocols tool for this event with eventId: "${event.id}". Do not pass or invent clientId, projectId, raw payloads, or other hidden identifiers.
 2. Do not perform web search directly and do not call web-capable retrieval tools from the orchestrator.
 3. Use the Flue task tool with agent: "researcher" for any current, external, web, source-backed, or research task. The researcher owns web_research and decides how many searches or fetches are needed.
 4. Use retrieve_memory when stored conversation or project memory would help.
 5. If research metadata reports providerFailures, say that plainly when it affects confidence and continue with the best available context.
 6. If a specific provider is still a placeholder, say that plainly and continue with the best available answer.
 
-Protocol selector:
-${JSON.stringify(protocolSelector, null, 2)}
-
-User message:
-${event.text}
+Safe event:
+${JSON.stringify(safeEvent, null, 2)}
 
 Answer the user message naturally and keep the response concise.
 `;

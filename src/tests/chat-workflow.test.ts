@@ -29,6 +29,34 @@ test('chat workflow prompt requires minimal tool flow before answering', () => {
   assert.match(prompt, /What can you do\?/);
 });
 
+test('chat workflow prompt excludes sensitive event context and raw payloads', () => {
+  const event = normalizeWebApiMessage({
+    text: 'Handle this safely.',
+    actorId: 'secret-actor-id',
+    actorDisplayName: 'Visible User',
+    conversationId: 'secret-conversation-id',
+    clientId: 'secret-client-id',
+    projectId: 'secret-project-id',
+    workflow: 'visible-workflow',
+    task: 'visible-task',
+    raw: {
+      token: 'secret-raw-token',
+    },
+  });
+
+  const prompt = createChatPrompt(event);
+
+  assert.match(prompt, /Handle this safely\./);
+  assert.match(prompt, /Visible User/);
+  assert.match(prompt, /visible-workflow/);
+  assert.match(prompt, /visible-task/);
+  assert.doesNotMatch(prompt, /secret-actor-id/);
+  assert.doesNotMatch(prompt, /secret-conversation-id/);
+  assert.doesNotMatch(prompt, /secret-client-id/);
+  assert.doesNotMatch(prompt, /secret-project-id/);
+  assert.doesNotMatch(prompt, /secret-raw-token/);
+});
+
 test('chat workflow reports context budget for selected model', () => {
   const report = createContextBudgetReport('ollama-cloud/minimax-m3');
 

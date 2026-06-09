@@ -5,6 +5,7 @@ import type { ConnectorKind, MessageKind, NormalizedMessageEvent } from '../type
 const provider = new SqliteProtocolProviderPlaceholder('protocols.sqlite');
 const connectorKinds = new Set<ConnectorKind>(['telegram', 'web-api', 'scheduled-job', 'test', 'unknown']);
 const messageKinds = new Set<MessageKind>(['chat.message', 'command', 'workflow.event']);
+const protocolLookupEvents = new Map<string, NormalizedMessageEvent>();
 
 export interface ProtocolToolInput {
   eventId: unknown;
@@ -43,34 +44,59 @@ export const loadProtocolsTool = defineTool({
 });
 
 export function createProtocolLookupEvent(input: ProtocolToolInput): NormalizedMessageEvent {
+  const eventId = String(input.eventId);
+  const registeredEvent = protocolLookupEvents.get(eventId);
   const threadId = readNonEmptyString(input.threadId);
   const clientId = readNonEmptyString(input.clientId);
   const projectId = readNonEmptyString(input.projectId);
   const workflow = readNonEmptyString(input.workflow);
   const task = readNonEmptyString(input.task);
+  const resolvedClientId = clientId ?? registeredEvent?.context?.clientId;
+  const resolvedProjectId = projectId ?? registeredEvent?.context?.projectId;
+  const resolvedWorkflow = workflow ?? registeredEvent?.context?.workflow;
+  const resolvedTask = task ?? registeredEvent?.context?.task;
 
   return {
-    id: String(input.eventId),
-    connector: readConnectorKind(input.connector) ?? 'unknown',
-    kind: readMessageKind(input.messageKind) ?? 'chat.message',
-    text: '',
-    receivedAt: new Date().toISOString(),
-    actor: { id: readNonEmptyString(input.actorId) ?? 'tool-call' },
+    id: eventId,
+    connector: readConnectorKind(input.connector) ?? registeredEvent?.connector ?? 'unknown',
+    kind: readMessageKind(input.messageKind) ?? registeredEvent?.kind ?? 'chat.message',
+    text: registeredEvent?.text ?? '',
+    receivedAt: registeredEvent?.receivedAt ?? new Date().toISOString(),
+    actor: { id: readNonEmptyString(input.actorId) ?? registeredEvent?.actor.id ?? 'tool-call' },
     conversation: {
-      id: readNonEmptyString(input.conversationId) ?? 'tool-call',
-      ...(threadId ? { threadId } : {}),
+      id: readNonEmptyString(input.conversationId) ?? registeredEvent?.conversation.id ?? 'tool-call',
+      ...(threadId ?? registeredEvent?.conversation.threadId
+        ? { threadId: threadId ?? registeredEvent?.conversation.threadId }
+        : {}),
     },
-    ...(clientId || projectId || workflow || task
+    ...(resolvedClientId || resolvedProjectId || resolvedWorkflow || resolvedTask
       ? {
           context: {
-            ...(clientId ? { clientId } : {}),
-            ...(projectId ? { projectId } : {}),
-            ...(workflow ? { workflow } : {}),
-            ...(task ? { task } : {}),
+            ...(resolvedClientId ? { clientId: resolvedClientId } : {}),
+            ...(resolvedProjectId ? { projectId: resolvedProjectId } : {}),
+            ...(resolvedWorkflow ? { workflow: resolvedWorkflow } : {}),
+            ...(resolvedTask ? { task: resolvedTask } : {}),
           },
         }
       : {}),
   };
+}
+
+export function rememberProtocolLookupEvent(event: NormalizedMessageEvent): void {
+  protocolLookupEvents.set(event.id, {
+    id: event.id,
+    connector: event.connector,
+    kind: event.kind,
+    text: event.text,
+    receivedAt: event.receivedAt,
+    actor: { ...event.actor },
+    conversation: { ...event.conversation },
+    ...(event.context ? { context: { ...event.context } } : {}),
+  });
+}
+
+export function forgetProtocolLookupEvent(eventId: string): void {
+  protocolLookupEvents.delete(eventId);
 }
 
 function readConnectorKind(value: unknown): ConnectorKind | undefined {
