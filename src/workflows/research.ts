@@ -24,6 +24,9 @@ export interface ResearchWorkflowResponse {
   usage: PromptResponse['usage'];
 }
 
+/**
+ * Runs the standalone research workflow by prompting the researcher worker directly.
+ */
 export async function run({
   init,
   payload,
@@ -39,6 +42,9 @@ export async function run({
   };
 }
 
+/**
+ * Builds the researcher prompt with bounded web-research controls from the workflow payload.
+ */
 export function createResearchPrompt(payload: ResearchWorkflowPayload): string {
   const maxContextTokens = payload.maxContextTokens ?? 4_000;
   const webFetch = payload.webFetch ?? 'auto';

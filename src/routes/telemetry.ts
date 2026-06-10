@@ -2,6 +2,9 @@ import type { Hono } from 'hono';
 import { requireApiSecret } from '../middleware/api-secret.js';
 import { flueTelemetryStore } from '../telemetry/flue-telemetry.js';
 
+/**
+ * Registers protected HTTP routes for inspecting sanitized Flue telemetry.
+ */
 export function registerTelemetryRoutes(app: Hono): void {
   app.get('/api/telemetry/runs/:runId', requireApiSecret, (c) => {
     const runId = c.req.param('runId');

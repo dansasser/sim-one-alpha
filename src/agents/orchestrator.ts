@@ -46,6 +46,9 @@ export default createAgent(({ env }) => {
   };
 });
 
+/**
+ * Creates the orchestrator compaction policy from the selected model card budget.
+ */
 export function createFlueCompactionConfig(modelCard: AgentModelCard): {
   reserveTokens: number;
   keepRecentTokens: number;
@@ -60,6 +63,9 @@ export function createFlueCompactionConfig(modelCard: AgentModelCard): {
   };
 }
 
+/**
+ * Describes the orchestrator capabilities that are actually wired at runtime.
+ */
 function createOrchestratorRuntimeCapabilityBlock(): string {
   return `# Runtime Capabilities
 

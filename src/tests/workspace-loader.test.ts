@@ -34,7 +34,8 @@ test('workspace loader reports missing workspace files clearly', () => {
   const dir = makeWorkspaceFixture();
 
   try {
-    rmSync(join(dir, 'TOOLS.md'));
+    const missingFilePath = join(dir, 'TOOLS.md');
+    rmSync(missingFilePath);
 
     assert.throws(
       () =>
@@ -42,7 +43,10 @@ test('workspace loader reports missing workspace files clearly', () => {
           workspaceDir: dir,
           title: 'Missing File Workspace',
         }),
-      /TOOLS\.md/,
+      (error) =>
+        error instanceof Error &&
+        error.message.includes('Failed to read workspace file TOOLS.md') &&
+        error.message.includes(missingFilePath),
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });

@@ -40,6 +40,14 @@ export interface TelemetrySnapshot {
   unscopedEventCount: number;
 }
 
+/**
+ * Keeps a bounded in-memory summary of sanitized Flue events.
+ *
+ * Mutations in this store are synchronous and contain no `await` boundary, so
+ * Node's run-to-completion execution model serializes `record`, `reset`, and
+ * trimming work inside this process. If Flue later emits observer callbacks
+ * from worker threads, this store should be wrapped in an external queue.
+ */
 export class FlueTelemetryStore {
   private readonly eventsByRunId = new Map<string, TelemetryEventSummary[]>();
   private readonly unscopedEvents: TelemetryEventSummary[] = [];
@@ -52,6 +60,9 @@ export class FlueTelemetryStore {
     } = {},
   ) {}
 
+  /**
+   * Records one sanitized event summary and trims bounded buffers immediately.
+   */
   record(event: FlueEvent): void {
     const summary = summarizeFlueEvent(event);
     if (!summary) {
@@ -71,11 +82,17 @@ export class FlueTelemetryStore {
     this.trimRuns();
   }
 
+  /**
+   * Returns the current summary for a run without exposing prompt or tool payloads.
+   */
   getRunSummary(runId: string): TelemetryRunSummary | undefined {
     const events = this.eventsByRunId.get(runId);
     return events ? summarizeRun(runId, events) : undefined;
   }
 
+  /**
+   * Returns all bounded run summaries and the count of events that had no run id.
+   */
   snapshot(): TelemetrySnapshot {
     return {
       runs: [...this.eventsByRunId.entries()].map(([runId, events]) => summarizeRun(runId, events)),
@@ -83,11 +100,17 @@ export class FlueTelemetryStore {
     };
   }
 
+  /**
+   * Clears all captured telemetry, primarily for tests.
+   */
   reset(): void {
     this.eventsByRunId.clear();
     this.unscopedEvents.length = 0;
   }
 
+  /**
+   * Trims oldest runs during the same synchronous mutation that records events.
+   */
   private trimRuns(): void {
     const maxRuns = this.options.maxRuns ?? 100;
     while (this.eventsByRunId.size > maxRuns) {
@@ -102,19 +125,24 @@ export class FlueTelemetryStore {
 
 export const flueTelemetryStore = new FlueTelemetryStore();
 
-let observerRegistered = false;
+let observerUnsubscribe: (() => void) | undefined;
 
+/**
+ * Registers the singleton telemetry observer once for the current module instance.
+ */
 export function registerFlueTelemetryObserver(): void {
-  if (observerRegistered) {
+  if (observerUnsubscribe) {
     return;
   }
 
-  observe((event) => {
+  observerUnsubscribe = observe((event) => {
     flueTelemetryStore.record(event);
   });
-  observerRegistered = true;
 }
 
+/**
+ * Builds a run-level summary from sanitized events.
+ */
 function summarizeRun(runId: string, events: TelemetryEventSummary[]): TelemetryRunSummary {
   const taskStarts = events.filter((event) => event.type === 'task_start');
   const toolCalls = events.filter((event) =>
@@ -139,6 +167,9 @@ function summarizeRun(runId: string, events: TelemetryEventSummary[]): Telemetry
   };
 }
 
+/**
+ * Converts a Flue event into the fields safe enough to expose from telemetry.
+ */
 function summarizeFlueEvent(event: FlueEvent): TelemetryEventSummary | undefined {
   if (!shouldKeepEvent(event)) {
     return undefined;
@@ -164,6 +195,9 @@ function summarizeFlueEvent(event: FlueEvent): TelemetryEventSummary | undefined
   };
 }
 
+/**
+ * Keeps only event types useful for delegation, tool-use, operation, and error summaries.
+ */
 function shouldKeepEvent(event: FlueEvent): boolean {
   return [
     'run_start',
@@ -186,6 +220,9 @@ function shouldKeepEvent(event: FlueEvent): boolean {
   ].includes(event.type);
 }
 
+/**
+ * Extracts token counts while dropping provider cost and message content details.
+ */
 function readUsage(event: FlueEvent): TelemetryEventSummary['usage'] {
   const usage = 'usage' in event ? event.usage : undefined;
   if (!usage) {
@@ -199,21 +236,33 @@ function readUsage(event: FlueEvent): TelemetryEventSummary['usage'] {
   };
 }
 
+/**
+ * Reads a string property from Flue's event union without broadening the public type.
+ */
 function readEventString(event: FlueEvent, key: string): string | undefined {
   const value = (event as Record<string, unknown>)[key];
   return typeof value === 'string' ? value : undefined;
 }
 
+/**
+ * Reads a finite numeric property from Flue's event union.
+ */
 function readEventNumber(event: FlueEvent, key: string): number | undefined {
   const value = (event as Record<string, unknown>)[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+/**
+ * Reads a boolean property from Flue's event union.
+ */
 function readEventBoolean(event: FlueEvent, key: string): boolean | undefined {
   const value = (event as Record<string, unknown>)[key];
   return typeof value === 'boolean' ? value : undefined;
 }
 
+/**
+ * Removes oldest entries from an array until it fits the configured maximum.
+ */
 function trimArray<T>(values: T[], maxLength: number): void {
   if (values.length > maxLength) {
     values.splice(0, values.length - maxLength);

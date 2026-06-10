@@ -26,6 +26,9 @@ export const researcherInstructions = [
   createResearcherRuntimeCapabilityBlock(),
 ].join('\n\n');
 
+/**
+ * Creates the reusable researcher Flue subagent profile used by the orchestrator and research workflow.
+ */
 export function createResearcherSubagent(model?: string): AgentProfile {
   return defineAgentProfile({
     name: researcherAgentName,
@@ -48,6 +51,9 @@ export default createAgent(({ env }) => {
   };
 });
 
+/**
+ * Creates the researcher compaction policy from the selected model card budget.
+ */
 function createResearchCompactionConfig(modelCard: AgentModelCard): {
   reserveTokens: number;
   keepRecentTokens: number;
@@ -62,6 +68,9 @@ function createResearchCompactionConfig(modelCard: AgentModelCard): {
   };
 }
 
+/**
+ * Describes the researcher capabilities that are actually wired at runtime.
+ */
 function createResearcherRuntimeCapabilityBlock(): string {
   return `# Runtime Capabilities
 

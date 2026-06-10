@@ -80,6 +80,9 @@ export interface WebResearchWorkflowOptions {
   memoryProvider?: MemoryProvider;
 }
 
+/**
+ * Flue workflow entrypoint for source-backed web research runs.
+ */
 export async function run({
   env,
   payload,
@@ -87,6 +90,9 @@ export async function run({
   return runWebResearch(payload, { env });
 }
 
+/**
+ * Runs bounded web research using query planning, cache-aware search, optional page fetch, and evidence packing.
+ */
 export async function runWebResearch(
   payload: WebResearchWorkflowPayload,
   options: WebResearchWorkflowOptions = {},
@@ -198,6 +204,9 @@ export async function runWebResearch(
   }
 }
 
+/**
+ * Builds a small query plan from the request and selected research depth.
+ */
 export function buildResearchQueryPlan(
   text: string,
   maxQueries: number,
@@ -244,17 +253,22 @@ interface ResearchSettings {
   maxIterations: number;
 }
 
+/**
+ * Decides whether gathered evidence satisfies the configured source and iteration requirements.
+ */
 function hasEnoughEvidence(
   request: string,
   contexts: RetrievedContext[],
   searchesRun: number,
   settings: ResearchSettings,
 ): boolean {
-  if (!contexts.length) {
+  const uniqueSourceCount = countUniqueSources(contexts);
+
+  if (!uniqueSourceCount) {
     return false;
   }
 
-  if (contexts.length < settings.minSources) {
+  if (uniqueSourceCount < settings.minSources) {
     return false;
   }
 
@@ -263,16 +277,22 @@ function hasEnoughEvidence(
   }
 
   if (isComplexResearchPrompt(request)) {
-    return contexts.length >= Math.max(3, settings.minSources) && searchesRun >= 2;
+    return uniqueSourceCount >= settings.minSources && searchesRun >= 2;
   }
 
   return true;
 }
 
+/**
+ * Detects prompts that need at least two searches before stopping.
+ */
 function isComplexResearchPrompt(text: string): boolean {
   return /(research|compare|versus| vs |sources|citations|deep dive|investigate|options|alternatives)/i.test(text);
 }
 
+/**
+ * Packs the highest-scoring unique source contexts inside the context token budget.
+ */
 function packUniqueContexts(contexts: RetrievedContext[], maxContextTokens: number): RetrievedContext[] {
   const seen = new Set<string>();
   const sorted = [...contexts].sort((left, right) => right.score - left.score);
@@ -280,8 +300,7 @@ function packUniqueContexts(contexts: RetrievedContext[], maxContextTokens: numb
   let remainingTokens = Math.max(1, Math.floor(maxContextTokens));
 
   for (const context of sorted) {
-    const url = typeof context.metadata?.url === 'string' ? context.metadata.url : '';
-    const key = url || `${context.provider}:${context.title}`;
+    const key = createSourceKey(context);
     if (seen.has(key)) {
       continue;
     }
@@ -299,6 +318,24 @@ function packUniqueContexts(contexts: RetrievedContext[], maxContextTokens: numb
   return packed;
 }
 
+/**
+ * Counts distinct source keys using the same identity rule as final source packing.
+ */
+function countUniqueSources(contexts: RetrievedContext[]): number {
+  return new Set(contexts.map(createSourceKey)).size;
+}
+
+/**
+ * Creates a stable source key from URL when present, otherwise provider and title.
+ */
+function createSourceKey(context: RetrievedContext): string {
+  const url = typeof context.metadata?.url === 'string' ? context.metadata.url : '';
+  return url || `${context.provider}:${context.title}`;
+}
+
+/**
+ * Converts a retrieved context into the public source evidence shape.
+ */
 function toSourceEvidence(context: RetrievedContext): SourceEvidence {
   return {
     id: context.id,
@@ -311,6 +348,9 @@ function toSourceEvidence(context: RetrievedContext): SourceEvidence {
   };
 }
 
+/**
+ * Estimates confidence from source count, official-source hints, prompt complexity, and provider failures.
+ */
 function calculateConfidence(
   request: string,
   sources: SourceEvidence[],
@@ -334,6 +374,9 @@ function calculateConfidence(
   return Math.max(0, Math.min(0.95, confidence));
 }
 
+/**
+ * Resolves explicit payload controls, environment overrides, and depth defaults into one settings object.
+ */
 function resolveResearchSettings(
   payload: WebResearchWorkflowPayload,
   env: Record<string, unknown>,
@@ -409,6 +452,9 @@ const researchDepthDefaults: Record<ResearchDepth, ResearchSettings> = {
   },
 };
 
+/**
+ * Resolves cache TTL while forcing fresh mode to bypass existing cache entries.
+ */
 function resolveTtlMs(freshness: ResearchFreshness, value: unknown, fallback: number): number {
   if (freshness === 'fresh') {
     return 0;
@@ -417,6 +463,9 @@ function resolveTtlMs(freshness: ResearchFreshness, value: unknown, fallback: nu
   return readPositiveInteger(value) ?? fallback;
 }
 
+/**
+ * Detects prompts that should prefer fresh search results over cached entries.
+ */
 function needsFreshResearch(text: string): boolean {
   return /\b(current|latest|recent|today|yesterday|tomorrow|now|breaking|news|2026)\b/i.test(text);
 }

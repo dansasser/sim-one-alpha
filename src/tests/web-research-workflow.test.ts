@@ -126,10 +126,56 @@ test('web research workflow runs multiple searches for complex research prompts'
   );
 
   assert.equal(result.status, 'completed');
+  assert.equal(result.queriesRun.length, 2);
+  assert.equal(queries.length, 2);
+  assert.equal(result.sources.length, 2);
+  assert.ok(result.confidence > 0.6);
+});
+
+test('web research workflow counts unique sources before stopping', async () => {
+  const queries: string[] = [];
+  const provider = createWebProvider({
+    retrieve: async (query) => {
+      queries.push(query.text);
+      const duplicate = queries.length < 3;
+
+      return [
+        makeContext({
+          id: `web:${queries.length}`,
+          title: duplicate ? 'Duplicate Source' : 'Distinct Source',
+          content: `Source ${queries.length} content.`,
+          url: duplicate ? 'https://example.com/same-source' : 'https://example.com/distinct-source',
+          query,
+        }),
+      ];
+    },
+  });
+
+  const result = await runWebResearch(
+    {
+      eventId: 'event-1',
+      text: 'Compare current web search options with sources.',
+      actorId: 'user-1',
+      conversationId: 'thread-1',
+      maxQueries: 3,
+      maxFetches: 0,
+      webFetch: 'never',
+      minSources: 2,
+    },
+    {
+      cache: new InMemoryResearchCache(),
+      webProvider: provider,
+    },
+  );
+
+  assert.equal(result.status, 'completed');
   assert.equal(result.queriesRun.length, 3);
   assert.equal(queries.length, 3);
-  assert.equal(result.sources.length, 3);
-  assert.ok(result.confidence > 0.6);
+  assert.equal(result.sources.length, 2);
+  assert.deepEqual(
+    result.sources.map((source) => source.url),
+    ['https://example.com/same-source', 'https://example.com/distinct-source'],
+  );
 });
 
 test('web research workflow keeps searching after fetch budget is exhausted', async () => {
@@ -169,6 +215,7 @@ test('web research workflow keeps searching after fetch budget is exhausted', as
       conversationId: 'thread-1',
       maxQueries: 3,
       maxFetches: 1,
+      minSources: 3,
       webFetch: 'always',
     },
     {
