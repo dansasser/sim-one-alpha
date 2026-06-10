@@ -1,5 +1,5 @@
 import type { WebFetchMode } from '../workflows/retrieval.js';
-import type { ResearchFreshness } from '../workflows/web-research.js';
+import type { ResearchDepth, ResearchFreshness } from '../workflows/web-research.js';
 
 export function readPositiveInteger(value: unknown): number | undefined {
   return readInteger(value, { minimum: 1 });
@@ -15,6 +15,10 @@ export function readWebFetchMode(value: unknown): WebFetchMode | undefined {
 
 export function readResearchFreshness(value: unknown): ResearchFreshness | undefined {
   return value === 'auto' || value === 'fresh' || value === 'cached' ? value : undefined;
+}
+
+export function readResearchDepth(value: unknown): ResearchDepth | undefined {
+  return value === 'basic' || value === 'standard' || value === 'deep' ? value : undefined;
 }
 
 function readInteger(value: unknown, options: { minimum: number }): number | undefined {

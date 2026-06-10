@@ -58,6 +58,7 @@ test('web research workflow reuses search and page cache across research runs', 
       maxQueries: 2,
       maxFetches: 1,
       webFetch: 'always',
+      minSources: 1,
     },
     {
       cache,
@@ -73,6 +74,7 @@ test('web research workflow reuses search and page cache across research runs', 
       maxQueries: 2,
       maxFetches: 1,
       webFetch: 'always',
+      minSources: 1,
     },
     {
       cache,
@@ -250,6 +252,49 @@ test('web research fresh mode bypasses existing search and page cache reads', as
   assert.equal(calls.fetch, 2);
   assert.equal(fresh.cache.searchHits, 0);
   assert.equal(fresh.cache.pageHits, 0);
+});
+
+test('web research workflow applies deep research defaults with bounded iterations', async () => {
+  const queries: string[] = [];
+  const provider = createWebProvider({
+    retrieve: async (query) => {
+      queries.push(query.text);
+      return [
+        makeContext({
+          id: `web:${queries.length}`,
+          title: `Deep Source ${queries.length}`,
+          content: `Deep source ${queries.length} content.`,
+          url: `https://example.com/deep-source-${queries.length}`,
+          query,
+        }),
+      ];
+    },
+  });
+
+  const result = await runWebResearch(
+    {
+      eventId: 'event-1',
+      text: 'Deep research current web search options with sources.',
+      actorId: 'user-1',
+      conversationId: 'thread-1',
+      depth: 'deep',
+      webFetch: 'never',
+    },
+    {
+      cache: new InMemoryResearchCache(),
+      webProvider: provider,
+    },
+  );
+
+  assert.equal(result.status, 'completed');
+  assert.equal(result.budget.depth, 'deep');
+  assert.equal(result.budget.maxQueries, 6);
+  assert.equal(result.budget.minSources, 5);
+  assert.equal(result.budget.maxIterations, 3);
+  assert.ok(result.budget.iterationsRun >= 2);
+  assert.ok(result.queriesRun.length >= 5);
+  assert.ok(queries.length >= 5);
+  assert.equal(result.sources.length, result.queriesRun.length);
 });
 
 function createWebProvider(input: {

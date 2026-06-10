@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import orchestratorAgent from '../agents/orchestrator.js';
-import { createResearcherSubagent } from '../agents/researcher.js';
+import { createResearcherSubagent } from '../workers/researcher/researcher.js';
 
 test('root and architecture docs preserve the Flue component contract', () => {
   const agents = readText('AGENTS.md');
@@ -66,8 +66,12 @@ test('Flue orchestrator routes research to the researcher instead of owning web 
   assert.equal(config.subagents?.find((agent) => agent.name === 'researcher')?.model, undefined);
   assert.equal(config.tools?.some((tool) => tool.name === 'retrieve_context'), false);
   assert.equal(config.tools?.some((tool) => tool.name === 'web_research'), false);
+  assert.match(config.instructions ?? '', /Main Agent Workspace Instructions/);
+  assert.match(config.instructions ?? '', /Runtime Capabilities/);
   assert.match(config.instructions ?? '', /delegate with the Flue task tool using agent: "researcher"/);
   assert.match(config.instructions ?? '', /do not perform web search directly/i);
+  assert.match(config.instructions ?? '', /depth: "deep"/);
+  assert.match(config.instructions ?? '', /providerFailures/);
 });
 
 test('researcher owns the web research tool', () => {
@@ -75,7 +79,8 @@ test('researcher owns the web research tool', () => {
 
   assert.equal(subagent.tools?.some((tool) => tool.name === 'web_research'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'retrieve_context'), false);
-  assert.match(subagent.instructions ?? '', /Own all web research behavior/);
+  assert.match(subagent.instructions ?? '', /source-backed web research/);
+  assert.match(subagent.instructions ?? '', /Researcher Workspace Instructions/);
 });
 
 function readText(path: string): string {

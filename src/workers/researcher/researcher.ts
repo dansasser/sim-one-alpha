@@ -4,25 +4,27 @@ import {
   type AgentProfile,
   type AgentRouteHandler,
 } from '@flue/runtime';
-import { configureRuntimeModels } from '../models/index.js';
-import type { AgentModelCard } from '../models/types.js';
-import { calculateContextBudget } from '../session/context-budget.js';
-import { goromboFlueSessionStore } from '../session/flue-session-store.js';
-import { webResearchTool } from '../tools/index.js';
+import { configureRuntimeModels } from '../../models/index.js';
+import type { AgentModelCard } from '../../models/types.js';
+import {
+  composeWorkspaceInstructions,
+  resolveWorkspaceDirectory,
+} from '../../persona/workspace-loader.js';
+import { calculateContextBudget } from '../../session/context-budget.js';
+import { goromboFlueSessionStore } from '../../session/flue-session-store.js';
+import { webResearchTool } from '../../tools/index.js';
 
 export const route: AgentRouteHandler = async (_c, next) => next();
 
 export const researcherAgentName = 'researcher';
 
-const researcherInstructions = `
-You are the GOROMBO research subagent.
-
-Own all web research behavior. Decide whether the request needs one search, multiple searches, page fetches, source comparison, or a direct no-search answer.
-Use web_research for source-backed, current, external, or web-backed research. The tool runs the researcher-owned research workflow with cache, query planning, web search, page fetch, source packing, and confidence metadata.
-Compare retrieved sources before answering. Preserve source URLs from returned source metadata when they are available.
-If providerFailures reports a failed source, say which source failed and continue with the remaining context.
-Return concise structured findings that the main orchestrator can use directly. Do not edit code, run shell commands, or claim access to providers that are not wired.
-`;
+export const researcherInstructions = [
+  composeWorkspaceInstructions({
+    workspaceDir: resolveWorkspaceDirectory('workers/researcher/workspace'),
+    title: 'Researcher Workspace Instructions',
+  }),
+  createResearcherRuntimeCapabilityBlock(),
+].join('\n\n');
 
 export function createResearcherSubagent(model?: string): AgentProfile {
   return defineAgentProfile({
@@ -58,4 +60,14 @@ function createResearchCompactionConfig(modelCard: AgentModelCard): {
     keepRecentTokens: budget.keepRecentTokens,
     model: modelCard.specifier,
   };
+}
+
+function createResearcherRuntimeCapabilityBlock(): string {
+  return `# Runtime Capabilities
+
+The following capabilities are actually attached to this researcher profile at runtime:
+
+- Tool: \`web_research\`
+
+Use only attached tools and provider capabilities. If a workspace file mentions a future capability that is not attached at runtime, report that limitation instead of pretending it exists.`;
 }

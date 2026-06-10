@@ -7,12 +7,14 @@ test('research workflow prompt instructs the researcher to use retrieval control
     text: 'Find the official Ollama web search API docs URL.',
     actorId: 'user-1',
     conversationId: 'thread-1',
+    depth: 'deep',
     maxContextTokens: 2_000,
     webFetch: 'always',
     fetchTopK: 2,
   });
 
   assert.match(prompt, /web_research/);
+  assert.match(prompt, /depth: "deep"/);
   assert.match(prompt, /maxContextTokens: 2000/);
   assert.match(prompt, /webFetch: "always"/);
   assert.match(prompt, /maxFetches: 2/);

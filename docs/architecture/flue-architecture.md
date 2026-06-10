@@ -41,6 +41,7 @@ health checks
 auth and middleware
 imported route registration
 custom ingress that forwards into Flue architecture
+telemetry observer registration
 app.route('/', flue())
 side-effect import of model runtime bootstrap
 ```
@@ -56,11 +57,15 @@ passing process.env into model-provider setup
 agent business logic
 ```
 
+Telemetry observers registered in `src/app.ts` must stay lightweight. Use Flue `observe(...)` for live runtime events, sanitize content-bearing events before exposing or exporting them, and keep protected telemetry routes in imported route modules.
+
 If app-owned ingress is needed, it must dispatch or invoke the Flue agent/workflow path. It must not call a separate non-Flue orchestrator. Auth checks should live in imported middleware modules, not inline route bodies.
 
 ## Agents
 
 An agent file is a Flue `createAgent(...)` entrypoint. Every agent has a main file. A subagent is a Flue agent profile called by an agent. In this project, that Flue term is not a model-selection concept; model selection always goes through project model cards.
+
+The main agent entrypoint lives at `src/agents/orchestrator.ts` because Flue direct agent discovery expects main agent files under `src/agents/`. Subagent implementations live under `src/workers/<name>/` so they do not sit at the same directory level as the main agent. The main agent workspace lives at `src/workspace/`; subagent workspaces live at `src/workers/<name>/workspace/`.
 
 Agents own:
 
