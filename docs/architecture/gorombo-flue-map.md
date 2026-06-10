@@ -2,6 +2,49 @@
 
 This file maps Flue architecture to this repository.
 
+## Top-Level Source Directory Map
+
+Every top-level `src/` directory should fit one of these categories. If a new directory is added, update this map in the same change.
+
+| Path | Type | Ownership rule |
+| --- | --- | --- |
+| `src/agents/` | Flue agent entrypoints | Main `createAgent(...)` files discovered by Flue. |
+| `src/config/` | Runtime configuration | Typed config loaders and shipped runtime config source files. |
+| `src/connectors/` | Connector normalization | External-source adapters that normalize input into internal message shapes. |
+| `src/memory/` | Shared memory subsystem | Memory retrieval interfaces and routing shared by agents/tools/workflows. |
+| `src/middleware/` | HTTP middleware | Reusable Hono middleware such as API-secret auth. |
+| `src/models/` | Model subsystem | Model cards, provider registration, model registry, limits, and runtime bootstrap. |
+| `src/protocols/` | Protocol storage/access subsystem | Protocol schemas and provider implementations used by protocol tools. |
+| `src/rag/` | Shared retrieval subsystem | Retrieval provider interfaces and routing. This name is pending a user-selected rename, but the concept remains top-level because it is shared architecture. |
+| `src/registries/` | Registry subsystem | Typed registries for tools, skills, agents, protocols, and future discoverable capabilities. |
+| `src/routes/` | HTTP route modules | Concrete app-owned Hono route registration modules. |
+| `src/session/` | Session/context subsystem | Flue session persistence, compaction policy, context budget, and usage tracking. |
+| `src/telemetry/` | Observability subsystem | Sanitized Flue event capture and run summaries. |
+| `src/tests/` | Test suite | Node test files compiled to `.tmp/tsc/tests`. |
+| `src/tools/` | Model-callable tools | `defineTool(...)` capabilities attached only to owning agents. |
+| `src/types/` | Shared TypeScript contracts | Public/common interfaces used across subsystems. |
+| `src/utils/` | Generic helpers | Small cross-cutting helpers only; domain subsystems do not belong here. |
+| `src/workers/` | Worker/subagent implementations | Specialized worker profiles plus worker-local support code and worker workspaces. |
+| `src/workflows/` | Flue workflows | Finite Flue operations that can initialize agents, manage bounded loops, and return structured results. |
+| `src/workspace/` | Main agent workspace content | User-editable persona markdown for the main agent. No TypeScript runtime code belongs here. |
+
+Root source files:
+
+```text
+src/app.ts
+  Hono application shell and Flue route mount.
+
+src/index.ts
+  Package barrel for exported connector, registry, and type helpers.
+  It must not re-export removed non-Flue orchestrator or gateway paths.
+
+src/workspace-loader.ts
+  Shared workspace markdown loader.
+  Composes workspace files in a fixed order for agent instructions.
+  Stays as a root support file because it is currently the only file in this category.
+  Keeps user-editable workspace content separate from TypeScript agent entrypoints.
+```
+
 ## Runtime Surfaces
 
 ```text
@@ -52,7 +95,16 @@ src/workers/researcher/researcher.ts
 src/workers/researcher/workspace/
   Researcher subagent user-editable workspace persona files.
 
-src/persona/workspace-loader.ts
+src/workers/coding-worker/coding-worker.ts
+  Placeholder coding worker subagent profile.
+  Owns coding-worker instructions and placeholder runtime boundary.
+  Does not attach coding tools yet.
+
+src/workers/coding-worker/workspace/
+  Coding worker user-editable workspace persona files.
+  Currently documents placeholder-only behavior until coding tools and approval flow are implemented.
+
+src/workspace-loader.ts
   Shared workspace markdown loader.
   Composes workspace files in a fixed order for agent instructions.
   Keeps user-editable workspace content separate from TypeScript agent entrypoints.
@@ -96,8 +148,8 @@ src/tools/rag-tool.ts
   Researcher-only low-level retrieval tool.
   Not attached to the orchestrator.
 
-src/research/
-  Research cache and web-provider wrappers.
+src/workers/researcher/research/
+  Researcher-owned research cache and web-provider wrappers.
 
 src/models/providers/
   Provider registration and provider-owned model cards.

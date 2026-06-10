@@ -9,7 +9,7 @@ import type { AgentModelCard } from '../../models/types.js';
 import {
   composeWorkspaceInstructions,
   resolveWorkspaceDirectory,
-} from '../../persona/workspace-loader.js';
+} from '../../workspace-loader.js';
 import { calculateContextBudget } from '../../session/context-budget.js';
 import { goromboFlueSessionStore } from '../../session/flue-session-store.js';
 import { webResearchTool } from '../../tools/index.js';

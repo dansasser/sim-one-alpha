@@ -1,5 +1,5 @@
-import type { RagProvider, WebFetchResult } from '../rag/providers.js';
-import type { RagQuery, RetrievedContext } from '../types/index.js';
+import type { RagProvider, WebFetchResult } from '../../../rag/providers.js';
+import type { RagQuery, RetrievedContext } from '../../../types/index.js';
 import {
   type ResearchRunCache,
   createExpiresAt,

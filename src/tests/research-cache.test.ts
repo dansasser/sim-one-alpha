@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
-import { SqliteResearchCache } from '../research/research-cache.js';
+import { SqliteResearchCache } from '../workers/researcher/research/research-cache.js';
 
 test('SQLite research cache treats corrupted JSON rows as cache misses', async () => {
   const filePath = join(mkdtempSync(join(tmpdir(), 'gorombo-research-cache-')), 'cache.sqlite');

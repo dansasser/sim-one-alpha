@@ -7,4 +7,8 @@ dist-flue/
 coverage/
 .tmp/
 *.tsbuildinfo
-.gorombo/
+.gorombo/*
+!.gorombo/
+!.gorombo/db/
+.gorombo/db/*
+!.gorombo/db/README.md

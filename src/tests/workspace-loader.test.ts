@@ -9,7 +9,7 @@ import {
   resolveWorkspaceFilePath,
   workspaceFileOrder,
   type WorkspaceFileName,
-} from '../persona/workspace-loader.js';
+} from '../workspace-loader.js';
 
 test('workspace loader composes files in workspace order with section headers', () => {
   const dir = makeWorkspaceFixture();

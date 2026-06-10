@@ -335,10 +335,11 @@ Planned structure:
 
 ```text
 src/
-  orchestrator.ts
+  agents/
   workspace/
   connectors/
-  gateway/
+  routes/
+  middleware/
   memory/
   protocols/
   rag/
@@ -591,7 +592,7 @@ GOROMBO_RAG_MAX_CONTEXT_TOKENS=4000
 GOROMBO_RAG_WEB_FETCH_TOP_K=1
 GOROMBO_RESEARCH_MAX_QUERIES=3
 GOROMBO_RESEARCH_MAX_FETCHES=2
-GOROMBO_RESEARCH_CACHE_DB=.gorombo/research-cache.sqlite
+GOROMBO_RESEARCH_CACHE_DB=.gorombo/db/research-cache.sqlite
 ```
 
 Implemented endpoints:

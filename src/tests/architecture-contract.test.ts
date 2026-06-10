@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import orchestratorAgent from '../agents/orchestrator.js';
+import { createCodingWorkerSubagent } from '../workers/coding-worker/coding-worker.js';
 import { createResearcherSubagent } from '../workers/researcher/researcher.js';
 
 test('root and architecture docs preserve the Flue component contract', () => {
@@ -42,12 +43,23 @@ test('app.ts stays a Flue app shell and does not bypass agents or cards', () => 
   assert.match(chatWorkflow, /requireApiSecret/);
 });
 
-test('legacy orchestrator scaffold cannot create a direct web-search path', () => {
-  const legacyOrchestrator = readText('src/orchestrator/orchestrator.ts');
+test('legacy non-Flue orchestrator and gateway paths stay removed', () => {
+  assert.equal(existsSync('src/orchestrator/orchestrator.ts'), false);
+  assert.equal(existsSync('src/gateway/secure-web-api.ts'), false);
+});
 
-  assert.doesNotMatch(legacyOrchestrator, /createDefaultWebSearchProvider/);
-  assert.doesNotMatch(legacyOrchestrator, /webSearchProvider/);
-  assert.doesNotMatch(legacyOrchestrator, /new RagRouter/);
+test('GOROMBO Flue map documents every top-level source directory', () => {
+  const goromboMap = readText('docs/architecture/gorombo-flue-map.md');
+  const topLevelDirectories = readdirSync('src', { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `src/${entry.name}/`);
+
+  for (const directory of topLevelDirectories) {
+    assert.match(goromboMap, new RegExp(escapeRegExp(directory)));
+  }
+
+  assert.match(goromboMap, /src\/workspace-loader\.ts/);
+  assert.match(goromboMap, /root support file/);
 });
 
 test('low-level web retrieval workflows are internal machinery, not public routes', () => {
@@ -63,7 +75,9 @@ test('Flue orchestrator routes research to the researcher instead of owning web 
   });
 
   assert.equal(config.subagents?.some((agent) => agent.name === 'researcher'), true);
+  assert.equal(config.subagents?.some((agent) => agent.name === 'coding-worker'), true);
   assert.equal(config.subagents?.find((agent) => agent.name === 'researcher')?.model, undefined);
+  assert.equal(config.subagents?.find((agent) => agent.name === 'coding-worker')?.model, false);
   assert.equal(config.tools?.some((tool) => tool.name === 'retrieve_context'), false);
   assert.equal(config.tools?.some((tool) => tool.name === 'web_research'), false);
   assert.match(config.instructions ?? '', /Main Agent Workspace Instructions/);
@@ -72,6 +86,16 @@ test('Flue orchestrator routes research to the researcher instead of owning web 
   assert.match(config.instructions ?? '', /do not perform web search directly/i);
   assert.match(config.instructions ?? '', /depth: "deep"/);
   assert.match(config.instructions ?? '', /providerFailures/);
+});
+
+test('coding worker owns its workspace-backed placeholder profile', () => {
+  const subagent = createCodingWorkerSubagent();
+
+  assert.equal(subagent.name, 'coding-worker');
+  assert.equal(subagent.model, false);
+  assert.match(subagent.instructions ?? '', /Coding Worker Workspace Instructions/);
+  assert.match(subagent.instructions ?? '', /placeholder-only/);
+  assert.match(subagent.instructions ?? '', /No coding tools are currently attached/);
 });
 
 test('researcher owns the web research tool', () => {
@@ -85,6 +109,10 @@ test('researcher owns the web research tool', () => {
 
 function readText(path: string): string {
   return readFileSync(path, 'utf8');
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function createModelEnv(): Record<string, string> {
