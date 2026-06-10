@@ -43,14 +43,15 @@ export interface TelemetrySnapshot {
 /**
  * Keeps a bounded in-memory summary of sanitized Flue events.
  *
- * Mutations in this store are synchronous and contain no `await` boundary, so
- * Node's run-to-completion execution model serializes `record`, `reset`, and
- * trimming work inside this process. If Flue later emits observer callbacks
- * from worker threads, this store should be wrapped in an external queue.
+ * A synchronous mutation lock serializes `record`, `reset`, and trimming work
+ * inside this module instance, including observer callbacks that enter through
+ * `record`. JavaScript worker threads do not share this store instance.
  */
 export class FlueTelemetryStore {
   private readonly eventsByRunId = new Map<string, TelemetryEventSummary[]>();
   private readonly unscopedEvents: TelemetryEventSummary[] = [];
+  private readonly pendingMutations: Array<() => void> = [];
+  private mutationLocked = false;
 
   constructor(
     private readonly options: {
@@ -64,6 +65,15 @@ export class FlueTelemetryStore {
    * Records one sanitized event summary and trims bounded buffers immediately.
    */
   record(event: FlueEvent): void {
+    this.withMutationLock(() => {
+      this.recordLocked(event);
+    });
+  }
+
+  /**
+   * Applies one event mutation while the telemetry mutation lock is held.
+   */
+  private recordLocked(event: FlueEvent): void {
     const summary = summarizeFlueEvent(event);
     if (!summary) {
       return;
@@ -104,12 +114,36 @@ export class FlueTelemetryStore {
    * Clears all captured telemetry, primarily for tests.
    */
   reset(): void {
-    this.eventsByRunId.clear();
-    this.unscopedEvents.length = 0;
+    this.withMutationLock(() => {
+      this.eventsByRunId.clear();
+      this.unscopedEvents.length = 0;
+    });
   }
 
   /**
-   * Trims oldest runs during the same synchronous mutation that records events.
+   * Runs one mutation at a time and queues reentrant calls until the lock is released.
+   */
+  private withMutationLock(mutation: () => void): void {
+    if (this.mutationLocked) {
+      this.pendingMutations.push(mutation);
+      return;
+    }
+
+    this.mutationLocked = true;
+    try {
+      mutation();
+      let pendingMutation = this.pendingMutations.shift();
+      while (pendingMutation) {
+        pendingMutation();
+        pendingMutation = this.pendingMutations.shift();
+      }
+    } finally {
+      this.mutationLocked = false;
+    }
+  }
+
+  /**
+   * Trims oldest runs while the telemetry mutation lock is held.
    */
   private trimRuns(): void {
     const maxRuns = this.options.maxRuns ?? 100;
@@ -136,6 +170,7 @@ export function registerFlueTelemetryObserver(): void {
   }
 
   observerUnsubscribe = observe((event) => {
+    // The store serializes observer callback mutations through `record`.
     flueTelemetryStore.record(event);
   });
 }

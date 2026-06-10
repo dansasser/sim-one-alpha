@@ -70,6 +70,19 @@ test('telemetry store keeps unrelated runs separate', () => {
   assert.equal(store.getRunSummary('workflow:chat:run-2')?.delegatedToResearcher, false);
 });
 
+test('telemetry store trims oldest runs through serialized mutations', () => {
+  const store = new FlueTelemetryStore({ maxRuns: 1 });
+
+  store.record(createEvent({ type: 'run_start', runId: 'workflow:chat:run-1' }));
+  store.record(createEvent({ type: 'run_start', runId: 'workflow:chat:run-2' }));
+
+  const snapshot = store.snapshot();
+
+  assert.equal(snapshot.runs.length, 1);
+  assert.equal(snapshot.runs[0]?.runId, 'workflow:chat:run-2');
+  assert.equal(store.getRunSummary('workflow:chat:run-1'), undefined);
+});
+
 function createEvent(input: Record<string, unknown>): FlueEvent {
   return input as unknown as FlueEvent;
 }
