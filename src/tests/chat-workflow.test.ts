@@ -104,6 +104,88 @@ test('chat workflow retries with backup model when primary is recoverably unavai
   assert.deepEqual(response.modelFailover?.attempts.map((attempt) => attempt.status), ['failed', 'used']);
 });
 
+test('chat workflow handles /new before the model and disables it for web chat prompts', async () => {
+  let initialized = false;
+
+  const response = await run({
+    env: createModelEnv(),
+    payload: {
+      text: '/new',
+      actorId: 'user-new-web',
+      conversationId: 'chat-new-web',
+    },
+    init: async () => {
+      initialized = true;
+      throw new Error('init should not be called');
+    },
+  } as never);
+
+  assert.equal(initialized, false);
+  assert.equal(response.command?.name, 'new');
+  assert.match(response.text, /web client session controls/);
+  assert.equal(response.usage.totalTokens, 0);
+});
+
+test('chat workflow creates a new TUI session for /new before the model', async () => {
+  let initialized = false;
+
+  const response = await run({
+    env: createModelEnv(),
+    payload: {
+      connector: 'tui',
+      text: '/new local notes',
+      actorId: 'user-new-tui',
+      conversationId: 'chat-new-tui',
+    },
+    init: async () => {
+      initialized = true;
+      throw new Error('init should not be called');
+    },
+  } as never);
+
+  assert.equal(initialized, false);
+  assert.equal(response.command?.name, 'new');
+  assert.equal(response.session?.surface, 'tui');
+  assert.equal(response.session?.created, true);
+  assert.match(response.session?.id ?? '', /^tui-/);
+  assert.equal(response.usage.totalTokens, 0);
+});
+
+test('chat workflow handles /compact by compacting the resolved session without prompting', async () => {
+  let compacted = false;
+  let prompted = false;
+  const session = {
+    async compact() {
+      compacted = true;
+    },
+    prompt: async () => {
+      prompted = true;
+      throw new Error('prompt should not be called');
+    },
+  };
+
+  const response = await run({
+    env: createModelEnv(),
+    payload: {
+      connector: 'tui',
+      text: '/compact',
+      actorId: 'user-compact',
+      conversationId: 'chat-compact',
+      session: 'compact-test-session',
+    },
+    init: async () => ({
+      name: 'fake-orchestrator',
+      session: async () => session,
+    }),
+  } as never);
+
+  assert.equal(compacted, true);
+  assert.equal(prompted, false);
+  assert.equal(response.command?.name, 'compact');
+  assert.equal(response.session?.id, 'compact-test-session');
+  assert.equal(response.usage.totalTokens, 0);
+});
+
 test('chat workflow does not retry backup for context budget model errors', async () => {
   const attemptedModels: string[] = [];
   const session = {
@@ -165,5 +247,13 @@ function createPromptResponse(provider: string, id: string, text: string): Promp
         total: 0,
       },
     },
+  };
+}
+
+function createModelEnv(): Record<string, string> {
+  return {
+    OLLAMA_API_KEY: 'test-key',
+    CODEX_BRAIN_LOCAL_API_KEY: 'test-key',
+    CODEX_BRAIN_LOCAL_API_URL: 'https://dt1.example.test/v1',
   };
 }

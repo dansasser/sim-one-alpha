@@ -15,6 +15,7 @@ export interface GoromboConfig {
     name?: string;
   };
   models: GoromboModelConfig;
+  storage?: GoromboStorageConfig;
   orchestrator?: Record<string, unknown>;
   workers?: Record<string, unknown>;
   rag?: Record<string, unknown>;
@@ -27,6 +28,11 @@ export interface GoromboConfig {
 export interface GoromboModelConfig {
   primary: string;
   backup?: string;
+}
+
+export interface GoromboStorageConfig {
+  flueDatabasePath?: string;
+  sessionDatabasePath?: string;
 }
 
 export interface LoadGoromboConfigOptions {
@@ -75,6 +81,7 @@ export function validateGoromboConfig(value: unknown, source = 'GOROMBO config')
   }
 
   const backup = readString(value.models.backup);
+  const storage = validateStorageConfig(value.storage, source);
 
   return {
     ...value,
@@ -83,7 +90,26 @@ export function validateGoromboConfig(value: unknown, source = 'GOROMBO config')
       primary,
       ...(backup ? { backup } : {}),
     },
+    ...(storage ? { storage } : {}),
   } as GoromboConfig;
+}
+
+function validateStorageConfig(value: unknown, source: string): GoromboStorageConfig | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${source} storage must be a JSON object when provided.`);
+  }
+
+  const flueDatabasePath = readString(value.flueDatabasePath);
+  const sessionDatabasePath = readString(value.sessionDatabasePath);
+
+  return {
+    ...(flueDatabasePath ? { flueDatabasePath } : {}),
+    ...(sessionDatabasePath ? { sessionDatabasePath } : {}),
+  };
 }
 
 function readString(value: unknown): string | undefined {

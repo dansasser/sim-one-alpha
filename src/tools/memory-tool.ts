@@ -1,12 +1,12 @@
 import { Type, defineTool } from '@flue/runtime';
-import { DatabaseMemoryProviderPlaceholder } from '../memory/memory-provider.js';
+import { SessionMemoryProvider } from '../memory/memory-provider.js';
 import { MemoryRouter } from '../memory/memory-router.js';
 
-const router = new MemoryRouter(new DatabaseMemoryProviderPlaceholder('memory-db-placeholder'));
+const router = new MemoryRouter(new SessionMemoryProvider());
 
 export const retrieveMemoryTool = defineTool({
   name: 'retrieve_memory',
-  description: 'Retrieve relevant context from the database-backed memory placeholder.',
+  description: 'Retrieve relevant context from persisted session memory.',
   parameters: Type.Object({
     eventId: Type.String(),
     text: Type.String(),
@@ -25,4 +25,3 @@ export const retrieveMemoryTool = defineTool({
     return JSON.stringify({ contexts });
   },
 });
-

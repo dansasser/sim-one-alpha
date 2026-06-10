@@ -1,6 +1,6 @@
 export type RegistryScope = 'base' | 'user';
 
-export type ConnectorKind = 'telegram' | 'web-api' | 'scheduled-job' | 'test' | 'unknown';
+export type ConnectorKind = 'telegram' | 'web-api' | 'tui' | 'scheduled-job' | 'test' | 'unknown';
 
 export type MessageKind = 'chat.message' | 'command' | 'workflow.event';
 

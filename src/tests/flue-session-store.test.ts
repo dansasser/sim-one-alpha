@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import type { SessionData } from '@flue/runtime';
 import orchestratorAgent from '../agents/orchestrator.js';
 import {
-  InMemoryFlueSessionStore,
   createFlueSessionStorageKey,
-  goromboFlueSessionStore,
   parseFlueSessionStorageKey,
 } from '../session/flue-session-store.js';
+import { createGoromboPersistenceRuntime } from '../session/session-persistence.js';
 
 test('Flue session storage keys can be parsed into stable logical session parts', () => {
   const storageKey = createFlueSessionStorageKey('workflow-run-1', 'gorombo-orchestrator', 'support');
@@ -19,38 +21,69 @@ test('Flue session storage keys can be parsed into stable logical session parts'
   });
 });
 
-test('project Flue session store loads the latest logical session across workflow run ids', async () => {
-  const store = new InMemoryFlueSessionStore();
+test('GOROMBO persistence wrapper loads latest logical session across workflow run ids', async () => {
+  const runtime = createTestPersistenceRuntime();
   const firstRunKey = createFlueSessionStorageKey('workflow-run-1', 'gorombo-orchestrator', 'support');
   const secondRunKey = createFlueSessionStorageKey('workflow-run-2', 'gorombo-orchestrator', 'support');
   const data = createStoredSessionData();
 
+  await runtime.adapter.migrate?.();
+  const store = runtime.adapter.connect().sessions;
   await store.save(firstRunKey, data);
 
   assert.deepEqual(await store.load(secondRunKey), data);
-  assert.deepEqual(store.getLatestSessionData('gorombo-orchestrator', 'support'), data);
+  assert.deepEqual(await runtime.getLatestSessionData('gorombo-orchestrator', 'support'), data);
+
+  await runtime.adapter.close?.();
+  runtime.cleanup();
 });
 
-test('project Flue session store deletes the logical session when called from a new run id', async () => {
-  const store = new InMemoryFlueSessionStore();
+test('GOROMBO persistence wrapper deletes the logical session when called from a new run id', async () => {
+  const runtime = createTestPersistenceRuntime();
   const firstRunKey = createFlueSessionStorageKey('workflow-run-1', 'gorombo-orchestrator', 'support');
   const secondRunKey = createFlueSessionStorageKey('workflow-run-2', 'gorombo-orchestrator', 'support');
 
+  await runtime.adapter.migrate?.();
+  const store = runtime.adapter.connect().sessions;
   await store.save(firstRunKey, createStoredSessionData());
   await store.delete(secondRunKey);
 
   assert.equal(await store.load(firstRunKey), null);
-  assert.equal(store.getLatestSessionData('gorombo-orchestrator', 'support'), null);
+  assert.equal(await runtime.getLatestSessionData('gorombo-orchestrator', 'support'), null);
+
+  await runtime.adapter.close?.();
+  runtime.cleanup();
 });
 
-test('orchestrator uses the project Flue session store', async () => {
+test('GOROMBO persistence wrapper indexes saved Flue session data for session memory retrieval', async () => {
+  const runtime = createTestPersistenceRuntime();
+  const storageKey = createFlueSessionStorageKey('workflow-run-memory', 'gorombo-orchestrator', 'memory-support');
+
+  await runtime.adapter.migrate?.();
+  const store = runtime.adapter.connect().sessions;
+  await store.save(storageKey, createStoredSessionData('Remember the neon invoice audit.'));
+
+  const matches = runtime.sessionDatabase.searchSessionMemory({
+    text: 'neon invoice',
+    limit: 5,
+  });
+
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0]?.sessionName, 'memory-support');
+  assert.match(matches[0]?.content ?? '', /neon invoice audit/);
+
+  await runtime.adapter.close?.();
+  runtime.cleanup();
+});
+
+test('orchestrator uses Flue db.ts persistence instead of per-agent persist', async () => {
   const config = await orchestratorAgent.initialize({
     id: 'workflow-run-1',
     env: createModelEnv(),
     payload: undefined,
   });
 
-  assert.equal(config.persist, goromboFlueSessionStore);
+  assert.equal('persist' in config, false);
   assert.equal(config.subagents?.some((agent) => agent.name === 'researcher'), true);
   assert.equal(config.tools?.some((tool) => tool.name === 'retrieve_context'), false);
   assert.equal(config.tools?.some((tool) => tool.name === 'web_research'), false);
@@ -58,9 +91,31 @@ test('orchestrator uses the project Flue session store', async () => {
   assert.match(config.instructions ?? '', /task/);
 });
 
-function createStoredSessionData(): SessionData {
+function createTestPersistenceRuntime() {
+  const directory = mkdtempSync(join(tmpdir(), 'gorombo-session-'));
+  const runtime = createGoromboPersistenceRuntime({
+    version: 1,
+    models: {
+      primary: 'minimax-m3-cloud',
+    },
+    storage: {
+      flueDatabasePath: join(directory, 'flue.sqlite'),
+      sessionDatabasePath: join(directory, 'sessions.sqlite'),
+    },
+  });
+
   return {
-    version: 4,
+    ...runtime,
+    cleanup() {
+      rmSync(directory, { recursive: true, force: true });
+    },
+  };
+}
+
+function createStoredSessionData(text = 'Hello'): SessionData {
+  return {
+    version: 5,
+    affinityKey: 'test-affinity',
     entries: [
       {
         type: 'message',
@@ -69,7 +124,7 @@ function createStoredSessionData(): SessionData {
         timestamp: '2026-06-07T00:00:00.000Z',
         message: {
           role: 'user',
-          content: [{ type: 'text', text: 'Hello' }],
+          content: [{ type: 'text', text }],
         },
         source: 'prompt',
       },

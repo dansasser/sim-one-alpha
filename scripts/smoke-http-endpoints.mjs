@@ -62,7 +62,11 @@ try {
           'content-type': 'application/json',
           'x-api-secret': requestSecret,
         },
-        body: JSON.stringify({ text: 'Reply with exactly: endpoint-live-ok' }),
+        body: JSON.stringify({
+          text: 'Reply with exactly: endpoint-live-ok',
+          actorId: 'http-smoke-user',
+          conversationId: 'http-smoke-thread',
+        }),
       },
       202,
       'chat event ingress with secret',
@@ -163,7 +167,8 @@ async function waitForRunResult(baseUrl, runId, requestSecret) {
     );
     latest = run;
 
-    if (run.status === 'completed' || run.status === 'failed') {
+    const completion = readRunCompletion(run);
+    if (completion) {
       return run;
     }
 
@@ -171,4 +176,16 @@ async function waitForRunResult(baseUrl, runId, requestSecret) {
   }
 
   throw new Error(`Timed out waiting for workflow run result.\n${JSON.stringify(latest).slice(0, 1000)}`);
+}
+
+function readRunCompletion(run) {
+  if (Array.isArray(run)) {
+    return run.find((event) => event && event.type === 'run_end');
+  }
+
+  if (run && (run.status === 'completed' || run.status === 'failed')) {
+    return run;
+  }
+
+  return undefined;
 }

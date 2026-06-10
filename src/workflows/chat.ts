@@ -1,6 +1,13 @@
 import type { FlueContext, FlueSession, PromptResponse, WorkflowRouteHandler } from '@flue/runtime';
 import orchestratorAgent from '../agents/orchestrator.js';
+import {
+  isSupportedSlashCommand,
+  isWebDisabledSlashCommand,
+  parseSlashCommand,
+  type ParsedSlashCommand,
+} from '../commands/slash-commands.js';
 import { normalizeWebApiMessage, type WebApiMessageInput } from '../connectors/web-api.js';
+import { goromboPersistenceRuntime } from '../db.js';
 import { requireApiSecret } from '../middleware/api-secret.js';
 import {
   configureRuntimeModels,
@@ -15,7 +22,10 @@ import {
   recordPromptUsage,
   type SessionBudgetReport,
 } from '../session/session-budget.js';
-import { goromboFlueSessionStore } from '../session/flue-session-store.js';
+import {
+  resolveChatSession,
+  type ChatSessionResolution,
+} from '../session/session-routing.js';
 import { rememberProtocolLookupEvent } from '../tools/protocol-tool.js';
 
 export const route: WorkflowRouteHandler = async (c, next) => requireApiSecret(c, next);
@@ -31,6 +41,15 @@ export interface ChatWorkflowResponse {
   model: PromptResponse['model'];
   usage: PromptResponse['usage'];
   event: ReturnType<typeof normalizeWebApiMessage>;
+  session?: {
+    id: string;
+    surface: ChatSessionResolution['surface'];
+    created: boolean;
+  };
+  command?: {
+    name: string;
+    handled: boolean;
+  };
   contextBudget?: ChatWorkflowContextBudget;
   modelFailover?: ChatWorkflowModelFailover;
 }
@@ -63,15 +82,64 @@ export async function run({
   payload,
 }: FlueContext<ChatWorkflowPayload>): Promise<ChatWorkflowResponse> {
   const event = normalizeWebApiMessage(payload);
-  const sessionId = payload.session ?? event.conversation.id;
   rememberProtocolLookupEvent(event);
-  const prompt = createChatPrompt(event);
   const runtimeModels = configureRuntimeModels(env);
   const selectedModelCard = runtimeModels.selectedModelCard;
   const backupModelCard = runtimeModels.backupModelCard;
+  const slashCommand = parseSlashCommand(event.text);
+
+  if (slashCommand && !isSupportedSlashCommand(slashCommand)) {
+    return createSlashCommandResponse({
+      event,
+      modelCard: selectedModelCard,
+      command: slashCommand,
+      text: `Unknown command "${slashCommand.raw}". Supported commands are /new and /compact.`,
+    });
+  }
+
+  if (slashCommand && event.connector === 'web-api' && isWebDisabledSlashCommand(slashCommand)) {
+    return createSlashCommandResponse({
+      event,
+      modelCard: selectedModelCard,
+      command: slashCommand,
+      text: '/new is handled by the web client session controls. Use the new chat action instead.',
+    });
+  }
+
+  const sessionResolution = resolveChatSession({
+    event,
+    requestedSessionId: payload.session,
+    forceNew: slashCommand?.name === 'new',
+    title: slashCommand?.name === 'new' && slashCommand.args ? slashCommand.args : undefined,
+  });
+  const sessionId = sessionResolution.sessionId;
+
+  if (slashCommand?.name === 'new') {
+    return createSlashCommandResponse({
+      event,
+      modelCard: selectedModelCard,
+      sessionResolution,
+      command: slashCommand,
+      text: `Started new session ${sessionId}.`,
+    });
+  }
+
+  const prompt = createChatPrompt(event);
   const harness = await init(orchestratorAgent, { name: orchestratorHarnessName });
   const session = await harness.session(sessionId);
   const attempts: ChatWorkflowModelAttempt[] = [];
+
+  if (slashCommand?.name === 'compact') {
+    return handleCompactCommand({
+      event,
+      session,
+      sessionId,
+      selectedModelCard,
+      sessionResolution,
+      command: slashCommand,
+    });
+  }
+
   let preparedPrompt = await preparePromptBudget({
     session,
     sessionId,
@@ -82,6 +150,7 @@ export async function run({
   if (preparedPrompt.contextBudget.status === 'stop') {
     return createBudgetStopResponse({
       event,
+      sessionResolution,
       preparedPrompt,
     });
   }
@@ -113,6 +182,7 @@ export async function run({
       attempts.push(createSkippedAttempt(backupModelCard, 'backup', 'backup model context budget would be exceeded'));
       return createBudgetStopResponse({
         event,
+        sessionResolution,
         preparedPrompt,
         modelFailover: {
           fallbackUsed: false,
@@ -131,7 +201,7 @@ export async function run({
     });
   }
 
-  let sessionData = goromboFlueSessionStore.getLatestSessionData(orchestratorHarnessName, sessionId);
+  let sessionData = await goromboPersistenceRuntime.getLatestSessionData(orchestratorHarnessName, sessionId);
   const responseSpecifier = modelSpecifierFromParts(response.model.provider, response.model.id);
   const responseModelCard = resolveModelCard(responseSpecifier) ?? preparedPrompt.modelCard;
 
@@ -153,6 +223,11 @@ export async function run({
     model: response.model,
     usage: response.usage,
     event,
+    session: {
+      id: sessionResolution.sessionId,
+      surface: sessionResolution.surface,
+      created: sessionResolution.created,
+    },
     contextBudget: {
       ...contextBudget,
       compactedBeforePrompt: preparedPrompt.compactedBeforePrompt,
@@ -220,6 +295,84 @@ function emptyPromptUsage(): PromptResponse['usage'] {
   };
 }
 
+async function handleCompactCommand(input: {
+  event: ReturnType<typeof normalizeWebApiMessage>;
+  session: FlueSession;
+  sessionId: string;
+  selectedModelCard: AgentModelCard;
+  sessionResolution: ChatSessionResolution;
+  command: ParsedSlashCommand;
+}): Promise<ChatWorkflowResponse> {
+  await input.session.compact();
+  const sessionData = await goromboPersistenceRuntime.getLatestSessionData(orchestratorHarnessName, input.sessionId);
+
+  if (!sessionData) {
+    recordManualCompaction({
+      sessionId: input.sessionId,
+      modelSpecifier: input.selectedModelCard.specifier,
+      budget: calculateContextBudget(input.selectedModelCard),
+    });
+  }
+
+  const contextBudget = createSessionBudgetReport({
+    sessionId: input.sessionId,
+    modelCard: input.selectedModelCard,
+    sessionData,
+  });
+
+  return createSlashCommandResponse({
+    event: input.event,
+    modelCard: input.selectedModelCard,
+    sessionResolution: input.sessionResolution,
+    command: input.command,
+    text: `Compacted session ${input.sessionId}.`,
+    contextBudget,
+  });
+}
+
+function createSlashCommandResponse(input: {
+  event: ReturnType<typeof normalizeWebApiMessage>;
+  modelCard: AgentModelCard;
+  command: ParsedSlashCommand;
+  text: string;
+  sessionResolution?: ChatSessionResolution;
+  contextBudget?: SessionBudgetReport;
+}): ChatWorkflowResponse {
+  return {
+    text: input.text,
+    model: {
+      provider: input.modelCard.providerId,
+      id: input.modelCard.modelId,
+    },
+    usage: emptyPromptUsage(),
+    event: input.event,
+    ...(input.sessionResolution
+      ? {
+          session: {
+            id: input.sessionResolution.sessionId,
+            surface: input.sessionResolution.surface,
+            created: input.sessionResolution.created,
+          },
+        }
+      : {}),
+    command: {
+      name: input.command.name,
+      handled: true,
+    },
+    ...(input.contextBudget
+      ? {
+          contextBudget: {
+            ...input.contextBudget,
+            compactedBeforePrompt: true,
+            prePromptStatus: input.contextBudget.status,
+            prePromptEstimatedUsedTokens: input.contextBudget.estimatedUsedTokens,
+            lastPromptEstimateTokens: input.contextBudget.estimatedPromptTokens,
+          },
+        }
+      : {}),
+  };
+}
+
 interface PreparedPromptBudget {
   modelCard: AgentModelCard;
   contextBudget: SessionBudgetReport;
@@ -234,7 +387,7 @@ async function preparePromptBudget(input: {
   prompt: string;
   compactedBeforePrompt?: boolean;
 }): Promise<PreparedPromptBudget> {
-  let sessionData = goromboFlueSessionStore.getLatestSessionData(orchestratorHarnessName, input.sessionId);
+  let sessionData = await goromboPersistenceRuntime.getLatestSessionData(orchestratorHarnessName, input.sessionId);
   let compactedBeforePrompt = input.compactedBeforePrompt ?? false;
   let contextBudget = createSessionBudgetReport({
     sessionId: input.sessionId,
@@ -246,7 +399,7 @@ async function preparePromptBudget(input: {
 
   if (contextBudget.shouldCompactBeforePrompt) {
     await input.session.compact();
-    sessionData = goromboFlueSessionStore.getLatestSessionData(orchestratorHarnessName, input.sessionId);
+    sessionData = await goromboPersistenceRuntime.getLatestSessionData(orchestratorHarnessName, input.sessionId);
     if (!sessionData) {
       recordManualCompaction({
         sessionId: input.sessionId,
@@ -316,6 +469,7 @@ export function isRecoverableModelFailure(error: unknown): boolean {
 
 function createBudgetStopResponse(input: {
   event: ReturnType<typeof normalizeWebApiMessage>;
+  sessionResolution: ChatSessionResolution;
   preparedPrompt: PreparedPromptBudget;
   modelFailover?: ChatWorkflowModelFailover;
   textPrefix?: string;
@@ -332,6 +486,11 @@ function createBudgetStopResponse(input: {
     },
     usage: emptyPromptUsage(),
     event: input.event,
+    session: {
+      id: input.sessionResolution.sessionId,
+      surface: input.sessionResolution.surface,
+      created: input.sessionResolution.created,
+    },
     contextBudget: {
       ...contextBudget,
       compactedBeforePrompt,

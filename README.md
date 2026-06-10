@@ -499,6 +499,7 @@ The HTTP runtime uses the Flue routing model:
 
 - `GET /health` is public.
 - `POST /api/chat/events` is the app-owned chat ingress alias.
+- `GET /api/chat/sessions` lists stored chat sessions for HTTP clients.
 - `POST /workflows/chat` is the Flue workflow route.
 - `GET /runs/:runId` reads the Flue workflow run.
 
@@ -512,7 +513,7 @@ x-api-secret: <API_SECRET>
 
 Flue workflow HTTP invocation is asynchronous. A successful chat event returns `202` with a `runId`; clients then read `/runs/:runId` with the same secret header to retrieve the completed result.
 
-The `chat` workflow initializes the `orchestrator` Flue agent, loads `.env` through the Flue CLI for secrets, loads the shipped `gorombo.config.json` runtime file for deployment/runtime choices, and prompts the configured primary model with the normalized message event. `models.primary` and `models.backup` are project model card keys. Raw Flue specifiers and `GOROMBO_MODEL` env selection are rejected. The default primary card is `minimax-m3-cloud`, which resolves through its card to `ollama-cloud/minimax-m3` and calls Ollama Cloud through `https://ollama.com/v1`. If the primary prompt fails with a recoverable model/provider error, the workflow checks the backup card budget and retries the same session with `models.backup`. Model cards live inside each provider directory under `src/models/providers/<provider>/cards`; the catalog in `src/models/catalog.ts` aggregates them for model selection and budget lookup. The agent currently has tool flow wired for protocol loading, memory retrieval, and RAG/context retrieval. The protocol, memory, and document-index providers remain typed placeholders; web search is live through Ollama Search when an Ollama API key is configured.
+The `chat` workflow initializes the `orchestrator` Flue agent, loads `.env` through the Flue CLI for secrets, loads the shipped `gorombo.config.json` runtime file for deployment/runtime choices, resolves the product session, handles pre-LLM slash commands, and prompts the configured primary model with the normalized message event. `models.primary` and `models.backup` are project model card keys. Raw Flue specifiers and `GOROMBO_MODEL` env selection are rejected. The default primary card is `minimax-m3-cloud`, which resolves through its card to `ollama-cloud/minimax-m3` and calls Ollama Cloud through `https://ollama.com/v1`. If the primary prompt fails with a recoverable model/provider error, the workflow checks the backup card budget and retries the same session with `models.backup`. Model cards live inside each provider directory under `src/models/providers/<provider>/cards`; the catalog in `src/models/catalog.ts` aggregates them for model selection and budget lookup. The agent currently has tool flow wired for protocol loading, session-memory retrieval, and RAG/context retrieval. The protocol and document-index providers remain typed placeholders; web search is live through Ollama Search when an Ollama API key is configured.
 
 ## Model Cards
 
@@ -566,7 +567,9 @@ Implemented pieces:
 - `resolveModelCard(...)` maps a Flue model specifier back to a project model card.
 - `calculateContextBudget(...)` chooses the provider-safe context window, reserves output tokens, and calculates warning, compaction, and hard-stop thresholds.
 - `evaluateCompaction(...)` returns `normal`, `warn`, `compact`, or `stop`.
-- `goromboFlueSessionStore` stores Flue `SessionData` and indexes the latest logical chat session by harness/session name.
+- `src/db.ts` exports the Flue persistence adapter discovered by Flue at build time.
+- `session-persistence.ts` wraps Flue's built-in SQLite adapter and indexes latest logical chat sessions by harness/session name.
+- `session-database.ts` stores chat session catalog records, active connector sessions, and session-memory FTS chunks.
 - `deriveSessionBudgetStateFromData(...)` estimates budget from the stored Flue conversation tree, including compaction entries.
 - `chatSessionBudgetStore` remains as an in-process fallback when stored session data is not available.
 - The `chat` workflow calls `session.compact()` before prompting when the estimate crosses the compaction threshold.
@@ -574,7 +577,21 @@ Implemented pieces:
 
 Flue's native automatic compaction remains enabled on the orchestrator agent with card-derived `reserveTokens` and `keepRecentTokens`. The GOROMBO layer adds pre-send protection and budget telemetry for future RAG allocation.
 
-The session store is now the natural boundary for future memory and RAG work: durable memory should be extracted from stored `SessionData`, and web search/document chunks should be injected only after the budget layer reports remaining context capacity.
+Session memory is now indexed from stored Flue `SessionData` and retrieved through the memory tool. The future full GOROMBO memory stack is separate from this session-memory layer. Web search/document chunks should be injected only after the budget layer reports remaining context capacity.
+
+Runtime SQLite defaults:
+
+```text
+.gorombo/db/flue.sqlite      Flue sessions, submissions, event streams, and workflow run/registry records
+.gorombo/db/sessions.sqlite  GOROMBO chat sessions, active sessions, logical session index, and session-memory FTS
+```
+
+Protected telemetry uses live in-memory Flue observer summaries when available and can fall back to persisted Flue run events after the in-memory summary is gone.
+
+Slash commands are parsed before the prompt reaches the LLM:
+
+- `/new` starts a new connector/TUI session. Web chat should use the client new-chat control instead.
+- `/compact` calls Flue `session.compact()` for the resolved session and returns command telemetry.
 
 Architecture details live in `docs/architecture/session-context-budget.md`.
 
@@ -737,8 +754,11 @@ Common commands:
 npm test
 npm run typecheck
 npm run build
+npm run test:http
 npm run smoke:http
 ```
+
+`npm test` runs the TypeScript unit suite, builds `dist/server.mjs`, then runs `npm run test:http` against the built server over real localhost HTTP. The root `.env` file remains the runtime environment source; it is not copied into `dist`.
 
 For a live built-server chat smoke through `/api/chat/events`, run:
 

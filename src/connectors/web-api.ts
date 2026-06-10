@@ -2,6 +2,7 @@ import type { NormalizedMessageEvent } from '../types/index.js';
 import { createEventId } from './base.js';
 
 export interface WebApiMessageInput {
+  connector?: NormalizedMessageEvent['connector'];
   text: string;
   actorId: string;
   actorDisplayName?: string;
@@ -16,8 +17,8 @@ export interface WebApiMessageInput {
 
 export function normalizeWebApiMessage(input: WebApiMessageInput): NormalizedMessageEvent {
   return {
-    id: createEventId('web'),
-    connector: 'web-api',
+    id: createEventId(input.connector === 'tui' ? 'tui' : 'web'),
+    connector: input.connector ?? 'web-api',
     kind: 'chat.message',
     text: input.text,
     receivedAt: new Date().toISOString(),
@@ -38,4 +39,3 @@ export function normalizeWebApiMessage(input: WebApiMessageInput): NormalizedMes
     raw: input.raw,
   };
 }
-

@@ -1,6 +1,6 @@
 import type { FlueContext } from '@flue/runtime';
 import type { MemoryProvider } from '../memory/memory-provider.js';
-import { DatabaseMemoryProviderPlaceholder } from '../memory/memory-provider.js';
+import { SessionMemoryProvider } from '../memory/memory-provider.js';
 import { MemoryRouter } from '../memory/memory-router.js';
 import {
   DocumentIndexProviderPlaceholder,
@@ -105,7 +105,7 @@ export function createRetrievalRouter(
   options: RetrievalWorkflowOptions = {},
 ): RagRouter {
   return new RagRouter(
-    new MemoryRouter(options.memoryProvider ?? new DatabaseMemoryProviderPlaceholder('memory-db-placeholder')),
+    new MemoryRouter(options.memoryProvider ?? new SessionMemoryProvider()),
     options.providers ?? createDefaultRetrievalProviders(env),
   );
 }
