@@ -1,27 +1,20 @@
 import {
   createAgent,
-  defineAgentProfile,
   type AgentRouteHandler,
 } from '@flue/runtime';
 import { configureRuntimeModels } from '../models/index.js';
 import {
   composeWorkspaceInstructions,
   resolveWorkspaceDirectory,
-} from '../persona/workspace-loader.js';
+} from '../workspace-loader.js';
 import { calculateContextBudget } from '../session/context-budget.js';
 import { goromboFlueSessionStore } from '../session/flue-session-store.js';
 import { loadProtocolsTool, retrieveMemoryTool } from '../tools/index.js';
 import type { AgentModelCard } from '../models/types.js';
+import { createCodingWorkerSubagent } from '../workers/coding-worker/coding-worker.js';
 import { createResearcherSubagent } from '../workers/researcher/researcher.js';
 
 export const route: AgentRouteHandler = async (_c, next) => next();
-
-const codingWorker = defineAgentProfile({
-  name: 'coding-worker',
-  model: false,
-  instructions:
-    'Placeholder coding worker subagent. Do not autonomously edit code yet; future phases add plan, edit, test, debug loop, diff, and approval behavior.',
-});
 
 export const orchestratorInstructions = [
   composeWorkspaceInstructions({
@@ -34,6 +27,7 @@ export const orchestratorInstructions = [
 export default createAgent(({ env }) => {
   const models = configureRuntimeModels(env);
   const selectedModelCard = models.selectedModelCard;
+  const codingWorker = createCodingWorkerSubagent();
   const researcher = createResearcherSubagent();
 
   return {

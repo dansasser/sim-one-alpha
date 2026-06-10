@@ -443,7 +443,8 @@ src/
   agents/
   workspace/
   connectors/
-  gateway/
+  routes/
+  middleware/
   memory/
   protocols/
   rag/

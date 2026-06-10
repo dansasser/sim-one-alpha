@@ -1,12 +1,12 @@
 import type { FlueContext } from '@flue/runtime';
 import type { MemoryProvider } from '../memory/memory-provider.js';
 import { createDefaultWebSearchProvider, type RagProvider } from '../rag/providers.js';
-import { CachedWebSearchProvider } from '../research/cached-web-provider.js';
+import { CachedWebSearchProvider } from '../workers/researcher/research/cached-web-provider.js';
 import {
   type ResearchCache,
   ResearchRunCache,
   createDefaultResearchCache,
-} from '../research/research-cache.js';
+} from '../workers/researcher/research/research-cache.js';
 import { estimateTextTokens } from '../session/context-budget.js';
 import type { RagResultMetadata, RetrievedContext } from '../types/index.js';
 import {

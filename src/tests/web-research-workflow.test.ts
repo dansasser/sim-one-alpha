@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { RagProvider, WebFetchResult } from '../rag/providers.js';
-import { InMemoryResearchCache } from '../research/research-cache.js';
+import { InMemoryResearchCache } from '../workers/researcher/research/research-cache.js';
 import type { RagQuery, RetrievedContext } from '../types/index.js';
 import { buildResearchQueryPlan, runWebResearch } from '../workflows/web-research.js';
 

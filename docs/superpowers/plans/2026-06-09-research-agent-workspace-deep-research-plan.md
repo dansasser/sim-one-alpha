@@ -13,8 +13,8 @@ The researcher should own web/current/source-backed research. The main agent sho
 - Researcher-owned tool: `web_research`
 - Researcher-owned workflow: `src/workflows/web-research.ts`
 - Shared retrieval workflow: `src/workflows/retrieval.ts`
-- Cache implementation: `src/research/research-cache.ts`
-- Cached provider wrapper: `src/research/cached-web-provider.ts`
+- Cache implementation: `src/workers/researcher/research/research-cache.ts`
+- Cached provider wrapper: `src/workers/researcher/research/cached-web-provider.ts`
 
 The current implementation already supports:
 
@@ -44,14 +44,14 @@ The researcher agent should compose its instructions from workspace files instea
 Recommended code location:
 
 ```text
-src/persona/workspace-loader.ts
+src/workspace-loader.ts
 ```
 
 Do not put TypeScript loader code inside `src/workspace/`, because that directory is user-editable workspace content.
 
 Status:
 
-- Implemented in `src/persona/workspace-loader.ts`.
+- Implemented in `src/workspace-loader.ts`.
 - Tested in `src/tests/workspace-loader.test.ts`.
 
 ### Workspace Composition Order
@@ -296,7 +296,7 @@ Needed content:
 
 ### Phase 1: Workspace Loader
 
-- [x] Add typed workspace loader in `src/persona/workspace-loader.ts`.
+- [x] Add typed workspace loader in `src/workspace-loader.ts`.
 - [x] Support required workspace files with clear missing-file errors.
 - [x] Compose workspace files in the agreed order.
 - [x] Add section headers so the model can distinguish each file.

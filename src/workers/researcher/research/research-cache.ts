@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { WebFetchResult } from '../rag/providers.js';
-import type { RetrievedContext } from '../types/index.js';
+import type { WebFetchResult } from '../../../rag/providers.js';
+import type { RetrievedContext } from '../../../types/index.js';
 
 export interface CachedSearchResult {
   key: string;
@@ -261,7 +261,7 @@ export function createDefaultResearchCache(env: Record<string, unknown> = proces
     return new InMemoryResearchCache();
   }
 
-  return new SqliteResearchCache(readString(env.GOROMBO_RESEARCH_CACHE_DB) ?? '.gorombo/research-cache.sqlite');
+  return new SqliteResearchCache(readString(env.GOROMBO_RESEARCH_CACHE_DB) ?? '.gorombo/db/research-cache.sqlite');
 }
 
 export function createSearchCacheKey(input: { query: string; provider: string; limit: number }): string {
