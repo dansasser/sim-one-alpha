@@ -64,7 +64,7 @@ test('telemetry store keeps unrelated runs separate', () => {
   const store = new FlueTelemetryStore();
 
   store.record(createEvent({ type: 'task_start', runId: 'workflow:chat:run-1', taskId: 'task-1', agent: 'researcher' }));
-  store.record(createEvent({ type: 'task_start', runId: 'workflow:chat:run-2', taskId: 'task-2', agent: 'coding_worker' }));
+  store.record(createEvent({ type: 'task_start', runId: 'workflow:chat:run-2', taskId: 'task-2', agent: 'coding-worker' }));
 
   assert.equal(store.getRunSummary('workflow:chat:run-1')?.delegatedToResearcher, true);
   assert.equal(store.getRunSummary('workflow:chat:run-2')?.delegatedToResearcher, false);

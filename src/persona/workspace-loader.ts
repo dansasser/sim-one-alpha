@@ -65,6 +65,7 @@ export function resolveWorkspaceDirectory(relativeWorkspacePath: string, cwd = p
 
   const normalizedWorkspacePath = relativeWorkspacePath.replaceAll('\\', '/');
   const candidates = [
+    resolveWorkspaceCandidate(cwd, '', normalizedWorkspacePath),
     resolveWorkspaceCandidate(cwd, 'src', normalizedWorkspacePath),
     resolveWorkspaceCandidate(cwd, 'dist', normalizedWorkspacePath),
     resolveWorkspaceCandidate(cwd, '.tmp/tsc', normalizedWorkspacePath),

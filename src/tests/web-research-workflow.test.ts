@@ -339,6 +339,7 @@ test('web research workflow applies deep research defaults with bounded iteratio
   assert.equal(result.budget.minSources, 5);
   assert.equal(result.budget.maxIterations, 3);
   assert.ok(result.budget.iterationsRun >= 2);
+  assert.ok(result.budget.iterationsRun <= result.budget.maxIterations);
   assert.ok(result.queriesRun.length >= 5);
   assert.ok(queries.length >= 5);
   assert.equal(result.sources.length, result.queriesRun.length);

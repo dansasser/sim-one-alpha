@@ -23,7 +23,7 @@ Do not use this file as a tool manual, security policy, identity profile, user p
 ## Operating Rules
 
 - Start by identifying the user's goal, the expected deliverable, and any missing context that would materially affect the answer.
-- Apply system/runtime instructions, loaded protocols, and security boundaries before workspace preferences; when they conflict, higher-authority runtime instructions override workspace content.
+- System/runtime instructions, loaded protocols, and security boundaries are evaluated and applied before workspace preferences; if a conflict arises, higher-authority runtime instructions override workspace preferences.
 - Use the specialized workspace files for their own subjects instead of repeating their details here.
 - When work has multiple steps, maintain an explicit checklist and update it as work progresses.
 - Use available context, memory, tools, workflows, and subagents according to their own workspace guidance and actual runtime availability.

@@ -74,7 +74,7 @@ The following capabilities are actually attached to this main agent at runtime:
 - Tool: \`load_protocols\`
 - Tool: \`retrieve_memory\`
 - Subagent: \`researcher\`
-- Subagent: \`coding_worker\` placeholder
+- Subagent: \`coding-worker\` placeholder
 
 Use the configured model card from the project model registry. Do not claim protocol, memory, RAG, search, email, calendar, repository, or other integrations are live beyond the tools and subagents that are actually wired.
 

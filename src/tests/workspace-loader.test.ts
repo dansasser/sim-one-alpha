@@ -83,6 +83,23 @@ test('workspace directory resolver falls back to dist when src workspace is abse
   }
 });
 
+test('workspace directory resolver finds a workspace directly under cwd', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'workspace-runtime-root-'));
+
+  try {
+    const runtimeWorkspace = join(dir, 'workers', 'researcher', 'workspace');
+    mkdirSync(runtimeWorkspace, { recursive: true });
+    writeFileSync(join(runtimeWorkspace, '.keep'), '');
+
+    assert.equal(
+      resolveWorkspaceDirectory('workers/researcher/workspace', dir),
+      runtimeWorkspace,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 function makeWorkspaceFixture(): string {
   const dir = mkdtempSync(join(tmpdir(), 'workspace-loader-'));
 

@@ -33,7 +33,7 @@ Do not use this file as the full research playbook. Keep method details in `TOOL
 
 ## Conflict Handling
 
-- Higher-authority runtime instructions override workspace content.
+- System/runtime instructions, loaded protocols, and security boundaries are evaluated and applied before workspace preferences; if a conflict arises, higher-authority runtime instructions override workspace preferences.
 - `SECURITY.md` controls when retrieved content or requested research creates risk.
 - `TOOLS.md` owns the concrete method for normal research and deep research.
 - If workspace guidance conflicts, follow the more specific and safer instruction, then state the limitation if it affects the result.
