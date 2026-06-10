@@ -58,6 +58,7 @@ test('web research workflow reuses search and page cache across research runs', 
       maxQueries: 2,
       maxFetches: 1,
       webFetch: 'always',
+      minSources: 1,
     },
     {
       cache,
@@ -73,6 +74,7 @@ test('web research workflow reuses search and page cache across research runs', 
       maxQueries: 2,
       maxFetches: 1,
       webFetch: 'always',
+      minSources: 1,
     },
     {
       cache,
@@ -124,10 +126,56 @@ test('web research workflow runs multiple searches for complex research prompts'
   );
 
   assert.equal(result.status, 'completed');
+  assert.equal(result.queriesRun.length, 2);
+  assert.equal(queries.length, 2);
+  assert.equal(result.sources.length, 2);
+  assert.ok(result.confidence > 0.6);
+});
+
+test('web research workflow counts unique sources before stopping', async () => {
+  const queries: string[] = [];
+  const provider = createWebProvider({
+    retrieve: async (query) => {
+      queries.push(query.text);
+      const duplicate = queries.length < 3;
+
+      return [
+        makeContext({
+          id: `web:${queries.length}`,
+          title: duplicate ? 'Duplicate Source' : 'Distinct Source',
+          content: `Source ${queries.length} content.`,
+          url: duplicate ? 'https://example.com/same-source' : 'https://example.com/distinct-source',
+          query,
+        }),
+      ];
+    },
+  });
+
+  const result = await runWebResearch(
+    {
+      eventId: 'event-1',
+      text: 'Compare current web search options with sources.',
+      actorId: 'user-1',
+      conversationId: 'thread-1',
+      maxQueries: 3,
+      maxFetches: 0,
+      webFetch: 'never',
+      minSources: 2,
+    },
+    {
+      cache: new InMemoryResearchCache(),
+      webProvider: provider,
+    },
+  );
+
+  assert.equal(result.status, 'completed');
   assert.equal(result.queriesRun.length, 3);
   assert.equal(queries.length, 3);
-  assert.equal(result.sources.length, 3);
-  assert.ok(result.confidence > 0.6);
+  assert.equal(result.sources.length, 2);
+  assert.deepEqual(
+    result.sources.map((source) => source.url),
+    ['https://example.com/same-source', 'https://example.com/distinct-source'],
+  );
 });
 
 test('web research workflow keeps searching after fetch budget is exhausted', async () => {
@@ -167,6 +215,7 @@ test('web research workflow keeps searching after fetch budget is exhausted', as
       conversationId: 'thread-1',
       maxQueries: 3,
       maxFetches: 1,
+      minSources: 3,
       webFetch: 'always',
     },
     {
@@ -250,6 +299,50 @@ test('web research fresh mode bypasses existing search and page cache reads', as
   assert.equal(calls.fetch, 2);
   assert.equal(fresh.cache.searchHits, 0);
   assert.equal(fresh.cache.pageHits, 0);
+});
+
+test('web research workflow applies deep research defaults with bounded iterations', async () => {
+  const queries: string[] = [];
+  const provider = createWebProvider({
+    retrieve: async (query) => {
+      queries.push(query.text);
+      return [
+        makeContext({
+          id: `web:${queries.length}`,
+          title: `Deep Source ${queries.length}`,
+          content: `Deep source ${queries.length} content.`,
+          url: `https://example.com/deep-source-${queries.length}`,
+          query,
+        }),
+      ];
+    },
+  });
+
+  const result = await runWebResearch(
+    {
+      eventId: 'event-1',
+      text: 'Deep research current web search options with sources.',
+      actorId: 'user-1',
+      conversationId: 'thread-1',
+      depth: 'deep',
+      webFetch: 'never',
+    },
+    {
+      cache: new InMemoryResearchCache(),
+      webProvider: provider,
+    },
+  );
+
+  assert.equal(result.status, 'completed');
+  assert.equal(result.budget.depth, 'deep');
+  assert.equal(result.budget.maxQueries, 6);
+  assert.equal(result.budget.minSources, 5);
+  assert.equal(result.budget.maxIterations, 3);
+  assert.ok(result.budget.iterationsRun >= 2);
+  assert.ok(result.budget.iterationsRun <= result.budget.maxIterations);
+  assert.ok(result.queriesRun.length >= 5);
+  assert.ok(queries.length >= 5);
+  assert.equal(result.sources.length, result.queriesRun.length);
 });
 
 function createWebProvider(input: {

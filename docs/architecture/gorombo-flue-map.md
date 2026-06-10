@@ -9,6 +9,7 @@ src/app.ts
   Hono application shell.
   Mounts Flue with app.route('/', flue()).
   May expose health checks and app-owned ingress.
+  Registers the lightweight Flue telemetry observer.
   Applies imported API-secret middleware to public Flue route families.
   Custom chat ingress forwards to the Flue chat workflow.
   Must not call the old non-Flue orchestrator.
@@ -23,15 +24,38 @@ src/routes/chat-events.ts
   Verifies API-secret middleware, normalizes the HTTP boundary, and forwards to /workflows/chat.
   Does not call c.executionCtx or a non-Flue orchestrator.
 
+src/routes/telemetry.ts
+  Protected app-owned telemetry inspection routes.
+  Exposes sanitized Flue event summaries by workflow run id.
+
+src/telemetry/flue-telemetry.ts
+  Registers Flue observe(...) once per running application context.
+  Stores sanitized live event summaries in memory by runId.
+  Tracks whether a run delegated to the researcher and whether web_research was called.
+
 src/agents/orchestrator.ts
   Main Flue orchestrator agent.
   Coordinates protocols, memory lookup, subagent delegation, and final synthesis.
+  Composes its instructions from main workspace files plus a small runtime capability block.
   Does not own web search.
 
-src/agents/researcher.ts
+src/workspace/
+  Main agent user-editable workspace persona files.
+  Persona names and identity details live inside file contents, not architecture paths.
+
+src/workers/researcher/researcher.ts
   Research subagent and direct researcher agent.
   Owns web research behavior.
+  Composes its instructions from its workspace files plus a small runtime capability block.
   May use tools, skills, and workflows.
+
+src/workers/researcher/workspace/
+  Researcher subagent user-editable workspace persona files.
+
+src/persona/workspace-loader.ts
+  Shared workspace markdown loader.
+  Composes workspace files in a fixed order for agent instructions.
+  Keeps user-editable workspace content separate from TypeScript agent entrypoints.
 
 src/workflows/chat.ts
   Finite chat workflow.
@@ -55,7 +79,7 @@ src/workflows/retrieval.ts
 
 src/workflows/web-research.ts
   Researcher-owned web research workflow.
-  Handles query planning, cache, web search, fetch, evidence packing, confidence, and failures.
+  Handles query planning, basic/standard/deep research depth, cache, web search, fetch, evidence packing, confidence, and failures.
   Used by the researcher-owned web_research tool.
 
 src/tools/protocol-tool.ts
@@ -66,6 +90,7 @@ src/tools/memory-tool.ts
 
 src/tools/web-research-tool.ts
   Researcher-owned web research tool.
+  Accepts bounded research controls such as depth, freshness, query/fetch budgets, and context budgets.
 
 src/tools/rag-tool.ts
   Researcher-only low-level retrieval tool.
@@ -136,6 +161,10 @@ import { Hono } from 'hono';
 import './models/runtime.js';
 import { requireApiSecret } from './middleware/api-secret.js';
 import { registerChatEventRoutes } from './routes/chat-events.js';
+import { registerTelemetryRoutes } from './routes/telemetry.js';
+import { registerFlueTelemetryObserver } from './telemetry/flue-telemetry.js';
+
+registerFlueTelemetryObserver();
 
 const app = new Hono();
 
@@ -145,6 +174,7 @@ app.use('/agents/*', requireApiSecret);
 app.use('/workflows/*', requireApiSecret);
 app.use('/runs/*', requireApiSecret);
 registerChatEventRoutes(app);
+registerTelemetryRoutes(app);
 app.route('/', flue());
 
 export default app;

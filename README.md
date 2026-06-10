@@ -335,7 +335,8 @@ Planned structure:
 
 ```text
 src/
-  agents/
+  orchestrator.ts
+  workspace/
   connectors/
   gateway/
   memory/
@@ -627,7 +628,9 @@ Use the boundaries this way:
 - low-level provider errors: the research workflow records failures in `providerFailures`
 - research strategy: researcher decides which searches to run, when to fetch pages, when to stop, and how to compare sources
 
-The researcher subagent lives in `src/agents/researcher.ts` and owns the `web_research` tool. The standalone `research` workflow in `src/workflows/research.ts` initializes the researcher directly for CLI or API research runs. Use `npm run research:local -- "..."` for local one-shot research testing.
+The researcher subagent lives in `src/workers/researcher/researcher.ts` and owns the `web_research` tool. The standalone `research` workflow in `src/workflows/research.ts` initializes the researcher directly for CLI or API research runs. Use `npm run research:local -- "..."` for local one-shot research testing.
+
+Main-agent workspace persona files live in `src/workspace/`. Subagent workspace persona files live beside their subagent implementation, for example `src/workers/researcher/workspace/`. Persona names belong inside workspace file contents, not in architecture paths.
 
 ```text
 chat workflow

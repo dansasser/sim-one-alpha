@@ -33,10 +33,21 @@ src/app.ts
   No direct old/non-Flue orchestrator path.
   No passing process.env into model-provider setup.
 
-src/agents/*.ts
-  Flue createAgent(...) entrypoints.
-  Agents select models from project model cards.
-  Agents attach tools, skills, subagents, sessions, and compaction.
+src/agents/orchestrator.ts
+  Main Flue createAgent(...) entrypoint.
+  The main agent selects models from project model cards.
+  The main agent attaches tools, skills, subagents, sessions, and compaction.
+
+src/workspace/
+  Main agent user-editable workspace persona files.
+  Persona names belong inside workspace file contents, not in architecture paths.
+
+src/workers/<name>/*.ts
+  Worker implementations for Flue subagent profiles.
+  Workers are built like normal agents but are organized away from main agent entrypoints.
+
+src/workers/<name>/workspace/
+  Worker user-editable workspace persona files.
 
 src/workflows/*.ts
   Finite Flue operations.
@@ -430,6 +441,7 @@ RagResult
 ```text
 src/
   agents/
+  workspace/
   connectors/
   gateway/
   memory/
