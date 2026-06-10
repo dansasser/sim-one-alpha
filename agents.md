@@ -3,12 +3,62 @@
 ## Project Overview
 
 This repository contains the GOROMBO multi-purpose orchestrating agent.
+Never edit the main branch.
+Always create a new branch for your work, and open a pull request when ready.  
 
 The system is built with Flue. A Typescript-based agent framework built by the Astro team.
 
 The main orchestrating agent receives messages from connectors, loads applicable protocols from SQLite, retrieves context when needed, uses tools, delegates work to workers/subagents, validates results, and returns a response.
 
 The orchestrator is a coordinator, not a hardcoded knowledge base.
+
+## Flue Architecture Contract
+
+Before modifying agents, workflows, tools, skills, subagents, model cards, provider runtime, routing, memory, RAG, or `src/app.ts`, read:
+
+```text
+docs/architecture/flue-architecture.md
+docs/architecture/gorombo-flue-map.md
+```
+
+Do not rediscover basic Flue architecture from web search when these docs are present. Treat them as the repo source of truth unless the user explicitly asks to refresh them from upstream Flue docs.
+
+In this project:
+
+```text
+src/app.ts
+  Hono routes, middleware, health checks, custom ingress, and app.route('/', flue()) only.
+  No orchestration logic.
+  No direct RAG or web-search wiring.
+  No direct old/non-Flue orchestrator path.
+  No passing process.env into model-provider setup.
+
+src/agents/*.ts
+  Flue createAgent(...) entrypoints.
+  Agents select models from project model cards.
+  Agents attach tools, skills, subagents, sessions, and compaction.
+
+src/workflows/*.ts
+  Finite Flue operations.
+  Workflows can initialize agents, open sessions, call tasks/skills, and implement bounded application machinery.
+
+src/tools/*.ts
+  Executable model-callable capabilities exposed only to the agents that should own them.
+
+src/skills/**/SKILL.md
+  Reusable workflow knowledge and instructions, not executable capability.
+
+model cards
+  Model id, provider id, specifier, capabilities, context limits, and environment variable names.
+  No secrets.
+
+provider runtime
+  Resolves card-declared environment variable names and registers Flue providers.
+```
+
+The orchestrator agent routes and delegates. It should not do substantive work directly. Orchestrator-owned tools should support orchestration, such as protocol loading and safe memory lookup.
+
+The researcher subagent owns web research. The orchestrator may decide web/current/source-backed information is needed, but it must delegate that work to the researcher. The orchestrator must not directly call web search or a web-capable retrieval path.
 
 ## Core Runtime Flow
 

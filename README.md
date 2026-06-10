@@ -395,24 +395,310 @@ Use the actual scripts defined in `package.json`.
 
 Do not assume a command exists unless it is configured in the project.
 
+## Local Chat
+
+Model choice lives in the shipped runtime config file. In source it is:
+
+```text
+src/config/gorombo.config.json
+```
+
+After build it is copied to:
+
+```text
+dist/gorombo.config.json
+```
+
+```json
+{
+  "version": 1,
+  "models": {
+    "primary": "minimax-m3-cloud",
+    "backup": "codex-brain"
+  }
+}
+```
+
+Create a local `.env` from `.env.example` and set provider secrets only:
+
+```env
+OLLAMA_API_KEY=your_ollama_cloud_key_here
+CODEX_BRAIN_LOCAL_API_URL=http://192.168.0.131:4180/v1
+CODEX_BRAIN_LOCAL_API_KEY=your_codex_brain_key_here
+API_SECRET=local_testing_secret
+```
+
+The default primary and backup model cards use Ollama's direct cloud API:
+
+```env
+OLLAMA_API_KEY=your_key_here
+OLLAMA_CLOUD_BASE_URL=https://ollama.com/v1
+GOROMBO_WEB_SEARCH_PROVIDER=ollama
+OLLAMA_WEB_SEARCH_BASE_URL=https://ollama.com
+GOROMBO_RAG_MAX_CONTEXT_TOKENS=4000
+GOROMBO_RAG_WEB_FETCH_TOP_K=1
+```
+
+Select another project-owned model card by changing the shipped `gorombo.config.json` runtime file and restarting the runtime:
+
+```json
+{
+  "version": 1,
+  "models": {
+    "primary": "qwen3-5-cloud",
+    "backup": "deepseek-v4-pro-cloud"
+  }
+}
+```
+
+Register the DT1-hosted Codex Brain model through its own provider when needed:
+
+```env
+CODEX_BRAIN_LOCAL_API_URL=https://dt1.example.local/v1
+CODEX_BRAIN_LOCAL_API_KEY=your_codex_brain_key_here
+```
+
+Then select it by card key in `gorombo.config.json`.
+
+`CODEX_BRAIN_LOCAL_API_URL` must be the OpenAI-compatible base URL including `/v1`.
+
+Run a one-shot chat workflow:
+
+```sh
+npm run chat:local -- "Hello"
+```
+
+Run a one-shot research workflow:
+
+```sh
+npm run research:local -- "Find the official Ollama web search API docs URL."
+```
+
+Run the underlying Flue workflow with a full normalized payload:
+
+```sh
+npm run chat -- --payload "{\"text\":\"Hello\",\"actorId\":\"local-user\",\"conversationId\":\"local-thread\"}"
+```
+
+Open an interactive Flue agent session:
+
+```sh
+npm run connect
+```
+
+Start the built Node HTTP runtime:
+
+```sh
+npm run build
+npm start
+```
+
+The HTTP runtime uses the Flue routing model:
+
+- `GET /health` is public.
+- `POST /api/chat/events` is the app-owned chat ingress alias.
+- `POST /workflows/chat` is the Flue workflow route.
+- `GET /runs/:runId` reads the Flue workflow run.
+
+Protected routes require:
+
+```text
+x-api-secret: <API_SECRET>
+```
+
+`API_SECRET` must be set in `.env` or by the deployment secret manager. If it is missing, protected endpoints fail closed with `503`.
+
+Flue workflow HTTP invocation is asynchronous. A successful chat event returns `202` with a `runId`; clients then read `/runs/:runId` with the same secret header to retrieve the completed result.
+
+The `chat` workflow initializes the `orchestrator` Flue agent, loads `.env` through the Flue CLI for secrets, loads the shipped `gorombo.config.json` runtime file for deployment/runtime choices, and prompts the configured primary model with the normalized message event. `models.primary` and `models.backup` are project model card keys. Raw Flue specifiers and `GOROMBO_MODEL` env selection are rejected. The default primary card is `minimax-m3-cloud`, which resolves through its card to `ollama-cloud/minimax-m3` and calls Ollama Cloud through `https://ollama.com/v1`. If the primary prompt fails with a recoverable model/provider error, the workflow checks the backup card budget and retries the same session with `models.backup`. Model cards live inside each provider directory under `src/models/providers/<provider>/cards`; the catalog in `src/models/catalog.ts` aggregates them for model selection and budget lookup. The agent currently has tool flow wired for protocol loading, memory retrieval, and RAG/context retrieval. The protocol, memory, and document-index providers remain typed placeholders; web search is live through Ollama Search when an Ollama API key is configured.
+
+## Model Cards
+
+Model cards are the project-owned source of truth for models the agent can intentionally use.
+
+Runtime model choice is separate from card definition. The shipped `gorombo.config.json` runtime file chooses active card keys:
+
+```json
+{
+  "version": 1,
+  "models": {
+    "primary": "minimax-m3-cloud",
+    "backup": "codex-brain"
+  }
+}
+```
+
+`.env` stores provider credentials. It must not choose models.
+
+Each card lives under its owning provider directory, for example `src/models/providers/ollama-cloud/cards/minimax-m3.ts`, and owns the details that are specific to one model:
+
+- provider id and model id
+- Flue model specifier
+- roles and capabilities
+- context window limits
+- maximum output tokens
+- advertised, guaranteed, and provider-reported limits when those differ
+- source notes for where the metadata came from
+
+Provider files live next to their cards in `src/models/providers/<provider>`. Providers describe transport: base URLs, API key environment variables, Flue `registerProvider(...)` calls, and per-provider model registration. When a provider has multiple model cards, those cards live in that provider's `cards/` subdirectory. This keeps provider setup out of agent files and lets the agent reference a card by specifier.
+
+Cards exist because session management, compaction, and RAG all need model-specific token limits. MiniMax M3, DeepSeek V4 Pro, and Qwen 3.5 do not have the same usable context or output budgets. The context-budget layer reads the selected card instead of hardcoding token limits in the agent, workflow, or RAG router.
+
+Current cards:
+
+```text
+minimax-m3-cloud       -> ollama-cloud/minimax-m3
+deepseek-v4-pro-cloud  -> ollama-cloud/deepseek-v4-pro
+qwen3-5-cloud          -> ollama-cloud/qwen3.5:397b
+codex-brain            -> codex-brain/gpt-5.5
+```
+
+MiniMax M3 is intentionally recorded with multiple limits: MiniMax advertises up to 1M context with a guaranteed 512K minimum, while Ollama Cloud currently reports 524288 through both direct cloud metadata and the local `:cloud` path. Session budget code must treat those as separate facts.
+
+## Session Budget And Compaction
+
+The chat workflow now reports and enforces a card-driven context budget before it sends a prompt to the LLM provider.
+
+Implemented pieces:
+
+- `resolveModelCard(...)` maps a Flue model specifier back to a project model card.
+- `calculateContextBudget(...)` chooses the provider-safe context window, reserves output tokens, and calculates warning, compaction, and hard-stop thresholds.
+- `evaluateCompaction(...)` returns `normal`, `warn`, `compact`, or `stop`.
+- `goromboFlueSessionStore` stores Flue `SessionData` and indexes the latest logical chat session by harness/session name.
+- `deriveSessionBudgetStateFromData(...)` estimates budget from the stored Flue conversation tree, including compaction entries.
+- `chatSessionBudgetStore` remains as an in-process fallback when stored session data is not available.
+- The `chat` workflow calls `session.compact()` before prompting when the estimate crosses the compaction threshold.
+- The workflow returns a guard response instead of calling the provider when the prompt still exceeds the hard input budget after compaction.
+
+Flue's native automatic compaction remains enabled on the orchestrator agent with card-derived `reserveTokens` and `keepRecentTokens`. The GOROMBO layer adds pre-send protection and budget telemetry for future RAG allocation.
+
+The session store is now the natural boundary for future memory and RAG work: durable memory should be extracted from stored `SessionData`, and web search/document chunks should be injected only after the budget layer reports remaining context capacity.
+
+Architecture details live in `docs/architecture/session-context-budget.md`.
+
+## Web Search And Research
+
+Ollama Search is the default web-search provider for the researcher-owned web research path.
+
+The provider uses the existing Ollama API key:
+
+```env
+GOROMBO_WEB_SEARCH_PROVIDER=ollama
+OLLAMA_API_KEY=your_key_here
+OLLAMA_WEB_SEARCH_BASE_URL=https://ollama.com
+GOROMBO_RAG_MAX_CONTEXT_TOKENS=4000
+GOROMBO_RAG_WEB_FETCH_TOP_K=1
+GOROMBO_RESEARCH_MAX_QUERIES=3
+GOROMBO_RESEARCH_MAX_FETCHES=2
+GOROMBO_RESEARCH_CACHE_DB=.gorombo/research-cache.sqlite
+```
+
+Implemented endpoints:
+
+```text
+POST https://ollama.com/api/web_search
+POST https://ollama.com/api/web_fetch
+```
+
+`web_search` results are normalized into the project `RetrievedContext` shape with `provider: "web-search"` and `metadata.provider: "ollama"`. If no Ollama key is configured, the web provider falls back to the web-search placeholder instead of failing startup.
+
+The researcher-facing `web_research` tool calls the `web-research` Flue workflow boundary, which owns query planning, search/fetch budget, cache use, evidence packing, confidence, and provider failures. The low-level `retrieve_context` tool remains researcher-only and must not be attached to the orchestrator.
+
+The researcher-owned web research path handles:
+
+- query planning: one search for simple lookups, multiple searches for complex research/comparison prompts
+- cache: per-run in-memory cache plus optional SQLite persistent cache
+- search-to-fetch enrichment: `webFetch: "auto"` or `"always"` fetches top pages when the provider supports `fetchPage(...)`
+- context packing: returned contexts are packed to `maxContextTokens`, defaulting to `GOROMBO_RAG_MAX_CONTEXT_TOKENS` or `4000`
+- provider failures: web-search failures are returned in `providerFailures` instead of failing the whole chat path
+
+The `web_research` tool accepts optional `limit`, `maxContextTokens`, `webFetch`, `maxQueries`, `maxFetches`, and `freshness` controls.
+
+Future RAG providers such as local SearXNG, GitHub, company documents, and durable memory should plug into the same `RagProvider` interface and then be ranked by the retrieval workflow and RAG router.
+
+## Research Subagent
+
+The main orchestrator has a registered Flue subagent named `researcher`.
+
+Use the boundaries this way:
+
+- no web needed: main orchestrator may answer, use protocols, or use safe memory lookup
+- any web/current/source-backed information: main orchestrator delegates through Flue `task` with `agent: "researcher"`
+- low-level provider errors: the research workflow records failures in `providerFailures`
+- research strategy: researcher decides which searches to run, when to fetch pages, when to stop, and how to compare sources
+
+The researcher subagent lives in `src/agents/researcher.ts` and owns the `web_research` tool. The standalone `research` workflow in `src/workflows/research.ts` initializes the researcher directly for CLI or API research runs. Use `npm run research:local -- "..."` for local one-shot research testing.
+
+```text
+chat workflow
+-> orchestrator agent
+-> task tool with agent: "researcher"
+-> researcher subagent
+-> web_research
+-> web-research workflow
+-> retrieval workflow
+-> cache / Ollama Search / future RAG providers
+```
+
 ## Configuration
 
 Environment variables are used for secrets and service configuration.
 
+The main agent runtime config is a real JSON file shipped with the product:
+
+```text
+src/config/gorombo.config.json -> source
+dist/gorombo.config.json       -> built/package runtime file
+```
+
+It starts with model selection and is intended to grow into the deployment-level config for the agent:
+
+```json
+{
+  "version": 1,
+  "models": {
+    "primary": "minimax-m3-cloud",
+    "backup": "codex-brain"
+  }
+}
+```
+
+Change model choices in the shipped runtime JSON file, then restart the runtime/gateway. Keep API keys and service credentials in `.env` or the deployment secret manager.
+
+For Node distribution, `.env` lives beside `package.json` at the runtime root. `npm start` runs:
+
+```sh
+node --env-file=.env dist/server.mjs
+```
+
+This loads provider keys, `API_SECRET`, and service settings before the built server starts.
+
 Expected future environment values may include:
 
 ```text
+OPENAI_API_KEY
+ANTHROPIC_API_KEY
+OLLAMA_API_KEY
+OLLAMA_CLOUD_API_KEY
+OLLAMA_CLOUD_BASE_URL
+OLLAMA_LOCAL_BASE_URL
+OLLAMA_LOCAL_API_KEY
+CODEX_BRAIN_LOCAL_API_URL
+CODEX_BRAIN_LOCAL_API_KEY
 TELEGRAM_BOT_TOKEN
 DATABASE_URL
 PROTOCOL_DB_PATH
 MEMORY_DB_URL
 API_SECRET
-MODEL_PROVIDER_API_KEY
+TAVILY_API_KEY
+BRAVE_SEARCH_API_KEY
 ```
+
+`GOROMBO_MODEL`, `GOROMBO_MODEL_BACKUP`, and `GOROMBO_CONFIG_PATH` are not supported. Model choices must be card keys in the shipped `gorombo.config.json` runtime file.
 
 Do not commit real secrets.
 
-Use local `.env` files or the deployment platform’s secret manager.
+Use local `.env` files or the deployment platform's secret manager.
 
 ## Development
 
@@ -429,7 +715,7 @@ Early development focuses on:
 - Memory Tool
 - RAG Router
 - document-index retrieval placeholder
-- web search provider placeholder
+- Ollama web search provider
 - registry interfaces
 - worker interfaces
 
@@ -447,6 +733,13 @@ Common commands:
 npm test
 npm run typecheck
 npm run build
+npm run smoke:http
+```
+
+For a live built-server chat smoke through `/api/chat/events`, run:
+
+```sh
+npm run smoke:http -- --live-chat
 ```
 
 If the project defines other scripts in `package.json`, use those exact scripts.
@@ -465,7 +758,7 @@ Near-term:
 - protocol loading tool
 - memory retrieval interface
 - initial RAG architecture
-- web search placeholder
+- Ollama web search provider
 - document-index placeholder
 - registry interfaces
 - worker interfaces

@@ -1,0 +1,37 @@
+{
+  "name": "astro-flue-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "GOROMBO Flue-based multi-purpose orchestrating agent foundation.",
+  "files": [
+    "dist/**",
+    "scripts/smoke-http-endpoints.mjs",
+    "README.md",
+    ".env.example"
+  ],
+  "scripts": {
+    "build": "flue build --target node && node scripts/copy-runtime-config.mjs",
+    "chat": "flue run chat --target node",
+    "chat:local": "node scripts/chat.mjs",
+    "connect": "flue connect orchestrator local --target node --session local",
+    "dev": "flue dev --target node",
+    "smoke:http": "node scripts/smoke-http-endpoints.mjs",
+    "research:local": "node scripts/research.mjs",
+    "start": "node --env-file=.env dist/server.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json && node scripts/copy-runtime-config.mjs --tsc && node --test \".tmp/tsc/tests/*.test.js\""
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@flue/runtime": "^0.9.2",
+    "hono": "^4.12.23"
+  },
+  "devDependencies": {
+    "@flue/cli": "^0.9.2",
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3"
+  }
+}
