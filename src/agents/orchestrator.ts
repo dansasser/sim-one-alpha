@@ -8,7 +8,6 @@ import {
   resolveWorkspaceDirectory,
 } from '../workspace-loader.js';
 import { calculateContextBudget } from '../session/context-budget.js';
-import { goromboFlueSessionStore } from '../session/flue-session-store.js';
 import { loadProtocolsTool, retrieveMemoryTool } from '../tools/index.js';
 import type { AgentModelCard } from '../models/types.js';
 import { createCodingWorkerSubagent } from '../workers/coding-worker/coding-worker.js';
@@ -34,7 +33,6 @@ export default createAgent(({ env }) => {
     model: selectedModelCard.specifier,
     instructions: orchestratorInstructions,
     compaction: createFlueCompactionConfig(selectedModelCard),
-    persist: goromboFlueSessionStore,
     tools: [loadProtocolsTool, retrieveMemoryTool],
     subagents: [codingWorker, researcher],
   };

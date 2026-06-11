@@ -159,6 +159,29 @@ export class FlueTelemetryStore {
 
 export const flueTelemetryStore = new FlueTelemetryStore();
 
+/**
+ * Builds a sanitized telemetry summary from a persisted Flue run event stream.
+ */
+export function summarizeTelemetryRunFromEvents(runId: string, events: unknown[]): TelemetryRunSummary | undefined {
+  const summaries = events
+    .filter(isFlueEvent)
+    .map((event) => summarizeFlueEvent(event))
+    .filter((event): event is TelemetryEventSummary => Boolean(event));
+
+  if (!summaries.length) {
+    return undefined;
+  }
+
+  return summarizeRun(runId, summaries);
+}
+
+function isFlueEvent(event: unknown): event is FlueEvent {
+  return typeof event === 'object' &&
+    event !== null &&
+    !Array.isArray(event) &&
+    typeof (event as { type?: unknown }).type === 'string';
+}
+
 let observerUnsubscribe: (() => void) | undefined;
 
 /**
@@ -182,9 +205,7 @@ function summarizeRun(runId: string, events: TelemetryEventSummary[]): Telemetry
   const taskStarts = events.filter((event) => event.type === 'task_start');
   const toolCalls = events.filter((event) =>
     event.type === 'tool_start' ||
-    event.type === 'tool_call' ||
-    event.type === 'tool_execution_start' ||
-    event.type === 'tool_execution_end',
+    event.type === 'tool_call',
   );
   const operations = events.filter((event) => event.type === 'operation_start' || event.type === 'operation');
   const errors = events.filter((event) => event.isError);

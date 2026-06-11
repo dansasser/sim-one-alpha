@@ -13,7 +13,8 @@ Runtime database files should be created here through config or environment-cont
 
 - `memory.sqlite`
 - `protocols.sqlite`
-- `research-cache.sqlite`
+- `flue.sqlite`
 - `sessions.sqlite`
+- `research-cache.sqlite`
 
 Do not commit generated database files, credentials, exports, or user data from this directory.

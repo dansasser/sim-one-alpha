@@ -62,7 +62,11 @@ try {
           'content-type': 'application/json',
           'x-api-secret': requestSecret,
         },
-        body: JSON.stringify({ text: 'Reply with exactly: endpoint-live-ok' }),
+        body: JSON.stringify({
+          text: 'Reply with exactly: endpoint-live-ok',
+          actorId: 'http-smoke-user',
+          conversationId: 'http-smoke-thread',
+        }),
       },
       202,
       'chat event ingress with secret',
@@ -76,8 +80,7 @@ try {
 
   console.log(`HTTP endpoint smoke passed${liveChat ? ' with live chat' : ''}.`);
 } finally {
-  child.kill('SIGTERM');
-  await new Promise((resolve) => child.once('exit', resolve));
+  await stopChild(child);
 }
 
 function parseEnvFile(path) {
@@ -163,7 +166,8 @@ async function waitForRunResult(baseUrl, runId, requestSecret) {
     );
     latest = run;
 
-    if (run.status === 'completed' || run.status === 'failed') {
+    const completion = readRunCompletion(run);
+    if (completion) {
       return run;
     }
 
@@ -171,4 +175,50 @@ async function waitForRunResult(baseUrl, runId, requestSecret) {
   }
 
   throw new Error(`Timed out waiting for workflow run result.\n${JSON.stringify(latest).slice(0, 1000)}`);
+}
+
+function readRunCompletion(run) {
+  if (Array.isArray(run)) {
+    return run.find((event) => event && event.type === 'run_end');
+  }
+
+  if (run && (run.status === 'completed' || run.status === 'failed')) {
+    return run;
+  }
+
+  return undefined;
+}
+
+async function stopChild(childProcess) {
+  if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
+    return;
+  }
+
+  childProcess.kill('SIGTERM');
+  if (await waitForChildExit(childProcess, 3_000)) {
+    return;
+  }
+
+  childProcess.kill('SIGKILL');
+  if (!(await waitForChildExit(childProcess, 5_000))) {
+    throw new Error('HTTP smoke child process did not exit after SIGKILL.');
+  }
+}
+
+function waitForChildExit(childProcess, timeoutMs) {
+  if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
+    return Promise.resolve(true);
+  }
+
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      childProcess.off('exit', onExit);
+      resolve(false);
+    }, timeoutMs);
+    const onExit = () => {
+      clearTimeout(timeout);
+      resolve(true);
+    };
+    childProcess.once('exit', onExit);
+  });
 }

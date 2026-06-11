@@ -9,6 +9,7 @@ Every top-level `src/` directory should fit one of these categories. If a new di
 | Path | Type | Ownership rule |
 | --- | --- | --- |
 | `src/agents/` | Flue agent entrypoints | Main `createAgent(...)` files discovered by Flue. |
+| `src/commands/` | Pre-LLM command parsing | Slash command definitions and parsing that run before prompts reach the LLM. |
 | `src/config/` | Runtime configuration | Typed config loaders and shipped runtime config source files. |
 | `src/connectors/` | Connector normalization | External-source adapters that normalize input into internal message shapes. |
 | `src/memory/` | Shared memory subsystem | Memory retrieval interfaces and routing shared by agents/tools/workflows. |
@@ -33,6 +34,10 @@ Root source files:
 ```text
 src/app.ts
   Hono application shell and Flue route mount.
+
+src/db.ts
+  Flue Node persistence adapter entrypoint discovered by Flue at build time.
+  Exports the GOROMBO persistence adapter wrapper around Flue's sqlite() adapter.
 
 src/index.ts
   Package barrel for exported connector, registry, and type helpers.
@@ -64,12 +69,19 @@ src/middleware/api-secret.ts
 
 src/routes/chat-events.ts
   App-owned /api/chat/events ingress alias.
-  Verifies API-secret middleware, normalizes the HTTP boundary, and forwards to /workflows/chat.
+  Verifies API-secret middleware, exposes /api/chat/sessions for HTTP chat lists, normalizes the HTTP boundary, and forwards events to /workflows/chat.
   Does not call c.executionCtx or a non-Flue orchestrator.
+
+src/db.ts
+  Flue persistence adapter entrypoint.
+  Uses Flue's Node sqlite() adapter for canonical agent sessions, submissions, and event streams.
+  Supplies SQLite workflow run and run registry records through GOROMBO's persistence wrapper.
+  Wraps the Flue session store to maintain GOROMBO's logical session index and extracted session-memory FTS records.
 
 src/routes/telemetry.ts
   Protected app-owned telemetry inspection routes.
   Exposes sanitized Flue event summaries by workflow run id.
+  Falls back to persisted Flue run events when the in-memory telemetry observer no longer has the run.
 
 src/telemetry/flue-telemetry.ts
   Registers Flue observe(...) once per running application context.
@@ -111,8 +123,12 @@ src/workspace-loader.ts
 
 src/workflows/chat.ts
   Finite chat workflow.
-  Normalizes a web/API message, initializes the orchestrator, checks session budget, compacts before oversize prompts, prompts the orchestrator, and retries with the configured backup model card when the primary model is recoverably unavailable.
+  Normalizes a web/API/TUI/connector message, resolves the product session, handles pre-LLM slash commands, initializes the orchestrator, checks session budget, compacts before oversize prompts, prompts the orchestrator, and retries with the configured backup model card when the primary model is recoverably unavailable.
   Exposes its Flue HTTP route through imported API-secret middleware.
+
+src/commands/
+  Pre-LLM slash command parsing and command registry helpers.
+  Commands are application machinery; they are not sent to the LLM as prompts.
 
 src/config/
   Typed loader and source JSON for the main GOROMBO runtime config file.
@@ -139,6 +155,7 @@ src/tools/protocol-tool.ts
 
 src/tools/memory-tool.ts
   Orchestrator-safe memory lookup tool.
+  Uses persisted session-memory FTS records extracted from Flue SessionData.
 
 src/tools/web-research-tool.ts
   Researcher-owned web research tool.

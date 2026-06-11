@@ -8,6 +8,7 @@ import {
   isRecoverableModelFailure,
   run,
 } from '../workflows/chat.js';
+import { goromboPersistenceRuntime } from '../db.js';
 
 test('chat workflow prompt requires minimal tool flow before answering', () => {
   const event = normalizeWebApiMessage({
@@ -104,6 +105,155 @@ test('chat workflow retries with backup model when primary is recoverably unavai
   assert.deepEqual(response.modelFailover?.attempts.map((attempt) => attempt.status), ['failed', 'used']);
 });
 
+test('chat workflow handles /new before the model and disables it for web chat prompts', async () => {
+  let initialized = false;
+
+  const response = await run({
+    env: createModelEnv(),
+    payload: {
+      text: '/new',
+      actorId: 'user-new-web',
+      conversationId: 'chat-new-web',
+    },
+    init: async () => {
+      initialized = true;
+      throw new Error('init should not be called');
+    },
+  } as never);
+
+  assert.equal(initialized, false);
+  assert.equal(response.command?.name, 'new');
+  assert.match(response.text, /web client session controls/);
+  assert.equal(response.usage.totalTokens, 0);
+});
+
+test('chat workflow creates a new TUI session for /new before the model', async () => {
+  let initialized = false;
+
+  const response = await run({
+    env: createModelEnv(),
+    payload: {
+      connector: 'tui',
+      text: '/new local notes',
+      actorId: 'user-new-tui',
+      conversationId: 'chat-new-tui',
+    },
+    init: async () => {
+      initialized = true;
+      throw new Error('init should not be called');
+    },
+  } as never);
+
+  assert.equal(initialized, false);
+  assert.equal(response.command?.name, 'new');
+  assert.equal(response.session?.surface, 'tui');
+  assert.equal(response.session?.created, true);
+  assert.match(response.session?.id ?? '', /^tui-/);
+  assert.equal(response.usage.totalTokens, 0);
+});
+
+test('chat workflow treats untrusted connector names in web payloads as web chat', async () => {
+  let initialized = false;
+
+  const response = await run({
+    env: createModelEnv(),
+    payload: {
+      connector: 'telegram',
+      text: '/new telegram notes',
+      actorId: 'telegram-user-new',
+      conversationId: 'telegram-chat-new',
+    },
+    init: async () => {
+      initialized = true;
+      throw new Error('init should not be called');
+    },
+  } as never);
+
+  assert.equal(initialized, false);
+  assert.equal(response.command?.name, 'new');
+  assert.match(response.text, /web client session controls/);
+  assert.equal(response.event.connector, 'web-api');
+  assert.equal(response.session, undefined);
+  assert.equal(response.usage.totalTokens, 0);
+});
+
+test('chat workflow handles /compact by compacting the resolved session without prompting', async () => {
+  let compacted = false;
+  let prompted = false;
+  const sessionName = `compact-test-session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const session = {
+    async compact() {
+      compacted = true;
+    },
+    prompt: async () => {
+      prompted = true;
+      throw new Error('prompt should not be called');
+    },
+  };
+
+  const response = await run({
+    env: createModelEnv(),
+    payload: {
+      connector: 'tui',
+      text: '/compact',
+      actorId: 'user-compact',
+      conversationId: 'chat-compact',
+      session: sessionName,
+    },
+    init: async () => ({
+      name: 'fake-orchestrator',
+      session: async () => session,
+    }),
+  } as never);
+
+  assert.equal(compacted, true);
+  assert.equal(prompted, false);
+  assert.equal(response.command?.name, 'compact');
+  assert.equal(response.session?.id, sessionName);
+  assert.equal(response.session?.created, true);
+  assert.equal(response.usage.totalTokens, 0);
+});
+
+test('chat workflow rejects explicit sessions owned by another actor before opening the harness session', async () => {
+  let initialized = false;
+  const sessionName = `ownership-test-session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  try {
+    goromboPersistenceRuntime.sessionDatabase.ensureChatSession({
+      sessionId: sessionName,
+      origin: 'tui',
+      actorId: 'owner-user',
+      conversationId: 'owner-chat',
+      title: 'Owner session',
+    });
+
+    const response = await run({
+      env: createModelEnv(),
+      payload: {
+        connector: 'tui',
+        text: 'resume this',
+        actorId: 'other-user',
+        conversationId: 'other-chat',
+        session: sessionName,
+      },
+      init: async () => {
+        initialized = true;
+        throw new Error('init should not be called for denied sessions');
+      },
+    } as never);
+
+    const storedSession = goromboPersistenceRuntime.sessionDatabase.getChatSession(sessionName);
+    assert.equal(initialized, false);
+    assert.equal(response.text, `Session ${sessionName} is not available for this actor or conversation.`);
+    assert.equal(response.session, undefined);
+    assert.equal(response.usage.totalTokens, 0);
+    assert.equal(storedSession?.actorId, 'owner-user');
+    assert.equal(storedSession?.conversationId, 'owner-chat');
+  } finally {
+    goromboPersistenceRuntime.sessionDatabase.deleteChatSession(sessionName);
+  }
+});
+
 test('chat workflow does not retry backup for context budget model errors', async () => {
   const attemptedModels: string[] = [];
   const session = {
@@ -165,5 +315,13 @@ function createPromptResponse(provider: string, id: string, text: string): Promp
         total: 0,
       },
     },
+  };
+}
+
+function createModelEnv(): Record<string, string> {
+  return {
+    OLLAMA_API_KEY: 'test-key',
+    CODEX_BRAIN_LOCAL_API_KEY: 'test-key',
+    CODEX_BRAIN_LOCAL_API_URL: 'https://dt1.example.test/v1',
   };
 }

@@ -3,5 +3,9 @@
   "models": {
     "primary": "minimax-m3-cloud",
     "backup": "codex-brain"
+  },
+  "storage": {
+    "flueDatabasePath": ".gorombo/db/flue.sqlite",
+    "sessionDatabasePath": ".gorombo/db/sessions.sqlite"
   }
 }

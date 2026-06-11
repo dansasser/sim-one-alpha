@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { FlueEvent } from '@flue/runtime';
-import { FlueTelemetryStore } from '../telemetry/flue-telemetry.js';
+import {
+  FlueTelemetryStore,
+  summarizeTelemetryRunFromEvents,
+} from '../telemetry/flue-telemetry.js';
 
 test('telemetry store summarizes researcher delegation and web research calls', () => {
   const store = new FlueTelemetryStore();
@@ -81,6 +84,69 @@ test('telemetry store trims oldest runs through serialized mutations', () => {
   assert.equal(snapshot.runs.length, 1);
   assert.equal(snapshot.runs[0]?.runId, 'workflow:chat:run-2');
   assert.equal(store.getRunSummary('workflow:chat:run-1'), undefined);
+});
+
+test('telemetry summary can be rebuilt from persisted Flue run events', () => {
+  const summary = summarizeTelemetryRunFromEvents('workflow:chat:run-persisted', [
+    {
+      type: 'run_start',
+      runId: 'workflow:chat:run-persisted',
+      payload: {
+        text: 'do not expose this prompt text',
+      },
+      timestamp: '2026-06-10T00:00:00.000Z',
+    },
+    {
+      type: 'operation',
+      runId: 'workflow:chat:run-persisted',
+      operationId: 'operation-1',
+      operationKind: 'prompt',
+      isError: false,
+      durationMs: 42,
+      result: {
+        text: 'do not expose this result text',
+      },
+      usage: {
+        input: 10,
+        output: 5,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 15,
+      },
+    },
+    {
+      type: 'run_end',
+      runId: 'workflow:chat:run-persisted',
+      result: {
+        text: 'do not expose final result text',
+      },
+      isError: false,
+      durationMs: 43,
+    },
+  ]);
+
+  assert.equal(summary?.eventCount, 3);
+  assert.equal(summary?.operations[0]?.usage?.totalTokens, 15);
+  assert.equal(summary?.events.some((event) => 'payload' in event), false);
+  assert.equal(summary?.events.some((event) => 'result' in event), false);
+});
+
+test('telemetry summary ignores invalid persisted run event entries', () => {
+  const summary = summarizeTelemetryRunFromEvents('workflow:chat:run-invalid', [
+    null,
+    'bad event',
+    {
+      payload: 'missing type',
+    },
+    {
+      type: 'tool_call',
+      runId: 'workflow:chat:run-invalid',
+      toolName: 'web_research',
+    },
+  ]);
+
+  assert.equal(summary?.eventCount, 1);
+  assert.equal(summary?.calledWebResearch, true);
 });
 
 function createEvent(input: Record<string, unknown>): FlueEvent {

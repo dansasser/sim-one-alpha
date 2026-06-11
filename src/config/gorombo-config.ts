@@ -15,6 +15,7 @@ export interface GoromboConfig {
     name?: string;
   };
   models: GoromboModelConfig;
+  storage?: GoromboStorageConfig;
   orchestrator?: Record<string, unknown>;
   workers?: Record<string, unknown>;
   rag?: Record<string, unknown>;
@@ -27,6 +28,11 @@ export interface GoromboConfig {
 export interface GoromboModelConfig {
   primary: string;
   backup?: string;
+}
+
+export interface GoromboStorageConfig {
+  flueDatabasePath?: string;
+  sessionDatabasePath?: string;
 }
 
 export interface LoadGoromboConfigOptions {
@@ -75,6 +81,7 @@ export function validateGoromboConfig(value: unknown, source = 'GOROMBO config')
   }
 
   const backup = readString(value.models.backup);
+  const storage = validateStorageConfig(value.storage, source);
 
   return {
     ...value,
@@ -83,7 +90,43 @@ export function validateGoromboConfig(value: unknown, source = 'GOROMBO config')
       primary,
       ...(backup ? { backup } : {}),
     },
+    ...(storage ? { storage } : {}),
   } as GoromboConfig;
+}
+
+function validateStorageConfig(value: unknown, source: string): GoromboStorageConfig | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${source} storage must be a JSON object when provided.`);
+  }
+
+  const flueDatabasePath = readOptionalStoragePath(value, 'flueDatabasePath', source);
+  const sessionDatabasePath = readOptionalStoragePath(value, 'sessionDatabasePath', source);
+
+  return {
+    ...(flueDatabasePath ? { flueDatabasePath } : {}),
+    ...(sessionDatabasePath ? { sessionDatabasePath } : {}),
+  };
+}
+
+function readOptionalStoragePath(
+  storage: Record<string, unknown>,
+  field: keyof GoromboStorageConfig,
+  source: string,
+): string | undefined {
+  if (!(field in storage)) {
+    return undefined;
+  }
+
+  const value = readString(storage[field]);
+  if (!value) {
+    throw new Error(`${source} validateStorageConfig storage.${field} must be a non-empty string when provided.`);
+  }
+
+  return value;
 }
 
 function readString(value: unknown): string | undefined {

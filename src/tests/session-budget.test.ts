@@ -118,7 +118,8 @@ test('session budget derivation treats latest compaction as the active context b
 
 function createSessionDataWithUsage(): SessionData {
   return {
-    version: 4,
+    version: 5,
+    affinityKey: 'test-affinity',
     entries: [
       {
         type: 'message',
@@ -160,7 +161,8 @@ function createSessionDataWithUsage(): SessionData {
 
 function createCompactedSessionData(): SessionData {
   return {
-    version: 4,
+    version: 5,
+    affinityKey: 'test-affinity',
     entries: [
       {
         type: 'message',

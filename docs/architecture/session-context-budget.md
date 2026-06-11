@@ -1,6 +1,6 @@
 # Session Context Budget
 
-Last checked: 2026-06-07.
+Last checked: 2026-06-10.
 
 ## Flue Session Findings
 
@@ -10,10 +10,11 @@ Sources:
 
 - Flue Agent API: https://flueframework.com/docs/api/agent-api/
 - Flue Data Persistence API: https://flueframework.com/docs/api/data-persistence-api/
-- Installed runtime types: `node_modules/@flue/runtime/dist/types-CEfuEx4p.d.mts`
-- Installed runtime implementation: `node_modules/@flue/runtime/dist/sandbox-C2jFycj2.mjs`
+- Flue Database guide: https://flueframework.com/docs/guide/database/
+- Installed runtime types: `node_modules/@flue/runtime/dist/run-registry-PAFvJO48.d.mts`
+- Installed runtime implementation: `node_modules/@flue/runtime/dist/run-store-CkOkvOxX.mjs`
 
-Flue persists session state through `SessionStore`. `SessionData` stores a history tree with message entries, compaction entries, branch summaries, metadata, and timestamps. On Node with no `persist` override, session state uses process-memory storage. On Cloudflare Durable Object-backed paths, Flue uses durable session storage when the durable storage context is available. A created agent can return `persist` to provide a custom durable store.
+Flue persists session state through the configured `PersistenceAdapter`. On Node, the current Flue persistence entrypoint is a source-root `src/db.ts` file that exports an adapter such as `sqlite('./data/flue.db')`. Without `db.ts`, the Node target uses in-memory state that disappears when the process exits. `SessionData` is version 5 and contains `affinityKey`, entries, `leafId`, metadata, and timestamps.
 
 `session.prompt(...)` appends the user prompt to the active session and runs against the session's current conversation context. The runtime rebuilds the agent harness state from stored session history when opening a session, then syncs newly produced messages back into session history after each prompt.
 
@@ -36,18 +37,22 @@ The active runtime model card now drives context budgeting, backup failover, and
 - the shipped `gorombo.config.json` runtime file selects the primary model card and optional backup model card for the deployment.
 - `src/session/context-budget.ts` calculates enforced context, output reserve, usable input, warning threshold, compaction threshold, and hard-stop threshold.
 - `src/session/compaction-policy.ts` converts token estimates into `normal`, `warn`, `compact`, or `stop`.
-- `src/session/flue-session-store.ts` implements the project-owned Flue `SessionStore` boundary.
+- `src/db.ts` exports the Flue persistence adapter discovered by Flue at build time.
+- `src/session/session-persistence.ts` wraps Flue's built-in SQLite adapter through the public `PersistenceAdapter` contract.
+- `src/session/session-database.ts` stores GOROMBO session catalog, active-session routing, logical Flue session indexes, and extracted session-memory FTS records.
+- `src/session/flue-session-store.ts` contains Flue session-key helpers only.
 - `src/session/session-budget.ts` derives budget state from stored Flue `SessionData` and keeps an in-process fallback ledger for cases where session data is unavailable.
 - `src/workflows/chat.ts` evaluates the next prompt before calling `session.prompt(...)`.
-- `src/agents/orchestrator.ts` passes card-derived Flue compaction settings and the project session store to `createAgent(...)`.
+- `src/agents/orchestrator.ts` passes card-derived Flue compaction settings to `createAgent(...)`; it does not pass persistence. Persistence belongs to `src/db.ts`.
 
-The session store preserves Flue's exact `SessionData` shape while also indexing the latest data by logical harness/session name. That lets the chat workflow recover the latest `gorombo-orchestrator` conversation state even when a workflow invocation receives a new Flue run id.
+Flue remains the owner of canonical `SessionData`. The GOROMBO wrapper indexes latest data by logical harness/session name so the synchronous chat workflow can recover the latest `gorombo-orchestrator` conversation state even when a workflow invocation receives a new Flue run id.
 
 The chat workflow sequence is:
 
 ```text
 normalize message
--> initialize orchestrator with project SessionStore
+-> resolve product session and pre-LLM slash commands
+-> initialize orchestrator using Flue db.ts persistence
 -> load latest logical Flue SessionData
 -> resolve primary and backup model cards from runtime config
 -> estimate session history plus next prompt
@@ -62,27 +67,31 @@ normalize message
 
 This keeps Flue's native automatic compaction enabled and adds a GOROMBO pre-send guard before the provider receives an oversized prompt.
 
-## Session Store Boundary
+## Persistence And Session Memory Boundary
 
-`src/session/flue-session-store.ts` is the first storage seam for the natural memory and RAG pipeline.
+`src/db.ts` is the Flue persistence boundary. `src/session/session-database.ts` is the GOROMBO sidecar index for product session records and extracted session-memory retrieval.
 
 Current behavior:
 
-- Implements Flue's public `SessionStore` contract.
-- Saves and loads exact Flue `SessionData`.
+- Implements Flue's public `PersistenceAdapter` contract by wrapping Flue's built-in SQLite adapter.
+- Saves and loads exact Flue `SessionData` through Flue's SQLite session store.
+- Stores workflow run metadata and run registry lookups in SQLite for the Flue run API.
+- Rebuilds protected telemetry summaries from persisted Flue run event streams when in-memory observer summaries are gone.
 - Parses Flue storage keys shaped as `agent-session:[instanceId,harnessName,sessionName]`.
 - Indexes the latest session by `harnessName + sessionName` so chat continuity can survive workflow run id changes.
 - Exposes `getLatestSessionData(harnessName, sessionName)` for budget derivation.
+- Extracts message, compaction, and branch-summary text into `session_memory_fts` for session-memory retrieval.
 
-The current implementation is in-process. A database-backed implementation should keep the same public interface and store:
+The SQLite implementation stores:
 
-- the raw Flue `SessionData`
-- logical session indexes
-- derived budget snapshots if useful for fast lookup
-- future memory extraction events
-- future RAG chunk references
+- Flue-owned canonical runtime data in `.gorombo/db/flue.sqlite`
+- workflow run records, run registry records, and Flue event streams in `.gorombo/db/flue.sqlite`
+- GOROMBO chat session records in `.gorombo/db/sessions.sqlite`
+- active connector session pointers
+- logical Flue session indexes
+- session-memory FTS chunks extracted from Flue `SessionData`
 
-Memory should not fork conversation truth into a separate transcript. It should read from or subscribe to this session-store boundary, extract durable memory records, and then let RAG allocate retrieved context through the same budget layer.
+Session memory does not fork conversation truth into a separate transcript. It indexes text extracted from Flue `SessionData` and returns matching chunks through the memory tool. The future seven-layer GOROMBO memory stack remains separate from this session-memory layer.
 
 ## Budget Inputs
 
@@ -148,6 +157,11 @@ Current retrieval controls:
 
 The `researcher` subagent uses these controls through `web_research`. This keeps context packing and provider failures in workflow machinery while preserving the ownership boundary: the orchestrator delegates web/current/source-backed work to the researcher, and the researcher owns web search decisions.
 
-## Open Questions
+## Slash Commands
 
-The remaining storage decision is the durable backend for `SessionStore`: SQLite, MongoDB, or another deployment-owned database. The in-process implementation defines the interface and behavior but does not survive process restarts.
+Slash commands are parsed before the LLM receives the prompt:
+
+- `/new` creates a new session for trusted connector-style and TUI entrypoints. It is disabled for GUI-managed web chat prompts because the web UI should switch visual session state through a client-side new-chat action. Generic Web API payloads must not be able to opt into connector-only behavior by spoofing a connector name.
+- `/compact` calls `session.compact()` for the resolved Flue session and returns command telemetry without sending `/compact` to the model.
+
+Future commands can accept trailing instruction text through the same parser. Unsupported slash commands are handled by application code and are not sent to the LLM.

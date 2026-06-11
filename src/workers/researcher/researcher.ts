@@ -11,7 +11,6 @@ import {
   resolveWorkspaceDirectory,
 } from '../../workspace-loader.js';
 import { calculateContextBudget } from '../../session/context-budget.js';
-import { goromboFlueSessionStore } from '../../session/flue-session-store.js';
 import { webResearchTool } from '../../tools/index.js';
 
 export const route: AgentRouteHandler = async (_c, next) => next();
@@ -47,7 +46,6 @@ export default createAgent(({ env }) => {
     profile: createResearcherSubagent(selectedModelCard.specifier),
     model: selectedModelCard.specifier,
     compaction: createResearchCompactionConfig(selectedModelCard),
-    persist: goromboFlueSessionStore,
   };
 });
 
