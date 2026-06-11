@@ -1,0 +1,141 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: "en-US"
+early_access: false
+
+tone_instructions: >
+  Review as a pragmatic senior TypeScript and agent-systems engineer. Be direct,
+  concrete, and focused on correctness, security, architecture boundaries, and
+  tests that prove real behavior.
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: true
+  review_details: true
+  poem: false
+  commit_status: true
+  fail_commit_status: true
+  enable_prompt_for_ai_agents: true
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT REVIEW"
+      - "NO REVIEW"
+    # Do not add non-main base branches here. Project PRs should target main
+    # unless explicitly documented otherwise.
+
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+    description:
+      mode: "warning"
+    title:
+      mode: "warning"
+
+  path_filters:
+    - "!dist/**"
+    - "!.tmp/**"
+    - "!coverage/**"
+    - "!.gorombo/db/**"
+    - "!**/*.sqlite"
+    - "!**/*.sqlite-*"
+    - "!**/*.db"
+    - "!**/*.db-*"
+
+  path_instructions:
+    - path: "src/app.ts"
+      instructions: |
+        Enforce the Flue app-shell boundary. This file should contain Hono routes,
+        middleware registration, health checks, custom ingress, and app.route('/', flue()) only.
+        Flag orchestration logic, direct RAG or web-search wiring, provider setup,
+        model selection, or process.env-to-model-provider wiring here.
+
+    - path: "src/agents/**"
+      instructions: |
+        Agents should be Flue createAgent(...) entrypoints that select models through
+        project model cards and attach tools, skills, workflows, subagents, sessions,
+        and compaction. Flag hardcoded provider/model setup, direct secret handling,
+        or substantive business logic that belongs in workflows, tools, or workers.
+
+    - path: "src/workflows/**"
+      instructions: |
+        Workflows should implement bounded Flue operations. For chat/session flows,
+        verify protocol loading, session resolution, slash-command handling, budget
+        checks, compaction behavior, and model failover are covered by tests.
+        Flag paths that bypass Flue agents or expose old non-Flue orchestrator behavior.
+
+    - path: "src/workers/researcher/**"
+      instructions: |
+        The researcher subagent owns web/current/source-backed research. Verify web
+        search stays delegated here and is not exposed as a direct orchestrator path.
+        Review cache behavior, fetch limits, source handling, and failure fallback carefully.
+
+    - path: "src/session/**"
+      instructions: |
+        Review session persistence, active-session routing, memory retrieval, compaction,
+        and slash-command behavior for privacy and restart safety. Flag unscoped memory
+        retrieval, cross-user or cross-conversation session access, mutation of another
+        actor's session metadata, indexing of thinking blocks, and missing tests for
+        restart or built HTTP behavior.
+
+    - path: "src/memory/**"
+      instructions: |
+        Memory is a first-class retrieval layer, but this branch of the system currently
+        implements session memory, not the full future GOROMBO memory stack. Verify memory
+        tool calls are scoped by actor, conversation, or explicitly authorized session/project
+        context before returning persisted chunks.
+
+    - path: "src/routes/**"
+      instructions: |
+        Focus on authentication, authorization, request validation, safe connector identity,
+        and whether routes forward into Flue workflows without embedding orchestration logic.
+        Public/generic HTTP payloads must not be allowed to spoof trusted connector surfaces.
+
+    - path: "src/connectors/**"
+      instructions: |
+        Connectors normalize external messages into internal events and should not orchestrate.
+        Review connector identity as server-derived trust boundary data, not as arbitrary
+        user-controlled payload fields.
+
+    - path: "src/models/**"
+      instructions: |
+        Model choice must go through model cards. Model cards may declare provider ids,
+        specifiers, capabilities, context limits, and environment variable names, but must
+        not contain secrets. Runtime provider setup should resolve card-declared env var names.
+
+    - path: "src/registries/**"
+      instructions: |
+        Registries provide discoverability and typed interfaces. Flag behavior buried in the
+        orchestrator that should be exposed through tool, skill, agent, protocol, or RAG
+        registries.
+
+    - path: "src/tests/**"
+      instructions: |
+        Prefer tests that prove real product behavior. For routes and runtime flows, check
+        built HTTP integration coverage in addition to isolated unit tests when the change
+        affects packaged server behavior.
+
+    - path: "scripts/**"
+      instructions: |
+        Scripts that spawn servers or child processes must clean up reliably on success and
+        failure. Review process teardown, port allocation, auth headers, .env loading, and
+        whether the script exercises the built output when it claims to test runtime behavior.
+
+    - path: "docs/**"
+      instructions: |
+        Documentation should preserve the Flue architecture contract and the GOROMBO-specific
+        boundaries. Flag docs that imply the orchestrator owns web search directly, that
+        protocols are skills, or that source-of-truth branches are PR targets by default.
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+
+chat:
+  auto_reply: true
