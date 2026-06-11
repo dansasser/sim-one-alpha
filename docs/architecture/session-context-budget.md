@@ -161,7 +161,7 @@ The `researcher` subagent uses these controls through `web_research`. This keeps
 
 Slash commands are parsed before the LLM receives the prompt:
 
-- `/new` creates a new session for connector-style entrypoints and is disabled inside web chat prompts because the web UI should switch visual session state through a client-side new-chat action.
+- `/new` creates a new session for connector-style and TUI entrypoints, even when the connector event arrives through HTTP. It is disabled for GUI-managed web chat prompts because the web UI should switch visual session state through a client-side new-chat action.
 - `/compact` calls `session.compact()` for the resolved Flue session and returns command telemetry without sending `/compact` to the model.
 
 Future commands can accept trailing instruction text through the same parser. Unsupported slash commands are handled by application code and are not sent to the LLM.

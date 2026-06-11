@@ -1,5 +1,5 @@
 import { goromboPersistenceRuntime } from '../db.js';
-import type { NormalizedMessageEvent } from '../types/index.js';
+import type { ConnectorKind, NormalizedMessageEvent } from '../types/index.js';
 import type { ChatSessionRecord } from './session-database.js';
 
 export type ChatSurface = 'web' | 'tui' | 'connector';
@@ -85,8 +85,12 @@ export function listChatSessions(limit?: number): ChatSessionRecord[] {
   return goromboPersistenceRuntime.sessionDatabase.listChatSessions(limit);
 }
 
+export function isGuiSessionManagedConnector(connector: ConnectorKind): boolean {
+  return connector === 'web-api';
+}
+
 function surfaceForEvent(event: NormalizedMessageEvent): ChatSurface {
-  if (event.connector === 'web-api') {
+  if (isGuiSessionManagedConnector(event.connector)) {
     return 'web';
   }
   if (event.connector === 'tui') {

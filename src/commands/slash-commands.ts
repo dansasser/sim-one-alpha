@@ -32,6 +32,6 @@ export function isSupportedSlashCommand(command: ParsedSlashCommand): command is
   return supportedCommands.has(command.name as SlashCommandName);
 }
 
-export function isWebDisabledSlashCommand(command: ParsedSlashCommand): boolean {
+export function isSessionCreationSlashCommand(command: ParsedSlashCommand): boolean {
   return command.name === 'new';
 }

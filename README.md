@@ -590,7 +590,7 @@ Protected telemetry uses live in-memory Flue observer summaries when available a
 
 Slash commands are parsed before the prompt reaches the LLM:
 
-- `/new` starts a new connector/TUI session. Web chat should use the client new-chat control instead.
+- `/new` starts a new connector/TUI session, even when that connector event arrives through HTTP. GUI-managed web chat should use the client new-chat control instead.
 - `/compact` calls Flue `session.compact()` for the resolved session and returns command telemetry.
 
 Architecture details live in `docs/architecture/session-context-budget.md`.
