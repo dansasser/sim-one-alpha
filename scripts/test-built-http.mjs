@@ -145,7 +145,7 @@ try {
     `tui /new workflow run did not include the expected command result.\n${tuiNewRunText.slice(0, 1200)}`,
   );
 
-  const connectorNewRunPointer = await expectJsonStatus(
+  const spoofedConnectorNewRunPointer = await expectJsonStatus(
     `${baseUrl}/api/chat/events`,
     {
       method: 'POST',
@@ -161,18 +161,17 @@ try {
       }),
     },
     202,
-    'chat event connector /new workflow with secret',
+    'chat event spoofed connector /new workflow with secret',
     (body) => {
-      assertJson(typeof body.runId === 'string' && body.runId.length > 0, 'connector /new workflow did not return a runId');
+      assertJson(typeof body.runId === 'string' && body.runId.length > 0, 'spoofed connector /new workflow did not return a runId');
     },
   );
-  const connectorNewRun = await waitForRunEnd(connectorNewRunPointer.runId);
-  const connectorNewRunText = JSON.stringify(connectorNewRun);
+  const spoofedConnectorNewRun = await waitForRunEnd(spoofedConnectorNewRunPointer.runId);
+  const spoofedConnectorNewRunText = JSON.stringify(spoofedConnectorNewRun);
   assertJson(
-    connectorNewRunText.includes('Started new session connector-') &&
-      connectorNewRunText.includes('"name":"new"') &&
-      connectorNewRunText.includes('"surface":"connector"'),
-    `connector /new workflow run did not include the expected command result.\n${connectorNewRunText.slice(0, 1200)}`,
+    spoofedConnectorNewRunText.includes('/new is handled by the web client session controls') &&
+      spoofedConnectorNewRunText.includes('"name":"new"'),
+    `spoofed connector /new workflow run did not include the expected web-safe command result.\n${spoofedConnectorNewRunText.slice(0, 1200)}`,
   );
 
   const compactRunPointer = await expectJsonStatus(
@@ -241,8 +240,7 @@ try {
 
   console.log('Built HTTP integration test passed.');
 } finally {
-  child.kill('SIGTERM');
-  await new Promise((resolve) => child.once('exit', resolve));
+  await stopChild(child);
 }
 
 function parseEnvFile(path) {
@@ -377,4 +375,18 @@ async function waitForRunEnd(runId) {
   }
 
   throw new Error(`Timed out waiting for workflow run_end.\n${JSON.stringify(latest).slice(0, 1200)}`);
+}
+
+async function stopChild(childProcess) {
+  if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
+    return;
+  }
+
+  await new Promise((resolve) => {
+    childProcess.once('exit', resolve);
+    childProcess.kill('SIGTERM');
+    if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
+      resolve();
+    }
+  });
 }

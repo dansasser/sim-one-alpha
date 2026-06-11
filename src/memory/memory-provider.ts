@@ -17,6 +17,8 @@ export class SessionMemoryProvider implements MemoryProvider {
       .searchSessionMemory({
         text: query.text,
         limit: query.limit,
+        actorId: query.actorId,
+        conversationId: query.conversationId,
       })
       .map((record) => ({
         id: `memory:${record.id}`,

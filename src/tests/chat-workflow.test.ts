@@ -151,7 +151,7 @@ test('chat workflow creates a new TUI session for /new before the model', async 
   assert.equal(response.usage.totalTokens, 0);
 });
 
-test('chat workflow allows connector /new events that arrive through HTTP-style payloads', async () => {
+test('chat workflow treats untrusted connector names in web payloads as web chat', async () => {
   let initialized = false;
 
   const response = await run({
@@ -170,15 +170,16 @@ test('chat workflow allows connector /new events that arrive through HTTP-style 
 
   assert.equal(initialized, false);
   assert.equal(response.command?.name, 'new');
-  assert.equal(response.session?.surface, 'connector');
-  assert.equal(response.session?.created, true);
-  assert.match(response.session?.id ?? '', /^connector-/);
+  assert.match(response.text, /web client session controls/);
+  assert.equal(response.event.connector, 'web-api');
+  assert.equal(response.session, undefined);
   assert.equal(response.usage.totalTokens, 0);
 });
 
 test('chat workflow handles /compact by compacting the resolved session without prompting', async () => {
   let compacted = false;
   let prompted = false;
+  const sessionName = `compact-test-session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const session = {
     async compact() {
       compacted = true;
@@ -196,7 +197,7 @@ test('chat workflow handles /compact by compacting the resolved session without 
       text: '/compact',
       actorId: 'user-compact',
       conversationId: 'chat-compact',
-      session: 'compact-test-session',
+      session: sessionName,
     },
     init: async () => ({
       name: 'fake-orchestrator',
@@ -207,7 +208,8 @@ test('chat workflow handles /compact by compacting the resolved session without 
   assert.equal(compacted, true);
   assert.equal(prompted, false);
   assert.equal(response.command?.name, 'compact');
-  assert.equal(response.session?.id, 'compact-test-session');
+  assert.equal(response.session?.id, sessionName);
+  assert.equal(response.session?.created, true);
   assert.equal(response.usage.totalTokens, 0);
 });
 

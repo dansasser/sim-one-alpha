@@ -1,8 +1,8 @@
-import type { NormalizedMessageEvent } from '../types/index.js';
+import type { ConnectorKind, NormalizedMessageEvent } from '../types/index.js';
 import { createEventId } from './base.js';
 
 export interface WebApiMessageInput {
-  connector?: NormalizedMessageEvent['connector'];
+  connector?: unknown;
   text: string;
   actorId: string;
   actorDisplayName?: string;
@@ -15,10 +15,30 @@ export interface WebApiMessageInput {
   raw?: unknown;
 }
 
+export type WebApiAcceptedConnector = Extract<ConnectorKind, 'web-api' | 'tui'>;
+
+const acceptedWebApiConnectors = new Set<WebApiAcceptedConnector>(['web-api', 'tui']);
+
+/**
+ * Normalizes connector values accepted from the generic Web API payload.
+ *
+ * Public HTTP callers must not be able to opt into connector-only behavior by
+ * sending `connector: "telegram"` or another future connector name. Trusted
+ * connector ingresses should derive connector identity server-side before
+ * handing events to chat workflow machinery.
+ */
+export function normalizeWebApiConnector(value: unknown): WebApiAcceptedConnector {
+  return typeof value === 'string' && acceptedWebApiConnectors.has(value as WebApiAcceptedConnector)
+    ? (value as WebApiAcceptedConnector)
+    : 'web-api';
+}
+
 export function normalizeWebApiMessage(input: WebApiMessageInput): NormalizedMessageEvent {
+  const connector = normalizeWebApiConnector(input.connector);
+
   return {
-    id: createEventId(input.connector === 'tui' ? 'tui' : 'web'),
-    connector: input.connector ?? 'web-api',
+    id: createEventId(connector === 'tui' ? 'tui' : 'web'),
+    connector,
     kind: 'chat.message',
     text: input.text,
     receivedAt: new Date().toISOString(),

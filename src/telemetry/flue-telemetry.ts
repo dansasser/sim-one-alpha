@@ -164,7 +164,8 @@ export const flueTelemetryStore = new FlueTelemetryStore();
  */
 export function summarizeTelemetryRunFromEvents(runId: string, events: unknown[]): TelemetryRunSummary | undefined {
   const summaries = events
-    .map((event) => summarizeFlueEvent(event as FlueEvent))
+    .filter(isFlueEvent)
+    .map((event) => summarizeFlueEvent(event))
     .filter((event): event is TelemetryEventSummary => Boolean(event));
 
   if (!summaries.length) {
@@ -172,6 +173,13 @@ export function summarizeTelemetryRunFromEvents(runId: string, events: unknown[]
   }
 
   return summarizeRun(runId, summaries);
+}
+
+function isFlueEvent(event: unknown): event is FlueEvent {
+  return typeof event === 'object' &&
+    event !== null &&
+    !Array.isArray(event) &&
+    typeof (event as { type?: unknown }).type === 'string';
 }
 
 let observerUnsubscribe: (() => void) | undefined;

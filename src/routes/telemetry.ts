@@ -45,7 +45,13 @@ async function readPersistedRunSummary(
     return undefined;
   }
 
-  const body = await response.json() as unknown;
+  let body: unknown;
+  try {
+    body = await response.json() as unknown;
+  } catch {
+    return undefined;
+  }
+
   if (!Array.isArray(body)) {
     return undefined;
   }

@@ -131,6 +131,24 @@ test('telemetry summary can be rebuilt from persisted Flue run events', () => {
   assert.equal(summary?.events.some((event) => 'result' in event), false);
 });
 
+test('telemetry summary ignores invalid persisted run event entries', () => {
+  const summary = summarizeTelemetryRunFromEvents('workflow:chat:run-invalid', [
+    null,
+    'bad event',
+    {
+      payload: 'missing type',
+    },
+    {
+      type: 'tool_call',
+      runId: 'workflow:chat:run-invalid',
+      toolName: 'web_research',
+    },
+  ]);
+
+  assert.equal(summary?.eventCount, 1);
+  assert.equal(summary?.calledWebResearch, true);
+});
+
 function createEvent(input: Record<string, unknown>): FlueEvent {
   return input as unknown as FlueEvent;
 }

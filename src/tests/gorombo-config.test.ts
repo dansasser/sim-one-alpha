@@ -20,3 +20,33 @@ test('GOROMBO config validates the main model config shape', () => {
     /models.primary as a model card key/,
   );
 });
+
+test('GOROMBO config rejects invalid storage paths instead of falling back to defaults', () => {
+  assert.throws(
+    () =>
+      validateGoromboConfig({
+        version: 1,
+        models: {
+          primary: 'minimax-m3-cloud',
+        },
+        storage: {
+          flueDatabasePath: '',
+        },
+      }, 'test config'),
+    /validateStorageConfig storage\.flueDatabasePath must be a non-empty string/,
+  );
+
+  assert.throws(
+    () =>
+      validateGoromboConfig({
+        version: 1,
+        models: {
+          primary: 'minimax-m3-cloud',
+        },
+        storage: {
+          sessionDatabasePath: 42,
+        },
+      }, 'test config'),
+    /validateStorageConfig storage\.sessionDatabasePath must be a non-empty string/,
+  );
+});

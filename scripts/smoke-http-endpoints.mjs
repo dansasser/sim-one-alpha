@@ -80,8 +80,7 @@ try {
 
   console.log(`HTTP endpoint smoke passed${liveChat ? ' with live chat' : ''}.`);
 } finally {
-  child.kill('SIGTERM');
-  await new Promise((resolve) => child.once('exit', resolve));
+  await stopChild(child);
 }
 
 function parseEnvFile(path) {
@@ -188,4 +187,18 @@ function readRunCompletion(run) {
   }
 
   return undefined;
+}
+
+async function stopChild(childProcess) {
+  if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
+    return;
+  }
+
+  await new Promise((resolve) => {
+    childProcess.once('exit', resolve);
+    childProcess.kill('SIGTERM');
+    if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
+      resolve();
+    }
+  });
 }

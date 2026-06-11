@@ -34,6 +34,7 @@ export function resolveChatSession(input: ResolveChatSessionInput): ChatSessionR
   const title = input.title ?? titleFromText(input.event.text);
 
   if (sessionId && !input.forceNew) {
+    const existingSession = goromboPersistenceRuntime.sessionDatabase.getChatSession(sessionId);
     const session = goromboPersistenceRuntime.sessionDatabase.ensureChatSession({
       sessionId,
       origin: surface,
@@ -54,7 +55,7 @@ export function resolveChatSession(input: ResolveChatSessionInput): ChatSessionR
       sessionId,
       surface,
       session,
-      created: false,
+      created: !existingSession,
     };
   }
 

@@ -44,6 +44,9 @@ export interface ActiveSessionLookup {
 export interface SessionMemorySearchInput {
   text: string;
   limit?: number;
+  actorId?: string;
+  conversationId?: string;
+  sessionId?: string;
 }
 
 export interface SessionMemoryRecord {
@@ -54,6 +57,9 @@ export interface SessionMemoryRecord {
   entryId: string;
   kind: string;
   role?: string;
+  actorId?: string;
+  conversationId?: string;
+  threadId?: string;
   title: string;
   content: string;
   score: number;
@@ -119,9 +125,20 @@ export class GoromboSessionDatabase {
 
     const latest = this.getLatestStorageKey(parts.harnessName, parts.sessionName);
     if (latest === storageKey) {
-      this.database
-        .prepare(`DELETE FROM flue_logical_sessions WHERE harness_name = ? AND session_name = ?`)
-        .run(parts.harnessName, parts.sessionName);
+      const replacement = this.getMostRecentIndexedStorageKey(parts.harnessName, parts.sessionName);
+      if (replacement) {
+        this.database
+          .prepare(
+            `UPDATE flue_logical_sessions
+             SET latest_storage_key = ?, updated_at = ?
+             WHERE harness_name = ? AND session_name = ?`,
+          )
+          .run(replacement.storageKey, replacement.updatedAt, parts.harnessName, parts.sessionName);
+      } else {
+        this.database
+          .prepare(`DELETE FROM flue_logical_sessions WHERE harness_name = ? AND session_name = ?`)
+          .run(parts.harnessName, parts.sessionName);
+      }
     }
   }
 
@@ -135,6 +152,23 @@ export class GoromboSessionDatabase {
       .get(harnessName, sessionName) as LatestSessionRow | undefined;
 
     return typeof row?.latest_storage_key === 'string' ? row.latest_storage_key : null;
+  }
+
+  private getMostRecentIndexedStorageKey(harnessName: string, sessionName: string): {
+    storageKey: string;
+    updatedAt: string;
+  } | null {
+    const row = this.database
+      .prepare(
+        `SELECT storage_key, updated_at
+         FROM flue_session_index
+         WHERE harness_name = ? AND session_name = ?
+         ORDER BY updated_at DESC, created_at DESC, storage_key DESC
+         LIMIT 1`,
+      )
+      .get(harnessName, sessionName) as IndexedSessionRow | undefined;
+
+    return row ? { storageKey: row.storage_key, updatedAt: row.updated_at } : null;
   }
 
   createChatSession(input: CreateChatSessionInput): ChatSessionRecord {
@@ -248,6 +282,10 @@ export class GoromboSessionDatabase {
     if (!query) {
       return [];
     }
+    const scope = createMemoryScope(input);
+    if (!scope) {
+      return [];
+    }
 
     const rows = this.database
       .prepare(
@@ -258,6 +296,9 @@ export class GoromboSessionDatabase {
                 c.entry_id,
                 c.kind,
                 c.role,
+                c.actor_id,
+                c.conversation_id,
+                c.thread_id,
                 c.title,
                 c.content,
                 c.token_estimate,
@@ -268,10 +309,11 @@ export class GoromboSessionDatabase {
          FROM session_memory_fts
          JOIN session_memory_chunks c ON c.chunk_key = session_memory_fts.chunk_key
          WHERE session_memory_fts MATCH ?
+           AND ${scope.where}
          ORDER BY rank
          LIMIT ?`,
       )
-      .all(query, Math.max(1, Math.min(20, Math.floor(input.limit ?? 5)))) as unknown as SessionMemoryChunkRow[];
+      .all(query, ...scope.params, Math.max(1, Math.min(20, Math.floor(input.limit ?? 5)))) as unknown as SessionMemoryChunkRow[];
 
     return rows.map(toSessionMemoryRecord);
   }
@@ -332,6 +374,9 @@ export class GoromboSessionDatabase {
         entry_id TEXT NOT NULL,
         kind TEXT NOT NULL,
         role TEXT,
+        actor_id TEXT,
+        conversation_id TEXT,
+        thread_id TEXT,
         title TEXT NOT NULL,
         content TEXT NOT NULL,
         token_estimate INTEGER NOT NULL,
@@ -346,6 +391,35 @@ export class GoromboSessionDatabase {
       CREATE VIRTUAL TABLE IF NOT EXISTS session_memory_fts
         USING fts5(chunk_key UNINDEXED, title, content);
     `);
+
+    this.ensureSessionMemoryScopeColumns();
+    this.database.exec(`
+      CREATE INDEX IF NOT EXISTS idx_session_memory_scope
+        ON session_memory_chunks(actor_id, conversation_id, session_name);
+    `);
+  }
+
+  private ensureSessionMemoryScopeColumns(): void {
+    const existingColumns = new Set(
+      (this.database.prepare(`PRAGMA table_info(session_memory_chunks)`).all() as unknown as Array<{ name: string }>)
+        .map((column) => column.name),
+    );
+
+    for (const [column, definition] of [
+      ['actor_id', 'TEXT'],
+      ['conversation_id', 'TEXT'],
+      ['thread_id', 'TEXT'],
+    ] as const) {
+      if (!existingColumns.has(column)) {
+        try {
+          this.database.exec(`ALTER TABLE session_memory_chunks ADD COLUMN ${column} ${definition}`);
+        } catch (error) {
+          if (!String(error).includes('duplicate column name')) {
+            throw error;
+          }
+        }
+      }
+    }
   }
 
   private indexSessionMemory(
@@ -355,13 +429,22 @@ export class GoromboSessionDatabase {
     data: SessionData,
   ): void {
     this.deleteSessionMemoryByStorageKey(storageKey);
+    const chatSession = this.getChatSession(sessionName);
 
-    for (const chunk of extractSessionMemoryChunks({ storageKey, harnessName, sessionName, data })) {
+    for (const chunk of extractSessionMemoryChunks({
+      storageKey,
+      harnessName,
+      sessionName,
+      actorId: chatSession?.actorId,
+      conversationId: chatSession?.conversationId,
+      threadId: chatSession?.threadId,
+      data,
+    })) {
       this.database
         .prepare(
           `INSERT OR REPLACE INTO session_memory_chunks
-           (chunk_key, source_storage_key, harness_name, session_name, entry_id, kind, role, title, content, token_estimate, metadata_json, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (chunk_key, source_storage_key, harness_name, session_name, entry_id, kind, role, actor_id, conversation_id, thread_id, title, content, token_estimate, metadata_json, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           chunk.id,
@@ -371,6 +454,9 @@ export class GoromboSessionDatabase {
           chunk.entryId,
           chunk.kind,
           chunk.role ?? null,
+          chunk.actorId ?? null,
+          chunk.conversationId ?? null,
+          chunk.threadId ?? null,
           chunk.title,
           chunk.content,
           chunk.tokenEstimate,
@@ -409,6 +495,9 @@ interface ExtractSessionMemoryInput {
   storageKey: string;
   harnessName: string;
   sessionName: string;
+  actorId?: string;
+  conversationId?: string;
+  threadId?: string;
   data: SessionData;
 }
 
@@ -417,6 +506,9 @@ interface ExtractedSessionMemoryChunk {
   entryId: string;
   kind: string;
   role?: string;
+  actorId?: string;
+  conversationId?: string;
+  threadId?: string;
   title: string;
   content: string;
   tokenEstimate: number;
@@ -444,9 +536,15 @@ function extractSessionMemoryChunks(input: ExtractSessionMemoryInput): Extracted
         title: `${role} message in ${input.sessionName}`,
         content,
         tokenEstimate: estimateTextTokens(content),
+        actorId: input.actorId,
+        conversationId: input.conversationId,
+        threadId: input.threadId,
         metadata: {
           source: 'flue-session',
           sessionName: input.sessionName,
+          actorId: input.actorId,
+          conversationId: input.conversationId,
+          threadId: input.threadId,
           role,
         },
         createdAt: entry.timestamp,
@@ -463,9 +561,15 @@ function extractSessionMemoryChunks(input: ExtractSessionMemoryInput): Extracted
         title: `compaction summary in ${input.sessionName}`,
         content: entry.summary,
         tokenEstimate: estimateTextTokens(entry.summary),
+        actorId: input.actorId,
+        conversationId: input.conversationId,
+        threadId: input.threadId,
         metadata: {
           source: 'flue-session',
           sessionName: input.sessionName,
+          actorId: input.actorId,
+          conversationId: input.conversationId,
+          threadId: input.threadId,
         },
         createdAt: entry.timestamp,
         updatedAt: input.data.updatedAt,
@@ -481,9 +585,15 @@ function extractSessionMemoryChunks(input: ExtractSessionMemoryInput): Extracted
         title: `branch summary in ${input.sessionName}`,
         content: entry.summary,
         tokenEstimate: estimateTextTokens(entry.summary),
+        actorId: input.actorId,
+        conversationId: input.conversationId,
+        threadId: input.threadId,
         metadata: {
           source: 'flue-session',
           sessionName: input.sessionName,
+          actorId: input.actorId,
+          conversationId: input.conversationId,
+          threadId: input.threadId,
         },
         createdAt: entry.timestamp,
         updatedAt: input.data.updatedAt,
@@ -518,9 +628,6 @@ function extractMessageText(message: unknown): string {
         if (typeof candidate.text === 'string') {
           return candidate.text;
         }
-        if (typeof candidate.thinking === 'string') {
-          return candidate.thinking;
-        }
         if (typeof candidate.name === 'string') {
           return `${candidate.name} ${JSON.stringify(candidate.arguments ?? {})}`;
         }
@@ -545,6 +652,43 @@ function createFtsQuery(text: string): string {
     .match(/[a-z0-9_'-]{2,}/g)
     ?.slice(0, 12);
   return terms?.map((term) => `"${term.replace(/"/g, '""')}"`).join(' OR ') ?? '';
+}
+
+function createMemoryScope(input: SessionMemorySearchInput): {
+  where: string;
+  params: string[];
+} | undefined {
+  const sessionId = cleanScopeValue(input.sessionId);
+  const actorId = cleanScopeValue(input.actorId);
+  const conversationId = cleanScopeValue(input.conversationId);
+  const where: string[] = [];
+  const params: string[] = [];
+
+  if (sessionId) {
+    where.push('c.session_name = ?');
+    params.push(sessionId);
+  }
+
+  const accessWhere: string[] = [];
+  if (actorId) {
+    accessWhere.push('c.actor_id = ?');
+    params.push(actorId);
+  }
+  if (conversationId) {
+    accessWhere.push('c.conversation_id = ?');
+    params.push(conversationId);
+  }
+
+  if (accessWhere.length) {
+    where.push(`(${accessWhere.join(' OR ')})`);
+  }
+
+  return where.length ? { where: where.join(' AND '), params } : undefined;
+}
+
+function cleanScopeValue(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
 }
 
 function activeSessionKey(input: ActiveSessionLookup): string {
@@ -581,6 +725,9 @@ function toSessionMemoryRecord(row: SessionMemoryChunkRow): SessionMemoryRecord 
     entryId: row.entry_id,
     kind: row.kind,
     ...(typeof row.role === 'string' ? { role: row.role } : {}),
+    ...(typeof row.actor_id === 'string' ? { actorId: row.actor_id } : {}),
+    ...(typeof row.conversation_id === 'string' ? { conversationId: row.conversation_id } : {}),
+    ...(typeof row.thread_id === 'string' ? { threadId: row.thread_id } : {}),
     title: row.title,
     content: row.content,
     score: 1 / (1 + Math.abs(rank)),
@@ -604,6 +751,11 @@ function parseMetadata(value: string): Record<string, unknown> {
 
 interface LatestSessionRow {
   latest_storage_key: string;
+}
+
+interface IndexedSessionRow {
+  storage_key: string;
+  updated_at: string;
 }
 
 interface ChatSessionRow {
@@ -630,6 +782,9 @@ interface SessionMemoryChunkRow {
   entry_id: string;
   kind: string;
   role: string | null;
+  actor_id: string | null;
+  conversation_id: string | null;
+  thread_id: string | null;
   title: string;
   content: string;
   token_estimate: number;

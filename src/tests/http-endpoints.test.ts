@@ -167,6 +167,24 @@ test('telemetry run endpoint falls back to persisted Flue run events after memor
   }
 });
 
+test('telemetry run endpoint treats non-JSON persisted run responses as not found', async () => {
+  const testApp = new Hono();
+  testApp.get('/runs/:runId', requireApiSecret, (c) => c.text('not json'));
+  registerTelemetryRoutes(testApp);
+
+  await withApiSecret('test-secret', async () => {
+    const response = await testApp.request('/api/telemetry/runs/workflow%3Achat%3Anon-json-run', {
+      headers: { 'x-api-secret': 'test-secret' },
+    });
+
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), {
+      error: 'Telemetry run not found',
+      runId: 'workflow:chat:non-json-run',
+    });
+  });
+});
+
 async function withApiSecret(secret: string | undefined, fn: () => Promise<void>): Promise<void> {
   const previous = process.env.API_SECRET;
 
