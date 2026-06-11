@@ -171,6 +171,7 @@ test('telemetry run endpoint treats non-JSON persisted run responses as not foun
   const testApp = new Hono();
   testApp.get('/runs/:runId', requireApiSecret, (c) => c.text('not json'));
   registerTelemetryRoutes(testApp);
+  flueTelemetryStore.reset();
 
   await withApiSecret('test-secret', async () => {
     const response = await testApp.request('/api/telemetry/runs/workflow%3Achat%3Anon-json-run', {
