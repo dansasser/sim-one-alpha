@@ -151,6 +151,31 @@ test('chat workflow creates a new TUI session for /new before the model', async 
   assert.equal(response.usage.totalTokens, 0);
 });
 
+test('chat workflow allows connector /new events that arrive through HTTP-style payloads', async () => {
+  let initialized = false;
+
+  const response = await run({
+    env: createModelEnv(),
+    payload: {
+      connector: 'telegram',
+      text: '/new telegram notes',
+      actorId: 'telegram-user-new',
+      conversationId: 'telegram-chat-new',
+    },
+    init: async () => {
+      initialized = true;
+      throw new Error('init should not be called');
+    },
+  } as never);
+
+  assert.equal(initialized, false);
+  assert.equal(response.command?.name, 'new');
+  assert.equal(response.session?.surface, 'connector');
+  assert.equal(response.session?.created, true);
+  assert.match(response.session?.id ?? '', /^connector-/);
+  assert.equal(response.usage.totalTokens, 0);
+});
+
 test('chat workflow handles /compact by compacting the resolved session without prompting', async () => {
   let compacted = false;
   let prompted = false;

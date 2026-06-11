@@ -89,6 +89,92 @@ try {
     'direct chat workflow without secret',
   );
 
+  const webNewRunPointer = await expectJsonStatus(
+    `${baseUrl}/api/chat/events`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-secret': requestSecret,
+      },
+      body: JSON.stringify({
+        text: '/new',
+        actorId: 'built-http-web-user',
+        conversationId: `built-http-web-${Date.now().toString(36)}`,
+      }),
+    },
+    202,
+    'chat event web /new workflow with secret',
+    (body) => {
+      assertJson(typeof body.runId === 'string' && body.runId.length > 0, 'web /new workflow did not return a runId');
+    },
+  );
+  const webNewRun = await waitForRunEnd(webNewRunPointer.runId);
+  const webNewRunText = JSON.stringify(webNewRun);
+  assertJson(
+    webNewRunText.includes('/new is handled by the web client session controls') &&
+      webNewRunText.includes('"name":"new"'),
+    `web /new workflow run did not include the expected command result.\n${webNewRunText.slice(0, 1200)}`,
+  );
+
+  const tuiNewRunPointer = await expectJsonStatus(
+    `${baseUrl}/api/chat/events`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-secret': requestSecret,
+      },
+      body: JSON.stringify({
+        text: '/new built http notes',
+        connector: 'tui',
+        actorId: 'built-http-tui-user',
+        conversationId: `built-http-tui-${Date.now().toString(36)}`,
+      }),
+    },
+    202,
+    'chat event tui /new workflow with secret',
+    (body) => {
+      assertJson(typeof body.runId === 'string' && body.runId.length > 0, 'tui /new workflow did not return a runId');
+    },
+  );
+  const tuiNewRun = await waitForRunEnd(tuiNewRunPointer.runId);
+  const tuiNewRunText = JSON.stringify(tuiNewRun);
+  assertJson(
+    tuiNewRunText.includes('Started new session tui-') && tuiNewRunText.includes('"name":"new"'),
+    `tui /new workflow run did not include the expected command result.\n${tuiNewRunText.slice(0, 1200)}`,
+  );
+
+  const connectorNewRunPointer = await expectJsonStatus(
+    `${baseUrl}/api/chat/events`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-secret': requestSecret,
+      },
+      body: JSON.stringify({
+        text: '/new telegram notes',
+        connector: 'telegram',
+        actorId: 'built-http-telegram-user',
+        conversationId: `built-http-telegram-${Date.now().toString(36)}`,
+      }),
+    },
+    202,
+    'chat event connector /new workflow with secret',
+    (body) => {
+      assertJson(typeof body.runId === 'string' && body.runId.length > 0, 'connector /new workflow did not return a runId');
+    },
+  );
+  const connectorNewRun = await waitForRunEnd(connectorNewRunPointer.runId);
+  const connectorNewRunText = JSON.stringify(connectorNewRun);
+  assertJson(
+    connectorNewRunText.includes('Started new session connector-') &&
+      connectorNewRunText.includes('"name":"new"') &&
+      connectorNewRunText.includes('"surface":"connector"'),
+    `connector /new workflow run did not include the expected command result.\n${connectorNewRunText.slice(0, 1200)}`,
+  );
+
   const compactRunPointer = await expectJsonStatus(
     `${baseUrl}/api/chat/events`,
     {
@@ -277,7 +363,7 @@ async function waitForRunEnd(runId) {
         headers: { 'x-api-secret': requestSecret },
       },
       200,
-      'compact workflow run lookup',
+      'workflow run lookup',
       (body) => {
         assertJson(Array.isArray(body), 'workflow run lookup did not return an event stream array');
       },
@@ -290,5 +376,5 @@ async function waitForRunEnd(runId) {
     await delay(500);
   }
 
-  throw new Error(`Timed out waiting for compact workflow run_end.\n${JSON.stringify(latest).slice(0, 1200)}`);
+  throw new Error(`Timed out waiting for workflow run_end.\n${JSON.stringify(latest).slice(0, 1200)}`);
 }

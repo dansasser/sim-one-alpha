@@ -1,8 +1,8 @@
 import type { FlueContext, FlueSession, PromptResponse, WorkflowRouteHandler } from '@flue/runtime';
 import orchestratorAgent from '../agents/orchestrator.js';
 import {
+  isSessionCreationSlashCommand,
   isSupportedSlashCommand,
-  isWebDisabledSlashCommand,
   parseSlashCommand,
   type ParsedSlashCommand,
 } from '../commands/slash-commands.js';
@@ -23,6 +23,7 @@ import {
   type SessionBudgetReport,
 } from '../session/session-budget.js';
 import {
+  isGuiSessionManagedConnector,
   resolveChatSession,
   type ChatSessionResolution,
 } from '../session/session-routing.js';
@@ -97,7 +98,7 @@ export async function run({
     });
   }
 
-  if (slashCommand && event.connector === 'web-api' && isWebDisabledSlashCommand(slashCommand)) {
+  if (slashCommand && isGuiSessionManagedConnector(event.connector) && isSessionCreationSlashCommand(slashCommand)) {
     return createSlashCommandResponse({
       event,
       modelCard: selectedModelCard,
