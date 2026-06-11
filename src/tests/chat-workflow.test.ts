@@ -8,6 +8,7 @@ import {
   isRecoverableModelFailure,
   run,
 } from '../workflows/chat.js';
+import { goromboPersistenceRuntime } from '../db.js';
 
 test('chat workflow prompt requires minimal tool flow before answering', () => {
   const event = normalizeWebApiMessage({
@@ -211,6 +212,42 @@ test('chat workflow handles /compact by compacting the resolved session without 
   assert.equal(response.session?.id, sessionName);
   assert.equal(response.session?.created, true);
   assert.equal(response.usage.totalTokens, 0);
+});
+
+test('chat workflow rejects explicit sessions owned by another actor before opening the harness session', async () => {
+  let initialized = false;
+  const sessionName = `ownership-test-session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  goromboPersistenceRuntime.sessionDatabase.ensureChatSession({
+    sessionId: sessionName,
+    origin: 'tui',
+    actorId: 'owner-user',
+    conversationId: 'owner-chat',
+    title: 'Owner session',
+  });
+
+  const response = await run({
+    env: createModelEnv(),
+    payload: {
+      connector: 'tui',
+      text: 'resume this',
+      actorId: 'other-user',
+      conversationId: 'other-chat',
+      session: sessionName,
+    },
+    init: async () => {
+      initialized = true;
+      throw new Error('init should not be called for denied sessions');
+    },
+  } as never);
+
+  const storedSession = goromboPersistenceRuntime.sessionDatabase.getChatSession(sessionName);
+  assert.equal(initialized, false);
+  assert.equal(response.text, `Session ${sessionName} is not available for this actor or conversation.`);
+  assert.equal(response.session, undefined);
+  assert.equal(response.usage.totalTokens, 0);
+  assert.equal(storedSession?.actorId, 'owner-user');
+  assert.equal(storedSession?.conversationId, 'owner-chat');
 });
 
 test('chat workflow does not retry backup for context budget model errors', async () => {

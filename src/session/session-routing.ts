@@ -4,6 +4,13 @@ import type { ChatSessionRecord } from './session-database.js';
 
 export type ChatSurface = 'web' | 'tui' | 'connector';
 
+export class SessionAccessDeniedError extends Error {
+  constructor(readonly sessionId: string) {
+    super(`Session ${sessionId} is not available for this actor or conversation.`);
+    this.name = 'SessionAccessDeniedError';
+  }
+}
+
 export interface ResolveChatSessionInput {
   event: NormalizedMessageEvent;
   requestedSessionId?: string;
@@ -35,6 +42,9 @@ export function resolveChatSession(input: ResolveChatSessionInput): ChatSessionR
 
   if (sessionId && !input.forceNew) {
     const existingSession = goromboPersistenceRuntime.sessionDatabase.getChatSession(sessionId);
+    if (existingSession) {
+      assertSessionBelongsToEvent(existingSession, input.event);
+    }
     const session = goromboPersistenceRuntime.sessionDatabase.ensureChatSession({
       sessionId,
       origin: surface,
@@ -101,6 +111,30 @@ function surfaceForEvent(event: NormalizedMessageEvent): ChatSurface {
 }
 
 function cleanSessionId(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+function assertSessionBelongsToEvent(session: ChatSessionRecord, event: NormalizedMessageEvent): void {
+  const storedActorId = cleanScopeValue(session.actorId);
+  const storedConversationId = cleanScopeValue(session.conversationId);
+  const eventActorId = cleanScopeValue(event.actor.id);
+  const eventConversationId = cleanScopeValue(event.conversation.id);
+
+  if (!storedActorId && !storedConversationId) {
+    throw new SessionAccessDeniedError(session.sessionId);
+  }
+
+  if (storedActorId && storedActorId !== eventActorId) {
+    throw new SessionAccessDeniedError(session.sessionId);
+  }
+
+  if (storedConversationId && storedConversationId !== eventConversationId) {
+    throw new SessionAccessDeniedError(session.sessionId);
+  }
+}
+
+function cleanScopeValue(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed || undefined;
 }

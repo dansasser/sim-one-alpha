@@ -25,6 +25,7 @@ import {
 import {
   isGuiSessionManagedConnector,
   resolveChatSession,
+  SessionAccessDeniedError,
   type ChatSessionResolution,
 } from '../session/session-routing.js';
 import { rememberProtocolLookupEvent } from '../tools/protocol-tool.js';
@@ -107,12 +108,24 @@ export async function run({
     });
   }
 
-  const sessionResolution = resolveChatSession({
-    event,
-    requestedSessionId: payload.session,
-    forceNew: slashCommand?.name === 'new',
-    title: slashCommand?.name === 'new' && slashCommand.args ? slashCommand.args : undefined,
-  });
+  let sessionResolution: ChatSessionResolution;
+  try {
+    sessionResolution = resolveChatSession({
+      event,
+      requestedSessionId: payload.session,
+      forceNew: slashCommand?.name === 'new',
+      title: slashCommand?.name === 'new' && slashCommand.args ? slashCommand.args : undefined,
+    });
+  } catch (error) {
+    if (error instanceof SessionAccessDeniedError) {
+      return createSessionAccessDeniedResponse({
+        event,
+        modelCard: selectedModelCard,
+        error,
+      });
+    }
+    throw error;
+  }
   const sessionId = sessionResolution.sessionId;
 
   if (slashCommand?.name === 'new') {
@@ -371,6 +384,22 @@ function createSlashCommandResponse(input: {
           },
         }
       : {}),
+  };
+}
+
+function createSessionAccessDeniedResponse(input: {
+  event: ReturnType<typeof normalizeWebApiMessage>;
+  modelCard: AgentModelCard;
+  error: SessionAccessDeniedError;
+}): ChatWorkflowResponse {
+  return {
+    text: input.error.message,
+    model: {
+      provider: input.modelCard.providerId,
+      id: input.modelCard.modelId,
+    },
+    usage: emptyPromptUsage(),
+    event: input.event,
   };
 }
 

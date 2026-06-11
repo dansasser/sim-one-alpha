@@ -144,6 +144,37 @@ try {
     tuiNewRunText.includes('Started new session tui-') && tuiNewRunText.includes('"name":"new"'),
     `tui /new workflow run did not include the expected command result.\n${tuiNewRunText.slice(0, 1200)}`,
   );
+  const tuiSessionId = tuiNewRunText.match(/Started new session (tui-[A-Za-z0-9-]+)/)?.[1];
+  assertJson(typeof tuiSessionId === 'string', `Could not extract TUI session id from /new run.\n${tuiNewRunText.slice(0, 1200)}`);
+
+  const deniedResumeRunPointer = await expectJsonStatus(
+    `${baseUrl}/api/chat/events`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-secret': requestSecret,
+      },
+      body: JSON.stringify({
+        text: 'try to resume another user session',
+        connector: 'tui',
+        actorId: 'built-http-tui-other-user',
+        conversationId: `built-http-tui-other-${Date.now().toString(36)}`,
+        session: tuiSessionId,
+      }),
+    },
+    202,
+    'chat event denied explicit session resume workflow with secret',
+    (body) => {
+      assertJson(typeof body.runId === 'string' && body.runId.length > 0, 'denied resume workflow did not return a runId');
+    },
+  );
+  const deniedResumeRun = await waitForRunEnd(deniedResumeRunPointer.runId);
+  const deniedResumeRunText = JSON.stringify(deniedResumeRun);
+  assertJson(
+    deniedResumeRunText.includes(`Session ${tuiSessionId} is not available for this actor or conversation.`),
+    `denied explicit session resume did not include the expected refusal.\n${deniedResumeRunText.slice(0, 1200)}`,
+  );
 
   const spoofedConnectorNewRunPointer = await expectJsonStatus(
     `${baseUrl}/api/chat/events`,
