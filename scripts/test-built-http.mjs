@@ -394,11 +394,11 @@ async function waitForRunEnd(runId) {
       200,
       'workflow run lookup',
       (body) => {
-        assertJson(Array.isArray(body), 'workflow run lookup did not return an event stream array');
+        assertJson(isRunLookupBody(body), 'workflow run lookup did not return an event stream array or run status object');
       },
     );
 
-    if (latest.some((event) => event && event.type === 'run_end')) {
+    if (readRunCompletion(latest)) {
       return latest;
     }
 
@@ -408,16 +408,52 @@ async function waitForRunEnd(runId) {
   throw new Error(`Timed out waiting for workflow run_end.\n${JSON.stringify(latest).slice(0, 1200)}`);
 }
 
+function isRunLookupBody(body) {
+  return Array.isArray(body) || (body && typeof body === 'object' && typeof body.status === 'string');
+}
+
+function readRunCompletion(run) {
+  if (Array.isArray(run)) {
+    return run.find((event) => event && event.type === 'run_end');
+  }
+
+  if (run && (run.status === 'completed' || run.status === 'failed')) {
+    return run;
+  }
+
+  return undefined;
+}
+
 async function stopChild(childProcess) {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
     return;
   }
 
-  await new Promise((resolve) => {
-    childProcess.once('exit', resolve);
-    childProcess.kill('SIGTERM');
-    if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
-      resolve();
-    }
+  childProcess.kill('SIGTERM');
+  if (await waitForChildExit(childProcess, 3_000)) {
+    return;
+  }
+
+  childProcess.kill('SIGKILL');
+  if (!(await waitForChildExit(childProcess, 5_000))) {
+    throw new Error('Built HTTP child process did not exit after SIGKILL.');
+  }
+}
+
+function waitForChildExit(childProcess, timeoutMs) {
+  if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
+    return Promise.resolve(true);
+  }
+
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      childProcess.off('exit', onExit);
+      resolve(false);
+    }, timeoutMs);
+    const onExit = () => {
+      clearTimeout(timeout);
+      resolve(true);
+    };
+    childProcess.once('exit', onExit);
   });
 }

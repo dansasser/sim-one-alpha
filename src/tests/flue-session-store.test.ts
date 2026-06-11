@@ -214,6 +214,31 @@ test('GOROMBO persistence wrapper restores the previous logical session when the
   }
 });
 
+test('GOROMBO persistence wrapper keeps the latest logical session when an older exact snapshot is deleted', async () => {
+  const runtime = createTestPersistenceRuntime();
+
+  try {
+    const firstRunKey = createFlueSessionStorageKey('workflow-run-1', 'gorombo-orchestrator', 'support');
+    const secondRunKey = createFlueSessionStorageKey('workflow-run-2', 'gorombo-orchestrator', 'support');
+    const firstData = createStoredSessionData('first support snapshot', '2026-06-07T00:00:00.000Z');
+    const secondData = createStoredSessionData('second support snapshot', '2026-06-07T00:01:00.000Z');
+
+    await runtime.adapter.migrate?.();
+    const store = runtime.adapter.connect().sessions;
+    await store.save(firstRunKey, firstData);
+    await store.save(secondRunKey, secondData);
+
+    await store.delete(firstRunKey);
+
+    assert.equal(runtime.sessionDatabase.getLatestStorageKey('gorombo-orchestrator', 'support'), secondRunKey);
+    assert.deepEqual(await runtime.getLatestSessionData('gorombo-orchestrator', 'support'), secondData);
+    assert.deepEqual(await store.load(secondRunKey), secondData);
+  } finally {
+    await runtime.adapter.close?.();
+    runtime.cleanup();
+  }
+});
+
 test('orchestrator uses Flue db.ts persistence instead of per-agent persist', async () => {
   const config = await orchestratorAgent.initialize({
     id: 'workflow-run-1',

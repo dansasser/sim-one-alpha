@@ -194,11 +194,31 @@ async function stopChild(childProcess) {
     return;
   }
 
-  await new Promise((resolve) => {
-    childProcess.once('exit', resolve);
-    childProcess.kill('SIGTERM');
-    if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
-      resolve();
-    }
+  childProcess.kill('SIGTERM');
+  if (await waitForChildExit(childProcess, 3_000)) {
+    return;
+  }
+
+  childProcess.kill('SIGKILL');
+  if (!(await waitForChildExit(childProcess, 5_000))) {
+    throw new Error('HTTP smoke child process did not exit after SIGKILL.');
+  }
+}
+
+function waitForChildExit(childProcess, timeoutMs) {
+  if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
+    return Promise.resolve(true);
+  }
+
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      childProcess.off('exit', onExit);
+      resolve(false);
+    }, timeoutMs);
+    const onExit = () => {
+      clearTimeout(timeout);
+      resolve(true);
+    };
+    childProcess.once('exit', onExit);
   });
 }

@@ -30,6 +30,7 @@ export function createGoromboPersistenceRuntime(config: GoromboConfig): GoromboP
   const adapter: PersistenceAdapter = {
     async migrate() {
       await flueAdapter.migrate?.();
+      sessionDatabase.migrate();
     },
     connect() {
       const executionStore = flueAdapter.connect();
@@ -106,10 +107,15 @@ class GoromboLogicalSessionStore implements SessionStore {
       return;
     }
 
-    const latestStorageKey = this.sessionDatabase.getLatestStorageKey(parts.harnessName, parts.sessionName);
+    const exact = await this.flueSessions.load(id);
     await this.flueSessions.delete(id);
     this.sessionDatabase.deleteFlueSession(id);
 
+    if (exact) {
+      return;
+    }
+
+    const latestStorageKey = this.sessionDatabase.getLatestStorageKey(parts.harnessName, parts.sessionName);
     if (latestStorageKey && latestStorageKey !== id) {
       await this.flueSessions.delete(latestStorageKey);
       this.sessionDatabase.deleteFlueSession(latestStorageKey);

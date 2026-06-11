@@ -4,9 +4,12 @@ import { listChatSessions } from '../session/session-routing.js';
 
 export function registerChatEventRoutes(app: Hono): void {
   app.get('/api/chat/sessions', requireApiSecret, (c) => {
-    const limit = Number(c.req.query('limit') ?? '50');
+    const parsedLimit = Number.parseInt(c.req.query('limit') ?? '', 10);
+    const limit = Number.isInteger(parsedLimit)
+      ? Math.min(100, Math.max(1, parsedLimit))
+      : 50;
     return c.json({
-      sessions: listChatSessions(Number.isFinite(limit) ? limit : 50),
+      sessions: listChatSessions(limit),
     });
   });
 

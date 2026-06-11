@@ -28,6 +28,7 @@ import {
   SessionAccessDeniedError,
   type ChatSessionResolution,
 } from '../session/session-routing.js';
+import { rememberMemoryLookupEvent } from '../tools/memory-tool.js';
 import { rememberProtocolLookupEvent } from '../tools/protocol-tool.js';
 
 export const route: WorkflowRouteHandler = async (c, next) => requireApiSecret(c, next);
@@ -85,6 +86,7 @@ export async function run({
 }: FlueContext<ChatWorkflowPayload>): Promise<ChatWorkflowResponse> {
   const event = normalizeWebApiMessage(payload);
   rememberProtocolLookupEvent(event);
+  rememberMemoryLookupEvent(event);
   const runtimeModels = configureRuntimeModels(env);
   const selectedModelCard = runtimeModels.selectedModelCard;
   const backupModelCard = runtimeModels.backupModelCard;
@@ -281,7 +283,7 @@ Before you answer:
 1. Use the load_protocols tool for this event with eventId: "${event.id}". Do not pass or invent clientId, projectId, raw payloads, or other hidden identifiers.
 2. Do not perform web search directly and do not call web-capable retrieval tools from the orchestrator.
 3. Use the Flue task tool with agent: "researcher" for any current, external, web, source-backed, or research task. The researcher owns web_research and decides how many searches or fetches are needed.
-4. Use retrieve_memory when stored conversation or project memory would help.
+4. Use retrieve_memory with eventId: "${event.id}" when stored conversation or project memory would help. Do not pass or invent actorId or conversationId.
 5. If research metadata reports providerFailures, say that plainly when it affects confidence and continue with the best available context.
 6. If a specific provider is still a placeholder, say that plainly and continue with the best available answer.
 

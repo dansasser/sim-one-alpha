@@ -4,14 +4,19 @@ import process from 'node:process';
 
 const args = process.argv.slice(2);
 const resumeIndex = args.indexOf('--resume');
-const resumeSession =
-  resumeIndex >= 0 && typeof args[resumeIndex + 1] === 'string'
-    ? args[resumeIndex + 1]
-    : process.env.GOROMBO_CHAT_SESSION;
-const textArgs =
-  resumeIndex >= 0
-    ? args.filter((_, index) => index !== resumeIndex && index !== resumeIndex + 1)
-    : args;
+let resumeSession = process.env.GOROMBO_CHAT_SESSION;
+let textArgs = args;
+
+if (resumeIndex >= 0) {
+  const candidate = args[resumeIndex + 1];
+  if (typeof candidate !== 'string' || candidate.startsWith('-')) {
+    console.error('Missing session id after --resume. Usage: npm run chat:local -- --resume <session-id> <message>');
+    process.exit(1);
+  }
+
+  resumeSession = candidate;
+  textArgs = args.filter((_, index) => index !== resumeIndex && index !== resumeIndex + 1);
+}
 const text = textArgs.join(' ').trim() || 'Hello';
 const payload = JSON.stringify({
   connector: 'tui',

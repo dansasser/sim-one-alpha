@@ -513,7 +513,25 @@ x-api-secret: <API_SECRET>
 
 Flue workflow HTTP invocation is asynchronous. A successful chat event returns `202` with a `runId`; clients then read `/runs/:runId` with the same secret header to retrieve the completed result.
 
-The `chat` workflow initializes the `orchestrator` Flue agent, loads `.env` through the Flue CLI for secrets, loads the shipped `gorombo.config.json` runtime file for deployment/runtime choices, resolves the product session, handles pre-LLM slash commands, and prompts the configured primary model with the normalized message event. `models.primary` and `models.backup` are project model card keys. Raw Flue specifiers and `GOROMBO_MODEL` env selection are rejected. The default primary card is `minimax-m3-cloud`, which resolves through its card to `ollama-cloud/minimax-m3` and calls Ollama Cloud through `https://ollama.com/v1`. If the primary prompt fails with a recoverable model/provider error, the workflow checks the backup card budget and retries the same session with `models.backup`. Model cards live inside each provider directory under `src/models/providers/<provider>/cards`; the catalog in `src/models/catalog.ts` aggregates them for model selection and budget lookup. The agent currently has tool flow wired for protocol loading, session-memory retrieval, and RAG/context retrieval. The protocol and document-index providers remain typed placeholders; web search is live through Ollama Search when an Ollama API key is configured.
+The `chat` workflow:
+
+- Initializes the `orchestrator` Flue agent.
+- Loads `.env` through the Flue CLI for secrets.
+- Loads the shipped `gorombo.config.json` runtime file for deployment/runtime choices.
+- Resolves the product session.
+- Handles pre-LLM slash commands.
+- Prompts the configured primary model with the normalized message event.
+
+Model selection rules:
+
+- `models.primary` and `models.backup` are project model card keys.
+- Raw Flue specifiers and `GOROMBO_MODEL` env selection are rejected.
+- The default primary card is `minimax-m3-cloud`, which resolves through its card to `ollama-cloud/minimax-m3` and calls Ollama Cloud through `https://ollama.com/v1`.
+- If the primary prompt fails with a recoverable model/provider error, the workflow checks the backup card budget and retries the same session with `models.backup`.
+- Model cards live inside each provider directory under `src/models/providers/<provider>/cards`.
+- The catalog in `src/models/catalog.ts` aggregates cards for model selection and budget lookup.
+
+The agent currently has tool flow wired for protocol loading, session-memory retrieval, and RAG/context retrieval. The protocol and document-index providers remain typed placeholders; web search is live through Ollama Search when an Ollama API key is configured.
 
 ## Model Cards
 

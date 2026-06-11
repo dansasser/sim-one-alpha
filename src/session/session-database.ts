@@ -222,6 +222,11 @@ export class GoromboSessionDatabase {
     return row ? toChatSessionRecord(row) : null;
   }
 
+  deleteChatSession(sessionId: string): void {
+    this.database.prepare(`DELETE FROM active_sessions WHERE session_id = ?`).run(sessionId);
+    this.database.prepare(`DELETE FROM chat_sessions WHERE session_id = ?`).run(sessionId);
+  }
+
   listChatSessions(limit = 50): ChatSessionRecord[] {
     const rows = this.database
       .prepare(
@@ -318,7 +323,7 @@ export class GoromboSessionDatabase {
     return rows.map(toSessionMemoryRecord);
   }
 
-  private migrate(): void {
+  migrate(): void {
     this.database.exec(`
       CREATE TABLE IF NOT EXISTS flue_session_index (
         storage_key TEXT PRIMARY KEY,
