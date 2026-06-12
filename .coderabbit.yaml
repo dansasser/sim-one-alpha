@@ -1,0 +1,165 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+tone_instructions: "Be direct and engineering-focused. Lead with bugs, security risks, regressions, and missing tests; avoid praise, poems, and generic style comments."
+early_access: false
+enable_free_tier: true
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  high_level_summary_in_walkthrough: true
+  review_status: true
+  review_details: true
+  commit_status: true
+  fail_commit_status: true
+  collapse_walkthrough: true
+  changed_files_summary: true
+  sequence_diagrams: false
+  estimate_code_review_effort: true
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: true
+  suggested_labels: true
+  auto_apply_labels: false
+  suggested_reviewers: false
+  auto_assign_reviewers: false
+  in_progress_fortune: false
+  poem: false
+  enable_prompt_for_ai_agents: true
+
+  path_filters:
+    - "!dist/**"
+    - "!.tmp/**"
+    - "!coverage/**"
+    - "!node_modules/**"
+    - "!.gorombo/db/*.sqlite"
+    - "!.gorombo/db/*.sqlite-*"
+    - "!.gorombo/db/*.db"
+    - "!.gorombo/db/*.db-*"
+
+  path_instructions:
+    - path: "src/app.ts"
+      instructions: |
+        Enforce the local Flue app shell contract. Flag orchestration logic, direct RAG/web-search wiring, provider credential handling, old non-Flue orchestrator paths, or inline auth that should live in imported route or middleware modules.
+
+    - path: "src/agents/**"
+      instructions: |
+        Agents must be Flue createAgent(...) entrypoints. Check that model selection goes through project model cards, not raw env vars or hardcoded provider specifiers. The orchestrator should coordinate protocols, memory lookup, subagent delegation, and final synthesis; flag substantive domain work or direct web research here.
+
+    - path: "src/workers/researcher/**"
+      instructions: |
+        The researcher owns web/current/source-backed research. Check query planning, cache use, evidence packing, provider failure reporting, and bounded search/fetch budgets. Flag changes that bypass the researcher by giving the orchestrator direct web-search capability.
+
+    - path: "src/workflows/**"
+      instructions: |
+        Workflows should be finite Flue operations that normalize input, initialize agents, open sessions, call tasks/skills, manage bounded loops, and return structured results. Check that public workflow routes use required auth and that web-search workflows remain researcher-owned.
+
+    - path: "src/tools/**"
+      instructions: |
+        Tools are executable model-callable capabilities and must only be attached to owning agents. For orchestrator tools, focus on safe orchestration helpers such as protocol loading and scoped memory lookup. Flag model-controlled identifiers that should come from trusted runtime/session context.
+
+    - path: "src/models/**"
+      instructions: |
+        Model cards are the only intended model selection surface. Cards may contain provider ids, model ids, specifiers, capabilities, context limits, output limits, and environment variable names, but no secrets. Provider runtime should resolve card-declared env names and register Flue providers.
+
+    - path: "src/session/**"
+      instructions: |
+        Treat session memory and Flue persistence as privacy-sensitive. Check actor/conversation/session scoping, resume authorization, latest logical-session handling, compaction budget accounting, and cleanup behavior. Flag cross-session or cross-actor memory leaks and destructive snapshot deletion.
+
+    - path: "src/routes/**"
+      instructions: |
+        Routes should remain app-owned ingress and inspection modules. Check auth, request validation, sanitized telemetry, safe forwarding into Flue workflows, and bounded API parameters. Flag any old/non-Flue orchestrator bypass.
+
+    - path: "src/middleware/**"
+      instructions: |
+        Middleware should fail closed for protected routes. Check that API-secret handling does not overwrite unrelated provider secrets and that auth decisions are centralized rather than duplicated inline.
+
+    - path: "src/connectors/**"
+      instructions: |
+        Connectors normalize external messages into internal events and must not orchestrate. Treat public connector fields as untrusted unless derived server-side. Flag spoofable connector/surface behavior and raw payload leakage into prompts.
+
+    - path: "src/config/**"
+      instructions: |
+        Runtime config chooses product behavior such as model card keys and storage paths. Secrets must stay in environment variables. Flag raw provider specifiers, model choice env vars, invalid path fallback, or build-time-only config that prevents runtime restart changes.
+
+    - path: "src/tests/**"
+      instructions: |
+        Tests should cover the real behavior being changed, not only smoke checks. Watch for shared persistent state leaks, missing cleanup in finally blocks, lack of built HTTP verification for route changes, and missing regression tests for session, memory, auth, or research boundaries.
+
+    - path: "docs/**"
+      instructions: |
+        Documentation should preserve the Flue/Gorombo architecture vocabulary and current directory map. Flag docs that confuse protocols, tools, skills, workflows, workers/subagents, registries, model cards, or session memory.
+
+    - path: "README.md"
+      instructions: |
+        README changes should stay consistent with runtime behavior, model-card selection, build output, HTTP routes, required secrets, and verification commands. Flag stale examples after source or config changes.
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    auto_pause_after_reviewed_commits: 0
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT REVIEW"
+    drafts: false
+
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+    title:
+      mode: "warning"
+      requirements: "Use a concise title that describes the user-visible or architecture-facing change."
+    description:
+      mode: "warning"
+    custom_checks:
+      - name: "Flue architecture boundary"
+        mode: "warning"
+        instructions: |
+          Pass when changes preserve the local Flue architecture contract: src/app.ts stays a shell, agents use createAgent and model cards, workflows remain finite, tools are attached only to owning agents, and the orchestrator delegates source-backed web research to the researcher.
+      - name: "Session memory privacy"
+        mode: "warning"
+        instructions: |
+          Pass when session, memory, telemetry, and route changes prevent cross-actor or cross-conversation data exposure, avoid raw payload leakage, and validate explicit session resume against trusted actor/conversation context.
+
+  tools:
+    github-checks:
+      enabled: true
+      timeout_ms: 180000
+    gitleaks:
+      enabled: true
+    trufflehog:
+      enabled: true
+    markdownlint:
+      enabled: true
+    eslint:
+      enabled: true
+
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: true
+    simplify:
+      enabled: false
+
+chat:
+  auto_reply: true
+  art: false
+
+knowledge_base:
+  web_search:
+    enabled: true
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "agents.md"
+      - "docs/architecture/*.md"
+      - "docs/architecture/**/*.md"
+      - "README.md"
+  learnings:
+    scope: "local"
+  pull_requests:
+    scope: "local"
+  issues:
+    scope: "local"
