@@ -10,7 +10,11 @@ import {
   defaultSessionDatabasePath,
   GoromboSessionDatabase,
 } from './session-database.js';
-import { parseFlueSessionStorageKey } from './flue-session-store.js';
+import { directAgentHarnessName, directAgentSessionName } from './direct-agent-session.js';
+import {
+  parseFlueSessionStorageKey,
+  type FlueSessionStorageParts,
+} from './flue-session-store.js';
 
 export const defaultFlueDatabasePath = '.gorombo/db/flue.sqlite';
 
@@ -18,6 +22,11 @@ export interface GoromboPersistenceRuntime {
   adapter: PersistenceAdapter;
   sessionDatabase: GoromboSessionDatabase;
   getLatestSessionData(harnessName: string, sessionName: string): Promise<SessionData | null>;
+  getLatestSessionDataForInstance(
+    instanceId: string,
+    harnessName: string,
+    sessionName: string,
+  ): Promise<SessionData | null>;
 }
 
 export function createGoromboPersistenceRuntime(config: GoromboConfig): GoromboPersistenceRuntime {
@@ -67,6 +76,15 @@ export function createGoromboPersistenceRuntime(config: GoromboConfig): GoromboP
       const sessions = latestExecutionStore?.sessions ?? adapter.connect().sessions;
       return sessions.load(storageKey);
     },
+    async getLatestSessionDataForInstance(instanceId, harnessName, sessionName) {
+      const storageKey = sessionDatabase.getLatestStorageKeyForInstance(instanceId, harnessName, sessionName);
+      if (!storageKey) {
+        return null;
+      }
+
+      const sessions = latestExecutionStore?.sessions ?? adapter.connect().sessions;
+      return sessions.load(storageKey);
+    },
   };
 }
 
@@ -89,6 +107,19 @@ class GoromboLogicalSessionStore implements SessionStore {
 
     const parts = parseFlueSessionStorageKey(id);
     if (!parts) {
+      return null;
+    }
+
+    const latestInstanceStorageKey = this.sessionDatabase.getLatestStorageKeyForInstance(
+      parts.instanceId,
+      parts.harnessName,
+      parts.sessionName,
+    );
+    if (latestInstanceStorageKey && latestInstanceStorageKey !== id) {
+      return this.flueSessions.load(latestInstanceStorageKey);
+    }
+
+    if (isDirectAgentStorageKey(parts)) {
       return null;
     }
 
@@ -115,10 +146,29 @@ class GoromboLogicalSessionStore implements SessionStore {
       return;
     }
 
+    const latestInstanceStorageKey = this.sessionDatabase.getLatestStorageKeyForInstance(
+      parts.instanceId,
+      parts.harnessName,
+      parts.sessionName,
+    );
+    if (latestInstanceStorageKey && latestInstanceStorageKey !== id) {
+      await this.flueSessions.delete(latestInstanceStorageKey);
+      this.sessionDatabase.deleteFlueSession(latestInstanceStorageKey);
+      return;
+    }
+
+    if (isDirectAgentStorageKey(parts)) {
+      return;
+    }
+
     const latestStorageKey = this.sessionDatabase.getLatestStorageKey(parts.harnessName, parts.sessionName);
     if (latestStorageKey && latestStorageKey !== id) {
       await this.flueSessions.delete(latestStorageKey);
       this.sessionDatabase.deleteFlueSession(latestStorageKey);
     }
   }
+}
+
+function isDirectAgentStorageKey(parts: FlueSessionStorageParts): boolean {
+  return parts.harnessName === directAgentHarnessName && parts.sessionName === directAgentSessionName;
 }

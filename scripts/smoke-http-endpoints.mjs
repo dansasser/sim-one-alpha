@@ -42,19 +42,19 @@ try {
     'chat event ingress without secret',
   );
   await expectStatus(
-    `${baseUrl}/workflows/chat`,
+    `${baseUrl}/workflows/not-real`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ text: 'auth check' }),
     },
     401,
-    'direct chat workflow without secret',
+    'workflow route without secret',
   );
   await expectStatus(`${baseUrl}/runs/not-real`, { method: 'GET' }, 401, 'run inspection without secret');
 
   if (liveChat) {
-    const runPointer = await expectJsonStatus(
+    const agentResult = await expectJsonStatus(
       `${baseUrl}/api/chat/events`,
       {
         method: 'POST',
@@ -68,13 +68,12 @@ try {
           conversationId: 'http-smoke-thread',
         }),
       },
-      202,
+      200,
       'chat event ingress with secret',
     );
-    const run = await waitForRunResult(baseUrl, runPointer.runId, requestSecret);
-    const serialized = JSON.stringify(run);
-    if (!serialized.includes('endpoint-live-ok')) {
-      throw new Error(`live chat run completed without expected text.\n${serialized.slice(0, 1000)}`);
+    if (!agentResultContainsText(agentResult, 'endpoint-live-ok')) {
+      const serialized = JSON.stringify(agentResult);
+      throw new Error(`live chat agent response completed without expected text.\n${serialized.slice(0, 1000)}`);
     }
   }
 
@@ -146,47 +145,42 @@ async function expectJsonStatus(url, init, expectedStatus, label) {
   return JSON.parse(text);
 }
 
-async function waitForRunResult(baseUrl, runId, requestSecret) {
-  if (!runId || typeof runId !== 'string') {
-    throw new Error('Workflow response did not include a runId.');
-  }
-
-  const deadline = Date.now() + 120_000;
-  let latest;
-
-  while (Date.now() < deadline) {
-    const run = await expectJsonStatus(
-      `${baseUrl}/runs/${encodeURIComponent(runId)}`,
-      {
-        method: 'GET',
-        headers: { 'x-api-secret': requestSecret },
-      },
-      200,
-      'run inspection with secret',
-    );
-    latest = run;
-
-    const completion = readRunCompletion(run);
-    if (completion) {
-      return run;
+function agentResultContainsText(agentResult, expectedText) {
+  for (const candidate of readAgentResultTextCandidates(agentResult)) {
+    if (candidate.includes(expectedText)) {
+      return true;
     }
-
-    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
-  throw new Error(`Timed out waiting for workflow run result.\n${JSON.stringify(latest).slice(0, 1000)}`);
+  return false;
 }
 
-function readRunCompletion(run) {
-  if (Array.isArray(run)) {
-    return run.find((event) => event && event.type === 'run_end');
+function readAgentResultTextCandidates(agentResult) {
+  if (!agentResult || typeof agentResult !== 'object') {
+    return [];
   }
 
-  if (run && (run.status === 'completed' || run.status === 'failed')) {
-    return run;
+  const candidates = [
+    agentResult.result?.text,
+    agentResult.output,
+    agentResult.response,
+    agentResult.text,
+  ];
+
+  appendChoiceTextCandidates(candidates, agentResult.choices);
+  appendChoiceTextCandidates(candidates, agentResult.result?.choices);
+
+  return candidates.filter((candidate) => typeof candidate === 'string');
+}
+
+function appendChoiceTextCandidates(candidates, choices) {
+  if (!Array.isArray(choices)) {
+    return;
   }
 
-  return undefined;
+  for (const choice of choices) {
+    candidates.push(choice?.message?.content, choice?.text, choice?.delta?.content);
+  }
 }
 
 async function stopChild(childProcess) {

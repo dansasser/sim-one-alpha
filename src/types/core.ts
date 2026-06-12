@@ -81,6 +81,9 @@ export interface NormalizedMessageEvent {
     workflow?: string;
     task?: string;
   };
+  deliveryKind?: string;
+  deliveryId?: string;
+  acceptedAt?: string;
   raw?: unknown;
 }
 

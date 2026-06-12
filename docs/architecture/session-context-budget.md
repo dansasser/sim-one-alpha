@@ -31,7 +31,7 @@ Flue does not expose a public pre-prompt exact token count for application code 
 
 ## Implemented GOROMBO Layer
 
-The active runtime model card now drives context budgeting, backup failover, and compaction:
+The active runtime model card now drives context budgeting and compaction:
 
 - `src/models/catalog.ts` resolves a Flue model specifier to a project-owned model card from provider-owned card directories.
 - the shipped `gorombo.config.json` runtime file selects the primary model card and optional backup model card for the deployment.
@@ -39,33 +39,28 @@ The active runtime model card now drives context budgeting, backup failover, and
 - `src/session/compaction-policy.ts` converts token estimates into `normal`, `warn`, `compact`, or `stop`.
 - `src/db.ts` exports the Flue persistence adapter discovered by Flue at build time.
 - `src/session/session-persistence.ts` wraps Flue's built-in SQLite adapter through the public `PersistenceAdapter` contract.
-- `src/session/session-database.ts` stores GOROMBO session catalog, active-session routing, logical Flue session indexes, and extracted session-memory FTS records.
+- `src/session/session-database.ts` stores GOROMBO session catalog, active-session routing, logical Flue session indexes, durable direct-agent instance indexes, normalized event context, and extracted session-memory FTS records.
 - `src/session/flue-session-store.ts` contains Flue session-key helpers only.
 - `src/session/session-budget.ts` derives budget state from stored Flue `SessionData` and keeps an in-process fallback ledger for cases where session data is unavailable.
-- `src/workflows/chat.ts` evaluates the next prompt before calling `session.prompt(...)`.
+- `src/routes/chat-events.ts` owns HTTP chat ingress and opens durable direct-agent sessions for slash commands.
+- `src/routes/chat-events.ts` is the primary app-owned chat ingress. It persists normalized event context and prompts `/agents/orchestrator/:sessionId?wait=result` so normal chat enters Flue's durable agent submission lifecycle.
 - `src/agents/orchestrator.ts` passes card-derived Flue compaction settings to `createAgent(...)`; it does not pass persistence. Persistence belongs to `src/db.ts`.
 
-Flue remains the owner of canonical `SessionData`. The GOROMBO wrapper indexes latest data by logical harness/session name so the synchronous chat workflow can recover the latest `gorombo-orchestrator` conversation state even when a workflow invocation receives a new Flue run id.
+Flue remains the owner of canonical `SessionData`. The GOROMBO wrapper indexes latest data by logical harness/session name for workflows and by instance/harness/session identity for durable direct-agent sessions.
 
-The chat workflow sequence is:
+The durable chat ingress sequence is:
 
 ```text
 normalize message
 -> resolve product session and pre-LLM slash commands
--> initialize orchestrator using Flue db.ts persistence
--> load latest logical Flue SessionData
--> resolve primary and backup model cards from runtime config
--> estimate session history plus next prompt
--> warn, compact, or stop
--> call session.compact() when compaction is required
--> refuse the prompt when the hard input budget is still exceeded
--> session.prompt(..., primary model card)
--> retry same session with backup model card when the primary model/provider is recoverably unavailable
--> read updated Flue SessionData
--> return contextBudget telemetry
+-> persist normalized event context
+-> call the durable /agents/orchestrator/:sessionId route for normal prompts
+-> Flue admits the prompt into durable direct-agent submission storage
+-> store updated Flue SessionData through the persistence adapter
+-> index session memory chunks
 ```
 
-This keeps Flue's native automatic compaction enabled and adds a GOROMBO pre-send guard before the provider receives an oversized prompt.
+This keeps Flue's native automatic compaction enabled on the durable direct-agent path. Explicit `/compact` opens the same durable direct-agent session and calls `session.compact()` without sending the command text to the model.
 
 ## Persistence And Session Memory Boundary
 
@@ -78,7 +73,9 @@ Current behavior:
 - Stores workflow run metadata and run registry lookups in SQLite for the Flue run API.
 - Rebuilds protected telemetry summaries from persisted Flue run event streams when in-memory observer summaries are gone.
 - Parses Flue storage keys shaped as `agent-session:[instanceId,harnessName,sessionName]`.
-- Indexes the latest session by `harnessName + sessionName` so chat continuity can survive workflow run id changes.
+- Indexes the latest workflow session by `harnessName + sessionName` so finite workflow continuity can survive workflow run id changes.
+- Indexes durable direct-agent sessions by `instanceId + harnessName + sessionName` so separate orchestrator agent instances do not collapse into one logical `default/default` session.
+- Persists normalized message event context before durable agent admission so protocol and memory tools can recover trusted selectors after process restart.
 - Exposes `getLatestSessionData(harnessName, sessionName)` for budget derivation.
 - Extracts message, compaction, and branch-summary text into `session_memory_fts` for session-memory retrieval.
 
@@ -86,9 +83,11 @@ The SQLite implementation stores:
 
 - Flue-owned canonical runtime data in `.gorombo/db/flue.sqlite`
 - workflow run records, run registry records, and Flue event streams in `.gorombo/db/flue.sqlite`
-- GOROMBO chat session records in `.gorombo/db/sessions.sqlite`
+- AI employee chat session records in `.gorombo/db/sessions.sqlite`
 - active connector session pointers
 - logical Flue session indexes
+- direct Flue agent instance indexes
+- normalized message event context for protocol and memory lookup
 - session-memory FTS chunks extracted from Flue `SessionData`
 
 Session memory does not fork conversation truth into a separate transcript. It indexes text extracted from Flue `SessionData` and returns matching chunks through the memory tool. The future seven-layer GOROMBO memory stack remains separate from this session-memory layer.
@@ -118,21 +117,19 @@ The calculator enforces the provider-reported context window first, then the gua
 - `compact`: estimated input is at or above the compaction threshold and still inside the hard input budget.
 - `stop`: estimated input exceeds the hard input budget.
 
-Pre-prompt flow:
+Compaction flow:
 
 ```text
-pre-prompt estimate
--> warn/compact/stop decision
--> optional session.compact()
--> recompute estimate
--> stop if still too large
--> prompt
--> post-response usage telemetry
+durable direct-agent session
+-> native Flue threshold and overflow compaction during prompt work
+-> explicit /compact when the user or client requests compaction
+-> session.compact()
+-> persisted SessionData and session-memory index update
 ```
 
-Flue's own threshold and overflow compaction still run during and after the prompt. The GOROMBO layer exists to reduce provider rejections and to give RAG a real remaining-token budget before retrieved context is injected.
+Flue's own threshold and overflow compaction still run during and after the prompt. The GOROMBO layer keeps the budget data available so RAG can receive a real remaining-token budget before retrieved context is injected.
 
-Backup model failover is an availability path, not a way to bypass context budgeting. If the primary model fails with a recoverable provider/model availability error, the chat workflow checks the backup card's budget and retries with the backup specifier on the same Flue session. Context-length errors, aborts, and hard-stop budget failures do not trigger a backup retry.
+Backup model failover is an availability path, not a way to bypass context budgeting. Current durable chat execution uses the primary configured card; backup cards remain configured metadata for future fallback-capable paths.
 
 ## RAG Allocation Rule
 
@@ -162,6 +159,6 @@ The `researcher` subagent uses these controls through `web_research`. This keeps
 Slash commands are parsed before the LLM receives the prompt:
 
 - `/new` creates a new session for trusted connector-style and TUI entrypoints. It is disabled for GUI-managed web chat prompts because the web UI should switch visual session state through a client-side new-chat action. Generic Web API payloads must not be able to opt into connector-only behavior by spoofing a connector name.
-- `/compact` calls `session.compact()` for the resolved Flue session and returns command telemetry without sending `/compact` to the model.
+- `/compact` calls `session.compact()` for the resolved durable direct-agent Flue session and returns command telemetry without sending `/compact` to the model.
 
 Future commands can accept trailing instruction text through the same parser. Unsupported slash commands are handled by application code and are not sent to the LLM.

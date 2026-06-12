@@ -3,7 +3,9 @@ import { mkdirSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { SessionData } from '@flue/runtime/adapter';
+import type { NormalizedMessageEvent } from '../types/index.js';
 import { estimateTextTokens } from './context-budget.js';
+import { directAgentHarnessName, directAgentSessionName } from './direct-agent-session.js';
 import { parseFlueSessionStorageKey } from './flue-session-store.js';
 
 export const defaultSessionDatabasePath = '.gorombo/db/sessions.sqlite';
@@ -69,6 +71,14 @@ export interface SessionMemoryRecord {
   updatedAt: string;
 }
 
+export interface RecordNormalizedMessageEventInput {
+  event: NormalizedMessageEvent;
+  sessionId?: string;
+  deliveryKind?: string;
+  deliveryId?: string;
+  acceptedAt?: string;
+}
+
 export class GoromboSessionDatabase {
   private readonly database: DatabaseSync;
 
@@ -101,15 +111,29 @@ export class GoromboSessionDatabase {
 
     this.database
       .prepare(
-        `INSERT INTO flue_logical_sessions
-         (harness_name, session_name, latest_storage_key, updated_at)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(harness_name, session_name) DO UPDATE SET
+        `INSERT INTO flue_instance_sessions
+         (instance_id, harness_name, session_name, latest_storage_key, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(instance_id, harness_name, session_name) DO UPDATE SET
            latest_storage_key = excluded.latest_storage_key,
            updated_at = excluded.updated_at
-         WHERE excluded.updated_at >= flue_logical_sessions.updated_at`,
+         WHERE excluded.updated_at >= flue_instance_sessions.updated_at`,
       )
-      .run(parts.harnessName, parts.sessionName, storageKey, updatedAt);
+      .run(parts.instanceId, parts.harnessName, parts.sessionName, storageKey, updatedAt);
+
+    if (!this.isDirectAgentChatSession(parts.instanceId, parts.harnessName, parts.sessionName)) {
+      this.database
+        .prepare(
+          `INSERT INTO flue_logical_sessions
+           (harness_name, session_name, latest_storage_key, updated_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(harness_name, session_name) DO UPDATE SET
+             latest_storage_key = excluded.latest_storage_key,
+             updated_at = excluded.updated_at
+           WHERE excluded.updated_at >= flue_logical_sessions.updated_at`,
+        )
+        .run(parts.harnessName, parts.sessionName, storageKey, updatedAt);
+    }
 
     this.indexSessionMemory(storageKey, parts.harnessName, parts.sessionName, data);
   }
@@ -122,24 +146,39 @@ export class GoromboSessionDatabase {
 
     this.database.prepare(`DELETE FROM flue_session_index WHERE storage_key = ?`).run(storageKey);
     this.deleteSessionMemoryByStorageKey(storageKey);
+    this.deleteInstanceSessionIndex(parts.instanceId, parts.harnessName, parts.sessionName, storageKey);
 
-    const latest = this.getLatestStorageKey(parts.harnessName, parts.sessionName);
-    if (latest === storageKey) {
-      const replacement = this.getMostRecentIndexedStorageKey(parts.harnessName, parts.sessionName);
-      if (replacement) {
-        this.database
-          .prepare(
-            `UPDATE flue_logical_sessions
-             SET latest_storage_key = ?, updated_at = ?
-             WHERE harness_name = ? AND session_name = ?`,
-          )
-          .run(replacement.storageKey, replacement.updatedAt, parts.harnessName, parts.sessionName);
-      } else {
-        this.database
-          .prepare(`DELETE FROM flue_logical_sessions WHERE harness_name = ? AND session_name = ?`)
-          .run(parts.harnessName, parts.sessionName);
+    if (!this.isDirectAgentChatSession(parts.instanceId, parts.harnessName, parts.sessionName)) {
+      const latest = this.getLatestStorageKey(parts.harnessName, parts.sessionName);
+      if (latest === storageKey) {
+        const replacement = this.getMostRecentIndexedStorageKey(parts.harnessName, parts.sessionName);
+        if (replacement) {
+          this.database
+            .prepare(
+              `UPDATE flue_logical_sessions
+               SET latest_storage_key = ?, updated_at = ?
+               WHERE harness_name = ? AND session_name = ?`,
+            )
+            .run(replacement.storageKey, replacement.updatedAt, parts.harnessName, parts.sessionName);
+        } else {
+          this.database
+            .prepare(`DELETE FROM flue_logical_sessions WHERE harness_name = ? AND session_name = ?`)
+            .run(parts.harnessName, parts.sessionName);
+        }
       }
     }
+  }
+
+  getLatestStorageKeyForInstance(instanceId: string, harnessName: string, sessionName: string): string | null {
+    const row = this.database
+      .prepare(
+        `SELECT latest_storage_key
+         FROM flue_instance_sessions
+         WHERE instance_id = ? AND harness_name = ? AND session_name = ?`,
+      )
+      .get(instanceId, harnessName, sessionName) as LatestSessionRow | undefined;
+
+    return typeof row?.latest_storage_key === 'string' ? row.latest_storage_key : null;
   }
 
   getLatestStorageKey(harnessName: string, sessionName: string): string | null {
@@ -251,6 +290,73 @@ export class GoromboSessionDatabase {
       .run(new Date().toISOString(), title ?? null, sessionId);
   }
 
+  recordNormalizedMessageEvent(input: RecordNormalizedMessageEventInput): void {
+    const now = new Date().toISOString();
+    const event = input.event;
+
+    this.database
+      .prepare(
+        `INSERT INTO normalized_message_events
+         (event_id, session_id, connector, message_kind, text, received_at, actor_id, actor_display_name, conversation_id, thread_id, client_id, project_id, workflow, task, delivery_kind, delivery_id, accepted_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(event_id) DO UPDATE SET
+           session_id = COALESCE(excluded.session_id, normalized_message_events.session_id),
+           connector = excluded.connector,
+           message_kind = excluded.message_kind,
+           text = excluded.text,
+           received_at = excluded.received_at,
+           actor_id = excluded.actor_id,
+           actor_display_name = excluded.actor_display_name,
+           conversation_id = excluded.conversation_id,
+           thread_id = excluded.thread_id,
+           client_id = excluded.client_id,
+           project_id = excluded.project_id,
+           workflow = excluded.workflow,
+           task = excluded.task,
+           delivery_kind = COALESCE(excluded.delivery_kind, normalized_message_events.delivery_kind),
+           delivery_id = COALESCE(excluded.delivery_id, normalized_message_events.delivery_id),
+           accepted_at = COALESCE(excluded.accepted_at, normalized_message_events.accepted_at),
+           updated_at = excluded.updated_at`,
+      )
+      .run(
+        event.id,
+        input.sessionId ?? null,
+        event.connector,
+        event.kind,
+        event.text,
+        event.receivedAt,
+        event.actor.id,
+        event.actor.displayName ?? null,
+        event.conversation.id,
+        event.conversation.threadId ?? null,
+        event.context?.clientId ?? null,
+        event.context?.projectId ?? null,
+        event.context?.workflow ?? null,
+        event.context?.task ?? null,
+        input.deliveryKind ?? null,
+        input.deliveryId ?? null,
+        input.acceptedAt ?? null,
+        now,
+        now,
+      );
+  }
+
+  getNormalizedMessageEvent(eventId: string): NormalizedMessageEvent | null {
+    const row = this.database
+      .prepare(
+        `SELECT event_id, connector, message_kind, text, received_at, actor_id, actor_display_name, conversation_id, thread_id, client_id, project_id, workflow, task, delivery_kind, delivery_id, accepted_at
+         FROM normalized_message_events
+         WHERE event_id = ?`,
+      )
+      .get(eventId) as NormalizedMessageEventRow | undefined;
+
+    return row ? toNormalizedMessageEvent(row) : null;
+  }
+
+  deleteNormalizedMessageEvent(eventId: string): void {
+    this.database.prepare(`DELETE FROM normalized_message_events WHERE event_id = ?`).run(eventId);
+  }
+
   getActiveSession(input: ActiveSessionLookup): string | null {
     const row = this.database
       .prepare(
@@ -345,6 +451,18 @@ export class GoromboSessionDatabase {
         PRIMARY KEY (harness_name, session_name)
       );
 
+      CREATE TABLE IF NOT EXISTS flue_instance_sessions (
+        instance_id TEXT NOT NULL,
+        harness_name TEXT NOT NULL,
+        session_name TEXT NOT NULL,
+        latest_storage_key TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (instance_id, harness_name, session_name)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_flue_instance_sessions_updated
+        ON flue_instance_sessions(instance_id, updated_at);
+
       CREATE TABLE IF NOT EXISTS chat_sessions (
         session_id TEXT PRIMARY KEY,
         origin TEXT NOT NULL,
@@ -370,6 +488,31 @@ export class GoromboSessionDatabase {
         session_id TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS normalized_message_events (
+        event_id TEXT PRIMARY KEY,
+        session_id TEXT,
+        connector TEXT NOT NULL,
+        message_kind TEXT NOT NULL,
+        text TEXT NOT NULL,
+        received_at TEXT NOT NULL,
+        actor_id TEXT NOT NULL,
+        actor_display_name TEXT,
+        conversation_id TEXT NOT NULL,
+        thread_id TEXT,
+        client_id TEXT,
+        project_id TEXT,
+        workflow TEXT,
+        task TEXT,
+        delivery_kind TEXT,
+        delivery_id TEXT,
+        accepted_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_normalized_message_events_session
+        ON normalized_message_events(session_id, received_at);
 
       CREATE TABLE IF NOT EXISTS session_memory_chunks (
         chunk_key TEXT PRIMARY KEY,
@@ -434,7 +577,12 @@ export class GoromboSessionDatabase {
     data: SessionData,
   ): void {
     this.deleteSessionMemoryByStorageKey(storageKey);
-    const chatSession = this.getChatSession(sessionName);
+    const parts = parseFlueSessionStorageKey(storageKey);
+    const chatSession =
+      this.getChatSession(sessionName) ??
+      (parts && this.isDirectAgentChatSession(parts.instanceId, harnessName, sessionName)
+        ? this.getChatSession(parts.instanceId)
+        : null);
 
     for (const chunk of extractSessionMemoryChunks({
       storageKey,
@@ -484,6 +632,66 @@ export class GoromboSessionDatabase {
       this.database.prepare(`DELETE FROM session_memory_fts WHERE chunk_key = ?`).run(row.chunk_key);
     }
     this.database.prepare(`DELETE FROM session_memory_chunks WHERE source_storage_key = ?`).run(storageKey);
+  }
+
+  private deleteInstanceSessionIndex(
+    instanceId: string,
+    harnessName: string,
+    sessionName: string,
+    deletedStorageKey: string,
+  ): void {
+    const latest = this.getLatestStorageKeyForInstance(instanceId, harnessName, sessionName);
+    if (latest !== deletedStorageKey) {
+      return;
+    }
+
+    const replacement = this.getMostRecentIndexedStorageKeyForInstance(instanceId, harnessName, sessionName);
+    if (replacement) {
+      this.database
+        .prepare(
+          `UPDATE flue_instance_sessions
+           SET latest_storage_key = ?, updated_at = ?
+           WHERE instance_id = ? AND harness_name = ? AND session_name = ?`,
+        )
+        .run(replacement.storageKey, replacement.updatedAt, instanceId, harnessName, sessionName);
+      return;
+    }
+
+    this.database
+      .prepare(
+        `DELETE FROM flue_instance_sessions
+         WHERE instance_id = ? AND harness_name = ? AND session_name = ?`,
+      )
+      .run(instanceId, harnessName, sessionName);
+  }
+
+  private getMostRecentIndexedStorageKeyForInstance(
+    instanceId: string,
+    harnessName: string,
+    sessionName: string,
+  ): {
+    storageKey: string;
+    updatedAt: string;
+  } | null {
+    const row = this.database
+      .prepare(
+        `SELECT storage_key, updated_at
+         FROM flue_session_index
+         WHERE instance_id = ? AND harness_name = ? AND session_name = ?
+         ORDER BY updated_at DESC, created_at DESC, storage_key DESC
+         LIMIT 1`,
+      )
+      .get(instanceId, harnessName, sessionName) as IndexedSessionRow | undefined;
+
+    return row ? { storageKey: row.storage_key, updatedAt: row.updated_at } : null;
+  }
+
+  private isDirectAgentChatSession(instanceId: string, harnessName: string, sessionName: string): boolean {
+    return (
+      harnessName === directAgentHarnessName &&
+      sessionName === directAgentSessionName &&
+      this.getChatSession(instanceId) !== null
+    );
   }
 }
 
@@ -720,6 +928,35 @@ function toChatSessionRecord(row: ChatSessionRow): ChatSessionRecord {
   };
 }
 
+function toNormalizedMessageEvent(row: NormalizedMessageEventRow): NormalizedMessageEvent {
+  const context = {
+    ...(typeof row.client_id === 'string' ? { clientId: row.client_id } : {}),
+    ...(typeof row.project_id === 'string' ? { projectId: row.project_id } : {}),
+    ...(typeof row.workflow === 'string' ? { workflow: row.workflow } : {}),
+    ...(typeof row.task === 'string' ? { task: row.task } : {}),
+  };
+
+  return {
+    id: row.event_id,
+    connector: row.connector as NormalizedMessageEvent['connector'],
+    kind: row.message_kind as NormalizedMessageEvent['kind'],
+    text: row.text,
+    receivedAt: row.received_at,
+    actor: {
+      id: row.actor_id,
+      ...(typeof row.actor_display_name === 'string' ? { displayName: row.actor_display_name } : {}),
+    },
+    conversation: {
+      id: row.conversation_id,
+      ...(typeof row.thread_id === 'string' ? { threadId: row.thread_id } : {}),
+    },
+    ...(Object.keys(context).length ? { context } : {}),
+    ...(typeof row.delivery_kind === 'string' ? { deliveryKind: row.delivery_kind } : {}),
+    ...(typeof row.delivery_id === 'string' ? { deliveryId: row.delivery_id } : {}),
+    ...(typeof row.accepted_at === 'string' ? { acceptedAt: row.accepted_at } : {}),
+  };
+}
+
 function toSessionMemoryRecord(row: SessionMemoryChunkRow): SessionMemoryRecord {
   const rank = typeof row.rank === 'number' ? row.rank : 0;
   return {
@@ -777,6 +1014,25 @@ interface ChatSessionRow {
 
 interface ActiveSessionRow {
   session_id: string;
+}
+
+interface NormalizedMessageEventRow {
+  event_id: string;
+  connector: string;
+  message_kind: string;
+  text: string;
+  received_at: string;
+  actor_id: string;
+  actor_display_name: string | null;
+  conversation_id: string;
+  thread_id: string | null;
+  client_id: string | null;
+  project_id: string | null;
+  workflow: string | null;
+  task: string | null;
+  delivery_kind: string | null;
+  delivery_id: string | null;
+  accepted_at: string | null;
 }
 
 interface SessionMemoryChunkRow {

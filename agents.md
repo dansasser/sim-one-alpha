@@ -486,19 +486,16 @@ docs/architecture/worker-system.md
 
 Always run the relevant verification commands before calling work complete.
 
-For TypeScript changes, run the project’s configured checks from `package.json`. Prefer the repo’s package manager based on the lockfile:
+For TypeScript changes, run the project's configured checks from `package.json` with pnpm only.
 
-- `pnpm` if `pnpm-lock.yaml` exists
-- `npm` if `package-lock.json` exists
-- `yarn` if `yarn.lock` exists
-- `bun` if `bun.lockb` or `bun.lock` exists
+Do not use npm, yarn, bun, npx, or package-manager fallback logic in this repository. The only supported package manager is pnpm through Corepack.
 
 Typical required checks are:
 
 ```sh
-<package-manager> test
-<package-manager> run typecheck
-<package-manager> run build
+corepack pnpm test
+corepack pnpm run typecheck
+corepack pnpm run build
 ```
 
 If the project has a lint/check script, run the named script exactly as configured. Do not assume the tool is called `lint`; it may run ESLint, Biome, Ruff, Prettier, or another checker.
@@ -514,7 +511,7 @@ python -m mypy .
 
 Run focused tests first when available, then run the full relevant suite before finishing. If a command cannot be run because dependencies are missing, the environment is unavailable, or the command fails for an unrelated reason, report that clearly with the exact command and error. Do not claim the work is complete or passing unless the required checks were actually run and passed.
 
-I would make the key phrase: **“Do not assume the tool is called lint; run the named script exactly as configured.”** That prevents the Ruff/pre-commit/ESLint/Biome confusion you were talking about.
+I would make the key phrase: **"Do not assume the tool is called lint; run the named script exactly as configured."** That prevents the Ruff/pre-commit/ESLint/Biome confusion you were talking about.
 
 Do not claim tests passed unless they were run.
 

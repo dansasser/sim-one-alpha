@@ -81,7 +81,7 @@ The loader must work after TypeScript build, not only from `src/`.
 
 Plan options:
 
-- copy workspace markdown files into `dist/` during `npm run build`
+- copy workspace markdown files into `dist/` during `corepack pnpm run build`
 - or load workspace markdown from the project root using a stable runtime path
 
 Recommendation:
@@ -368,9 +368,9 @@ Needed content:
 Required checks for TypeScript changes:
 
 ```sh
-npm test
-npm run typecheck
-npm run build
+corepack pnpm test
+corepack pnpm run typecheck
+corepack pnpm run build
 ```
 
 Focused tests to update or add:

@@ -1,11 +1,9 @@
 import { Type, defineTool } from '@flue/runtime';
+import { goromboPersistenceRuntime } from '../db.js';
 import { SqliteProtocolProviderPlaceholder } from '../protocols/sqlite-protocol-provider-placeholder.js';
-import type { ConnectorKind, MessageKind, NormalizedMessageEvent } from '../types/index.js';
+import type { NormalizedMessageEvent } from '../types/index.js';
 
 const provider = new SqliteProtocolProviderPlaceholder('protocols.sqlite');
-const connectorKinds = new Set<ConnectorKind>(['telegram', 'web-api', 'scheduled-job', 'test', 'unknown']);
-const messageKinds = new Set<MessageKind>(['chat.message', 'command', 'workflow.event']);
-const protocolLookupEvents = new Map<string, NormalizedMessageEvent>();
 
 export interface ProtocolToolInput {
   eventId: unknown;
@@ -44,38 +42,39 @@ export const loadProtocolsTool = defineTool({
 });
 
 export function createProtocolLookupEvent(input: ProtocolToolInput): NormalizedMessageEvent {
-  const eventId = String(input.eventId);
-  const registeredEvent = protocolLookupEvents.get(eventId);
-  const threadId = readNonEmptyString(input.threadId);
-  const clientId = readNonEmptyString(input.clientId);
-  const projectId = readNonEmptyString(input.projectId);
-  const workflow = readNonEmptyString(input.workflow);
-  const task = readNonEmptyString(input.task);
-  const resolvedClientId = clientId ?? registeredEvent?.context?.clientId;
-  const resolvedProjectId = projectId ?? registeredEvent?.context?.projectId;
-  const resolvedWorkflow = workflow ?? registeredEvent?.context?.workflow;
-  const resolvedTask = task ?? registeredEvent?.context?.task;
+  const eventId = readNonEmptyString(input.eventId);
+  if (!eventId) {
+    throw new Error('load_protocols requires a persisted eventId.');
+  }
+
+  const registeredEvent = goromboPersistenceRuntime.sessionDatabase.getNormalizedMessageEvent(eventId);
+  if (!registeredEvent) {
+    throw new Error(`No persisted normalized message event found for eventId ${eventId}.`);
+  }
+
+  const context = registeredEvent.context ?? {};
 
   return {
     id: eventId,
-    connector: readConnectorKind(input.connector) ?? registeredEvent?.connector ?? 'unknown',
-    kind: readMessageKind(input.messageKind) ?? registeredEvent?.kind ?? 'chat.message',
-    text: registeredEvent?.text ?? '',
-    receivedAt: registeredEvent?.receivedAt ?? new Date().toISOString(),
-    actor: { id: readNonEmptyString(input.actorId) ?? registeredEvent?.actor.id ?? 'tool-call' },
-    conversation: {
-      id: readNonEmptyString(input.conversationId) ?? registeredEvent?.conversation.id ?? 'tool-call',
-      ...(threadId ?? registeredEvent?.conversation.threadId
-        ? { threadId: threadId ?? registeredEvent?.conversation.threadId }
-        : {}),
+    connector: registeredEvent.connector ?? 'unknown',
+    kind: registeredEvent.kind ?? 'chat.message',
+    text: registeredEvent.text ?? '',
+    receivedAt: registeredEvent.receivedAt ?? new Date().toISOString(),
+    actor: {
+      id: registeredEvent.actor?.id ?? 'tool-call',
+      ...(registeredEvent.actor?.displayName ? { displayName: registeredEvent.actor.displayName } : {}),
     },
-    ...(resolvedClientId || resolvedProjectId || resolvedWorkflow || resolvedTask
+    conversation: {
+      id: registeredEvent.conversation?.id ?? 'tool-call',
+      ...(registeredEvent.conversation?.threadId ? { threadId: registeredEvent.conversation.threadId } : {}),
+    },
+    ...(context.clientId || context.projectId || context.workflow || context.task
       ? {
           context: {
-            ...(resolvedClientId ? { clientId: resolvedClientId } : {}),
-            ...(resolvedProjectId ? { projectId: resolvedProjectId } : {}),
-            ...(resolvedWorkflow ? { workflow: resolvedWorkflow } : {}),
-            ...(resolvedTask ? { task: resolvedTask } : {}),
+            ...(context.clientId ? { clientId: context.clientId } : {}),
+            ...(context.projectId ? { projectId: context.projectId } : {}),
+            ...(context.workflow ? { workflow: context.workflow } : {}),
+            ...(context.task ? { task: context.task } : {}),
           },
         }
       : {}),
@@ -83,32 +82,22 @@ export function createProtocolLookupEvent(input: ProtocolToolInput): NormalizedM
 }
 
 export function rememberProtocolLookupEvent(event: NormalizedMessageEvent): void {
-  protocolLookupEvents.set(event.id, {
-    id: event.id,
-    connector: event.connector,
-    kind: event.kind,
-    text: event.text,
-    receivedAt: event.receivedAt,
-    actor: { ...event.actor },
-    conversation: { ...event.conversation },
-    ...(event.context ? { context: { ...event.context } } : {}),
+  goromboPersistenceRuntime.sessionDatabase.recordNormalizedMessageEvent({
+    event: {
+      id: event.id,
+      connector: event.connector,
+      kind: event.kind,
+      text: event.text,
+      receivedAt: event.receivedAt,
+      actor: { ...event.actor },
+      conversation: { ...event.conversation },
+      ...(event.context ? { context: { ...event.context } } : {}),
+    },
   });
 }
 
 export function forgetProtocolLookupEvent(eventId: string): void {
-  protocolLookupEvents.delete(eventId);
-}
-
-function readConnectorKind(value: unknown): ConnectorKind | undefined {
-  return typeof value === 'string' && connectorKinds.has(value as ConnectorKind)
-    ? (value as ConnectorKind)
-    : undefined;
-}
-
-function readMessageKind(value: unknown): MessageKind | undefined {
-  return typeof value === 'string' && messageKinds.has(value as MessageKind)
-    ? (value as MessageKind)
-    : undefined;
+  goromboPersistenceRuntime.sessionDatabase.deleteNormalizedMessageEvent(eventId);
 }
 
 function readNonEmptyString(value: unknown): string | undefined {
