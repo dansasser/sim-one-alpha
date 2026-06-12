@@ -42,12 +42,13 @@ The active runtime model card now drives context budgeting, backup failover, and
 - `src/session/session-database.ts` stores GOROMBO session catalog, active-session routing, logical Flue session indexes, and extracted session-memory FTS records.
 - `src/session/flue-session-store.ts` contains Flue session-key helpers only.
 - `src/session/session-budget.ts` derives budget state from stored Flue `SessionData` and keeps an in-process fallback ledger for cases where session data is unavailable.
-- `src/workflows/chat.ts` evaluates the next prompt before calling `session.prompt(...)`.
+- `src/workflows/chat.ts` evaluates the next prompt before calling `session.prompt(...)` for finite workflow/local compatibility paths.
+- `src/routes/chat-events.ts` is the primary app-owned chat ingress. It persists normalized event context and prompts `/agents/orchestrator/:sessionId?wait=result` so normal chat enters Flue's durable agent submission lifecycle.
 - `src/agents/orchestrator.ts` passes card-derived Flue compaction settings to `createAgent(...)`; it does not pass persistence. Persistence belongs to `src/db.ts`.
 
 Flue remains the owner of canonical `SessionData`. The GOROMBO wrapper indexes latest data by logical harness/session name so the synchronous chat workflow can recover the latest `gorombo-orchestrator` conversation state even when a workflow invocation receives a new Flue run id.
 
-The chat workflow sequence is:
+The finite chat workflow sequence is:
 
 ```text
 normalize message
@@ -65,7 +66,7 @@ normalize message
 -> return contextBudget telemetry
 ```
 
-This keeps Flue's native automatic compaction enabled and adds a GOROMBO pre-send guard before the provider receives an oversized prompt.
+This keeps Flue's native automatic compaction enabled and adds a pre-send guard before the provider receives an oversized prompt on the finite workflow path. The durable `/api/chat/events` path currently relies on the orchestrator agent's native Flue compaction settings.
 
 ## Persistence And Session Memory Boundary
 
@@ -78,7 +79,9 @@ Current behavior:
 - Stores workflow run metadata and run registry lookups in SQLite for the Flue run API.
 - Rebuilds protected telemetry summaries from persisted Flue run event streams when in-memory observer summaries are gone.
 - Parses Flue storage keys shaped as `agent-session:[instanceId,harnessName,sessionName]`.
-- Indexes the latest session by `harnessName + sessionName` so chat continuity can survive workflow run id changes.
+- Indexes the latest workflow session by `harnessName + sessionName` so finite workflow chat continuity can survive workflow run id changes.
+- Indexes durable direct-agent sessions by `instanceId + harnessName + sessionName` so separate orchestrator agent instances do not collapse into one logical `default/default` session.
+- Persists normalized message event context before durable agent admission so protocol and memory tools can recover trusted selectors after process restart.
 - Exposes `getLatestSessionData(harnessName, sessionName)` for budget derivation.
 - Extracts message, compaction, and branch-summary text into `session_memory_fts` for session-memory retrieval.
 
@@ -86,9 +89,11 @@ The SQLite implementation stores:
 
 - Flue-owned canonical runtime data in `.gorombo/db/flue.sqlite`
 - workflow run records, run registry records, and Flue event streams in `.gorombo/db/flue.sqlite`
-- GOROMBO chat session records in `.gorombo/db/sessions.sqlite`
+- AI employee chat session records in `.gorombo/db/sessions.sqlite`
 - active connector session pointers
 - logical Flue session indexes
+- direct Flue agent instance indexes
+- normalized message event context for protocol and memory lookup
 - session-memory FTS chunks extracted from Flue `SessionData`
 
 Session memory does not fork conversation truth into a separate transcript. It indexes text extracted from Flue `SessionData` and returns matching chunks through the memory tool. The future seven-layer GOROMBO memory stack remains separate from this session-memory layer.

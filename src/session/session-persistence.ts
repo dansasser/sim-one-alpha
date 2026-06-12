@@ -92,6 +92,15 @@ class GoromboLogicalSessionStore implements SessionStore {
       return null;
     }
 
+    const latestInstanceStorageKey = this.sessionDatabase.getLatestStorageKeyForInstance(
+      parts.instanceId,
+      parts.harnessName,
+      parts.sessionName,
+    );
+    if (latestInstanceStorageKey && latestInstanceStorageKey !== id) {
+      return this.flueSessions.load(latestInstanceStorageKey);
+    }
+
     const latestStorageKey = this.sessionDatabase.getLatestStorageKey(parts.harnessName, parts.sessionName);
     if (!latestStorageKey || latestStorageKey === id) {
       return null;
@@ -112,6 +121,17 @@ class GoromboLogicalSessionStore implements SessionStore {
     this.sessionDatabase.deleteFlueSession(id);
 
     if (exact) {
+      return;
+    }
+
+    const latestInstanceStorageKey = this.sessionDatabase.getLatestStorageKeyForInstance(
+      parts.instanceId,
+      parts.harnessName,
+      parts.sessionName,
+    );
+    if (latestInstanceStorageKey && latestInstanceStorageKey !== id) {
+      await this.flueSessions.delete(latestInstanceStorageKey);
+      this.sessionDatabase.deleteFlueSession(latestInstanceStorageKey);
       return;
     }
 

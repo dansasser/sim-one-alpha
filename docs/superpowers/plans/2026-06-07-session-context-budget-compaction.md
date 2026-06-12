@@ -113,7 +113,7 @@ test('unknown model specifier returns undefined', () => {
 Run:
 
 ```sh
-npm test -- --test-name-pattern "model cards can be resolved|unknown model specifier"
+corepack pnpm test -- --test-name-pattern "model cards can be resolved|unknown model specifier"
 ```
 
 Expected: TypeScript build fails because `resolveModelCard` does not exist.
@@ -133,7 +133,7 @@ export function resolveModelCard(specifier: string): AgentModelCard | undefined 
 Run:
 
 ```sh
-npm test -- --test-name-pattern "model cards can be resolved|unknown model specifier"
+corepack pnpm test -- --test-name-pattern "model cards can be resolved|unknown model specifier"
 ```
 
 Expected: both tests pass.
@@ -180,7 +180,7 @@ test('context budget exposes warning and compaction thresholds', () => {
 Run:
 
 ```sh
-npm test -- --test-name-pattern "context budget"
+corepack pnpm test -- --test-name-pattern "context budget"
 ```
 
 Expected: TypeScript build fails because `calculateContextBudget` does not exist.
@@ -216,7 +216,7 @@ Use provider-reported context first, then guaranteed context, then advertised co
 Run:
 
 ```sh
-npm test -- --test-name-pattern "context budget"
+corepack pnpm test -- --test-name-pattern "context budget"
 ```
 
 Expected: tests pass.
@@ -248,7 +248,7 @@ contextBudget: {
 Run:
 
 ```sh
-npm test -- --test-name-pattern "chat workflow"
+corepack pnpm test -- --test-name-pattern "chat workflow"
 ```
 
 Expected: test fails because workflow response does not expose context budget.
@@ -262,7 +262,7 @@ After `session.prompt(...)` returns, resolve the response model to a card and ca
 Run:
 
 ```sh
-npm test -- --test-name-pattern "chat workflow"
+corepack pnpm test -- --test-name-pattern "chat workflow"
 ```
 
 Expected: tests pass.
@@ -297,7 +297,7 @@ test('compaction policy requests compaction at threshold', () => {
 Run:
 
 ```sh
-npm test -- --test-name-pattern "compaction policy"
+corepack pnpm test -- --test-name-pattern "compaction policy"
 ```
 
 Expected: TypeScript build fails because `evaluateCompaction` does not exist.
@@ -324,7 +324,7 @@ post-response usage -> update budget telemetry
 Run:
 
 ```sh
-npm test -- --test-name-pattern "compaction policy"
+corepack pnpm test -- --test-name-pattern "compaction policy"
 ```
 
 Expected: tests pass.
@@ -340,9 +340,9 @@ Expected: tests pass.
 Run:
 
 ```sh
-npm run typecheck
-npm test
-npm run chat:local -- "Reply with exactly: context budget online"
+corepack pnpm run typecheck
+corepack pnpm test
+corepack pnpm run chat:local -- "Reply with exactly: context budget online"
 ```
 
 Expected:

@@ -277,7 +277,7 @@ export function createChatPrompt(event: ReturnType<typeof normalizeWebApiMessage
   };
 
   return `
-You are handling a normalized GOROMBO chat event.
+You are handling a normalized chat event for this AI employee system.
 
 Before you answer:
 1. Use the load_protocols tool for this event with eventId: "${event.id}". Do not pass or invent clientId, projectId, raw payloads, or other hidden identifiers.

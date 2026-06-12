@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@11.6.0",
   "description": "GOROMBO Flue-based multi-purpose orchestrating agent foundation.",
   "files": [
     "dist/**",
@@ -12,6 +13,7 @@
     ".env.example"
   ],
   "scripts": {
+    "preinstall": "node scripts/enforce-pnpm.mjs",
     "build": "flue build --target node && node scripts/copy-runtime-config.mjs",
     "chat": "flue run chat --target node",
     "chat:local": "node scripts/chat.mjs",
@@ -23,10 +25,11 @@
     "research:local": "node scripts/research.mjs",
     "start": "node --env-file=.env dist/server.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run test:unit && npm run build && npm run test:http"
+    "test": "corepack pnpm run test:unit && corepack pnpm run build && corepack pnpm run test:http"
   },
   "engines": {
-    "node": ">=22.18.0"
+    "node": ">=22.18.0",
+    "pnpm": ">=11.6.0"
   },
   "dependencies": {
     "@flue/runtime": "^0.11.0",

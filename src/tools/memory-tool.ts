@@ -1,10 +1,10 @@
 import { Type, defineTool } from '@flue/runtime';
+import { goromboPersistenceRuntime } from '../db.js';
 import { SessionMemoryProvider } from '../memory/memory-provider.js';
 import { MemoryRouter } from '../memory/memory-router.js';
 import type { NormalizedMessageEvent } from '../types/index.js';
 
 const router = new MemoryRouter(new SessionMemoryProvider());
-const memoryLookupEvents = new Map<string, NormalizedMessageEvent>();
 
 export const retrieveMemoryTool = defineTool({
   name: 'retrieve_memory',
@@ -30,18 +30,24 @@ export const retrieveMemoryTool = defineTool({
 });
 
 export function rememberMemoryLookupEvent(event: NormalizedMessageEvent): void {
-  memoryLookupEvents.set(event.id, {
-    ...event,
-    actor: { ...event.actor },
-    conversation: { ...event.conversation },
-    context: event.context ? { ...event.context } : undefined,
+  goromboPersistenceRuntime.sessionDatabase.recordNormalizedMessageEvent({
+    event: {
+      id: event.id,
+      connector: event.connector,
+      kind: event.kind,
+      text: event.text,
+      receivedAt: event.receivedAt,
+      actor: { ...event.actor },
+      conversation: { ...event.conversation },
+      ...(event.context ? { context: { ...event.context } } : {}),
+    },
   });
 }
 
 function getTrustedMemoryLookupEvent(eventId: unknown): NormalizedMessageEvent {
-  const event = memoryLookupEvents.get(String(eventId));
+  const event = goromboPersistenceRuntime.sessionDatabase.getNormalizedMessageEvent(String(eventId));
   if (!event) {
-    throw new Error('retrieve_memory requires a trusted eventId registered by the chat workflow.');
+    throw new Error('retrieve_memory requires a trusted eventId persisted by chat ingress.');
   }
   return event;
 }

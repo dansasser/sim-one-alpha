@@ -15,7 +15,7 @@ test('retrieve_memory scopes lookup through a trusted registered event', async (
         eventId: `missing-${randomUUID()}`,
         text: 'missing event memory query',
       }),
-    /trusted eventId/,
+    /trusted eventId persisted by chat ingress/,
   );
 
   const event = normalizeWebApiMessage({

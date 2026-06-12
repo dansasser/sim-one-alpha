@@ -3,7 +3,9 @@ import test from 'node:test';
 import type { FlueEvent } from '@flue/runtime';
 import { Hono } from 'hono';
 import app from '../app.js';
+import { goromboPersistenceRuntime } from '../db.js';
 import { requireApiSecret } from '../middleware/api-secret.js';
+import { registerChatEventRoutes } from '../routes/chat-events.js';
 import { registerTelemetryRoutes } from '../routes/telemetry.js';
 import { flueTelemetryStore } from '../telemetry/flue-telemetry.js';
 
@@ -58,6 +60,73 @@ test('chat session list endpoint returns the stored session list after auth pass
     assert.equal(response.status, 200);
     const body = await response.json() as { sessions?: unknown };
     assert.equal(Array.isArray(body.sessions), true);
+  });
+});
+
+test('chat event ingress enters the durable orchestrator agent route', async () => {
+  const testApp = new Hono();
+  let promptedAgent = false;
+
+  testApp.use('/agents/*', requireApiSecret);
+  registerChatEventRoutes(testApp);
+  testApp.post('/agents/orchestrator/:id', requireApiSecret, async (c) => {
+    promptedAgent = true;
+    assert.equal(c.req.query('wait'), 'result');
+
+    const body = await c.req.json() as { message?: string };
+    assert.match(body.message ?? '', /load_protocols/);
+    assert.match(body.message ?? '', /Reply through the durable boundary/);
+    assert.doesNotMatch(body.message ?? '', /durable-actor/);
+
+    return c.json({
+      result: {
+        text: 'direct-agent-ok',
+      },
+      streamUrl: c.req.url,
+      offset: '0',
+    });
+  });
+  testApp.post('/workflows/chat', () => {
+    throw new Error('chat ingress should not forward normal messages to the chat workflow');
+  });
+
+  await withApiSecret('test-secret', async () => {
+    const response = await testApp.request('/api/chat/events', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-secret': 'test-secret',
+      },
+      body: JSON.stringify({
+        text: 'Reply through the durable boundary.',
+        actorId: 'durable-actor',
+        conversationId: 'durable-conversation',
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    const body = await response.json() as {
+      result?: { text?: string };
+      event?: { id?: string };
+      session?: { id?: string; surface?: string; created?: boolean };
+    };
+    assert.equal(promptedAgent, true);
+    assert.equal(body.result?.text, 'direct-agent-ok');
+    assert.equal(body.session?.surface, 'web');
+    assert.equal(body.session?.created, true);
+    assert.equal(typeof body.session?.id, 'string');
+    assert.equal(typeof body.event?.id, 'string');
+
+    const storedEvent = goromboPersistenceRuntime.sessionDatabase.getNormalizedMessageEvent(body.event?.id ?? '');
+    assert.equal(storedEvent?.text, 'Reply through the durable boundary.');
+    assert.equal(storedEvent?.actor.id, 'durable-actor');
+
+    if (body.event?.id) {
+      goromboPersistenceRuntime.sessionDatabase.deleteNormalizedMessageEvent(body.event.id);
+    }
+    if (body.session?.id) {
+      goromboPersistenceRuntime.sessionDatabase.deleteChatSession(body.session.id);
+    }
   });
 });
 

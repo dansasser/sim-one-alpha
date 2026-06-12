@@ -366,31 +366,31 @@ cd <repository-name>
 Install dependencies using the package manager used by the repo:
 
 ```sh
-npm install
+corepack pnpm install
 ```
 
 Run the development server or local workflow command defined in `package.json`:
 
 ```sh
-npm run dev
+corepack pnpm run dev
 ```
 
 Run tests:
 
 ```sh
-npm test
+corepack pnpm test
 ```
 
 Run type checks:
 
 ```sh
-npm run typecheck
+corepack pnpm run typecheck
 ```
 
 Build the project:
 
 ```sh
-npm run build
+corepack pnpm run build
 ```
 
 Use the actual scripts defined in `package.json`.
@@ -467,32 +467,32 @@ Then select it by card key in `gorombo.config.json`.
 Run a one-shot chat workflow:
 
 ```sh
-npm run chat:local -- "Hello"
+corepack pnpm run chat:local -- "Hello"
 ```
 
 Run a one-shot research workflow:
 
 ```sh
-npm run research:local -- "Find the official Ollama web search API docs URL."
+corepack pnpm run research:local -- "Find the official Ollama web search API docs URL."
 ```
 
 Run the underlying Flue workflow with a full normalized payload:
 
 ```sh
-npm run chat -- --payload "{\"text\":\"Hello\",\"actorId\":\"local-user\",\"conversationId\":\"local-thread\"}"
+corepack pnpm run chat -- --payload "{\"text\":\"Hello\",\"actorId\":\"local-user\",\"conversationId\":\"local-thread\"}"
 ```
 
 Open an interactive Flue agent session:
 
 ```sh
-npm run connect
+corepack pnpm run connect
 ```
 
 Start the built Node HTTP runtime:
 
 ```sh
-npm run build
-npm start
+corepack pnpm run build
+corepack pnpm start
 ```
 
 The HTTP runtime uses the Flue routing model:
@@ -500,6 +500,7 @@ The HTTP runtime uses the Flue routing model:
 - `GET /health` is public.
 - `POST /api/chat/events` is the app-owned chat ingress alias.
 - `GET /api/chat/sessions` lists stored chat sessions for HTTP clients.
+- `POST /agents/orchestrator/:sessionId` is the durable Flue orchestrator agent route used by the chat ingress.
 - `POST /workflows/chat` is the Flue workflow route.
 - `GET /runs/:runId` reads the Flue workflow run.
 
@@ -511,9 +512,29 @@ x-api-secret: <API_SECRET>
 
 `API_SECRET` must be set in `.env` or by the deployment secret manager. If it is missing, protected endpoints fail closed with `503`.
 
-Flue workflow HTTP invocation is asynchronous. A successful chat event returns `202` with a `runId`; clients then read `/runs/:runId` with the same secret header to retrieve the completed result.
+The app-owned chat ingress normalizes and authorizes the message, persists trusted event context to SQLite, resolves the product session, and prompts the durable orchestrator agent instance at `/agents/orchestrator/:sessionId?wait=result`. A successful normal chat event returns the direct agent result with stream coordinates:
 
-The `chat` workflow:
+```json
+{
+  "result": {},
+  "streamUrl": "http://127.0.0.1:3000/agents/orchestrator/<sessionId>",
+  "offset": "0",
+  "event": { "id": "web-..." },
+  "session": { "id": "<sessionId>", "surface": "web", "created": true }
+}
+```
+
+Flue workflow HTTP invocation remains available for finite workflow calls. Workflow calls return `202` with a `runId`; clients then read `/runs/:runId` with the same secret header to retrieve the completed workflow result.
+
+The `/api/chat/events` durable ingress:
+
+- Normalizes the incoming message event.
+- Persists trusted event context before agent admission.
+- Resolves the product session.
+- Handles pre-LLM slash commands that can be handled at ingress.
+- Prompts the durable `orchestrator` Flue agent instance for that session.
+
+The finite `chat` workflow:
 
 - Initializes the `orchestrator` Flue agent.
 - Loads `.env` through the Flue CLI for secrets.
@@ -586,8 +607,8 @@ Implemented pieces:
 - `calculateContextBudget(...)` chooses the provider-safe context window, reserves output tokens, and calculates warning, compaction, and hard-stop thresholds.
 - `evaluateCompaction(...)` returns `normal`, `warn`, `compact`, or `stop`.
 - `src/db.ts` exports the Flue persistence adapter discovered by Flue at build time.
-- `session-persistence.ts` wraps Flue's built-in SQLite adapter and indexes latest logical chat sessions by harness/session name.
-- `session-database.ts` stores chat session catalog records, active connector sessions, and session-memory FTS chunks.
+- `session-persistence.ts` wraps Flue's built-in SQLite adapter and indexes latest logical workflow sessions plus durable direct-agent instance sessions.
+- `session-database.ts` stores chat session catalog records, active connector sessions, persisted normalized event context, and session-memory FTS chunks.
 - `deriveSessionBudgetStateFromData(...)` estimates budget from the stored Flue conversation tree, including compaction entries.
 - `chatSessionBudgetStore` remains as an in-process fallback when stored session data is not available.
 - The `chat` workflow calls `session.compact()` before prompting when the estimate crosses the compaction threshold.
@@ -600,8 +621,8 @@ Session memory is now indexed from stored Flue `SessionData` and retrieved throu
 Runtime SQLite defaults:
 
 ```text
-.gorombo/db/flue.sqlite      Flue sessions, submissions, event streams, and workflow run/registry records
-.gorombo/db/sessions.sqlite  GOROMBO chat sessions, active sessions, logical session index, and session-memory FTS
+.gorombo/db/flue.sqlite      Flue sessions, durable submissions, event streams, and workflow run/registry records
+.gorombo/db/sessions.sqlite  chat sessions, active sessions, logical session indexes, normalized event context, and session-memory FTS
 ```
 
 Protected telemetry uses live in-memory Flue observer summaries when available and can fall back to persisted Flue run events after the in-memory summary is gone.
@@ -664,7 +685,7 @@ Use the boundaries this way:
 - low-level provider errors: the research workflow records failures in `providerFailures`
 - research strategy: researcher decides which searches to run, when to fetch pages, when to stop, and how to compare sources
 
-The researcher subagent lives in `src/workers/researcher/researcher.ts` and owns the `web_research` tool. The standalone `research` workflow in `src/workflows/research.ts` initializes the researcher directly for CLI or API research runs. Use `npm run research:local -- "..."` for local one-shot research testing.
+The researcher subagent lives in `src/workers/researcher/researcher.ts` and owns the `web_research` tool. The standalone `research` workflow in `src/workflows/research.ts` initializes the researcher directly for CLI or API research runs. Use `corepack pnpm run research:local -- "..."` for local one-shot research testing.
 
 Main-agent workspace persona files live in `src/workspace/`. Subagent workspace persona files live beside their subagent implementation, for example `src/workers/researcher/workspace/`. Persona names belong inside workspace file contents, not in architecture paths.
 
@@ -704,7 +725,7 @@ It starts with model selection and is intended to grow into the deployment-level
 
 Change model choices in the shipped runtime JSON file, then restart the runtime/gateway. Keep API keys and service credentials in `.env` or the deployment secret manager.
 
-For Node distribution, `.env` lives beside `package.json` at the runtime root. `npm start` runs:
+For Node distribution, `.env` lives beside `package.json` at the runtime root. `corepack pnpm start` runs:
 
 ```sh
 node --env-file=.env dist/server.mjs
@@ -769,19 +790,19 @@ Run relevant verification before calling work complete.
 Common commands:
 
 ```sh
-npm test
-npm run typecheck
-npm run build
-npm run test:http
-npm run smoke:http
+corepack pnpm test
+corepack pnpm run typecheck
+corepack pnpm run build
+corepack pnpm run test:http
+corepack pnpm run smoke:http
 ```
 
-`npm test` runs the TypeScript unit suite, builds `dist/server.mjs`, then runs `npm run test:http` against the built server over real localhost HTTP. The root `.env` file remains the runtime environment source; it is not copied into `dist`.
+`corepack pnpm test` runs the TypeScript unit suite, builds `dist/server.mjs`, then runs `corepack pnpm run test:http` against the built server over real localhost HTTP. The root `.env` file remains the runtime environment source; it is not copied into `dist`.
 
 For a live built-server chat smoke through `/api/chat/events`, run:
 
 ```sh
-npm run smoke:http -- --live-chat
+corepack pnpm run smoke:http -- --live-chat
 ```
 
 If the project defines other scripts in `package.json`, use those exact scripts.

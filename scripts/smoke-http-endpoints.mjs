@@ -54,7 +54,7 @@ try {
   await expectStatus(`${baseUrl}/runs/not-real`, { method: 'GET' }, 401, 'run inspection without secret');
 
   if (liveChat) {
-    const runPointer = await expectJsonStatus(
+    const agentResult = await expectJsonStatus(
       `${baseUrl}/api/chat/events`,
       {
         method: 'POST',
@@ -68,13 +68,12 @@ try {
           conversationId: 'http-smoke-thread',
         }),
       },
-      202,
+      200,
       'chat event ingress with secret',
     );
-    const run = await waitForRunResult(baseUrl, runPointer.runId, requestSecret);
-    const serialized = JSON.stringify(run);
+    const serialized = JSON.stringify(agentResult);
     if (!serialized.includes('endpoint-live-ok')) {
-      throw new Error(`live chat run completed without expected text.\n${serialized.slice(0, 1000)}`);
+      throw new Error(`live chat agent response completed without expected text.\n${serialized.slice(0, 1000)}`);
     }
   }
 

@@ -22,7 +22,7 @@ Add a test that imports `createResearcherSubagent` and verifies the subagent nam
 
 - [x] **Step 2: Run the test to verify it fails**
 
-Run `npm test` and verify TypeScript reports that `src/workers/researcher/researcher.ts` does not exist.
+Run `corepack pnpm test` and verify TypeScript reports that `src/workers/researcher/researcher.ts` does not exist.
 
 - [x] **Step 3: Implement the researcher subagent**
 
@@ -30,7 +30,7 @@ Create `src/workers/researcher/researcher.ts` with `createResearcherSubagent(mod
 
 - [x] **Step 4: Verify the test passes**
 
-Run `npm test` and verify the new subagent test passes.
+Run `corepack pnpm test` and verify the new subagent test passes.
 
 ### Task 2: Main Orchestrator Subagent Wiring
 
@@ -44,7 +44,7 @@ Extend the orchestrator initialization test to verify `config.subagents` include
 
 - [x] **Step 2: Run the test to verify it fails**
 
-Run `npm test` and verify the assertion fails because only `coding_worker` is registered.
+Run `corepack pnpm test` and verify the assertion fails because only `coding_worker` is registered.
 
 - [x] **Step 3: Register the researcher subagent**
 
@@ -52,7 +52,7 @@ Update `src/agents/orchestrator.ts` so runtime config creates a researcher subag
 
 - [x] **Step 4: Verify the test passes**
 
-Run `npm test` and verify the orchestrator config test passes.
+Run `corepack pnpm test` and verify the orchestrator config test passes.
 
 ### Task 3: Direct Research Workflow
 
@@ -66,7 +66,7 @@ Add tests for `createResearchPrompt(...)` that verify the prompt instructs the r
 
 - [x] **Step 2: Run the test to verify it fails**
 
-Run `npm test` and verify TypeScript reports that `src/workflows/research.ts` does not exist.
+Run `corepack pnpm test` and verify TypeScript reports that `src/workflows/research.ts` does not exist.
 
 - [x] **Step 3: Implement the workflow**
 
@@ -74,7 +74,7 @@ Create `src/workflows/research.ts` with a Flue route, `ResearchWorkflowPayload`,
 
 - [x] **Step 4: Verify the test passes**
 
-Run `npm test` and verify the research workflow prompt test passes.
+Run `corepack pnpm test` and verify the research workflow prompt test passes.
 
 ### Task 4: Documentation And Verification
 
@@ -92,10 +92,10 @@ Document the main-agent delegation rule, the standalone `research` workflow, and
 Run:
 
 ```powershell
-npm run typecheck
-npm test
+corepack pnpm run typecheck
+corepack pnpm test
 git diff --check
-npm run chat:local -- "Use research to find the official Ollama web search API docs URL and answer with one sentence."
+corepack pnpm run chat:local -- "Use research to find the official Ollama web search API docs URL and answer with one sentence."
 ```
 
 - [x] **Step 3: Commit and push**

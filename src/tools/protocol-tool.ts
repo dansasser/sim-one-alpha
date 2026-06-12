@@ -1,11 +1,11 @@
 import { Type, defineTool } from '@flue/runtime';
+import { goromboPersistenceRuntime } from '../db.js';
 import { SqliteProtocolProviderPlaceholder } from '../protocols/sqlite-protocol-provider-placeholder.js';
 import type { ConnectorKind, MessageKind, NormalizedMessageEvent } from '../types/index.js';
 
 const provider = new SqliteProtocolProviderPlaceholder('protocols.sqlite');
-const connectorKinds = new Set<ConnectorKind>(['telegram', 'web-api', 'scheduled-job', 'test', 'unknown']);
+const connectorKinds = new Set<ConnectorKind>(['telegram', 'web-api', 'tui', 'scheduled-job', 'test', 'unknown']);
 const messageKinds = new Set<MessageKind>(['chat.message', 'command', 'workflow.event']);
-const protocolLookupEvents = new Map<string, NormalizedMessageEvent>();
 
 export interface ProtocolToolInput {
   eventId: unknown;
@@ -45,7 +45,7 @@ export const loadProtocolsTool = defineTool({
 
 export function createProtocolLookupEvent(input: ProtocolToolInput): NormalizedMessageEvent {
   const eventId = String(input.eventId);
-  const registeredEvent = protocolLookupEvents.get(eventId);
+  const registeredEvent = goromboPersistenceRuntime.sessionDatabase.getNormalizedMessageEvent(eventId);
   const threadId = readNonEmptyString(input.threadId);
   const clientId = readNonEmptyString(input.clientId);
   const projectId = readNonEmptyString(input.projectId);
@@ -83,20 +83,22 @@ export function createProtocolLookupEvent(input: ProtocolToolInput): NormalizedM
 }
 
 export function rememberProtocolLookupEvent(event: NormalizedMessageEvent): void {
-  protocolLookupEvents.set(event.id, {
-    id: event.id,
-    connector: event.connector,
-    kind: event.kind,
-    text: event.text,
-    receivedAt: event.receivedAt,
-    actor: { ...event.actor },
-    conversation: { ...event.conversation },
-    ...(event.context ? { context: { ...event.context } } : {}),
+  goromboPersistenceRuntime.sessionDatabase.recordNormalizedMessageEvent({
+    event: {
+      id: event.id,
+      connector: event.connector,
+      kind: event.kind,
+      text: event.text,
+      receivedAt: event.receivedAt,
+      actor: { ...event.actor },
+      conversation: { ...event.conversation },
+      ...(event.context ? { context: { ...event.context } } : {}),
+    },
   });
 }
 
 export function forgetProtocolLookupEvent(eventId: string): void {
-  protocolLookupEvents.delete(eventId);
+  goromboPersistenceRuntime.sessionDatabase.deleteNormalizedMessageEvent(eventId);
 }
 
 function readConnectorKind(value: unknown): ConnectorKind | undefined {

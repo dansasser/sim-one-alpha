@@ -101,7 +101,7 @@ return structured results
 
 Workflows are first-class Flue architecture. Complex research machinery may live in workflow files when the owning agent is the researcher.
 
-Workflow files expose HTTP by exporting `route`. Flue workflow HTTP invocation is asynchronous: accepted calls return a workflow `runId`, and clients inspect `/runs/:runId` for the completed result.
+Workflow files expose HTTP by exporting `route`. Flue workflow HTTP invocation is asynchronous by default: accepted calls return a workflow `runId`, and clients inspect `/runs/:runId` for the completed result. Workflows are finite operations, not the durable continuing chat boundary.
 
 ## Tools
 
@@ -146,7 +146,8 @@ The orchestrator routes and delegates. The researcher owns web research.
 
 ```text
 User prompt
--> chat workflow / Flue route
+-> app-owned chat ingress
+-> durable orchestrator agent session
 -> orchestrator agent
 -> load_protocols
 -> safe memory lookup if useful

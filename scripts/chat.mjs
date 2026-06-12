@@ -10,7 +10,7 @@ let textArgs = args;
 if (resumeIndex >= 0) {
   const candidate = args[resumeIndex + 1];
   if (typeof candidate !== 'string' || candidate.startsWith('-')) {
-    console.error('Missing session id after --resume. Usage: npm run chat:local -- --resume <session-id> <message>');
+    console.error('Missing session id after --resume. Usage: corepack pnpm run chat:local -- --resume <session-id> <message>');
     process.exit(1);
   }
 

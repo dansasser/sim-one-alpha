@@ -37,7 +37,8 @@ test('app.ts stays a Flue app shell and does not bypass agents or cards', () => 
   assert.doesNotMatch(app, /executionCtx/);
   assert.doesNotMatch(app, /createDefaultWebSearchProvider/);
   assert.match(chatEventsRoute, /\/api\/chat\/events/);
-  assert.match(chatEventsRoute, /\/workflows\/chat/);
+  assert.match(chatEventsRoute, /\/agents\/orchestrator/);
+  assert.doesNotMatch(chatEventsRoute, /app\.request\(\s*[`'"]\/workflows\/chat/);
   assert.doesNotMatch(chatEventsRoute, /executionCtx/);
   assert.match(apiSecretMiddleware, /API_SECRET/);
   assert.match(chatWorkflow, /requireApiSecret/);
