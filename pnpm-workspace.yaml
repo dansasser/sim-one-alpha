@@ -6,4 +6,4 @@ allowBuilds:
   protobufjs: true
   sharp: true
   workerd: true
-verifyDepsBeforeRun: false
+verifyDepsBeforeRun: true

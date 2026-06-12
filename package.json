@@ -17,7 +17,7 @@
     "build": "flue build --target node && node scripts/copy-runtime-config.mjs",
     "connect": "flue connect orchestrator local --target node --session local",
     "dev": "flue dev --target node",
-    "test:unit": "node scripts/clean-tsc-output.mjs && tsc -p tsconfig.json && node scripts/copy-runtime-config.mjs --tsc && node --test \".tmp/tsc/tests/*.test.js\"",
+    "test:unit": "node scripts/run-unit-tests.mjs",
     "test:http": "node scripts/test-built-http.mjs",
     "smoke:http": "node scripts/smoke-http-endpoints.mjs",
     "research:local": "node scripts/research.mjs",
@@ -30,11 +30,11 @@
     "pnpm": ">=11.6.0"
   },
   "dependencies": {
-    "@flue/runtime": "^0.11.0",
+    "@flue/runtime": "0.11.0",
     "hono": "^4.12.23"
   },
   "devDependencies": {
-    "@flue/cli": "^0.11.0",
+    "@flue/cli": "0.11.0",
     "@types/node": "^25.9.2",
     "typescript": "^6.0.3"
   }

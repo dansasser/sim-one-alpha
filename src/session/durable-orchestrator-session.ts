@@ -8,24 +8,24 @@ import {
 } from '@flue/runtime/internal';
 import orchestratorAgent from '../agents/orchestrator.js';
 import { goromboPersistenceRuntime } from '../db.js';
+export { directAgentHarnessName, directAgentSessionName } from './direct-agent-session.js';
 
 export interface DurableOrchestratorSessionInput {
   sessionId: string;
   env: Record<string, unknown>;
   payload?: unknown;
+  allowFullInternetAccess?: boolean;
 }
 
 export type DurableOrchestratorSessionOpener = (
   input: DurableOrchestratorSessionInput,
 ) => Promise<FlueSession>;
 
-export const directAgentHarnessName = 'default';
-export const directAgentSessionName = 'default';
-
 export const openDurableOrchestratorSession: DurableOrchestratorSessionOpener = async ({
   sessionId,
   env,
   payload = {},
+  allowFullInternetAccess = false,
 }) => {
   const executionStore = goromboPersistenceRuntime.adapter.connect();
   const context = createFlueContext({
@@ -42,12 +42,18 @@ export const openDurableOrchestratorSession: DurableOrchestratorSessionOpener = 
     createDefaultEnv: async () =>
       bashFactoryToSessionEnv(
         () =>
-          new Bash({
-            fs: new InMemoryFs(),
-            network: {
-              dangerouslyAllowFullInternetAccess: true,
-            },
-          }),
+          new Bash(
+            allowFullInternetAccess
+              ? {
+                  fs: new InMemoryFs(),
+                  network: {
+                    dangerouslyAllowFullInternetAccess: true,
+                  },
+                }
+              : {
+                  fs: new InMemoryFs(),
+                },
+          ),
       ),
     defaultStore: executionStore.sessions,
     submissionStore: executionStore.submissions,

@@ -10,9 +10,8 @@ import { goromboPersistenceRuntime } from '../db.js';
 import { requireApiSecret, runtimeEnvForRequest } from '../middleware/api-secret.js';
 import { configureRuntimeModels } from '../models/index.js';
 import { calculateContextBudget } from '../session/context-budget.js';
+import { directAgentHarnessName, directAgentSessionName } from '../session/direct-agent-session.js';
 import {
-  directAgentHarnessName,
-  directAgentSessionName,
   openDurableOrchestratorSession,
   type DurableOrchestratorSessionOpener,
 } from '../session/durable-orchestrator-session.js';
@@ -295,6 +294,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function readDeliveryId(body: Record<string, unknown>): string | undefined {
+  const submission = isRecord(body.submission) ? body.submission : undefined;
+  const submissionId = typeof submission?.id === 'string' && submission.id.trim()
+    ? submission.id.trim()
+    : undefined;
+  if (submissionId) {
+    return submissionId;
+  }
+
   const offset = typeof body.offset === 'string' ? body.offset : undefined;
   const streamUrl = typeof body.streamUrl === 'string' ? body.streamUrl : undefined;
   if (!offset && !streamUrl) {

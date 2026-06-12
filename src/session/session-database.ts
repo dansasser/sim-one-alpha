@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import type { SessionData } from '@flue/runtime/adapter';
 import type { NormalizedMessageEvent } from '../types/index.js';
 import { estimateTextTokens } from './context-budget.js';
+import { directAgentHarnessName, directAgentSessionName } from './direct-agent-session.js';
 import { parseFlueSessionStorageKey } from './flue-session-store.js';
 
 export const defaultSessionDatabasePath = '.gorombo/db/sessions.sqlite';
@@ -343,7 +344,7 @@ export class GoromboSessionDatabase {
   getNormalizedMessageEvent(eventId: string): NormalizedMessageEvent | null {
     const row = this.database
       .prepare(
-        `SELECT event_id, connector, message_kind, text, received_at, actor_id, actor_display_name, conversation_id, thread_id, client_id, project_id, workflow, task
+        `SELECT event_id, connector, message_kind, text, received_at, actor_id, actor_display_name, conversation_id, thread_id, client_id, project_id, workflow, task, delivery_kind, delivery_id, accepted_at
          FROM normalized_message_events
          WHERE event_id = ?`,
       )
@@ -686,7 +687,11 @@ export class GoromboSessionDatabase {
   }
 
   private isDirectAgentChatSession(instanceId: string, harnessName: string, sessionName: string): boolean {
-    return harnessName === 'default' && sessionName === 'default' && this.getChatSession(instanceId) !== null;
+    return (
+      harnessName === directAgentHarnessName &&
+      sessionName === directAgentSessionName &&
+      this.getChatSession(instanceId) !== null
+    );
   }
 }
 
@@ -946,6 +951,9 @@ function toNormalizedMessageEvent(row: NormalizedMessageEventRow): NormalizedMes
       ...(typeof row.thread_id === 'string' ? { threadId: row.thread_id } : {}),
     },
     ...(Object.keys(context).length ? { context } : {}),
+    ...(typeof row.delivery_kind === 'string' ? { deliveryKind: row.delivery_kind } : {}),
+    ...(typeof row.delivery_id === 'string' ? { deliveryId: row.delivery_id } : {}),
+    ...(typeof row.accepted_at === 'string' ? { acceptedAt: row.accepted_at } : {}),
   };
 }
 
@@ -1022,6 +1030,9 @@ interface NormalizedMessageEventRow {
   project_id: string | null;
   workflow: string | null;
   task: string | null;
+  delivery_kind: string | null;
+  delivery_id: string | null;
+  accepted_at: string | null;
 }
 
 interface SessionMemoryChunkRow {

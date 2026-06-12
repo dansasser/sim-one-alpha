@@ -71,8 +71,8 @@ try {
       200,
       'chat event ingress with secret',
     );
-    const serialized = JSON.stringify(agentResult);
-    if (!serialized.includes('endpoint-live-ok')) {
+    if (!agentResultContainsText(agentResult, 'endpoint-live-ok')) {
+      const serialized = JSON.stringify(agentResult);
       throw new Error(`live chat agent response completed without expected text.\n${serialized.slice(0, 1000)}`);
     }
   }
@@ -143,6 +143,37 @@ async function expectJsonStatus(url, init, expectedStatus, label) {
   }
 
   return JSON.parse(text);
+}
+
+function agentResultContainsText(agentResult, expectedText) {
+  for (const candidate of readAgentResultTextCandidates(agentResult)) {
+    if (candidate.includes(expectedText)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function readAgentResultTextCandidates(agentResult) {
+  if (!agentResult || typeof agentResult !== 'object') {
+    return [];
+  }
+
+  const candidates = [
+    agentResult.result?.text,
+    agentResult.output,
+    agentResult.response,
+    agentResult.text,
+  ];
+
+  if (Array.isArray(agentResult.choices)) {
+    for (const choice of agentResult.choices) {
+      candidates.push(choice?.message?.content, choice?.text, choice?.delta?.content);
+    }
+  }
+
+  return candidates.filter((candidate) => typeof candidate === 'string');
 }
 
 async function stopChild(childProcess) {

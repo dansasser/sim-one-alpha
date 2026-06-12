@@ -193,6 +193,8 @@ test('normalized chat event context is persisted without raw payload data', asyn
         threadId: event.conversation.threadId,
       },
       context: event.context,
+      deliveryKind: 'direct-agent',
+      deliveryId: 'stream#0',
     });
     assert.equal('raw' in (stored ?? {}), false);
   } finally {

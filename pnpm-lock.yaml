@@ -9,14 +9,14 @@ importers:
   .:
     dependencies:
       '@flue/runtime':
-        specifier: ^0.11.0
+        specifier: 0.11.0
         version: 0.11.0(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(typebox@1.1.38)(typescript@6.0.3)(zod-to-json-schema@3.25.2(zod@4.4.3))(zod@4.4.3)
       hono:
         specifier: ^4.12.23
         version: 4.12.25
     devDependencies:
       '@flue/cli':
-        specifier: ^0.11.0
+        specifier: 0.11.0
         version: 0.11.0(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@types/node@25.9.3)(esbuild@0.27.3)(typebox@1.1.38)(typescript@6.0.3)(workerd@1.20260609.1)(wrangler@4.99.0)(yaml@2.9.0)(zod-to-json-schema@3.25.2(zod@4.4.3))(zod@4.4.3)
       '@types/node':
         specifier: ^25.9.2

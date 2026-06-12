@@ -82,6 +82,9 @@ test('chat event ingress enters the durable orchestrator agent route', async () 
       result: {
         text: 'direct-agent-ok',
       },
+      submission: {
+        id: 'test-delivery-id',
+      },
       streamUrl: c.req.url,
       offset: '0',
     });
@@ -117,6 +120,7 @@ test('chat event ingress enters the durable orchestrator agent route', async () 
     const storedEvent = goromboPersistenceRuntime.sessionDatabase.getNormalizedMessageEvent(body.event?.id ?? '');
     assert.equal(storedEvent?.text, 'Reply through the durable boundary.');
     assert.equal(storedEvent?.actor.id, 'durable-actor');
+    assert.equal(storedEvent?.deliveryId, 'test-delivery-id');
 
     if (body.event?.id) {
       goromboPersistenceRuntime.sessionDatabase.deleteNormalizedMessageEvent(body.event.id);
