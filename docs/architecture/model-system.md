@@ -27,7 +27,7 @@ Runtime setup has two layers:
 3. The shipped `gorombo.config.json` runtime file selects active project model card keys for the running deployment.
 4. `src/models/catalog.ts` aggregates provider-owned cards for lookup by Flue model specifier.
 
-The orchestrator should not register providers itself. Runtime config selects a primary project model card and an optional backup card. The workflow uses the active card's specifier as the Flue model string. Session-budget and compaction code uses the selected card before estimating, reserving, or compacting context.
+The orchestrator should not register providers itself. Runtime config selects a primary project model card and an optional backup card. The durable orchestrator agent uses the active card's specifier as the Flue model string. Session-budget and compaction code uses the selected card before estimating, reserving, or compacting context.
 
 ## Ollama Cloud, Ollama Local, And Codex Brain
 
@@ -120,7 +120,7 @@ The session-management layer uses cards in this order:
 6. Trigger `session.compact()` before Flue or the provider rejects the prompt.
 7. Give RAG only the remaining context budget after system instructions, protocol context, memory, current user input, and output reserve are accounted for.
 
-The chat workflow prompts with the primary card first. If that model/provider fails with a recoverable availability error, the workflow evaluates the backup card's context budget and retries the same Flue session with the backup card. Context overflow, aborts, and hard budget stops do not trigger blind backup retries.
+The durable orchestrator agent prompts with the primary card. Backup cards remain explicit model metadata for future fallback-capable paths; they are not a reason to bypass context budgeting.
 
 RAG should come after this budget layer because retrieved context must fit into the selected card's remaining budget.
 

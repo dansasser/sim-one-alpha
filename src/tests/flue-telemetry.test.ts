@@ -9,11 +9,11 @@ import {
 test('telemetry store summarizes researcher delegation and web research calls', () => {
   const store = new FlueTelemetryStore();
 
-  store.record(createEvent({ type: 'run_start', runId: 'workflow:chat:run-1' }));
+  store.record(createEvent({ type: 'run_start', runId: 'agent:orchestrator:run-1' }));
   store.record(
     createEvent({
       type: 'task_start',
-      runId: 'workflow:chat:run-1',
+      runId: 'agent:orchestrator:run-1',
       taskId: 'task-1',
       agent: 'researcher',
       session: 'support',
@@ -22,7 +22,7 @@ test('telemetry store summarizes researcher delegation and web research calls', 
   store.record(
     createEvent({
       type: 'tool_start',
-      runId: 'workflow:chat:run-1',
+      runId: 'agent:orchestrator:run-1',
       taskId: 'task-1',
       toolCallId: 'tool-1',
       toolName: 'web_research',
@@ -31,7 +31,7 @@ test('telemetry store summarizes researcher delegation and web research calls', 
   store.record(
     createEvent({
       type: 'operation',
-      runId: 'workflow:chat:run-1',
+      runId: 'agent:orchestrator:run-1',
       operationId: 'operation-1',
       operationKind: 'task',
       durationMs: 123,
@@ -53,7 +53,7 @@ test('telemetry store summarizes researcher delegation and web research calls', 
     }),
   );
 
-  const summary = store.getRunSummary('workflow:chat:run-1');
+  const summary = store.getRunSummary('agent:orchestrator:run-1');
 
   assert.equal(summary?.delegatedToResearcher, true);
   assert.equal(summary?.calledWebResearch, true);
@@ -66,31 +66,31 @@ test('telemetry store summarizes researcher delegation and web research calls', 
 test('telemetry store keeps unrelated runs separate', () => {
   const store = new FlueTelemetryStore();
 
-  store.record(createEvent({ type: 'task_start', runId: 'workflow:chat:run-1', taskId: 'task-1', agent: 'researcher' }));
-  store.record(createEvent({ type: 'task_start', runId: 'workflow:chat:run-2', taskId: 'task-2', agent: 'coding-worker' }));
+  store.record(createEvent({ type: 'task_start', runId: 'agent:orchestrator:run-1', taskId: 'task-1', agent: 'researcher' }));
+  store.record(createEvent({ type: 'task_start', runId: 'agent:orchestrator:run-2', taskId: 'task-2', agent: 'coding-worker' }));
 
-  assert.equal(store.getRunSummary('workflow:chat:run-1')?.delegatedToResearcher, true);
-  assert.equal(store.getRunSummary('workflow:chat:run-2')?.delegatedToResearcher, false);
+  assert.equal(store.getRunSummary('agent:orchestrator:run-1')?.delegatedToResearcher, true);
+  assert.equal(store.getRunSummary('agent:orchestrator:run-2')?.delegatedToResearcher, false);
 });
 
 test('telemetry store trims oldest runs through serialized mutations', () => {
   const store = new FlueTelemetryStore({ maxRuns: 1 });
 
-  store.record(createEvent({ type: 'run_start', runId: 'workflow:chat:run-1' }));
-  store.record(createEvent({ type: 'run_start', runId: 'workflow:chat:run-2' }));
+  store.record(createEvent({ type: 'run_start', runId: 'agent:orchestrator:run-1' }));
+  store.record(createEvent({ type: 'run_start', runId: 'agent:orchestrator:run-2' }));
 
   const snapshot = store.snapshot();
 
   assert.equal(snapshot.runs.length, 1);
-  assert.equal(snapshot.runs[0]?.runId, 'workflow:chat:run-2');
-  assert.equal(store.getRunSummary('workflow:chat:run-1'), undefined);
+  assert.equal(snapshot.runs[0]?.runId, 'agent:orchestrator:run-2');
+  assert.equal(store.getRunSummary('agent:orchestrator:run-1'), undefined);
 });
 
 test('telemetry summary can be rebuilt from persisted Flue run events', () => {
-  const summary = summarizeTelemetryRunFromEvents('workflow:chat:run-persisted', [
+  const summary = summarizeTelemetryRunFromEvents('agent:orchestrator:run-persisted', [
     {
       type: 'run_start',
-      runId: 'workflow:chat:run-persisted',
+      runId: 'agent:orchestrator:run-persisted',
       payload: {
         text: 'do not expose this prompt text',
       },
@@ -98,7 +98,7 @@ test('telemetry summary can be rebuilt from persisted Flue run events', () => {
     },
     {
       type: 'operation',
-      runId: 'workflow:chat:run-persisted',
+      runId: 'agent:orchestrator:run-persisted',
       operationId: 'operation-1',
       operationKind: 'prompt',
       isError: false,
@@ -116,7 +116,7 @@ test('telemetry summary can be rebuilt from persisted Flue run events', () => {
     },
     {
       type: 'run_end',
-      runId: 'workflow:chat:run-persisted',
+      runId: 'agent:orchestrator:run-persisted',
       result: {
         text: 'do not expose final result text',
       },
@@ -132,7 +132,7 @@ test('telemetry summary can be rebuilt from persisted Flue run events', () => {
 });
 
 test('telemetry summary ignores invalid persisted run event entries', () => {
-  const summary = summarizeTelemetryRunFromEvents('workflow:chat:run-invalid', [
+  const summary = summarizeTelemetryRunFromEvents('agent:orchestrator:run-invalid', [
     null,
     'bad event',
     {
@@ -140,7 +140,7 @@ test('telemetry summary ignores invalid persisted run event entries', () => {
     },
     {
       type: 'tool_call',
-      runId: 'workflow:chat:run-invalid',
+      runId: 'agent:orchestrator:run-invalid',
       toolName: 'web_research',
     },
   ]);

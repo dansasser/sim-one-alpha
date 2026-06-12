@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 
 if (!existsSync('dist/server.mjs')) {
-  throw new Error('dist/server.mjs does not exist. Run npm run build before the built HTTP test.');
+  throw new Error('dist/server.mjs does not exist. Run corepack pnpm run build before the built HTTP test.');
 }
 
 const port = await getFreePort();
@@ -11,11 +11,19 @@ const baseUrl = `http://127.0.0.1:${port}`;
 const envFileValues = parseEnvFile('.env');
 const requestSecret = process.env.GOROMBO_HTTP_TEST_API_SECRET || envFileValues.API_SECRET || 'built-http-test-secret';
 const nodeArgs = existsSync('.env') ? ['--env-file=.env', 'dist/server.mjs'] : ['dist/server.mjs'];
+const modelEnv = {
+  OLLAMA_API_KEY: process.env.OLLAMA_API_KEY || envFileValues.OLLAMA_API_KEY || 'built-http-test-key',
+  CODEX_BRAIN_LOCAL_API_KEY:
+    process.env.CODEX_BRAIN_LOCAL_API_KEY || envFileValues.CODEX_BRAIN_LOCAL_API_KEY || 'built-http-test-key',
+  CODEX_BRAIN_LOCAL_API_URL:
+    process.env.CODEX_BRAIN_LOCAL_API_URL || envFileValues.CODEX_BRAIN_LOCAL_API_URL || 'https://dt1.example.test/v1',
+};
 
 const child = spawn(process.execPath, nodeArgs, {
   cwd: process.cwd(),
   env: {
     ...process.env,
+    ...modelEnv,
     PORT: String(port),
     API_SECRET: requestSecret,
   },
@@ -79,17 +87,17 @@ try {
   );
 
   await expectStatus(
-    `${baseUrl}/workflows/chat`,
+    `${baseUrl}/workflows/not-real`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ text: 'auth check' }),
     },
     401,
-    'direct chat workflow without secret',
+    'workflow route without secret',
   );
 
-  const webNewRunPointer = await expectJsonStatus(
+  const webNewCommand = await expectJsonStatus(
     `${baseUrl}/api/chat/events`,
     {
       method: 'POST',
@@ -103,21 +111,22 @@ try {
         conversationId: `built-http-web-${Date.now().toString(36)}`,
       }),
     },
-    202,
-    'chat event web /new workflow with secret',
+    200,
+    'chat event web /new command with secret',
     (body) => {
-      assertJson(typeof body.runId === 'string' && body.runId.length > 0, 'web /new workflow did not return a runId');
+      assertJson(
+        body.result?.text?.includes('/new is handled by the web client session controls') &&
+          body.result?.command?.name === 'new',
+        `web /new command did not include the expected command result.\n${JSON.stringify(body).slice(0, 1200)}`,
+      );
     },
   );
-  const webNewRun = await waitForRunEnd(webNewRunPointer.runId);
-  const webNewRunText = JSON.stringify(webNewRun);
   assertJson(
-    webNewRunText.includes('/new is handled by the web client session controls') &&
-      webNewRunText.includes('"name":"new"'),
-    `web /new workflow run did not include the expected command result.\n${webNewRunText.slice(0, 1200)}`,
+    webNewCommand.event?.id,
+    `web /new command did not include an event id.\n${JSON.stringify(webNewCommand).slice(0, 1200)}`,
   );
 
-  const tuiNewRunPointer = await expectJsonStatus(
+  const tuiNewCommand = await expectJsonStatus(
     `${baseUrl}/api/chat/events`,
     {
       method: 'POST',
@@ -132,22 +141,21 @@ try {
         conversationId: `built-http-tui-${Date.now().toString(36)}`,
       }),
     },
-    202,
-    'chat event tui /new workflow with secret',
+    200,
+    'chat event tui /new command with secret',
     (body) => {
-      assertJson(typeof body.runId === 'string' && body.runId.length > 0, 'tui /new workflow did not return a runId');
+      assertJson(
+        body.result?.text?.includes('Started new session tui-') &&
+          body.result?.command?.name === 'new' &&
+          typeof body.session?.id === 'string',
+        `tui /new command did not include the expected command result.\n${JSON.stringify(body).slice(0, 1200)}`,
+      );
     },
   );
-  const tuiNewRun = await waitForRunEnd(tuiNewRunPointer.runId);
-  const tuiNewRunText = JSON.stringify(tuiNewRun);
-  assertJson(
-    tuiNewRunText.includes('Started new session tui-') && tuiNewRunText.includes('"name":"new"'),
-    `tui /new workflow run did not include the expected command result.\n${tuiNewRunText.slice(0, 1200)}`,
-  );
-  const tuiSessionId = tuiNewRunText.match(/Started new session (tui-[A-Za-z0-9-]+)/)?.[1];
-  assertJson(typeof tuiSessionId === 'string', `Could not extract TUI session id from /new run.\n${tuiNewRunText.slice(0, 1200)}`);
+  const tuiSessionId = tuiNewCommand.session?.id;
+  assertJson(typeof tuiSessionId === 'string', `Could not extract TUI session id from /new command.\n${JSON.stringify(tuiNewCommand).slice(0, 1200)}`);
 
-  const deniedResumeRunPointer = await expectJsonStatus(
+  await expectJsonStatus(
     `${baseUrl}/api/chat/events`,
     {
       method: 'POST',
@@ -163,20 +171,17 @@ try {
         session: tuiSessionId,
       }),
     },
-    202,
-    'chat event denied explicit session resume workflow with secret',
+    403,
+    'chat event denied explicit session resume with secret',
     (body) => {
-      assertJson(typeof body.runId === 'string' && body.runId.length > 0, 'denied resume workflow did not return a runId');
+      assertJson(
+        body.error?.includes(`Session ${tuiSessionId} is not available for this actor or conversation.`),
+        `denied explicit session resume did not include the expected refusal.\n${JSON.stringify(body).slice(0, 1200)}`,
+      );
     },
   );
-  const deniedResumeRun = await waitForRunEnd(deniedResumeRunPointer.runId);
-  const deniedResumeRunText = JSON.stringify(deniedResumeRun);
-  assertJson(
-    deniedResumeRunText.includes(`Session ${tuiSessionId} is not available for this actor or conversation.`),
-    `denied explicit session resume did not include the expected refusal.\n${deniedResumeRunText.slice(0, 1200)}`,
-  );
 
-  const spoofedConnectorNewRunPointer = await expectJsonStatus(
+  await expectJsonStatus(
     `${baseUrl}/api/chat/events`,
     {
       method: 'POST',
@@ -191,21 +196,18 @@ try {
         conversationId: `built-http-telegram-${Date.now().toString(36)}`,
       }),
     },
-    202,
-    'chat event spoofed connector /new workflow with secret',
+    200,
+    'chat event spoofed connector /new command with secret',
     (body) => {
-      assertJson(typeof body.runId === 'string' && body.runId.length > 0, 'spoofed connector /new workflow did not return a runId');
+      assertJson(
+        body.result?.text?.includes('/new is handled by the web client session controls') &&
+          body.result?.command?.name === 'new',
+        `spoofed connector /new command did not include the expected web-safe command result.\n${JSON.stringify(body).slice(0, 1200)}`,
+      );
     },
   );
-  const spoofedConnectorNewRun = await waitForRunEnd(spoofedConnectorNewRunPointer.runId);
-  const spoofedConnectorNewRunText = JSON.stringify(spoofedConnectorNewRun);
-  assertJson(
-    spoofedConnectorNewRunText.includes('/new is handled by the web client session controls') &&
-      spoofedConnectorNewRunText.includes('"name":"new"'),
-    `spoofed connector /new workflow run did not include the expected web-safe command result.\n${spoofedConnectorNewRunText.slice(0, 1200)}`,
-  );
 
-  const compactRunPointer = await expectJsonStatus(
+  await expectJsonStatus(
     `${baseUrl}/api/chat/events`,
     {
       method: 'POST',
@@ -220,20 +222,19 @@ try {
         conversationId: `built-http-session-${Date.now().toString(36)}`,
       }),
     },
-    202,
-    'chat event compact workflow with secret',
+    200,
+    'chat event compact command with secret',
     (body) => {
-      assertJson(typeof body.runId === 'string' && body.runId.length > 0, 'compact workflow did not return a runId');
+      assertJson(
+        body.result?.text?.includes('Compacted session') &&
+          body.result?.command?.name === 'compact' &&
+          body.result?.contextBudget?.compactedBeforePrompt === true,
+        `compact command did not include the expected durable compact response.\n${JSON.stringify(body).slice(0, 1200)}`,
+      );
     },
   );
-  const compactRun = await waitForRunEnd(compactRunPointer.runId);
-  const compactRunText = JSON.stringify(compactRun);
-  assertJson(
-    compactRunText.includes('Compacted session') && compactRunText.includes('"name":"compact"'),
-    `compact workflow run did not include the expected command result.\n${compactRunText.slice(0, 1200)}`,
-  );
 
-  const missingRunId = 'workflow:chat:built-http-missing-run';
+  const missingRunId = 'agent:orchestrator:built-http-missing-run';
   await expectStatus(`${baseUrl}/runs/${encodeURIComponent(missingRunId)}`, { method: 'GET' }, 401, 'run lookup without secret');
   await expectStatus(
     `${baseUrl}/runs/${encodeURIComponent(missingRunId)}`,
@@ -336,7 +337,7 @@ async function waitForHealth() {
       lastError = error;
     }
 
-    await delay(250);
+    await sleep(250);
   }
 
   throw new Error(`Built server did not become healthy: ${lastError instanceof Error ? lastError.message : String(lastError)}\n${stderr}`);
@@ -376,52 +377,8 @@ function assertJson(condition, message) {
   }
 }
 
-function delay(ms) {
+function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitForRunEnd(runId) {
-  const deadline = Date.now() + 60_000;
-  let latest;
-
-  while (Date.now() < deadline) {
-    latest = await expectJsonStatus(
-      `${baseUrl}/runs/${encodeURIComponent(runId)}`,
-      {
-        method: 'GET',
-        headers: { 'x-api-secret': requestSecret },
-      },
-      200,
-      'workflow run lookup',
-      (body) => {
-        assertJson(isRunLookupBody(body), 'workflow run lookup did not return an event stream array or run status object');
-      },
-    );
-
-    if (readRunCompletion(latest)) {
-      return latest;
-    }
-
-    await delay(500);
-  }
-
-  throw new Error(`Timed out waiting for workflow run_end.\n${JSON.stringify(latest).slice(0, 1200)}`);
-}
-
-function isRunLookupBody(body) {
-  return Array.isArray(body) || (body && typeof body === 'object' && typeof body.status === 'string');
-}
-
-function readRunCompletion(run) {
-  if (Array.isArray(run)) {
-    return run.find((event) => event && event.type === 'run_end');
-  }
-
-  if (run && (run.status === 'completed' || run.status === 'failed')) {
-    return run;
-  }
-
-  return undefined;
 }
 
 async function stopChild(childProcess) {

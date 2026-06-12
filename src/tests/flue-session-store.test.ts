@@ -101,6 +101,106 @@ test('GOROMBO persistence wrapper indexes saved Flue session data for session me
   }
 });
 
+test('direct agent session data is indexed by agent instance id for memory retrieval', async () => {
+  const runtime = createTestPersistenceRuntime();
+
+  try {
+    const storageKey = createFlueSessionStorageKey('direct-agent-session', 'default', 'default');
+    runtime.sessionDatabase.ensureChatSession({
+      sessionId: 'direct-agent-session',
+      origin: 'web',
+      actorId: 'direct-actor',
+      conversationId: 'direct-conversation',
+    });
+
+    await runtime.adapter.migrate?.();
+    const store = runtime.adapter.connect().sessions;
+    await store.save(storageKey, createStoredSessionData('Remember the direct durable invoice note.'));
+
+    assert.equal(
+      runtime.sessionDatabase.getLatestStorageKeyForInstance('direct-agent-session', 'default', 'default'),
+      storageKey,
+    );
+    assert.equal(runtime.sessionDatabase.getLatestStorageKey('default', 'default'), null);
+
+    const matches = runtime.sessionDatabase.searchSessionMemory({
+      text: 'durable invoice',
+      actorId: 'direct-actor',
+      conversationId: 'direct-conversation',
+      limit: 5,
+    });
+
+    assert.equal(matches.length, 1);
+    assert.equal(matches[0]?.sessionName, 'default');
+    assert.equal(matches[0]?.actorId, 'direct-actor');
+    assert.match(matches[0]?.content ?? '', /direct durable invoice note/);
+  } finally {
+    await runtime.adapter.close?.();
+    runtime.cleanup();
+  }
+});
+
+test('normalized chat event context is persisted without raw payload data', async () => {
+  const runtime = createTestPersistenceRuntime();
+
+  try {
+    const event = {
+      id: 'event-persisted-context',
+      connector: 'web-api',
+      kind: 'chat.message',
+      text: 'Persist this trusted context.',
+      receivedAt: '2026-06-12T00:00:00.000Z',
+      actor: {
+        id: 'event-actor',
+        displayName: 'Visible Actor',
+      },
+      conversation: {
+        id: 'event-conversation',
+        threadId: 'event-thread',
+      },
+      context: {
+        clientId: 'event-client',
+        projectId: 'event-project',
+        workflow: 'event-workflow',
+        task: 'event-task',
+      },
+      raw: {
+        token: 'do-not-store',
+      },
+    } as const;
+
+    runtime.sessionDatabase.recordNormalizedMessageEvent({
+      event,
+      sessionId: 'event-session',
+      deliveryKind: 'direct-agent',
+      deliveryId: 'stream#0',
+    });
+
+    const stored = runtime.sessionDatabase.getNormalizedMessageEvent(event.id);
+
+    assert.deepEqual(stored, {
+      id: event.id,
+      connector: event.connector,
+      kind: event.kind,
+      text: event.text,
+      receivedAt: event.receivedAt,
+      actor: {
+        id: event.actor.id,
+        displayName: event.actor.displayName,
+      },
+      conversation: {
+        id: event.conversation.id,
+        threadId: event.conversation.threadId,
+      },
+      context: event.context,
+    });
+    assert.equal('raw' in (stored ?? {}), false);
+  } finally {
+    await runtime.adapter.close?.();
+    runtime.cleanup();
+  }
+});
+
 test('session memory retrieval is scoped to the current actor or conversation', async () => {
   const runtime = createTestPersistenceRuntime();
 

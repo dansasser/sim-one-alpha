@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { FlueEvent } from '@flue/runtime';
+import type { FlueEvent, FlueSession } from '@flue/runtime';
 import { Hono } from 'hono';
 import app from '../app.js';
+import { goromboPersistenceRuntime } from '../db.js';
 import { requireApiSecret } from '../middleware/api-secret.js';
+import { registerChatEventRoutes } from '../routes/chat-events.js';
 import { registerTelemetryRoutes } from '../routes/telemetry.js';
 import { flueTelemetryStore } from '../telemetry/flue-telemetry.js';
 
@@ -61,6 +63,144 @@ test('chat session list endpoint returns the stored session list after auth pass
   });
 });
 
+test('chat event ingress enters the durable orchestrator agent route', async () => {
+  const testApp = new Hono();
+  let promptedAgent = false;
+
+  testApp.use('/agents/*', requireApiSecret);
+  registerChatEventRoutes(testApp);
+  testApp.post('/agents/orchestrator/:id', requireApiSecret, async (c) => {
+    promptedAgent = true;
+    assert.equal(c.req.query('wait'), 'result');
+
+    const body = await c.req.json() as { message?: string };
+    assert.match(body.message ?? '', /load_protocols/);
+    assert.match(body.message ?? '', /Reply through the durable boundary/);
+    assert.doesNotMatch(body.message ?? '', /durable-actor/);
+
+    return c.json({
+      result: {
+        text: 'direct-agent-ok',
+      },
+      streamUrl: c.req.url,
+      offset: '0',
+    });
+  });
+
+  await withApiSecret('test-secret', async () => {
+    const response = await testApp.request('/api/chat/events', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-secret': 'test-secret',
+      },
+      body: JSON.stringify({
+        text: 'Reply through the durable boundary.',
+        actorId: 'durable-actor',
+        conversationId: 'durable-conversation',
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    const body = await response.json() as {
+      result?: { text?: string };
+      event?: { id?: string };
+      session?: { id?: string; surface?: string; created?: boolean };
+    };
+    assert.equal(promptedAgent, true);
+    assert.equal(body.result?.text, 'direct-agent-ok');
+    assert.equal(body.session?.surface, 'web');
+    assert.equal(body.session?.created, true);
+    assert.equal(typeof body.session?.id, 'string');
+    assert.equal(typeof body.event?.id, 'string');
+
+    const storedEvent = goromboPersistenceRuntime.sessionDatabase.getNormalizedMessageEvent(body.event?.id ?? '');
+    assert.equal(storedEvent?.text, 'Reply through the durable boundary.');
+    assert.equal(storedEvent?.actor.id, 'durable-actor');
+
+    if (body.event?.id) {
+      goromboPersistenceRuntime.sessionDatabase.deleteNormalizedMessageEvent(body.event.id);
+    }
+    if (body.session?.id) {
+      goromboPersistenceRuntime.sessionDatabase.deleteChatSession(body.session.id);
+    }
+  });
+});
+
+test('chat event compact command compacts the durable orchestrator session without prompting', async () => {
+  const testApp = new Hono();
+  const requestedSessionId = `compact-direct-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  let openedSessionId: string | undefined;
+  let compacted = false;
+  let prompted = false;
+
+  testApp.use('/agents/*', requireApiSecret);
+  registerChatEventRoutes(testApp, {
+    openDurableSession: async ({ sessionId }) => {
+      openedSessionId = sessionId;
+      return {
+        compact: async () => {
+          compacted = true;
+        },
+        prompt: async () => {
+          prompted = true;
+          throw new Error('compact command should not prompt');
+        },
+      } as unknown as FlueSession;
+    },
+  });
+  testApp.post('/agents/orchestrator/:id', () => {
+    throw new Error('compact command should not forward to the agent prompt route');
+  });
+
+  await withApiSecret('test-secret', async () => {
+    await withModelEnv(async () => {
+      const response = await testApp.request('/api/chat/events', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-secret': 'test-secret',
+        },
+        body: JSON.stringify({
+          connector: 'tui',
+          text: '/compact',
+          actorId: 'compact-user',
+          conversationId: 'compact-thread',
+          session: requestedSessionId,
+        }),
+      });
+
+      assert.equal(response.status, 200);
+      const body = await response.json() as {
+        result?: {
+          text?: string;
+          command?: { name?: string; handled?: boolean };
+          contextBudget?: { compactedBeforePrompt?: boolean; modelSpecifier?: string };
+        };
+        event?: { id?: string };
+        session?: { id?: string; surface?: string; created?: boolean };
+      };
+
+      assert.equal(openedSessionId, requestedSessionId);
+      assert.equal(compacted, true);
+      assert.equal(prompted, false);
+      assert.equal(body.result?.text, `Compacted session ${requestedSessionId}.`);
+      assert.equal(body.result?.command?.name, 'compact');
+      assert.equal(body.result?.command?.handled, true);
+      assert.equal(body.result?.contextBudget?.compactedBeforePrompt, true);
+      assert.equal(body.result?.contextBudget?.modelSpecifier, 'ollama-cloud/minimax-m3');
+      assert.equal(body.session?.id, requestedSessionId);
+      assert.equal(body.session?.surface, 'tui');
+      assert.equal(body.session?.created, true);
+
+      if (body.event?.id) {
+        goromboPersistenceRuntime.sessionDatabase.deleteNormalizedMessageEvent(body.event.id);
+      }
+      goromboPersistenceRuntime.sessionDatabase.deleteChatSession(requestedSessionId);
+    });
+  });
+});
+
 test('telemetry run endpoint is protected and reports researcher delegation', async () => {
   flueTelemetryStore.reset();
 
@@ -68,7 +208,7 @@ test('telemetry run endpoint is protected and reports researcher delegation', as
     flueTelemetryStore.record(
       createEvent({
         type: 'task_start',
-        runId: 'workflow:chat:run-telemetry',
+        runId: 'agent:orchestrator:run-telemetry',
         taskId: 'task-1',
         agent: 'researcher',
       }),
@@ -76,7 +216,7 @@ test('telemetry run endpoint is protected and reports researcher delegation', as
     flueTelemetryStore.record(
       createEvent({
         type: 'tool_call',
-        runId: 'workflow:chat:run-telemetry',
+        runId: 'agent:orchestrator:run-telemetry',
         taskId: 'task-1',
         toolCallId: 'tool-1',
         toolName: 'web_research',
@@ -86,10 +226,10 @@ test('telemetry run endpoint is protected and reports researcher delegation', as
     );
 
     await withApiSecret('test-secret', async () => {
-      const unauthorized = await app.request('/api/telemetry/runs/workflow%3Achat%3Arun-telemetry');
+      const unauthorized = await app.request('/api/telemetry/runs/agent%3Aorchestrator%3Arun-telemetry');
       assert.equal(unauthorized.status, 401);
 
-      const response = await app.request('/api/telemetry/runs/workflow%3Achat%3Arun-telemetry', {
+      const response = await app.request('/api/telemetry/runs/agent%3Aorchestrator%3Arun-telemetry', {
         headers: { 'x-api-secret': 'test-secret' },
       });
 
@@ -143,10 +283,10 @@ test('telemetry run endpoint falls back to persisted Flue run events after memor
 
   try {
     await withApiSecret('test-secret', async () => {
-      const unauthorized = await testApp.request('/api/telemetry/runs/workflow%3Achat%3Apersisted-run');
+      const unauthorized = await testApp.request('/api/telemetry/runs/agent%3Aorchestrator%3Apersisted-run');
       assert.equal(unauthorized.status, 401);
 
-      const response = await testApp.request('/api/telemetry/runs/workflow%3Achat%3Apersisted-run', {
+      const response = await testApp.request('/api/telemetry/runs/agent%3Aorchestrator%3Apersisted-run', {
         headers: { 'x-api-secret': 'test-secret' },
       });
 
@@ -174,14 +314,14 @@ test('telemetry run endpoint treats non-JSON persisted run responses as not foun
   flueTelemetryStore.reset();
 
   await withApiSecret('test-secret', async () => {
-    const response = await testApp.request('/api/telemetry/runs/workflow%3Achat%3Anon-json-run', {
+    const response = await testApp.request('/api/telemetry/runs/agent%3Aorchestrator%3Anon-json-run', {
       headers: { 'x-api-secret': 'test-secret' },
     });
 
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), {
       error: 'Telemetry run not found',
-      runId: 'workflow:chat:non-json-run',
+      runId: 'agent:orchestrator:non-json-run',
     });
   });
 });
@@ -203,6 +343,33 @@ async function withApiSecret(secret: string | undefined, fn: () => Promise<void>
     } else {
       process.env.API_SECRET = previous;
     }
+  }
+}
+
+async function withModelEnv(fn: () => Promise<void>): Promise<void> {
+  const previous = {
+    OLLAMA_API_KEY: process.env.OLLAMA_API_KEY,
+    CODEX_BRAIN_LOCAL_API_KEY: process.env.CODEX_BRAIN_LOCAL_API_KEY,
+    CODEX_BRAIN_LOCAL_API_URL: process.env.CODEX_BRAIN_LOCAL_API_URL,
+  };
+
+  try {
+    process.env.OLLAMA_API_KEY = 'test-key';
+    process.env.CODEX_BRAIN_LOCAL_API_KEY = 'test-key';
+    process.env.CODEX_BRAIN_LOCAL_API_URL = 'https://dt1.example.test/v1';
+    await fn();
+  } finally {
+    restoreEnv('OLLAMA_API_KEY', previous.OLLAMA_API_KEY);
+    restoreEnv('CODEX_BRAIN_LOCAL_API_KEY', previous.CODEX_BRAIN_LOCAL_API_KEY);
+    restoreEnv('CODEX_BRAIN_LOCAL_API_URL', previous.CODEX_BRAIN_LOCAL_API_URL);
+  }
+}
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
   }
 }
 

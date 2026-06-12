@@ -35,19 +35,19 @@ This file is a planning checklist. Do not treat it as completed implementation u
 - [x] Update architecture tests to assert the legacy files are absent and the live Flue route remains wired.
 - [x] Update docs that still listed the removed `gateway/` source directory.
 - [x] Search for stale legacy references after edits.
-- [x] Run `npm test`.
-- [x] Run `npm run typecheck`.
-- [x] Run `npm run build`.
-- [x] Run `npm run smoke:http`.
+- [x] Run `corepack pnpm test`.
+- [x] Run `corepack pnpm run typecheck`.
+- [x] Run `corepack pnpm run build`.
+- [x] Run `corepack pnpm run smoke:http`.
 - [x] Run an HTTP prompt test that should invoke researcher web search.
 
 Verification result:
 
-- `npm test` passed with 89 tests.
-- `npm run typecheck` passed.
-- `npm run build` passed and found 1 agent plus 4 workflows.
-- `npm run smoke:http` passed.
-- Live HTTP prompt test passed using the main checkout `.env`; run `workflow:chat:01KTSHH9V62NPZ12JVVQP9YGV2` completed, returned a Gorombo URL, delegated to `researcher`, and called `web_research`.
+- `corepack pnpm test` passed with 89 tests.
+- `corepack pnpm run typecheck` passed.
+- `corepack pnpm run build` passed and found 1 agent plus 4 workflows.
+- `corepack pnpm run smoke:http` passed.
+- Live HTTP prompt test passed using the main checkout `.env`; durable orchestrator run `agent:orchestrator:01KTSHH9V62NPZ12JVVQP9YGV2` completed, returned a Gorombo URL, delegated to `researcher`, and called `web_research`.
 
 ### Fix Worker Layout
 
@@ -61,11 +61,11 @@ Verification result:
 
 - Stale path search found no remaining references to the former loose coding worker file.
 - Coding worker workspace contains the full persona file set.
-- `npm test` passed with 91 tests.
-- `npm run typecheck` passed.
-- `npm run build` passed and found 1 agent plus 4 workflows.
-- `npm run smoke:http` passed.
-- Live HTTP prompt test passed using the main checkout `.env`; run `workflow:chat:01KTSJP4DRMZWNAXEHWRHMX7KR` completed, returned a Gorombo URL, delegated to `researcher`, and called `web_research`.
+- `corepack pnpm test` passed with 91 tests.
+- `corepack pnpm run typecheck` passed.
+- `corepack pnpm run build` passed and found 1 agent plus 4 workflows.
+- `corepack pnpm run smoke:http` passed.
+- Live HTTP prompt test passed using the main checkout `.env`; durable orchestrator run `agent:orchestrator:01KTSJP4DRMZWNAXEHWRHMX7KR` completed, returned a Gorombo URL, delegated to `researcher`, and called `web_research`.
 
 ### Move Researcher-Owned Support Code
 
@@ -79,11 +79,11 @@ Verification result:
 Verification result:
 
 - Stale path search found no remaining references to the former top-level research support directory, old relative imports, or old research cache DB path.
-- `npm test` passed with 89 tests.
-- `npm run typecheck` passed.
-- `npm run build` passed and found 1 agent plus 4 workflows.
-- `npm run smoke:http` passed.
-- Live HTTP prompt test passed using the main checkout `.env`; run `workflow:chat:01KTSJ2H3KK1XZP49A150D0XRV` completed, returned a Gorombo URL, delegated to `researcher`, and called `web_research`.
+- `corepack pnpm test` passed with 89 tests.
+- `corepack pnpm run typecheck` passed.
+- `corepack pnpm run build` passed and found 1 agent plus 4 workflows.
+- `corepack pnpm run smoke:http` passed.
+- Live HTTP prompt test passed using the main checkout `.env`; durable orchestrator run `agent:orchestrator:01KTSJ2H3KK1XZP49A150D0XRV` completed, returned a Gorombo URL, delegated to `researcher`, and called `web_research`.
 
 ### Rename Shared Retrieval Subsystem
 
@@ -104,13 +104,13 @@ Verification result:
 Verification result:
 
 - Architecture tests now require the Flue map to document every current top-level `src/` directory.
-- `npm test` passed with 91 tests.
+- `corepack pnpm test` passed with 91 tests.
 - Stale reference search found no remaining old persona-directory imports or docs references.
-- `npm test` passed with 91 tests after moving the loader.
-- `npm run typecheck` passed.
-- `npm run build` passed and found 1 agent plus 4 workflows.
-- `npm run smoke:http` passed.
-- Live HTTP prompt test passed using the main checkout `.env`; run `workflow:chat:01KTSKCZ65KYV83RQFZFKVN6HZ` completed, returned a Gorombo URL, delegated to `researcher`, and called `web_research`.
+- `corepack pnpm test` passed with 91 tests after moving the loader.
+- `corepack pnpm run typecheck` passed.
+- `corepack pnpm run build` passed and found 1 agent plus 4 workflows.
+- `corepack pnpm run smoke:http` passed.
+- Live HTTP prompt test passed using the main checkout `.env`; durable orchestrator run `agent:orchestrator:01KTSKCZ65KYV83RQFZFKVN6HZ` completed, returned a Gorombo URL, delegated to `researcher`, and called `web_research`.
 
 ### Runtime Database Directory
 

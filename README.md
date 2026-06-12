@@ -366,31 +366,31 @@ cd <repository-name>
 Install dependencies using the package manager used by the repo:
 
 ```sh
-npm install
+corepack pnpm install
 ```
 
 Run the development server or local workflow command defined in `package.json`:
 
 ```sh
-npm run dev
+corepack pnpm run dev
 ```
 
 Run tests:
 
 ```sh
-npm test
+corepack pnpm test
 ```
 
 Run type checks:
 
 ```sh
-npm run typecheck
+corepack pnpm run typecheck
 ```
 
 Build the project:
 
 ```sh
-npm run build
+corepack pnpm run build
 ```
 
 Use the actual scripts defined in `package.json`.
@@ -464,35 +464,23 @@ Then select it by card key in `gorombo.config.json`.
 
 `CODEX_BRAIN_LOCAL_API_URL` must be the OpenAI-compatible base URL including `/v1`.
 
-Run a one-shot chat workflow:
-
-```sh
-npm run chat:local -- "Hello"
-```
-
 Run a one-shot research workflow:
 
 ```sh
-npm run research:local -- "Find the official Ollama web search API docs URL."
-```
-
-Run the underlying Flue workflow with a full normalized payload:
-
-```sh
-npm run chat -- --payload "{\"text\":\"Hello\",\"actorId\":\"local-user\",\"conversationId\":\"local-thread\"}"
+corepack pnpm run research:local -- "Find the official Ollama web search API docs URL."
 ```
 
 Open an interactive Flue agent session:
 
 ```sh
-npm run connect
+corepack pnpm run connect
 ```
 
 Start the built Node HTTP runtime:
 
 ```sh
-npm run build
-npm start
+corepack pnpm run build
+corepack pnpm start
 ```
 
 The HTTP runtime uses the Flue routing model:
@@ -500,8 +488,8 @@ The HTTP runtime uses the Flue routing model:
 - `GET /health` is public.
 - `POST /api/chat/events` is the app-owned chat ingress alias.
 - `GET /api/chat/sessions` lists stored chat sessions for HTTP clients.
-- `POST /workflows/chat` is the Flue workflow route.
-- `GET /runs/:runId` reads the Flue workflow run.
+- `POST /agents/orchestrator/:sessionId` is the durable Flue orchestrator agent route used by the chat ingress.
+- `GET /runs/:runId` reads persisted Flue run and event stream records.
 
 Protected routes require:
 
@@ -511,23 +499,34 @@ x-api-secret: <API_SECRET>
 
 `API_SECRET` must be set in `.env` or by the deployment secret manager. If it is missing, protected endpoints fail closed with `503`.
 
-Flue workflow HTTP invocation is asynchronous. A successful chat event returns `202` with a `runId`; clients then read `/runs/:runId` with the same secret header to retrieve the completed result.
+The app-owned chat ingress normalizes and authorizes the message, persists trusted event context to SQLite, resolves the product session, and prompts the durable orchestrator agent instance at `/agents/orchestrator/:sessionId?wait=result`. A successful normal chat event returns the direct agent result with stream coordinates:
 
-The `chat` workflow:
+```json
+{
+  "result": {},
+  "streamUrl": "http://127.0.0.1:3000/agents/orchestrator/<sessionId>",
+  "offset": "0",
+  "event": { "id": "web-..." },
+  "session": { "id": "<sessionId>", "surface": "web", "created": true }
+}
+```
 
-- Initializes the `orchestrator` Flue agent.
-- Loads `.env` through the Flue CLI for secrets.
-- Loads the shipped `gorombo.config.json` runtime file for deployment/runtime choices.
+Flue workflow HTTP invocation remains available for other finite workflow calls. Workflow calls return `202` with a `runId`; clients then read `/runs/:runId` with the same secret header to retrieve the completed workflow result.
+
+The `/api/chat/events` durable ingress:
+
+- Normalizes the incoming message event.
+- Persists trusted event context before agent admission.
 - Resolves the product session.
-- Handles pre-LLM slash commands.
-- Prompts the configured primary model with the normalized message event.
+- Handles pre-LLM slash commands that can be handled at ingress.
+- Prompts the durable `orchestrator` Flue agent instance for that session.
 
 Model selection rules:
 
 - `models.primary` and `models.backup` are project model card keys.
 - Raw Flue specifiers and `GOROMBO_MODEL` env selection are rejected.
 - The default primary card is `minimax-m3-cloud`, which resolves through its card to `ollama-cloud/minimax-m3` and calls Ollama Cloud through `https://ollama.com/v1`.
-- If the primary prompt fails with a recoverable model/provider error, the workflow checks the backup card budget and retries the same session with `models.backup`.
+- The durable orchestrator agent uses the configured primary card. The backup card remains configured metadata for paths that explicitly implement fallback behavior.
 - Model cards live inside each provider directory under `src/models/providers/<provider>/cards`.
 - The catalog in `src/models/catalog.ts` aggregates cards for model selection and budget lookup.
 
@@ -563,7 +562,7 @@ Each card lives under its owning provider directory, for example `src/models/pro
 
 Provider files live next to their cards in `src/models/providers/<provider>`. Providers describe transport: base URLs, API key environment variables, Flue `registerProvider(...)` calls, and per-provider model registration. When a provider has multiple model cards, those cards live in that provider's `cards/` subdirectory. This keeps provider setup out of agent files and lets the agent reference a card by specifier.
 
-Cards exist because session management, compaction, and RAG all need model-specific token limits. MiniMax M3, DeepSeek V4 Pro, and Qwen 3.5 do not have the same usable context or output budgets. The context-budget layer reads the selected card instead of hardcoding token limits in the agent, workflow, or RAG router.
+Cards exist because session management, compaction, and RAG all need model-specific token limits. MiniMax M3, DeepSeek V4 Pro, and Qwen 3.5 do not have the same usable context or output budgets. The context-budget layer reads the selected card instead of hardcoding token limits in the agent, durable ingress, or RAG router.
 
 Current cards:
 
@@ -578,7 +577,7 @@ MiniMax M3 is intentionally recorded with multiple limits: MiniMax advertises up
 
 ## Session Budget And Compaction
 
-The chat workflow now reports and enforces a card-driven context budget before it sends a prompt to the LLM provider.
+The durable chat ingress and session layer use card-driven context budget metadata for explicit compaction, session-memory indexing, and future RAG allocation.
 
 Implemented pieces:
 
@@ -586,22 +585,21 @@ Implemented pieces:
 - `calculateContextBudget(...)` chooses the provider-safe context window, reserves output tokens, and calculates warning, compaction, and hard-stop thresholds.
 - `evaluateCompaction(...)` returns `normal`, `warn`, `compact`, or `stop`.
 - `src/db.ts` exports the Flue persistence adapter discovered by Flue at build time.
-- `session-persistence.ts` wraps Flue's built-in SQLite adapter and indexes latest logical chat sessions by harness/session name.
-- `session-database.ts` stores chat session catalog records, active connector sessions, and session-memory FTS chunks.
+- `session-persistence.ts` wraps Flue's built-in SQLite adapter and indexes latest logical workflow sessions plus durable direct-agent instance sessions.
+- `session-database.ts` stores chat session catalog records, active connector sessions, persisted normalized event context, and session-memory FTS chunks.
 - `deriveSessionBudgetStateFromData(...)` estimates budget from the stored Flue conversation tree, including compaction entries.
 - `chatSessionBudgetStore` remains as an in-process fallback when stored session data is not available.
-- The `chat` workflow calls `session.compact()` before prompting when the estimate crosses the compaction threshold.
-- The workflow returns a guard response instead of calling the provider when the prompt still exceeds the hard input budget after compaction.
+- The `/compact` slash command opens the durable direct-agent session and calls Flue `session.compact()` without sending the command text to the model.
 
-Flue's native automatic compaction remains enabled on the orchestrator agent with card-derived `reserveTokens` and `keepRecentTokens`. The GOROMBO layer adds pre-send protection and budget telemetry for future RAG allocation.
+Flue's native automatic compaction remains enabled on the orchestrator agent with card-derived `reserveTokens` and `keepRecentTokens`. The GOROMBO layer adds explicit command compaction, persisted context lookup, and budget telemetry for future RAG allocation.
 
 Session memory is now indexed from stored Flue `SessionData` and retrieved through the memory tool. The future full GOROMBO memory stack is separate from this session-memory layer. Web search/document chunks should be injected only after the budget layer reports remaining context capacity.
 
 Runtime SQLite defaults:
 
 ```text
-.gorombo/db/flue.sqlite      Flue sessions, submissions, event streams, and workflow run/registry records
-.gorombo/db/sessions.sqlite  GOROMBO chat sessions, active sessions, logical session index, and session-memory FTS
+.gorombo/db/flue.sqlite      Flue sessions, durable submissions, event streams, and workflow run/registry records
+.gorombo/db/sessions.sqlite  chat sessions, active sessions, logical session indexes, normalized event context, and session-memory FTS
 ```
 
 Protected telemetry uses live in-memory Flue observer summaries when available and can fall back to persisted Flue run events after the in-memory summary is gone.
@@ -609,7 +607,7 @@ Protected telemetry uses live in-memory Flue observer summaries when available a
 Slash commands are parsed before the prompt reaches the LLM:
 
 - `/new` starts a new trusted connector/TUI session. GUI-managed web chat should use the client new-chat control instead, and generic Web API payloads cannot opt into connector-only behavior by spoofing a connector name.
-- `/compact` calls Flue `session.compact()` for the resolved session and returns command telemetry.
+- `/compact` calls Flue `session.compact()` for the resolved durable direct-agent session and returns command telemetry.
 
 Architecture details live in `docs/architecture/session-context-budget.md`.
 
@@ -664,12 +662,12 @@ Use the boundaries this way:
 - low-level provider errors: the research workflow records failures in `providerFailures`
 - research strategy: researcher decides which searches to run, when to fetch pages, when to stop, and how to compare sources
 
-The researcher subagent lives in `src/workers/researcher/researcher.ts` and owns the `web_research` tool. The standalone `research` workflow in `src/workflows/research.ts` initializes the researcher directly for CLI or API research runs. Use `npm run research:local -- "..."` for local one-shot research testing.
+The researcher subagent lives in `src/workers/researcher/researcher.ts` and owns the `web_research` tool. The standalone `research` workflow in `src/workflows/research.ts` initializes the researcher directly for CLI or API research runs. Use `corepack pnpm run research:local -- "..."` for local one-shot research testing.
 
 Main-agent workspace persona files live in `src/workspace/`. Subagent workspace persona files live beside their subagent implementation, for example `src/workers/researcher/workspace/`. Persona names belong inside workspace file contents, not in architecture paths.
 
 ```text
-chat workflow
+durable chat ingress
 -> orchestrator agent
 -> task tool with agent: "researcher"
 -> researcher subagent
@@ -704,7 +702,7 @@ It starts with model selection and is intended to grow into the deployment-level
 
 Change model choices in the shipped runtime JSON file, then restart the runtime/gateway. Keep API keys and service credentials in `.env` or the deployment secret manager.
 
-For Node distribution, `.env` lives beside `package.json` at the runtime root. `npm start` runs:
+For Node distribution, `.env` lives beside `package.json` at the runtime root. `corepack pnpm start` runs:
 
 ```sh
 node --env-file=.env dist/server.mjs
@@ -769,19 +767,19 @@ Run relevant verification before calling work complete.
 Common commands:
 
 ```sh
-npm test
-npm run typecheck
-npm run build
-npm run test:http
-npm run smoke:http
+corepack pnpm test
+corepack pnpm run typecheck
+corepack pnpm run build
+corepack pnpm run test:http
+corepack pnpm run smoke:http
 ```
 
-`npm test` runs the TypeScript unit suite, builds `dist/server.mjs`, then runs `npm run test:http` against the built server over real localhost HTTP. The root `.env` file remains the runtime environment source; it is not copied into `dist`.
+`corepack pnpm test` runs the TypeScript unit suite, builds `dist/server.mjs`, then runs `corepack pnpm run test:http` against the built server over real localhost HTTP. The root `.env` file remains the runtime environment source; it is not copied into `dist`.
 
 For a live built-server chat smoke through `/api/chat/events`, run:
 
 ```sh
-npm run smoke:http -- --live-chat
+corepack pnpm run smoke:http -- --live-chat
 ```
 
 If the project defines other scripts in `package.json`, use those exact scripts.

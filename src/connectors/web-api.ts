@@ -25,7 +25,7 @@ const acceptedWebApiConnectors = new Set<WebApiAcceptedConnector>(['web-api', 't
  * Public HTTP callers must not be able to opt into connector-only behavior by
  * sending `connector: "telegram"` or another future connector name. Trusted
  * connector ingresses should derive connector identity server-side before
- * handing events to chat workflow machinery.
+ * handing events to durable chat ingress.
  */
 export function normalizeWebApiConnector(value: unknown): WebApiAcceptedConnector {
   return typeof value === 'string' && acceptedWebApiConnectors.has(value as WebApiAcceptedConnector)

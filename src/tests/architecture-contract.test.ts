@@ -22,7 +22,6 @@ test('app.ts stays a Flue app shell and does not bypass agents or cards', () => 
   const app = readText('src/app.ts');
   const chatEventsRoute = readText('src/routes/chat-events.ts');
   const apiSecretMiddleware = readText('src/middleware/api-secret.ts');
-  const chatWorkflow = readText('src/workflows/chat.ts');
 
   assert.match(app, /app\.route\('\/', flue\(\)\)/);
   assert.match(app, /models\/runtime\.js/);
@@ -37,10 +36,11 @@ test('app.ts stays a Flue app shell and does not bypass agents or cards', () => 
   assert.doesNotMatch(app, /executionCtx/);
   assert.doesNotMatch(app, /createDefaultWebSearchProvider/);
   assert.match(chatEventsRoute, /\/api\/chat\/events/);
-  assert.match(chatEventsRoute, /\/workflows\/chat/);
+  assert.match(chatEventsRoute, /\/agents\/orchestrator/);
+  assert.doesNotMatch(chatEventsRoute, /app\.request\(\s*[`'"]\/workflows\//);
   assert.doesNotMatch(chatEventsRoute, /executionCtx/);
   assert.match(apiSecretMiddleware, /API_SECRET/);
-  assert.match(chatWorkflow, /requireApiSecret/);
+  assert.equal(existsSync(['src', 'workflows', 'chat.ts'].join('/')), false);
 });
 
 test('legacy non-Flue orchestrator and gateway paths stay removed', () => {

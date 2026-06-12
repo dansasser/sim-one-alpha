@@ -59,7 +59,7 @@ src/app.ts
   May expose health checks and app-owned ingress.
   Registers the lightweight Flue telemetry observer.
   Applies imported API-secret middleware to public Flue route families.
-  Custom chat ingress forwards to the Flue chat workflow.
+  Custom chat ingress forwards to the durable Flue orchestrator agent route.
   Must not call the old non-Flue orchestrator.
 
 src/middleware/api-secret.ts
@@ -69,14 +69,14 @@ src/middleware/api-secret.ts
 
 src/routes/chat-events.ts
   App-owned /api/chat/events ingress alias.
-  Verifies API-secret middleware, exposes /api/chat/sessions for HTTP chat lists, normalizes the HTTP boundary, and forwards events to /workflows/chat.
-  Does not call c.executionCtx or a non-Flue orchestrator.
+  Verifies API-secret middleware, exposes /api/chat/sessions for HTTP chat lists, normalizes the HTTP boundary, persists trusted event context, resolves the product session, and prompts the durable /agents/orchestrator/:sessionId route.
+  Does not call c.executionCtx, a workflow route for normal chat execution, or a non-Flue orchestrator.
 
 src/db.ts
   Flue persistence adapter entrypoint.
-  Uses Flue's Node sqlite() adapter for canonical agent sessions, submissions, and event streams.
+  Uses Flue's Node sqlite() adapter for canonical agent sessions, durable direct/dispatch submissions, and event streams.
   Supplies SQLite workflow run and run registry records through GOROMBO's persistence wrapper.
-  Wraps the Flue session store to maintain GOROMBO's logical session index and extracted session-memory FTS records.
+  Wraps the Flue session store to maintain logical session indexes, direct agent instance indexes, persisted normalized event context, and extracted session-memory FTS records.
 
 src/routes/telemetry.ts
   Protected app-owned telemetry inspection routes.
@@ -120,11 +120,6 @@ src/workspace-loader.ts
   Shared workspace markdown loader.
   Composes workspace files in a fixed order for agent instructions.
   Keeps user-editable workspace content separate from TypeScript agent entrypoints.
-
-src/workflows/chat.ts
-  Finite chat workflow.
-  Normalizes a web/API/TUI/connector message, resolves the product session, handles pre-LLM slash commands, initializes the orchestrator, checks session budget, compacts before oversize prompts, prompts the orchestrator, and retries with the configured backup model card when the primary model is recoverably unavailable.
-  Exposes its Flue HTTP route through imported API-secret middleware.
 
 src/commands/
   Pre-LLM slash command parsing and command registry helpers.
@@ -251,12 +246,13 @@ export default app;
 
 Custom ingress may be added only if it enters the Flue agent/workflow path.
 
-The built HTTP chat path is asynchronous because it uses Flue workflow routing:
+The built HTTP chat path enters the durable orchestrator agent route:
 
 ```text
 POST /api/chat/events
--> POST /workflows/chat
--> 202 { runId }
--> GET /runs/:runId
--> completed workflow result
+-> persist normalized event context in SQLite
+-> POST /agents/orchestrator/:sessionId?wait=result
+-> 200 { result, streamUrl, offset, event, session }
 ```
+
+Async connector-style delivery should use Flue `dispatch(...)` against the orchestrator agent instance. Direct prompts and dispatched inputs share Flue's durable agent submission lifecycle when the Node runtime uses the SQLite `src/db.ts` adapter.
