@@ -10,7 +10,11 @@ import {
   defaultSessionDatabasePath,
   GoromboSessionDatabase,
 } from './session-database.js';
-import { parseFlueSessionStorageKey } from './flue-session-store.js';
+import { directAgentHarnessName, directAgentSessionName } from './direct-agent-session.js';
+import {
+  parseFlueSessionStorageKey,
+  type FlueSessionStorageParts,
+} from './flue-session-store.js';
 
 export const defaultFlueDatabasePath = '.gorombo/db/flue.sqlite';
 
@@ -115,6 +119,10 @@ class GoromboLogicalSessionStore implements SessionStore {
       return this.flueSessions.load(latestInstanceStorageKey);
     }
 
+    if (isDirectAgentStorageKey(parts)) {
+      return null;
+    }
+
     const latestStorageKey = this.sessionDatabase.getLatestStorageKey(parts.harnessName, parts.sessionName);
     if (!latestStorageKey || latestStorageKey === id) {
       return null;
@@ -149,10 +157,18 @@ class GoromboLogicalSessionStore implements SessionStore {
       return;
     }
 
+    if (isDirectAgentStorageKey(parts)) {
+      return;
+    }
+
     const latestStorageKey = this.sessionDatabase.getLatestStorageKey(parts.harnessName, parts.sessionName);
     if (latestStorageKey && latestStorageKey !== id) {
       await this.flueSessions.delete(latestStorageKey);
       this.sessionDatabase.deleteFlueSession(latestStorageKey);
     }
   }
+}
+
+function isDirectAgentStorageKey(parts: FlueSessionStorageParts): boolean {
+  return parts.harnessName === directAgentHarnessName && parts.sessionName === directAgentSessionName;
 }

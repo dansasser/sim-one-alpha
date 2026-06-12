@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 
 const forwardedArgs = process.argv.slice(2);
+// pnpm can forward its "--" separator, as in "pnpm run test:unit -- --test-name-pattern ...".
 if (forwardedArgs[0] === '--') {
   forwardedArgs.shift();
 }

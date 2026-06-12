@@ -167,13 +167,20 @@ function readAgentResultTextCandidates(agentResult) {
     agentResult.text,
   ];
 
-  if (Array.isArray(agentResult.choices)) {
-    for (const choice of agentResult.choices) {
-      candidates.push(choice?.message?.content, choice?.text, choice?.delta?.content);
-    }
-  }
+  appendChoiceTextCandidates(candidates, agentResult.choices);
+  appendChoiceTextCandidates(candidates, agentResult.result?.choices);
 
   return candidates.filter((candidate) => typeof candidate === 'string');
+}
+
+function appendChoiceTextCandidates(candidates, choices) {
+  if (!Array.isArray(choices)) {
+    return;
+  }
+
+  for (const choice of choices) {
+    candidates.push(choice?.message?.content, choice?.text, choice?.delta?.content);
+  }
 }
 
 async function stopChild(childProcess) {

@@ -140,6 +140,57 @@ test('direct agent session data is indexed by agent instance id for memory retri
   }
 });
 
+test('direct agent loads do not fall back to logical default session history', async () => {
+  const runtime = createTestPersistenceRuntime();
+
+  try {
+    const legacyKey = createFlueSessionStorageKey('legacy-direct-session', 'default', 'default');
+    const newSessionKey = createFlueSessionStorageKey('new-direct-session', 'default', 'default');
+    const legacyData = createStoredSessionData('legacy default direct-agent history');
+
+    await runtime.adapter.migrate?.();
+    const store = runtime.adapter.connect().sessions;
+    await store.save(legacyKey, legacyData);
+    runtime.sessionDatabase.ensureChatSession({
+      sessionId: 'new-direct-session',
+      origin: 'web',
+      actorId: 'new-direct-actor',
+      conversationId: 'new-direct-conversation',
+    });
+
+    assert.equal(runtime.sessionDatabase.getLatestStorageKey('default', 'default'), legacyKey);
+    assert.equal(
+      runtime.sessionDatabase.getLatestStorageKeyForInstance('new-direct-session', 'default', 'default'),
+      null,
+    );
+    assert.equal(await store.load(newSessionKey), null);
+  } finally {
+    await runtime.adapter.close?.();
+    runtime.cleanup();
+  }
+});
+
+test('direct agent deletes do not remove logical default session history', async () => {
+  const runtime = createTestPersistenceRuntime();
+
+  try {
+    const legacyKey = createFlueSessionStorageKey('legacy-direct-session', 'default', 'default');
+    const missingSessionKey = createFlueSessionStorageKey('missing-direct-session', 'default', 'default');
+    const legacyData = createStoredSessionData('legacy default direct-agent history');
+
+    await runtime.adapter.migrate?.();
+    const store = runtime.adapter.connect().sessions;
+    await store.save(legacyKey, legacyData);
+    await store.delete(missingSessionKey);
+
+    assert.deepEqual(await store.load(legacyKey), legacyData);
+    assert.equal(runtime.sessionDatabase.getLatestStorageKey('default', 'default'), legacyKey);
+  } finally {
+    await runtime.adapter.close?.();
+    runtime.cleanup();
+  }
+});
+
 test('normalized chat event context is persisted without raw payload data', async () => {
   const runtime = createTestPersistenceRuntime();
 
