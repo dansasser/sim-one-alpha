@@ -2,9 +2,11 @@
 
 The coding worker may use only capabilities actually attached at runtime.
 
-Currently planned and wired worker-local capability groups:
+Wired worker-local capability groups:
 
-- Flue Node local sandbox: trusted repo file, shell, git, and test execution when initialized by the worker-owned coding task workflow.
+- Flue Node local sandbox tools: trusted repo file listing, file reading, literal search, exact patch application, whole-file writes, shell commands, git status, git diff, verification commands, and tests.
+- Approval-gated git tools: local commit and push actions require matching approval decisions.
+- Approval-gated GitHub tools: PR creation requires a matching approval decision.
 - GitHub context tools: read issue, PR, and check context through the coding-worker GitHub tool boundary.
 - Approval tools: create approval requests for GitHub and git side effects.
 - Repo support modules: preflight, package-manager detection, verification planning, git-state parsing, and diff summaries.

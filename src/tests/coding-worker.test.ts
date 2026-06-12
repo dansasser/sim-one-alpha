@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import orchestratorAgent from '../agents/orchestrator.js';
 import { evaluateCodingApproval, createCodingApprovalRequest } from '../workers/coding-worker/approvals/approval-policy.js';
 import { createCodingGitHubTools } from '../workers/coding-worker/github/github-tools.js';
 import { InMemoryCodingProgressReporter } from '../workers/coding-worker/events/progress-reporter.js';
@@ -14,8 +16,12 @@ import {
 } from '../workers/coding-worker/subagents/index.js';
 import { runCodingRepoPreflight } from '../workers/coding-worker/repo/preflight.js';
 import { createCodingVerificationPlan } from '../workers/coding-worker/repo/verification.js';
+import { createCodingGitTools } from '../workers/coding-worker/tools/coding-git-tools.js';
+import { createCodingRepoTools } from '../workers/coding-worker/tools/coding-repo-tools.js';
+import { createFlueCodingSubagentDelegate } from '../workers/coding-worker/workflow/coordination.js';
 import { runCodingTaskWorkflow } from '../workers/coding-worker/workflow/coding-task.js';
 import { assertCodingWorkerCanComplete } from '../workers/coding-worker/workflow/result-schema.js';
+import type { ToolDefinition } from '@flue/runtime';
 
 test('coding worker internal subagents are worker-local profiles with distinct context identities', () => {
   const subagents = createCodingWorkerInternalSubagents('ollama-cloud/minimax-m3');
@@ -42,6 +48,47 @@ test('coding worker child session names are stable and scoped by task', () => {
   assert.equal(plan.childSessions['test-debug'], 'support-session:test-debug');
   assert.equal(plan.childSessions['code-review'], 'support-session:code-review');
   assert.equal(plan.childSessions.github, 'support-session:github');
+});
+
+test('coding worker live delegate uses Flue task delegation to worker-local subagent names', async () => {
+  const calls: Array<{ text: string; agent?: string }> = [];
+  const delegate = createFlueCodingSubagentDelegate({
+    task: async (text: string, options?: { agent?: string }) => {
+      calls.push({ text, agent: options?.agent });
+      return {
+        text: 'triage complete',
+        model: { provider: 'test', id: 'test' },
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+      };
+    },
+  } as never);
+
+  const sessionPlan = createCodingWorkerSessionPlan('task-delegate', 'delegate-session');
+  const result = await delegate('triage', {
+    task: {
+      taskId: 'task-delegate',
+      text: 'Classify this change.',
+    },
+    sessionPlan,
+    preflight: {
+      repoPath: process.cwd(),
+      packageManager: 'pnpm',
+      scripts: {},
+      verificationPlan: [],
+    },
+    plan: [],
+  });
+
+  assert.equal(calls[0]?.agent, 'coding-worker-triage');
+  assert.match(calls[0]?.text ?? '', /delegate-session:triage/);
+  assert.equal(result.summary, 'triage complete');
 });
 
 test('public coding worker events reject raw thinking or internal prompt fields', () => {
@@ -153,6 +200,145 @@ test('GitHub side effects are approval-gated and GitHub read tool is mockable', 
   assert.equal(output.checks?.[0]?.conclusion, 'SUCCESS');
 });
 
+test('coding worker repo tools edit files and run verification in a temp repo', async () => {
+  const repoPath = createExecutableTempRepo();
+
+  try {
+    const tools = createCodingRepoTools({ repoPath });
+    const shell = getTool(tools, 'coding_shell_run');
+    const patch = getTool(tools, 'coding_repo_apply_patch');
+    const read = getTool(tools, 'coding_repo_read_file');
+
+    const failing = JSON.parse(await shell.execute({ command: 'node test.js' })) as { exitCode: number };
+    assert.equal(failing.exitCode, 1);
+
+    const patchResult = JSON.parse(
+      await patch.execute({
+        path: 'index.js',
+        edits: [{ oldText: 'return 41;', newText: 'return 42;', expectedOccurrences: 1 }],
+      }),
+    ) as { replacements: number };
+    assert.equal(patchResult.replacements, 1);
+
+    const passing = JSON.parse(await shell.execute({ command: 'node test.js' })) as { exitCode: number };
+    assert.equal(passing.exitCode, 0);
+
+    const output = JSON.parse(await read.execute({ path: 'index.js' })) as { content: string };
+    assert.match(output.content, /return 42/);
+  } finally {
+    rmSync(repoPath, { recursive: true, force: true });
+  }
+});
+
+test('orchestrator exposes repo execution only through the coding-worker lead', async () => {
+  const repoPath = createExecutableTempRepo();
+
+  try {
+    const config = await orchestratorAgent.initialize({
+      id: 'coding-worker-orchestrator-surface',
+      env: {
+        ...createModelEnv(),
+        GOROMBO_CODING_REPO_PATH: repoPath,
+      },
+      payload: undefined,
+    });
+
+    assert.equal(config.tools?.some((tool) => tool.name === 'coding_repo_apply_patch'), false);
+    assert.equal(config.tools?.some((tool) => tool.name === 'coding_shell_run'), false);
+
+    const codingWorker = config.subagents?.find((agent) => agent.name === 'coding-worker');
+    assert.ok(codingWorker);
+
+    const patch = getTool(codingWorker.tools ?? [], 'coding_repo_apply_patch');
+    const shell = getTool(codingWorker.tools ?? [], 'coding_shell_run');
+
+    await patch.execute({
+      path: 'index.js',
+      edits: [{ oldText: 'return 41;', newText: 'return 42;', expectedOccurrences: 1 }],
+    });
+    const output = JSON.parse(await shell.execute({ command: 'node test.js' })) as { exitCode: number };
+
+    assert.equal(output.exitCode, 0);
+  } finally {
+    rmSync(repoPath, { recursive: true, force: true });
+  }
+});
+
+test('coding worker shell tool blocks git and GitHub writes without approval', async () => {
+  const repoPath = createExecutableTempRepo();
+
+  try {
+    const shell = getTool(createCodingRepoTools({ repoPath }), 'coding_shell_run');
+    const output = JSON.parse(await shell.execute({ command: 'git push origin main' })) as {
+      blocked?: boolean;
+      approvalAction?: string;
+    };
+
+    assert.equal(output.blocked, true);
+    assert.equal(output.approvalAction, 'git.write');
+  } finally {
+    rmSync(repoPath, { recursive: true, force: true });
+  }
+});
+
+test('coding worker git commit tool requires approval and commits when approved', async () => {
+  const repoPath = createGitTempRepo();
+
+  try {
+    writeFileSync(join(repoPath, 'index.js'), 'exports.answer = function answer() { return 42; };\n');
+    const commit = getTool(createCodingGitTools({ repoPath }), 'coding_git_commit');
+
+    const blocked = JSON.parse(
+      await commit.execute({
+        taskId: 'task-commit',
+        message: 'Update answer',
+        paths: ['index.js'],
+        approvalRequestId: 'task-commit:wrong',
+        approved: true,
+      }),
+    ) as { blocked?: boolean };
+    assert.equal(blocked.blocked, true);
+
+    const output = JSON.parse(
+      await commit.execute({
+        taskId: 'task-commit',
+        message: 'Update answer',
+        paths: ['index.js'],
+        approvalRequestId: 'task-commit:git.commit',
+        approved: true,
+      }),
+    ) as { status?: string };
+    assert.equal(output.status, 'committed');
+
+    const log = execFileSync('git', ['log', '--oneline', '-1'], { cwd: repoPath, encoding: 'utf8' });
+    assert.match(log, /Update answer/);
+  } finally {
+    rmSync(repoPath, { recursive: true, force: true });
+  }
+});
+
+test('coding worker GitHub PR creation tool is approval-gated', async () => {
+  const repoPath = createGitTempRepo();
+
+  try {
+    const createPr = getTool(createCodingGitTools({ repoPath }), 'coding_github_create_pr');
+    const output = JSON.parse(
+      await createPr.execute({
+        taskId: 'task-pr',
+        title: 'Test PR',
+        body: 'Test body',
+        approvalRequestId: 'task-pr:github.pr.create',
+        approved: false,
+        approvalReason: 'not approved',
+      }),
+    ) as { blocked?: boolean };
+
+    assert.equal(output.blocked, true);
+  } finally {
+    rmSync(repoPath, { recursive: true, force: true });
+  }
+});
+
 test('coding task workflow emits public progress and blocks completion without verification evidence', async () => {
   const reporter = new InMemoryCodingProgressReporter();
   const result = await runCodingTaskWorkflow(
@@ -190,16 +376,107 @@ test('coding task workflow emits public progress and blocks completion without v
   assert.equal(reporter.events().some((event) => event.type === 'coding.blocked'), true);
 });
 
-test('coding task workflow can complete only with passing required verification evidence', async () => {
+test('coding task workflow edits a temp repo and completes only after verification passes', async () => {
+  const repoPath = createExecutableTempRepo();
+
+  try {
+    const result = await runCodingTaskWorkflow({
+      taskId: 'task-with-real-edit',
+      text: 'Fix answer implementation.',
+      repoPath,
+      fileEdits: [
+        {
+          path: 'index.js',
+          oldText: 'return 41;',
+          newText: 'return 42;',
+          expectedOccurrences: 1,
+        },
+      ],
+      verificationCommands: [
+        {
+          name: 'unit',
+          command: 'node test.js',
+          required: true,
+          reason: 'Temp repo unit verification must pass.',
+        },
+      ],
+    });
+
+    assert.equal(result.status, 'completed');
+    assert.match(readFileSync(join(repoPath, 'index.js'), 'utf8'), /return 42/);
+    assert.equal(result.subagentResults.some((item) => item.subagent === 'implementer'), true);
+    assert.equal(result.publicEvents.some((event) => JSON.stringify(event).includes('coding.verification.completed')), true);
+    assert.doesNotThrow(() => assertCodingWorkerCanComplete(result));
+  } finally {
+    rmSync(repoPath, { recursive: true, force: true });
+  }
+});
+
+test('coding task workflow debug loop patches after a failed verification run', async () => {
+  const repoPath = createExecutableTempRepo();
+
+  try {
+    const result = await runCodingTaskWorkflow({
+      taskId: 'task-debug-loop',
+      text: 'Fix answer implementation through debug loop.',
+      repoPath,
+      fileEdits: [
+        {
+          path: 'index.js',
+          oldText: 'return 41;',
+          newText: 'return 40;',
+          expectedOccurrences: 1,
+        },
+      ],
+      debugEdits: [
+        {
+          path: 'index.js',
+          oldText: 'return 40;',
+          newText: 'return 42;',
+          expectedOccurrences: 1,
+        },
+      ],
+      verificationCommands: [
+        {
+          name: 'unit',
+          command: 'node test.js',
+          required: true,
+          reason: 'Temp repo unit verification must pass after debug.',
+        },
+      ],
+    });
+
+    assert.equal(result.status, 'completed');
+    assert.match(readFileSync(join(repoPath, 'index.js'), 'utf8'), /return 42/);
+    assert.equal(result.verification.evidence.some((item) => item.status === 'failed'), true);
+    assert.equal(result.verification.evidence.some((item) => item.status === 'passed'), true);
+  } finally {
+    rmSync(repoPath, { recursive: true, force: true });
+  }
+});
+
+test('coding task workflow can complete with passing required verification evidence', async () => {
+  const repoPath = createExecutableTempRepo();
+
+  try {
   const result = await runCodingTaskWorkflow(
     {
       taskId: 'task-with-verification',
       text: 'Implement a feature',
-      repoPath: process.cwd(),
+      repoPath,
+      filesToInspect: ['index.js'],
+      verificationCommands: [
+        {
+          name: 'unit',
+          command: 'node -e "process.exit(0)"',
+          required: true,
+          reason: 'Synthetic verification evidence must pass.',
+        },
+      ],
     },
     {
       preflight: () => ({
-        repoPath: process.cwd(),
+        repoPath,
         packageManager: 'pnpm',
         scripts: {
           typecheck: 'tsc -p tsconfig.json --noEmit',
@@ -215,16 +492,14 @@ test('coding task workflow can complete only with passing required verification 
           },
         }),
       }),
-      verificationEvidence: [
-        { command: 'corepack pnpm run typecheck', status: 'passed', exitCode: 0, summary: 'Typecheck passed.' },
-        { command: 'corepack pnpm run build', status: 'passed', exitCode: 0, summary: 'Build passed.' },
-        { command: 'corepack pnpm test', status: 'passed', exitCode: 0, summary: 'Tests passed.' },
-      ],
     },
   );
 
   assert.equal(result.status, 'completed');
   assert.doesNotThrow(() => assertCodingWorkerCanComplete(result));
+  } finally {
+    rmSync(repoPath, { recursive: true, force: true });
+  }
 });
 
 function createTempRepo(input: { scripts: Record<string, string> }) {
@@ -240,4 +515,42 @@ function createTempRepo(input: { scripts: Record<string, string> }) {
     ),
   );
   return repoPath;
+}
+
+function createExecutableTempRepo() {
+  const repoPath = createTempRepo({
+    scripts: {
+      test: 'node test.js',
+    },
+  });
+  writeFileSync(join(repoPath, 'index.js'), 'exports.answer = function answer() { return 41; };\n');
+  writeFileSync(
+    join(repoPath, 'test.js'),
+    "const { answer } = require('./index.js');\nif (answer() !== 42) {\n  console.error(`expected 42, got ${answer()}`);\n  process.exit(1);\n}\n",
+  );
+  return repoPath;
+}
+
+function createGitTempRepo() {
+  const repoPath = createExecutableTempRepo();
+  execFileSync('git', ['init'], { cwd: repoPath });
+  execFileSync('git', ['config', 'user.email', 'coding-worker@example.test'], { cwd: repoPath });
+  execFileSync('git', ['config', 'user.name', 'Coding Worker Test'], { cwd: repoPath });
+  execFileSync('git', ['add', '.'], { cwd: repoPath });
+  execFileSync('git', ['commit', '-m', 'Initial commit'], { cwd: repoPath });
+  return repoPath;
+}
+
+function getTool(tools: ToolDefinition[], name: string) {
+  const tool = tools.find((item) => item.name === name);
+  assert.ok(tool);
+  return tool;
+}
+
+function createModelEnv(): Record<string, string> {
+  return {
+    OLLAMA_API_KEY: 'test-key',
+    CODEX_BRAIN_LOCAL_API_KEY: 'test-key',
+    CODEX_BRAIN_LOCAL_API_URL: 'https://dt1.example.test/v1',
+  };
 }

@@ -40,6 +40,7 @@ export function createCodingGitHubTools(client?: GitHubClient): ToolDefinition[]
       parameters: Type.Object({
         taskId: Type.String(),
         actionType: Type.Union([
+          Type.Literal('git.commit'),
           Type.Literal('git.push'),
           Type.Literal('github.comment'),
           Type.Literal('github.pr.create'),
@@ -66,4 +67,3 @@ export function createCodingGitHubTools(client?: GitHubClient): ToolDefinition[]
     }),
   ];
 }
-

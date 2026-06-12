@@ -83,6 +83,8 @@ test('Flue orchestrator routes research to the researcher instead of owning web 
   assert.equal(config.tools?.some((tool) => tool.name === 'retrieve_context'), false);
   assert.equal(config.tools?.some((tool) => tool.name === 'web_research'), false);
   assert.equal(config.tools?.some((tool) => tool.name === 'coding_github_read_context'), false);
+  assert.equal(config.tools?.some((tool) => tool.name === 'coding_repo_apply_patch'), false);
+  assert.equal(config.tools?.some((tool) => tool.name === 'coding_git_commit'), false);
   assert.match(config.instructions ?? '', /Main Agent Workspace Instructions/);
   assert.match(config.instructions ?? '', /Runtime Capabilities/);
   assert.match(config.instructions ?? '', /delegate with the Flue task tool using agent: "researcher"/);
@@ -104,6 +106,9 @@ test('coding worker owns its workspace-backed lead profile', () => {
   assert.equal(subagent.subagents?.some((agent) => agent.name === 'coding-worker-triage'), true);
   assert.equal(subagent.subagents?.some((agent) => agent.name === 'coding-worker-code-review'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_github_read_context'), true);
+  assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_repo_apply_patch'), true);
+  assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_shell_run'), true);
+  assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_git_commit'), true);
   assert.equal(subagent.skills?.some((skill) => skill.name === 'coding-worker.code-change-loop'), true);
   assert.equal(existsSync('src/workflows/coding-task.ts'), false);
   assert.equal(existsSync('src/agents/coding-worker.ts'), false);

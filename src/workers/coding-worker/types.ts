@@ -18,6 +18,11 @@ export interface CodingWorkerTaskRequest {
   repoPath?: string;
   sessionId?: string;
   github?: CodingGithubContextRequest;
+  filesToInspect?: string[];
+  fileEdits?: CodingFileEdit[];
+  debugEdits?: CodingFileEdit[];
+  writeFiles?: CodingFileWrite[];
+  verificationCommands?: CodingVerificationCommandRequest[];
 }
 
 export interface CodingGithubContextRequest {
@@ -33,6 +38,27 @@ export interface CodingPlanItem {
   description: string;
   owner: CodingSubagentKind | 'coding-worker';
   status: 'pending' | 'in_progress' | 'completed' | 'blocked';
+}
+
+export interface CodingFileEdit {
+  path: string;
+  oldText: string;
+  newText: string;
+  expectedOccurrences?: number;
+}
+
+export interface CodingFileWrite {
+  path: string;
+  content: string;
+}
+
+export interface CodingVerificationCommandRequest {
+  name: string;
+  command: string;
+  required?: boolean;
+  reason?: string;
+  cwd?: string;
+  timeoutSeconds?: number;
 }
 
 export interface CodingVerificationCommand {
@@ -73,4 +99,3 @@ export interface CodingWorkerRunResult {
     uri: string;
   }>;
 }
-

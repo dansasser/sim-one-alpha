@@ -26,7 +26,10 @@ export const orchestratorInstructions = [
 export default createAgent(({ env }) => {
   const models = configureRuntimeModels(env);
   const selectedModelCard = models.selectedModelCard;
-  const codingWorker = createCodingWorkerSubagent();
+  const codingWorker = createCodingWorkerSubagent({
+    repoPath: resolveCodingWorkerRepoPath(env),
+    env: createCodingWorkerToolEnv(env),
+  });
   const researcher = createResearcherSubagent();
 
   return {
@@ -53,6 +56,22 @@ export function createFlueCompactionConfig(modelCard: AgentModelCard): {
     keepRecentTokens: budget.keepRecentTokens,
     model: modelCard.specifier,
   };
+}
+
+function resolveCodingWorkerRepoPath(env: Record<string, unknown>): string {
+  return readOptionalEnv(env, 'GOROMBO_CODING_REPO_PATH') ?? process.cwd();
+}
+
+function createCodingWorkerToolEnv(env: Record<string, unknown>): Record<string, string | undefined> {
+  return {
+    GH_TOKEN: readOptionalEnv(env, 'GH_TOKEN'),
+    GITHUB_TOKEN: readOptionalEnv(env, 'GITHUB_TOKEN'),
+  };
+}
+
+function readOptionalEnv(env: Record<string, unknown>, key: string): string | undefined {
+  const value = env[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 /**

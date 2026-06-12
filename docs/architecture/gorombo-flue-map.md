@@ -119,7 +119,12 @@ src/workers/coding-worker/workspace/
 src/workers/coding-worker/subagents/
   Worker-local internal coding subagents used only by the coding-worker lead.
   Includes triage, implementer, test-debug, code-review, and GitHub/PR specialists.
-  These are not top-level orchestrator-addressable workers in Phase 1.
+  These are not top-level orchestrator-addressable workers.
+
+src/workers/coding-worker/tools/
+  Worker-local repo, shell, git, GitHub, and approval-aware execution tools.
+  Repo file/shell/git/test execution is backed by Flue's Node local sandbox factory.
+  The main orchestrator does not own these tools directly.
 
 src/workers/coding-worker/subagents/<name>/workspace/
   Worker-local subagent user-editable workspace persona files.
