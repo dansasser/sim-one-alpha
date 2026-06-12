@@ -86,13 +86,20 @@ export function createDefaultAgentRegistry() {
     },
     {
       id: 'coding-worker',
-      name: 'Coding Worker Placeholder',
-      description: 'Placeholder for future plan/edit/test/debug/diff/approval behavior.',
+      name: 'Coding Worker',
+      description:
+        'Lead coding worker that coordinates worker-local triage, implementer, test-debug, code-review, and GitHub/PR subagents.',
       scope: 'base',
       enabled: true,
       kind: 'worker',
       model: false,
-      capabilities: ['placeholder'],
+      capabilities: [
+        'coding-triage',
+        'plan-edit-test-debug-review',
+        'github-context',
+        'approval-gates',
+        'public-progress-events',
+      ],
       tags: ['worker', 'coding'],
     },
   ]);

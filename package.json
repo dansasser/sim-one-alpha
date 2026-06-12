@@ -23,7 +23,7 @@
     "research:local": "node scripts/research.mjs",
     "start": "node --env-file=.env dist/server.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm run test:unit && pnpm run build && pnpm run test:http"
+    "test": "corepack pnpm run test:unit && corepack pnpm run build && corepack pnpm run test:http"
   },
   "engines": {
     "node": ">=22.18.0",

@@ -76,26 +76,37 @@ test('Flue orchestrator routes research to the researcher instead of owning web 
 
   assert.equal(config.subagents?.some((agent) => agent.name === 'researcher'), true);
   assert.equal(config.subagents?.some((agent) => agent.name === 'coding-worker'), true);
+  assert.equal(config.subagents?.some((agent) => agent.name === 'coding-worker-triage'), false);
+  assert.equal(config.subagents?.some((agent) => agent.name === 'coding-worker-implementer'), false);
   assert.equal(config.subagents?.find((agent) => agent.name === 'researcher')?.model, undefined);
-  assert.equal(config.subagents?.find((agent) => agent.name === 'coding-worker')?.model, false);
+  assert.equal(config.subagents?.find((agent) => agent.name === 'coding-worker')?.model, undefined);
   assert.equal(config.tools?.some((tool) => tool.name === 'retrieve_context'), false);
   assert.equal(config.tools?.some((tool) => tool.name === 'web_research'), false);
+  assert.equal(config.tools?.some((tool) => tool.name === 'coding_github_read_context'), false);
   assert.match(config.instructions ?? '', /Main Agent Workspace Instructions/);
   assert.match(config.instructions ?? '', /Runtime Capabilities/);
   assert.match(config.instructions ?? '', /delegate with the Flue task tool using agent: "researcher"/);
+  assert.match(config.instructions ?? '', /agent: "coding-worker"/);
+  assert.match(config.instructions ?? '', /Do not call coding-worker internal subagents directly/);
   assert.match(config.instructions ?? '', /do not perform web search directly/i);
   assert.match(config.instructions ?? '', /depth: "deep"/);
   assert.match(config.instructions ?? '', /providerFailures/);
 });
 
-test('coding worker owns its workspace-backed placeholder profile', () => {
+test('coding worker owns its workspace-backed lead profile', () => {
   const subagent = createCodingWorkerSubagent();
 
   assert.equal(subagent.name, 'coding-worker');
-  assert.equal(subagent.model, false);
+  assert.equal(subagent.model, undefined);
   assert.match(subagent.instructions ?? '', /Coding Worker Workspace Instructions/);
-  assert.match(subagent.instructions ?? '', /placeholder-only/);
-  assert.match(subagent.instructions ?? '', /No coding tools are currently attached/);
+  assert.match(subagent.instructions ?? '', /worker-local internal subagents/);
+  assert.match(subagent.instructions ?? '', /Do not expose raw hidden thinking/);
+  assert.equal(subagent.subagents?.some((agent) => agent.name === 'coding-worker-triage'), true);
+  assert.equal(subagent.subagents?.some((agent) => agent.name === 'coding-worker-code-review'), true);
+  assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_github_read_context'), true);
+  assert.equal(subagent.skills?.some((skill) => skill.name === 'coding-worker.code-change-loop'), true);
+  assert.equal(existsSync('src/workflows/coding-task.ts'), false);
+  assert.equal(existsSync('src/agents/coding-worker.ts'), false);
 });
 
 test('researcher owns the web research tool', () => {
