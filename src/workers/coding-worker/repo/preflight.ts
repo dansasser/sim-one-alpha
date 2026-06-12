@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { detectPackageManager, type RepoPackageManager } from './package-manager.js';
 import { createCodingVerificationPlan } from './verification.js';
@@ -24,9 +24,12 @@ export function runCodingRepoPreflight(repoPath: string): CodingRepoPreflight {
 }
 
 export function readPackageScripts(repoPath: string): Record<string, string> {
-  const packageJson = JSON.parse(readFileSync(join(repoPath, 'package.json'), 'utf8')) as {
+  const packageJsonPath = join(repoPath, 'package.json');
+  if (!existsSync(packageJsonPath)) {
+    return {};
+  }
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
     scripts?: Record<string, string>;
   };
   return packageJson.scripts ?? {};
 }
-

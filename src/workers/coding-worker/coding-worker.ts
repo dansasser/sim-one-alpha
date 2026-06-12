@@ -16,13 +16,13 @@ import { codingWorkerSkills, createCodingWorkerSkillCapabilityBlock } from './sk
 import { createCodingWorkerInternalSubagents } from './subagents/index.js';
 import { createCodingGitTools } from './tools/coding-git-tools.js';
 import { createCodingRepoTools } from './tools/coding-repo-tools.js';
+import type { CodingWorkspaceTargetInput } from './repo/workspace-target.js';
 
 export const codingWorkerAgentName = 'coding-worker';
 export const route: AgentRouteHandler = async (_c, next) => next();
 
-export interface CodingWorkerSubagentOptions {
+export interface CodingWorkerSubagentOptions extends CodingWorkspaceTargetInput {
   model?: string;
-  repoPath?: string;
   env?: Record<string, string | undefined>;
 }
 
@@ -40,7 +40,8 @@ export const codingWorkerInstructions = [
  */
 export function createCodingWorkerSubagent(options: string | CodingWorkerSubagentOptions = {}): AgentProfile {
   const resolvedOptions = typeof options === 'string' ? { model: options } : options;
-  const repoPath = resolvedOptions.repoPath ?? process.cwd();
+  const workspaceRoot =
+    resolvedOptions.workspaceRoot ?? (resolvedOptions.repoPath ? undefined : process.cwd());
 
   return defineAgentProfile({
     name: codingWorkerAgentName,
@@ -50,12 +51,22 @@ export function createCodingWorkerSubagent(options: string | CodingWorkerSubagen
     instructions: codingWorkerInstructions,
     tools: [
       ...createCodingRepoTools({
-        repoPath,
+        workspaceRoot,
+        targetKind: resolvedOptions.targetKind,
+        projectId: resolvedOptions.projectId,
+        projectSlug: resolvedOptions.projectSlug,
+        projectRelativePath: resolvedOptions.projectRelativePath,
+        repoPath: resolvedOptions.repoPath,
         env: resolvedOptions.env,
         sessionId: 'coding-worker-profile-tools',
       }),
       ...createCodingGitTools({
-        repoPath,
+        workspaceRoot,
+        targetKind: resolvedOptions.targetKind,
+        projectId: resolvedOptions.projectId,
+        projectSlug: resolvedOptions.projectSlug,
+        projectRelativePath: resolvedOptions.projectRelativePath,
+        repoPath: resolvedOptions.repoPath,
         env: resolvedOptions.env,
         sessionId: 'coding-worker-git-tools',
       }),
@@ -69,18 +80,18 @@ export function createCodingWorkerSubagent(options: string | CodingWorkerSubagen
 export default createAgent(({ env }) => {
   const models = configureRuntimeModels(env);
   const selectedModelCard = models.selectedModelCard;
-  const repoPath = resolveCodingWorkerRepoPath(env);
+  const workspaceRoot = resolveCodingWorkerWorkspaceRoot(env);
 
   return {
     profile: createCodingWorkerSubagent({
       model: selectedModelCard.specifier,
-      repoPath,
+      workspaceRoot,
       env: createCodingWorkerToolEnv(env),
     }),
     model: selectedModelCard.specifier,
-    cwd: repoPath,
+    cwd: workspaceRoot,
     sandbox: local({
-      cwd: repoPath,
+      cwd: workspaceRoot,
       env: {
         GH_TOKEN: readOptionalEnv(env, 'GH_TOKEN'),
         GITHUB_TOKEN: readOptionalEnv(env, 'GITHUB_TOKEN'),
@@ -89,8 +100,13 @@ export default createAgent(({ env }) => {
   };
 });
 
-function resolveCodingWorkerRepoPath(env: Record<string, unknown>): string {
-  return readOptionalEnv(env, 'GOROMBO_CODING_REPO_PATH') ?? process.cwd();
+function resolveCodingWorkerWorkspaceRoot(env: Record<string, unknown>): string {
+  return (
+    readOptionalEnv(env, 'GOROMBO_WORKSPACE_ROOT') ??
+    readOptionalEnv(env, 'GOROMBO_CODING_WORKSPACE_ROOT') ??
+    readOptionalEnv(env, 'GOROMBO_CODING_REPO_PATH') ??
+    process.cwd()
+  );
 }
 
 function createCodingWorkerToolEnv(env: Record<string, unknown>): Record<string, string | undefined> {

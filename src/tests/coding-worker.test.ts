@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -18,6 +18,7 @@ import { runCodingRepoPreflight } from '../workers/coding-worker/repo/preflight.
 import { createCodingVerificationPlan } from '../workers/coding-worker/repo/verification.js';
 import { createCodingGitTools } from '../workers/coding-worker/tools/coding-git-tools.js';
 import { createCodingRepoTools } from '../workers/coding-worker/tools/coding-repo-tools.js';
+import { resolveCodingWorkspaceTarget } from '../workers/coding-worker/repo/workspace-target.js';
 import { createFlueCodingSubagentDelegate } from '../workers/coding-worker/workflow/coordination.js';
 import { runCodingTaskWorkflow } from '../workers/coding-worker/workflow/coding-task.js';
 import { assertCodingWorkerCanComplete } from '../workers/coding-worker/workflow/result-schema.js';
@@ -51,6 +52,7 @@ test('coding worker child session names are stable and scoped by task', () => {
 });
 
 test('coding worker live delegate uses Flue task delegation to worker-local subagent names', async () => {
+  const workspaceRoot = createTempWorkspace();
   const calls: Array<{ text: string; agent?: string }> = [];
   const delegate = createFlueCodingSubagentDelegate({
     task: async (text: string, options?: { agent?: string }) => {
@@ -70,25 +72,65 @@ test('coding worker live delegate uses Flue task delegation to worker-local suba
     },
   } as never);
 
-  const sessionPlan = createCodingWorkerSessionPlan('task-delegate', 'delegate-session');
-  const result = await delegate('triage', {
-    task: {
-      taskId: 'task-delegate',
-      text: 'Classify this change.',
-    },
-    sessionPlan,
-    preflight: {
-      repoPath: process.cwd(),
-      packageManager: 'pnpm',
-      scripts: {},
-      verificationPlan: [],
-    },
-    plan: [],
-  });
+  try {
+    const sessionPlan = createCodingWorkerSessionPlan('task-delegate', 'delegate-session');
+    const result = await delegate('triage', {
+      task: {
+        taskId: 'task-delegate',
+        text: 'Classify this change.',
+        workspaceRoot,
+        targetKind: 'workspace',
+      },
+      sessionPlan,
+      preflight: {
+        repoPath: workspaceRoot,
+        packageManager: 'pnpm',
+        scripts: {},
+        verificationPlan: [],
+      },
+      plan: [],
+    });
 
-  assert.equal(calls[0]?.agent, 'coding-worker-triage');
-  assert.match(calls[0]?.text ?? '', /delegate-session:triage/);
-  assert.equal(result.summary, 'triage complete');
+    assert.equal(calls[0]?.agent, 'coding-worker-triage');
+    assert.match(calls[0]?.text ?? '', /delegate-session:triage/);
+    assert.match(calls[0]?.text ?? '', /workspaceRoot/);
+    assert.equal(result.summary, 'triage complete');
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding workspace resolver stores projects and repos under the runtime workspace root', () => {
+  const workspaceRoot = createTempWorkspace();
+
+  try {
+    const projectTarget = resolveCodingWorkspaceTarget({
+      workspaceRoot,
+      targetKind: 'project',
+      projectSlug: 'New App',
+    });
+    const repoTarget = resolveCodingWorkspaceTarget({
+      workspaceRoot,
+      targetKind: 'repo',
+      projectSlug: 'existing-repo',
+    });
+
+    assert.equal(projectTarget.projectRelativePath, 'projects/new-app');
+    assert.equal(projectTarget.scopePath, join(workspaceRoot, 'projects', 'new-app'));
+    assert.equal(repoTarget.projectRelativePath, 'repos/existing-repo');
+    assert.equal(repoTarget.scopePath, join(workspaceRoot, 'repos', 'existing-repo'));
+    assert.throws(
+      () =>
+        resolveCodingWorkspaceTarget({
+          workspaceRoot,
+          targetKind: 'project',
+          projectRelativePath: '../outside',
+        }),
+      /escape|relative/,
+    );
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
 });
 
 test('public coding worker events reject raw thinking or internal prompt fields', () => {
@@ -200,14 +242,35 @@ test('GitHub side effects are approval-gated and GitHub read tool is mockable', 
   assert.equal(output.checks?.[0]?.conclusion, 'SUCCESS');
 });
 
-test('coding worker repo tools edit files and run verification in a temp repo', async () => {
-  const repoPath = createExecutableTempRepo();
+test('coding worker tools create projects under the workspace root and scope file edits there', async () => {
+  const workspaceRoot = createTempWorkspace();
 
   try {
-    const tools = createCodingRepoTools({ repoPath });
-    const shell = getTool(tools, 'coding_shell_run');
-    const patch = getTool(tools, 'coding_repo_apply_patch');
-    const read = getTool(tools, 'coding_repo_read_file');
+    const workspaceTools = createCodingRepoTools({ workspaceRoot, targetKind: 'workspace' });
+    const createProject = getTool(workspaceTools, 'coding_project_create');
+    const created = JSON.parse(
+      await createProject.execute({
+        name: 'Answer App',
+        directoryKind: 'projects',
+        initializeReadme: true,
+      }),
+    ) as { projectRelativePath: string; projectPath: string; targetKind: string };
+
+    assert.equal(created.targetKind, 'project');
+    assert.equal(created.projectRelativePath, 'projects/answer-app');
+    assert.equal(created.projectPath, join(workspaceRoot, 'projects', 'answer-app'));
+    assert.equal(existsSync(join(workspaceRoot, 'projects', 'answer-app', 'README.md')), true);
+
+    writeExecutableProjectFiles(created.projectPath);
+
+    const projectTools = createCodingRepoTools({
+      workspaceRoot,
+      targetKind: 'project',
+      projectRelativePath: created.projectRelativePath,
+    });
+    const shell = getTool(projectTools, 'coding_shell_run');
+    const patch = getTool(projectTools, 'coding_repo_apply_patch');
+    const read = getTool(projectTools, 'coding_repo_read_file');
 
     const failing = JSON.parse(await shell.execute({ command: 'node test.js' })) as { exitCode: number };
     assert.equal(failing.exitCode, 1);
@@ -225,20 +288,21 @@ test('coding worker repo tools edit files and run verification in a temp repo', 
 
     const output = JSON.parse(await read.execute({ path: 'index.js' })) as { content: string };
     assert.match(output.content, /return 42/);
+    await assert.rejects(() => read.execute({ path: '../README.md' }), /escapes coding-worker/);
   } finally {
-    rmSync(repoPath, { recursive: true, force: true });
+    rmSync(workspaceRoot, { recursive: true, force: true });
   }
 });
 
 test('orchestrator exposes repo execution only through the coding-worker lead', async () => {
-  const repoPath = createExecutableTempRepo();
+  const project = createExecutableWorkspaceProject();
 
   try {
     const config = await orchestratorAgent.initialize({
       id: 'coding-worker-orchestrator-surface',
       env: {
         ...createModelEnv(),
-        GOROMBO_CODING_REPO_PATH: repoPath,
+        GOROMBO_WORKSPACE_ROOT: project.workspaceRoot,
       },
       payload: undefined,
     });
@@ -253,22 +317,59 @@ test('orchestrator exposes repo execution only through the coding-worker lead', 
     const shell = getTool(codingWorker.tools ?? [], 'coding_shell_run');
 
     await patch.execute({
-      path: 'index.js',
+      path: `${project.projectRelativePath}/index.js`,
       edits: [{ oldText: 'return 41;', newText: 'return 42;', expectedOccurrences: 1 }],
     });
-    const output = JSON.parse(await shell.execute({ command: 'node test.js' })) as { exitCode: number };
+    const output = JSON.parse(
+      await shell.execute({ command: 'node test.js', cwd: project.projectRelativePath }),
+    ) as { exitCode: number };
 
     assert.equal(output.exitCode, 0);
   } finally {
-    rmSync(repoPath, { recursive: true, force: true });
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker workspace scope can edit workspace files and reject path escapes', async () => {
+  const workspaceRoot = createTempWorkspace();
+
+  try {
+    writeFileSync(join(workspaceRoot, 'USER.md'), 'Principal: orchestrator\n');
+    const tools = createCodingRepoTools({ workspaceRoot, targetKind: 'workspace' });
+    const patch = getTool(tools, 'coding_repo_apply_patch');
+    const read = getTool(tools, 'coding_repo_read_file');
+
+    await patch.execute({
+      path: 'USER.md',
+      edits: [
+        {
+          oldText: 'Principal: orchestrator',
+          newText: 'Principal: main orchestrator agent',
+          expectedOccurrences: 1,
+        },
+      ],
+    });
+
+    const output = JSON.parse(await read.execute({ path: 'USER.md' })) as { content: string };
+    assert.match(output.content, /main orchestrator agent/);
+    await assert.rejects(() => read.execute({ path: '../outside.txt' }), /escapes coding-worker/);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
   }
 });
 
 test('coding worker shell tool blocks git and GitHub writes without approval', async () => {
-  const repoPath = createExecutableTempRepo();
+  const project = createExecutableWorkspaceProject();
 
   try {
-    const shell = getTool(createCodingRepoTools({ repoPath }), 'coding_shell_run');
+    const shell = getTool(
+      createCodingRepoTools({
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+      }),
+      'coding_shell_run',
+    );
     const output = JSON.parse(await shell.execute({ command: 'git push origin main' })) as {
       blocked?: boolean;
       approvalAction?: string;
@@ -277,16 +378,23 @@ test('coding worker shell tool blocks git and GitHub writes without approval', a
     assert.equal(output.blocked, true);
     assert.equal(output.approvalAction, 'git.write');
   } finally {
-    rmSync(repoPath, { recursive: true, force: true });
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
   }
 });
 
 test('coding worker git commit tool requires approval and commits when approved', async () => {
-  const repoPath = createGitTempRepo();
+  const project = createGitWorkspaceProject();
 
   try {
-    writeFileSync(join(repoPath, 'index.js'), 'exports.answer = function answer() { return 42; };\n');
-    const commit = getTool(createCodingGitTools({ repoPath }), 'coding_git_commit');
+    writeFileSync(join(project.repoPath, 'index.js'), 'exports.answer = function answer() { return 42; };\n');
+    const commit = getTool(
+      createCodingGitTools({
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+      }),
+      'coding_git_commit',
+    );
 
     const blocked = JSON.parse(
       await commit.execute({
@@ -310,18 +418,25 @@ test('coding worker git commit tool requires approval and commits when approved'
     ) as { status?: string };
     assert.equal(output.status, 'committed');
 
-    const log = execFileSync('git', ['log', '--oneline', '-1'], { cwd: repoPath, encoding: 'utf8' });
+    const log = execFileSync('git', ['log', '--oneline', '-1'], { cwd: project.repoPath, encoding: 'utf8' });
     assert.match(log, /Update answer/);
   } finally {
-    rmSync(repoPath, { recursive: true, force: true });
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
   }
 });
 
 test('coding worker GitHub PR creation tool is approval-gated', async () => {
-  const repoPath = createGitTempRepo();
+  const project = createGitWorkspaceProject();
 
   try {
-    const createPr = getTool(createCodingGitTools({ repoPath }), 'coding_github_create_pr');
+    const createPr = getTool(
+      createCodingGitTools({
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+      }),
+      'coding_github_create_pr',
+    );
     const output = JSON.parse(
       await createPr.execute({
         taskId: 'task-pr',
@@ -335,55 +450,65 @@ test('coding worker GitHub PR creation tool is approval-gated', async () => {
 
     assert.equal(output.blocked, true);
   } finally {
-    rmSync(repoPath, { recursive: true, force: true });
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
   }
 });
 
 test('coding task workflow emits public progress and blocks completion without verification evidence', async () => {
+  const project = createExecutableWorkspaceProject();
   const reporter = new InMemoryCodingProgressReporter();
-  const result = await runCodingTaskWorkflow(
-    {
-      taskId: 'task-no-verification',
-      text: 'Implement a feature',
-      repoPath: process.cwd(),
-    },
-    {
-      reporter,
-      preflight: () => ({
-        repoPath: process.cwd(),
-        packageManager: 'pnpm',
-        scripts: {
-          typecheck: 'tsc -p tsconfig.json --noEmit',
-          build: 'flue build --target node',
-          test: 'pnpm run test:unit && pnpm run build',
-        },
-        verificationPlan: createCodingVerificationPlan({
+
+  try {
+    const result = await runCodingTaskWorkflow(
+      {
+        taskId: 'task-no-verification',
+        text: 'Implement a feature',
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+      },
+      {
+        reporter,
+        preflight: () => ({
+          repoPath: project.repoPath,
           packageManager: 'pnpm',
           scripts: {
             typecheck: 'tsc -p tsconfig.json --noEmit',
             build: 'flue build --target node',
             test: 'pnpm run test:unit && pnpm run build',
           },
+          verificationPlan: createCodingVerificationPlan({
+            packageManager: 'pnpm',
+            scripts: {
+              typecheck: 'tsc -p tsconfig.json --noEmit',
+              build: 'flue build --target node',
+              test: 'pnpm run test:unit && pnpm run build',
+            },
+          }),
         }),
-      }),
-    },
-  );
+      },
+    );
 
-  assert.equal(result.status, 'blocked');
-  assert.match(result.summary, /verification evidence/);
-  assert.equal(reporter.events()[0]?.type, 'coding.task.accepted');
-  assert.equal(reporter.events().some((event) => event.type === 'coding.plan.updated'), true);
-  assert.equal(reporter.events().some((event) => event.type === 'coding.blocked'), true);
+    assert.equal(result.status, 'blocked');
+    assert.match(result.summary, /verification evidence/);
+    assert.equal(reporter.events()[0]?.type, 'coding.task.accepted');
+    assert.equal(reporter.events().some((event) => event.type === 'coding.plan.updated'), true);
+    assert.equal(reporter.events().some((event) => event.type === 'coding.blocked'), true);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
 });
 
 test('coding task workflow edits a temp repo and completes only after verification passes', async () => {
-  const repoPath = createExecutableTempRepo();
+  const project = createExecutableWorkspaceProject();
 
   try {
     const result = await runCodingTaskWorkflow({
       taskId: 'task-with-real-edit',
       text: 'Fix answer implementation.',
-      repoPath,
+      workspaceRoot: project.workspaceRoot,
+      targetKind: 'project',
+      projectRelativePath: project.projectRelativePath,
       fileEdits: [
         {
           path: 'index.js',
@@ -403,23 +528,25 @@ test('coding task workflow edits a temp repo and completes only after verificati
     });
 
     assert.equal(result.status, 'completed');
-    assert.match(readFileSync(join(repoPath, 'index.js'), 'utf8'), /return 42/);
+    assert.match(readFileSync(join(project.repoPath, 'index.js'), 'utf8'), /return 42/);
     assert.equal(result.subagentResults.some((item) => item.subagent === 'implementer'), true);
     assert.equal(result.publicEvents.some((event) => JSON.stringify(event).includes('coding.verification.completed')), true);
     assert.doesNotThrow(() => assertCodingWorkerCanComplete(result));
   } finally {
-    rmSync(repoPath, { recursive: true, force: true });
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
   }
 });
 
 test('coding task workflow debug loop patches after a failed verification run', async () => {
-  const repoPath = createExecutableTempRepo();
+  const project = createExecutableWorkspaceProject();
 
   try {
     const result = await runCodingTaskWorkflow({
       taskId: 'task-debug-loop',
       text: 'Fix answer implementation through debug loop.',
-      repoPath,
+      workspaceRoot: project.workspaceRoot,
+      targetKind: 'project',
+      projectRelativePath: project.projectRelativePath,
       fileEdits: [
         {
           path: 'index.js',
@@ -447,23 +574,25 @@ test('coding task workflow debug loop patches after a failed verification run', 
     });
 
     assert.equal(result.status, 'completed');
-    assert.match(readFileSync(join(repoPath, 'index.js'), 'utf8'), /return 42/);
+    assert.match(readFileSync(join(project.repoPath, 'index.js'), 'utf8'), /return 42/);
     assert.equal(result.verification.evidence.some((item) => item.status === 'failed'), true);
     assert.equal(result.verification.evidence.some((item) => item.status === 'passed'), true);
   } finally {
-    rmSync(repoPath, { recursive: true, force: true });
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
   }
 });
 
 test('coding task workflow can complete with passing required verification evidence', async () => {
-  const repoPath = createExecutableTempRepo();
+  const project = createExecutableWorkspaceProject();
 
   try {
   const result = await runCodingTaskWorkflow(
     {
       taskId: 'task-with-verification',
       text: 'Implement a feature',
-      repoPath,
+      workspaceRoot: project.workspaceRoot,
+      targetKind: 'project',
+      projectRelativePath: project.projectRelativePath,
       filesToInspect: ['index.js'],
       verificationCommands: [
         {
@@ -476,7 +605,7 @@ test('coding task workflow can complete with passing required verification evide
     },
     {
       preflight: () => ({
-        repoPath,
+        repoPath: project.repoPath,
         packageManager: 'pnpm',
         scripts: {
           typecheck: 'tsc -p tsconfig.json --noEmit',
@@ -498,7 +627,7 @@ test('coding task workflow can complete with passing required verification evide
   assert.equal(result.status, 'completed');
   assert.doesNotThrow(() => assertCodingWorkerCanComplete(result));
   } finally {
-    rmSync(repoPath, { recursive: true, force: true });
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
   }
 });
 
@@ -517,28 +646,61 @@ function createTempRepo(input: { scripts: Record<string, string> }) {
   return repoPath;
 }
 
-function createExecutableTempRepo() {
-  const repoPath = createTempRepo({
-    scripts: {
-      test: 'node test.js',
-    },
-  });
+interface TempWorkspaceProject {
+  workspaceRoot: string;
+  projectRelativePath: string;
+  repoPath: string;
+}
+
+function createTempWorkspace() {
+  return mkdtempSync(join(tmpdir(), 'coding-worker-workspace-'));
+}
+
+function createWorkspaceProject(projectRelativePath = 'projects/answer-app'): TempWorkspaceProject {
+  const workspaceRoot = createTempWorkspace();
+  const repoPath = join(workspaceRoot, ...projectRelativePath.split('/'));
+  mkdirSync(repoPath, { recursive: true });
+  return {
+    workspaceRoot,
+    projectRelativePath,
+    repoPath,
+  };
+}
+
+function createExecutableWorkspaceProject(): TempWorkspaceProject {
+  const project = createWorkspaceProject();
+  writeExecutableProjectFiles(project.repoPath);
+  return project;
+}
+
+function writeExecutableProjectFiles(repoPath: string): void {
+  writeFileSync(
+    join(repoPath, 'package.json'),
+    JSON.stringify(
+      {
+        scripts: {
+          test: 'node test.js',
+        },
+      },
+      null,
+      2,
+    ),
+  );
   writeFileSync(join(repoPath, 'index.js'), 'exports.answer = function answer() { return 41; };\n');
   writeFileSync(
     join(repoPath, 'test.js'),
     "const { answer } = require('./index.js');\nif (answer() !== 42) {\n  console.error(`expected 42, got ${answer()}`);\n  process.exit(1);\n}\n",
   );
-  return repoPath;
 }
 
-function createGitTempRepo() {
-  const repoPath = createExecutableTempRepo();
-  execFileSync('git', ['init'], { cwd: repoPath });
-  execFileSync('git', ['config', 'user.email', 'coding-worker@example.test'], { cwd: repoPath });
-  execFileSync('git', ['config', 'user.name', 'Coding Worker Test'], { cwd: repoPath });
-  execFileSync('git', ['add', '.'], { cwd: repoPath });
-  execFileSync('git', ['commit', '-m', 'Initial commit'], { cwd: repoPath });
-  return repoPath;
+function createGitWorkspaceProject(): TempWorkspaceProject {
+  const project = createExecutableWorkspaceProject();
+  execFileSync('git', ['init'], { cwd: project.repoPath });
+  execFileSync('git', ['config', 'user.email', 'coding-worker@example.test'], { cwd: project.repoPath });
+  execFileSync('git', ['config', 'user.name', 'Coding Worker Test'], { cwd: project.repoPath });
+  execFileSync('git', ['add', '.'], { cwd: project.repoPath });
+  execFileSync('git', ['commit', '-m', 'Initial commit'], { cwd: project.repoPath });
+  return project;
 }
 
 function getTool(tools: ToolDefinition[], name: string) {

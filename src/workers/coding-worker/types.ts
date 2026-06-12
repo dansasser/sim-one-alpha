@@ -11,10 +11,21 @@ export type CodingWorkerRunStatus = 'completed' | 'failed' | 'blocked' | 'needs_
 
 export type VerificationStatus = 'pending' | 'running' | 'passed' | 'failed' | 'skipped';
 
+export type CodingWorkspaceTargetKind = 'workspace' | 'project' | 'repo';
+
 export interface CodingWorkerTaskRequest {
   taskId: string;
   text: string;
   event?: NormalizedMessageEvent;
+  workspaceRoot?: string;
+  targetKind?: CodingWorkspaceTargetKind;
+  projectId?: string;
+  projectSlug?: string;
+  projectRelativePath?: string;
+  git?: CodingGitWorkspaceContext;
+  /**
+   * Legacy direct-repository scope. Prefer workspaceRoot plus project metadata.
+   */
   repoPath?: string;
   sessionId?: string;
   github?: CodingGithubContextRequest;
@@ -23,6 +34,12 @@ export interface CodingWorkerTaskRequest {
   debugEdits?: CodingFileEdit[];
   writeFiles?: CodingFileWrite[];
   verificationCommands?: CodingVerificationCommandRequest[];
+}
+
+export interface CodingGitWorkspaceContext {
+  remote?: string;
+  branch?: string;
+  worktreePath?: string;
 }
 
 export interface CodingGithubContextRequest {

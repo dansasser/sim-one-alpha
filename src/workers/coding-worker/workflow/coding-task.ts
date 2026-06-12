@@ -10,6 +10,10 @@ import {
   normalizeRepoRelativePath,
   type CodingSandboxRuntime,
 } from '../tools/sandbox-runtime.js';
+import {
+  resolveCodingWorkspaceTarget,
+  type ResolvedCodingWorkspaceTarget,
+} from '../repo/workspace-target.js';
 import { createCodingWorkerSessionPlan, type CodingWorkerSessionPlan } from '../session/child-session-names.js';
 import type {
   CodingFileEdit,
@@ -24,10 +28,13 @@ import type {
 } from '../types.js';
 
 export interface CodingTaskWorkflowDependencies {
-  preflight?: (repoPath: string) => CodingRepoPreflight;
+  preflight?: (scopePath: string, target: ResolvedCodingWorkspaceTarget) => CodingRepoPreflight;
   reporter?: CodingProgressReporter;
   sandbox?: CodingSandboxRuntime;
-  createSandbox?: (repoPath: string, sessionPlan: CodingWorkerSessionPlan) => Promise<CodingSandboxRuntime>;
+  createSandbox?: (
+    target: ResolvedCodingWorkspaceTarget,
+    sessionPlan: CodingWorkerSessionPlan,
+  ) => Promise<CodingSandboxRuntime>;
   delegate?: (subagent: CodingSubagentKind, request: CodingTaskSubagentRequest) => Promise<CodingSubagentRunResult>;
   verificationEvidence?: CodingVerificationEvidence[];
 }
@@ -60,7 +67,8 @@ export async function runCodingTaskWorkflow(
   dependencies: CodingTaskWorkflowDependencies = {},
 ): Promise<CodingWorkerRunResult> {
   const reporter = dependencies.reporter ?? new InMemoryCodingProgressReporter();
-  const repoPath = task.repoPath ?? process.cwd();
+  const workspaceTarget = resolveCodingWorkspaceTarget(task);
+  const repoPath = workspaceTarget.scopePath;
   const sessionPlan = createCodingWorkerSessionPlan(task.taskId, task.sessionId);
 
   reporter.emit({
@@ -68,7 +76,11 @@ export async function runCodingTaskWorkflow(
     taskId: task.taskId,
     purpose: 'Accept coding task and create stable lead/child session plan.',
     summary: `Accepted coding task ${task.taskId}.`,
-    evidence: [sessionPlan.leadSessionName],
+    evidence: [
+      sessionPlan.leadSessionName,
+      `workspaceRoot=${workspaceTarget.workspaceRoot}`,
+      `scope=${workspaceTarget.projectRelativePath}`,
+    ],
   });
 
   reporter.emit({
@@ -78,7 +90,9 @@ export async function runCodingTaskWorkflow(
     purpose: 'Detect package manager, scripts, and verification commands before model work.',
   });
 
-  const preflight = (dependencies.preflight ?? runCodingRepoPreflight)(repoPath);
+  const preflightRunner =
+    dependencies.preflight ?? ((scopePath: string) => runCodingRepoPreflight(scopePath));
+  const preflight = preflightRunner(repoPath, workspaceTarget);
   const verificationCommands = resolveVerificationCommands(task.verificationCommands, preflight);
 
   reporter.emit({
@@ -112,7 +126,7 @@ export async function runCodingTaskWorkflow(
 
   const sandbox =
     dependencies.sandbox ??
-    (await (dependencies.createSandbox ?? createDefaultSandbox)(repoPath, sessionPlan));
+    (await (dependencies.createSandbox ?? createDefaultSandbox)(workspaceTarget, sessionPlan));
   const state: WorkflowExecutionState = {
     task,
     sessionPlan,
@@ -202,7 +216,7 @@ export function createInitialCodingPlan(task: CodingWorkerTaskRequest): CodingPl
   return [
     {
       id: `${task.taskId}:triage`,
-      description: 'Triage request, scope, repository state, GitHub context, and required internal subagents.',
+      description: 'Triage request, workspace/project scope, repository state, GitHub context, and required internal subagents.',
       owner: 'triage',
       status: 'pending',
     },
@@ -294,7 +308,7 @@ async function runBuiltInTriage(state: WorkflowExecutionState): Promise<CodingSu
   setPlanStatus(state.plan, 'triage', 'completed');
   return {
     subagent: 'triage',
-    summary: 'Triage inspected the requested repo context and selected the coding-worker execution path.',
+    summary: 'Triage inspected the requested workspace/project context and selected the coding-worker execution path.',
     evidence,
     nextAction: 'Apply scoped edits and run verification.',
   };
@@ -317,7 +331,9 @@ async function runBuiltInImplementation(state: WorkflowExecutionState): Promise<
   setPlanStatus(state.plan, 'implementer', 'completed');
   return {
     subagent: 'implementer',
-    summary: evidence.length ? 'Implementation applied structured repo edits.' : 'No implementation edits were required.',
+    summary: evidence.length
+      ? 'Implementation applied structured workspace/project edits.'
+      : 'No implementation edits were required.',
     evidence,
     nextAction: 'Run focused and required verification.',
   };
@@ -510,11 +526,15 @@ function summarizeShellResult(stdout: string, stderr: string): string {
 }
 
 async function createDefaultSandbox(
-  repoPath: string,
+  target: ResolvedCodingWorkspaceTarget,
   sessionPlan: CodingWorkerSessionPlan,
 ): Promise<CodingSandboxRuntime> {
   return createFlueLocalCodingSandbox({
-    repoPath,
+    workspaceRoot: target.workspaceRoot,
+    targetKind: target.targetKind,
+    projectId: target.projectId,
+    projectSlug: target.projectSlug,
+    projectRelativePath: target.projectRelativePath,
     sessionId: sessionPlan.leadSessionName,
   });
 }

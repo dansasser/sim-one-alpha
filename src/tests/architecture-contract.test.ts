@@ -106,6 +106,7 @@ test('coding worker owns its workspace-backed lead profile', () => {
   assert.equal(subagent.subagents?.some((agent) => agent.name === 'coding-worker-triage'), true);
   assert.equal(subagent.subagents?.some((agent) => agent.name === 'coding-worker-code-review'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_github_read_context'), true);
+  assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_project_create'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_repo_apply_patch'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_shell_run'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_git_commit'), true);

@@ -8,9 +8,9 @@ import {
   createFlueLocalCodingSandbox,
   type CodingSandboxRuntime,
 } from './sandbox-runtime.js';
+import type { CodingWorkspaceTargetInput } from '../repo/workspace-target.js';
 
-export interface CodingGitToolsOptions {
-  repoPath: string;
+export interface CodingGitToolsOptions extends CodingWorkspaceTargetInput {
   env?: Record<string, string | undefined>;
   sandbox?: CodingSandboxRuntime;
   sessionId?: string;
@@ -22,6 +22,11 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
     sandboxPromise ??= options.sandbox
       ? Promise.resolve(options.sandbox)
       : createFlueLocalCodingSandbox({
+          workspaceRoot: options.workspaceRoot,
+          targetKind: options.targetKind,
+          projectId: options.projectId,
+          projectSlug: options.projectSlug,
+          projectRelativePath: options.projectRelativePath,
           repoPath: options.repoPath,
           env: options.env,
           sessionId: options.sessionId,
@@ -32,7 +37,7 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
   return [
     defineTool({
       name: 'coding_git_status',
-      description: 'Read git status for the coding-worker repository.',
+      description: 'Read git status for the selected coding-worker project/repo scope.',
       parameters: Type.Object({}),
       execute: async () => {
         const sandbox = await getSandbox();
@@ -42,7 +47,7 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
     }),
     defineTool({
       name: 'coding_git_diff',
-      description: 'Read git diff for the coding-worker repository.',
+      description: 'Read git diff for the selected coding-worker project/repo scope.',
       parameters: Type.Object({
         statOnly: Type.Optional(Type.Boolean()),
       }),

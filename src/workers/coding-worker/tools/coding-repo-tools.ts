@@ -8,9 +8,15 @@ import {
 } from './sandbox-runtime.js';
 import type { CodingProgressReporter } from '../events/progress-reporter.js';
 import type { CodingWorkerEventType } from '../events/coding-worker-events.js';
+import {
+  createProjectRelativePath,
+  normalizeProjectSlug,
+  resolveCodingWorkspaceTarget,
+  type CodingProjectDirectoryKind,
+  type CodingWorkspaceTargetInput,
+} from '../repo/workspace-target.js';
 
-export interface CodingRepoToolsOptions {
-  repoPath: string;
+export interface CodingRepoToolsOptions extends CodingWorkspaceTargetInput {
   env?: Record<string, string | undefined>;
   sandbox?: CodingSandboxRuntime;
   reporter?: CodingProgressReporter;
@@ -32,6 +38,11 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
     sandboxPromise ??= options.sandbox
       ? Promise.resolve(options.sandbox)
       : createFlueLocalCodingSandbox({
+          workspaceRoot: options.workspaceRoot,
+          targetKind: options.targetKind,
+          projectId: options.projectId,
+          projectSlug: options.projectSlug,
+          projectRelativePath: options.projectRelativePath,
           repoPath: options.repoPath,
           env: options.env,
           sessionId: options.sessionId,
@@ -43,7 +54,7 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
     defineTool({
       name: 'coding_repo_list_files',
       description:
-        'List repository files inside the coding-worker repo boundary. Skips heavy generated directories by default.',
+        'List files inside the selected coding-worker workspace/project scope. Skips heavy generated directories by default.',
       parameters: Type.Object({
         root: Type.Optional(Type.String()),
         maxFiles: Type.Optional(Type.Number()),
@@ -59,7 +70,7 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
     }),
     defineTool({
       name: 'coding_repo_read_file',
-      description: 'Read a UTF-8 file inside the coding-worker repo boundary.',
+      description: 'Read a UTF-8 file inside the selected coding-worker workspace/project scope.',
       parameters: Type.Object({
         path: Type.String(),
       }),
@@ -75,7 +86,7 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
     }),
     defineTool({
       name: 'coding_repo_search',
-      description: 'Search UTF-8 repository files for a literal string inside the coding-worker repo boundary.',
+      description: 'Search UTF-8 files for a literal string inside the selected coding-worker workspace/project scope.',
       parameters: Type.Object({
         query: Type.String(),
         root: Type.Optional(Type.String()),
@@ -94,7 +105,7 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
     defineTool({
       name: 'coding_repo_write_file',
       description:
-        'Write a UTF-8 file inside the coding-worker repo boundary. Use for complete-file generated outputs or explicit replacements.',
+        'Write a UTF-8 file inside the selected coding-worker workspace/project scope. Use for complete-file generated outputs or explicit replacements.',
       parameters: Type.Object({
         path: Type.String(),
         content: Type.String(),
@@ -117,7 +128,7 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
     defineTool({
       name: 'coding_repo_apply_patch',
       description:
-        'Apply exact text replacements to one UTF-8 file inside the coding-worker repo boundary. Each edit must include oldText and newText.',
+        'Apply exact text replacements to one UTF-8 file inside the selected coding-worker workspace/project scope. Each edit must include oldText and newText.',
       parameters: Type.Object({
         path: Type.String(),
         edits: Type.Array(
@@ -150,7 +161,7 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
     defineTool({
       name: 'coding_shell_run',
       description:
-        'Run a repository command through the coding-worker local sandbox. Git/GitHub write commands are blocked and must use approval-gated paths.',
+        'Run a command through the selected coding-worker workspace/project scope. Git/GitHub write commands are blocked and must use approval-gated paths.',
       parameters: Type.Object({
         command: Type.String(),
         cwd: Type.Optional(Type.String()),
@@ -182,6 +193,56 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
           exitCode: result.exitCode,
           stdout: result.stdout,
           stderr: result.stderr,
+        });
+      },
+    }),
+    defineTool({
+      name: 'coding_project_create',
+      description:
+        'Create or resolve a project directory under the runtime workspace root. Projects are stored in projects/<slug>; repos are stored in repos/<slug>.',
+      parameters: Type.Object({
+        name: Type.Optional(Type.String()),
+        slug: Type.Optional(Type.String()),
+        directoryKind: Type.Optional(Type.String()),
+        initializeReadme: Type.Optional(Type.Boolean()),
+      }),
+      execute: async (args) => {
+        const sandbox = await getSandbox();
+        const directoryKind = readProjectDirectoryKind(args.directoryKind);
+        const slugSource = readString(args.slug) ?? requireString(args.name, 'name');
+        const projectSlug = normalizeProjectSlug(slugSource);
+        const projectRelativePath = createProjectRelativePath({
+          directoryKind,
+          projectSlug,
+        });
+        const target = resolveCodingWorkspaceTarget({
+          workspaceRoot: sandbox.workspaceRoot,
+          targetKind: directoryKind === 'repos' ? 'repo' : 'project',
+          projectSlug,
+          projectRelativePath,
+        });
+
+        await sandbox.mkdirWorkspace(target.projectRelativePath, { recursive: true });
+        if (args.initializeReadme === true) {
+          await sandbox.writeWorkspaceFile(
+            `${target.projectRelativePath}/README.md`,
+            `# ${projectSlug}\n`,
+          );
+        }
+
+        emitToolProgress(options, {
+          action: 'project-create',
+          summary: `Resolved ${target.targetKind} at ${target.projectRelativePath}.`,
+          evidence: [target.projectRelativePath],
+        });
+
+        return toToolJson({
+          workspaceRoot: target.workspaceRoot,
+          targetKind: target.targetKind,
+          projectSlug,
+          projectRelativePath: target.projectRelativePath,
+          projectPath: target.scopePath,
+          status: 'ready',
         });
       },
     }),
@@ -404,6 +465,16 @@ function readStringArray(value: unknown): string[] | undefined {
     return undefined;
   }
   return value.filter((item): item is string => typeof item === 'string');
+}
+
+function readProjectDirectoryKind(value: unknown): CodingProjectDirectoryKind {
+  if (value === undefined || value === null || value === '') {
+    return 'projects';
+  }
+  if (value === 'projects' || value === 'repos') {
+    return value;
+  }
+  throw new Error('directoryKind must be "projects" or "repos".');
 }
 
 function readPositiveInteger(value: unknown): number | undefined {

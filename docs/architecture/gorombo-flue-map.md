@@ -111,6 +111,7 @@ src/workers/coding-worker/coding-worker.ts
   Coding worker lead subagent profile.
   Owns coding-worker instructions, worker-local GitHub tools, coding-process skills, approval-aware side-effect boundaries, public progress event rules, and worker-local internal subagent profiles.
   The main orchestrator delegates coding work only to this lead profile.
+  Receives the configured runtime workspace root from the orchestrator and passes it to worker-owned tools.
 
 src/workers/coding-worker/workspace/
   Coding worker user-editable workspace persona files.
@@ -122,8 +123,10 @@ src/workers/coding-worker/subagents/
   These are not top-level orchestrator-addressable workers.
 
 src/workers/coding-worker/tools/
-  Worker-local repo, shell, git, GitHub, and approval-aware execution tools.
-  Repo file/shell/git/test execution is backed by Flue's Node local sandbox factory.
+  Worker-local workspace/project, shell, git, GitHub, and approval-aware execution tools.
+  File/shell/git/test execution is backed by Flue's Node local sandbox factory.
+  The sandbox is rooted at the configured runtime workspace root. User-editable workspace files live at that root; projects live under `projects/**`; repositories live under `repos/**`.
+  The coding worker must create or resolve new project work under that runtime workspace root, not inside the agent source checkout.
   The main orchestrator does not own these tools directly.
 
 src/workers/coding-worker/subagents/<name>/workspace/

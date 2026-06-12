@@ -69,6 +69,11 @@ ${JSON.stringify(
   {
     taskId: request.task.taskId,
     text: request.task.text,
+    workspaceRoot: request.task.workspaceRoot,
+    targetKind: request.task.targetKind,
+    projectId: request.task.projectId,
+    projectSlug: request.task.projectSlug,
+    projectRelativePath: request.task.projectRelativePath,
     repoPath: request.preflight.repoPath,
     packageManager: request.preflight.packageManager,
     verificationCommands: request.preflight.verificationPlan.map((command) => command.command),

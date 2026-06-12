@@ -27,7 +27,7 @@ export default createAgent(({ env }) => {
   const models = configureRuntimeModels(env);
   const selectedModelCard = models.selectedModelCard;
   const codingWorker = createCodingWorkerSubagent({
-    repoPath: resolveCodingWorkerRepoPath(env),
+    workspaceRoot: resolveCodingWorkerWorkspaceRoot(env),
     env: createCodingWorkerToolEnv(env),
   });
   const researcher = createResearcherSubagent();
@@ -58,8 +58,13 @@ export function createFlueCompactionConfig(modelCard: AgentModelCard): {
   };
 }
 
-function resolveCodingWorkerRepoPath(env: Record<string, unknown>): string {
-  return readOptionalEnv(env, 'GOROMBO_CODING_REPO_PATH') ?? process.cwd();
+function resolveCodingWorkerWorkspaceRoot(env: Record<string, unknown>): string {
+  return (
+    readOptionalEnv(env, 'GOROMBO_WORKSPACE_ROOT') ??
+    readOptionalEnv(env, 'GOROMBO_CODING_WORKSPACE_ROOT') ??
+    readOptionalEnv(env, 'GOROMBO_CODING_REPO_PATH') ??
+    process.cwd()
+  );
 }
 
 function createCodingWorkerToolEnv(env: Record<string, unknown>): Record<string, string | undefined> {
