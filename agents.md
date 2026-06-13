@@ -12,6 +12,20 @@ The main orchestrating agent receives messages from connectors, loads applicable
 
 The orchestrator is a coordinator, not a hardcoded knowledge base.
 
+## Product Identity
+
+```text
+Gorombo       = the company
+GOROMBO Agent = the product / AI employee system built in this repository
+Flue          = the TypeScript agent harness framework from the Astro team
+Ollie         = the main agent persona (defined in src/workspace contents, not paths)
+```
+
+Keep company, product, framework, agent, worker, workspace, and repository names distinct. Do not use "Gorombo" as the default product name. This repository is `astro-flue-agent`; the runtime product is GOROMBO Agent.
+
+Workers are subsystems of GOROMBO Agent, not standalone products or public endpoints.
+
+
 ## Flue Architecture Contract
 
 Before modifying agents, workflows, tools, skills, subagents, model cards, provider runtime, routing, memory, RAG, or `src/app.ts`, read:
@@ -211,9 +225,11 @@ Skills do not store mandatory runtime rules.
 
 ## Worker / Subagent System
 
-Workers are specialized executors.
+Workers are specialized executors. They are subsystems of GOROMBO Agent, not standalone products or public endpoints.
 
-Workers may operate independently or be invoked by the orchestrator.
+Workers live under `src/workers/<name>/`. They are built like normal Flue agents but are organized away from the main agent entrypoint.
+
+All workers are invoked by the main orchestrator. The orchestrator workspace at `src/workspace/` defines when and how to invoke each worker. A worker's own workspace at `src/workers/<name>/workspace/` defines the worker's internal persona and guidance, not the orchestrator's routing rules.
 
 Workers are discovered through the Agent Registry.
 
@@ -237,9 +253,12 @@ Testing / Review Worker
 Future Domain Workers
 ```
 
+Internal subagents under `src/workers/<name>/subagents/` are owned by that worker. They must not be exposed directly to `src/agents/orchestrator.ts` or registered as top-level orchestrator tools/subagents.
+
 Workers return structured results.
 
 Workers do not silently mutate global state.
+
 
 ## Registry System
 
@@ -400,7 +419,7 @@ The orchestrator should not assume it knows context when memory or retrieval can
 
 ## Coding Worker System
 
-The Coding Worker is a specialized worker.
+The Coding Worker is a specialized worker under `src/workers/coding-worker/`.
 
 It must support:
 
@@ -416,6 +435,25 @@ approval
 The Coding Worker must run tests before claiming completion.
 
 The Coding Worker must not declare success without verification.
+
+The Coding Worker is orchestrator-only. The main orchestrator exposes only the `coding-worker` lead. Internal `coding-worker-*` subagents must never be visible to the orchestrator.
+
+All mutating side effects (commit, push, repo mutations, GitHub writes) must go through the approval service and be fail-closed.
+
+Execution uses Flue's Node local sandbox, scoped under `workspaceRoot` (`projects/<slug>` or `repos/<slug>`). `process.cwd()` is only a local-dev fallback.
+
+The researcher subagent owns web research. The Coding Worker must not directly call web search or web-capable retrieval paths.
+
+Every turn of the Coding Worker loop — tool execution, subagent handoff, plan update, verification result, commit/push/PR action — must emit structured progress events that reach the user UI. The Coding Worker must not behave like a black box.
+
+
+## Progress and Handoff Visibility
+
+Every tool execution, subagent delegation, worker handoff, plan update, verification result, and state transition must emit a structured progress event that reaches the user UI.
+
+Do not build workers or subagents that act like black boxes. The user must be able to see what is happening while the agent is working.
+
+Progress events are durable, typed, and routable through the connector layer (Telegram, Web/API, future connectors). They are not informal console logs.
 
 ## Required Types
 
@@ -554,6 +592,24 @@ tests failed
 assumptions made
 next recommended step
 ```
+
+## Worktree and Swarm Workflow
+
+For substantial repository work, create a sibling worktree. Use the user-specified source branch as the starting point; the default PR base is `main` unless the user explicitly requests otherwise.
+
+When work is large enough to justify parallel agents (a swarm):
+
+1. Settle shared types, schemas, and contracts in a small lead PR first.
+2. Spawn sibling worktrees for each parallel workstream, each on its own `codex/...` branch from the most current relevant source branch.
+3. Each parallel branch targets `main` and depends only on the shared contract, not on other parallel branches internals.
+
+Before declaring any PR work complete, verify with:
+
+```sh
+gh pr view <n> --json number,url,state,isDraft,baseRefName,headRefName
+```
+
+Confirm `baseRefName` is the intended base (usually `main`) and, when review automation is expected, `isDraft` is `false`.
 
 ## Architecture Boundaries
 

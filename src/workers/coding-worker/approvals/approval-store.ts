@@ -1,5 +1,6 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+﻿import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { lock } from 'proper-lockfile';
 import type {
   CodingApprovalDecision,
   CodingApprovalRecord,
@@ -35,7 +36,6 @@ export class InMemoryCodingApprovalStore implements CodingApprovalStore {
 
 export class JsonFileCodingApprovalStore implements CodingApprovalStore {
   constructor(private readonly filePath: string) {}
-  readonly #lock = createAsyncMutex();
 
   static atWorkspaceRoot(workspaceRoot: string): JsonFileCodingApprovalStore {
     return new JsonFileCodingApprovalStore(
@@ -44,12 +44,14 @@ export class JsonFileCodingApprovalStore implements CodingApprovalStore {
   }
 
   async getRecord(requestId: string): Promise<CodingApprovalRecord | undefined> {
-    const record = (await this.readRecords()).find((entry) => entry.request.id === requestId);
-    return record ? cloneRecord(record) : undefined;
+    return this.#withFileLock(async () => {
+      const record = (await this.readRecords()).find((entry) => entry.request.id === requestId);
+      return record ? cloneRecord(record) : undefined;
+    });
   }
 
   async upsertRecord(record: CodingApprovalRecord): Promise<void> {
-    await this.#lock(async () => {
+    return this.#withFileLock(async () => {
       const records = await this.readRecords();
       const index = records.findIndex((entry) => entry.request.id === record.request.id);
       if (index >= 0) {
@@ -62,9 +64,31 @@ export class JsonFileCodingApprovalStore implements CodingApprovalStore {
   }
 
   async listRecords(taskId?: string): Promise<CodingApprovalRecord[]> {
-    return (await this.readRecords())
-      .filter((record) => !taskId || record.request.taskId === taskId)
-      .map((record) => cloneRecord(record));
+    return this.#withFileLock(async () => {
+      return (await this.readRecords())
+        .filter((record) => !taskId || record.request.taskId === taskId)
+        .map((record) => cloneRecord(record));
+    });
+  }
+
+  async #withFileLock<T>(job: () => Promise<T>): Promise<T> {
+    await mkdir(dirname(this.filePath), { recursive: true });
+    const release = await lock(this.filePath, {
+      realpath: false,
+      stale: 5000,
+      update: 1000,
+      retries: {
+        retries: 10,
+        factor: 2,
+        minTimeout: 20,
+        maxTimeout: 1000,
+      },
+    });
+    try {
+      return await job();
+    } finally {
+      await release();
+    }
   }
 
   private async readRecords(): Promise<CodingApprovalRecord[]> {
@@ -128,15 +152,6 @@ function cloneRecord(record: CodingApprovalRecord): CodingApprovalRecord {
 
 function cloneDecision(decision: CodingApprovalDecision): CodingApprovalDecision {
   return { ...decision };
-}
-
-function createAsyncMutex(): <T>(job: () => Promise<T>) => Promise<T> {
-  let tail: Promise<unknown> = Promise.resolve();
-  return async (job) => {
-    const next = tail.then(async () => job());
-    tail = next.catch(() => undefined);
-    return next;
-  };
 }
 
 function isMissingFileError(error: unknown): boolean {

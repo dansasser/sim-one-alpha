@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+﻿import { createHash } from 'node:crypto';
 import type {
   CodingApprovalActionType,
   CodingApprovalDecision,
@@ -159,7 +159,7 @@ function normalizeApprovalMetadata(
   return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
-function isExpired(request: CodingApprovalRequest): boolean {
+export function isExpired(request: CodingApprovalRequest): boolean {
   if (!request.expiresAt) {
     return false;
   }
@@ -169,4 +169,3 @@ function isExpired(request: CodingApprovalRequest): boolean {
   }
   return parsed <= Date.now();
 }
-

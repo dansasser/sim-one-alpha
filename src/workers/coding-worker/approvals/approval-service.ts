@@ -1,7 +1,4 @@
-import {
-  createCodingApprovalRequest,
-  evaluateCodingApproval,
-} from './approval-policy.js';
+﻿import { createCodingApprovalRequest, evaluateCodingApproval, isExpired } from './approval-policy.js';
 import {
   InMemoryCodingApprovalStore,
   JsonFileCodingApprovalStore,
@@ -181,15 +178,4 @@ class DefaultCodingApprovalService implements CodingApprovalService {
     const persistedRequest = record?.request ?? request;
     return evaluateCodingApproval(persistedRequest, record?.decision);
   }
-}
-
-function isExpired(request: CodingApprovalRequest): boolean {
-  if (!request.expiresAt) {
-    return false;
-  }
-  const parsed = Date.parse(request.expiresAt);
-  if (Number.isNaN(parsed)) {
-    return true;
-  }
-  return parsed <= Date.now();
 }

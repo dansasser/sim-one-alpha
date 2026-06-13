@@ -1,4 +1,4 @@
-import { codingWorkerInternalSubagentNames } from './subagents/index.js';
+﻿import { codingWorkerInternalSubagentNames } from './subagents/index.js';
 
 export function createCodingWorkerRuntimeCapabilityBlock(): string {
   const subagents = codingWorkerInternalSubagentNames.map((name) => `- ${name}`).join('\n');
@@ -15,7 +15,7 @@ ${subagents}
 
 The coding worker can use worker-local workspace/project tools for project creation, file listing, file reading, literal search, exact patch application, whole-file writes, shell execution, git status, git diff, repo discovery/register/clone/branch/worktree/fetch/sync workflows, approval-gated commits, approval-gated pushes, approval-gated PR creation/update/ready-state changes, approval-gated GitHub comments, approval-gated review-thread updates, GitHub context reads, PR base/head/draft verification, approval requests, repo preflight, verification planning, diff/result packaging, durable task-run records, and public progress reporting.
 
-Approval is handled by a backend approval service, not by model-supplied flags. Approval requests and decisions are persisted under the runtime workspace root, and side-effect tools must verify trusted decisions through that service immediately before mutating local or remote state.
+Approval is handled by a backend approval service, not by model-supplied flags. Approval requests and decisions are persisted outside the runtime workspace root in a dedicated approvalRoot (e.g. the sibling \`../.gorombo-approvals\` fallback used when no explicit root is configured). Side-effect tools must validate trusted decisions through that service immediately before mutating local or remote state. The security boundary is enforced by \`assertApprovalRootOutsideWorkspace\`, which rejects any approvalRoot that resolves inside the workspace root.
 
 Trusted file/shell/git/test execution uses Flue's Node local sandbox factory through the worker-owned tool/runtime layer. The sandbox is rooted at the configured runtime workspace root, and task execution scopes to either the workspace root itself or a selected project/repo under \`projects/**\` or \`repos/**\`. The main orchestrator does not own these execution tools.
 

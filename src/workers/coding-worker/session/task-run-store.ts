@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+﻿import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { CodingWorkerEvent } from '../events/coding-worker-events.js';
 import type {
@@ -128,6 +128,10 @@ export function statusForCodingSubagent(subagent: CodingSubagentKind): CodingTas
       return 'reviewing';
     case 'github':
       return 'github';
+    default: {
+      const _exhaustive: never = subagent;
+      throw new Error(`Unexpected coding subagent kind: ${String(_exhaustive)}`);
+    }
   }
 }
 

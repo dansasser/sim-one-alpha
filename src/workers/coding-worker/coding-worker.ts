@@ -1,10 +1,11 @@
-import {
+﻿import {
   createAgent,
   defineAgentProfile,
   type AgentProfile,
   type AgentRouteHandler,
 } from '@flue/runtime';
 import { local } from '@flue/runtime/node';
+import { realpath } from 'node:fs/promises';
 import { resolve as resolvePath, sep } from 'node:path';
 import { configureRuntimeModels } from '../../models/index.js';
 import {
@@ -174,19 +175,27 @@ function resolveApprovalRoot(
   return options.repoPath ? resolvePath(options.repoPath, '..', '.gorombo-approvals') : undefined;
 }
 
-function assertApprovalRootOutsideWorkspace(approvalRoot: string, workspaceRoot: string | undefined): void {
+async function assertApprovalRootOutsideWorkspace(approvalRoot: string, workspaceRoot: string | undefined): Promise<void> {
   if (!workspaceRoot) {
     return;
   }
-  const normalizedApproval = resolvePath(approvalRoot).toLowerCase();
-  const normalizedWorkspace = resolvePath(workspaceRoot).toLowerCase();
-  const workspacePrefix = normalizedWorkspace.endsWith(sep) ? normalizedWorkspace : normalizedWorkspace + sep;
-  if (normalizedApproval === workspacePrefix.slice(0, -1) || normalizedApproval.startsWith(workspacePrefix)) {
+  const resolvedApproval = await realpath(resolvePath(approvalRoot)).catch(() => resolvePath(approvalRoot));
+  const resolvedWorkspace = await realpath(resolvePath(workspaceRoot)).catch(() => resolvePath(workspaceRoot));
+  const workspacePrefix = resolvedWorkspace.endsWith(sep) ? resolvedWorkspace : resolvedWorkspace + sep;
+  const isInside = pathsEqual(resolvedApproval, resolvedWorkspace) || resolvedApproval.startsWith(workspacePrefix);
+  if (isInside) {
     throw new Error(
       'Approval persistence root must be outside the coding-worker workspace root to prevent model tampering. ' +
         `approvalRoot=${approvalRoot} workspaceRoot=${workspaceRoot}`,
     );
   }
+}
+
+function pathsEqual(left: string, right: string): boolean {
+  if (process.platform === 'win32' || process.platform === 'darwin') {
+    return left.toLowerCase() === right.toLowerCase();
+  }
+  return left === right;
 }
 
 function resolveSubagentWorkspaceRoot(options: CodingWorkerSubagentOptions): string {

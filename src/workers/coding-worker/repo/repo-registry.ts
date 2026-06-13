@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+﻿import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 export interface CodingRegisteredRepo {
@@ -36,9 +36,10 @@ export class InMemoryCodingRepoRegistry implements CodingRepoRegistry {
   }
 }
 
+const fileMutexRegistry = new Map<string, AsyncMutex>();
+
 export class JsonFileCodingRepoRegistry implements CodingRepoRegistry {
   constructor(private readonly filePath: string) {}
-  readonly #lock = createAsyncMutex();
 
   static atWorkspaceRoot(workspaceRoot: string): JsonFileCodingRepoRegistry {
     return new JsonFileCodingRepoRegistry(
@@ -47,16 +48,20 @@ export class JsonFileCodingRepoRegistry implements CodingRepoRegistry {
   }
 
   async get(slug: string): Promise<CodingRegisteredRepo | undefined> {
-    const record = (await this.readRecords()).find((entry) => entry.slug === slug);
-    return record ? cloneRepo(record) : undefined;
+    return this.#withFileLock(async () => {
+      const record = (await this.readRecords()).find((entry) => entry.slug === slug);
+      return record ? cloneRepo(record) : undefined;
+    });
   }
 
   async list(): Promise<CodingRegisteredRepo[]> {
-    return (await this.readRecords()).map((record) => cloneRepo(record));
+    return this.#withFileLock(async () => {
+      return (await this.readRecords()).map((record) => cloneRepo(record));
+    });
   }
 
   async upsert(repo: CodingRegisteredRepo): Promise<void> {
-    await this.#lock(async () => {
+    return this.#withFileLock(async () => {
       const records = await this.readRecords();
       const index = records.findIndex((entry) => entry.slug === repo.slug);
       const next = cloneRepo(repo);
@@ -67,6 +72,11 @@ export class JsonFileCodingRepoRegistry implements CodingRepoRegistry {
       }
       await this.writeRecords(records);
     });
+  }
+
+  async #withFileLock<T>(job: () => Promise<T>): Promise<T> {
+    const mutex = getMutexForPath(this.filePath);
+    return mutex(job);
   }
 
   private async readRecords(): Promise<CodingRegisteredRepo[]> {
@@ -90,7 +100,18 @@ export class JsonFileCodingRepoRegistry implements CodingRepoRegistry {
   }
 }
 
-function createAsyncMutex(): <T>(job: () => Promise<T>) => Promise<T> {
+function getMutexForPath(path: string): AsyncMutex {
+  let mutex = fileMutexRegistry.get(path);
+  if (!mutex) {
+    mutex = createAsyncMutex();
+    fileMutexRegistry.set(path, mutex);
+  }
+  return mutex;
+}
+
+type AsyncMutex = <T>(job: () => Promise<T>) => Promise<T>;
+
+function createAsyncMutex(): AsyncMutex {
   let tail: Promise<unknown> = Promise.resolve();
   return async (job) => {
     const next = tail.then(async () => job());

@@ -1,4 +1,4 @@
-import type { AgentProfile, ToolDefinition } from '@flue/runtime';
+﻿import type { AgentProfile, ToolDefinition } from '@flue/runtime';
 import type { CodingApprovalService } from '../approvals/approval-service.js';
 import type { GitHubClient } from '../github/github-client.js';
 import { createCodingGitHubTools } from '../github/github-tools.js';
@@ -27,16 +27,17 @@ export interface CodingWorkerInternalSubagentsOptions extends CodingWorkspaceTar
   githubClient?: GitHubClient;
 }
 
-export function createCodingWorkerInternalSubagents(input?: string | CodingWorkerInternalSubagentsOptions): AgentProfile[] {
-  const options = typeof input === 'string' ? { model: input } : input ?? {};
-  const toolsets = createInternalToolsets(options);
+export function createCodingWorkerInternalSubagents(
+  options?: CodingWorkerInternalSubagentsOptions,
+): AgentProfile[] {
+  const toolsets = createInternalToolsets(options ?? {});
 
   return [
-    createCodingTriageSubagent(options.model, toolsets.triage),
-    createCodingImplementerSubagent(options.model, toolsets.implementer),
-    createCodingTestDebugSubagent(options.model, toolsets.testDebug),
-    createCodingCodeReviewSubagent(options.model, toolsets.codeReview),
-    createCodingGithubSubagent(options.model, toolsets.github),
+    createCodingTriageSubagent(options?.model, toolsets.triage),
+    createCodingImplementerSubagent(options?.model, toolsets.implementer),
+    createCodingTestDebugSubagent(options?.model, toolsets.testDebug),
+    createCodingCodeReviewSubagent(options?.model, toolsets.codeReview),
+    createCodingGithubSubagent(options?.model, toolsets.github),
   ];
 }
 
@@ -128,6 +129,11 @@ function createInternalToolsets(options: CodingWorkerInternalSubagentsOptions): 
 
 function selectTools(tools: ToolDefinition[], ...names: string[]): ToolDefinition[] {
   const wanted = new Set(names);
+  const available = new Set(tools.map((tool) => tool.name));
+  const missing = [...wanted].filter((name) => !available.has(name));
+  if (missing.length > 0) {
+    console.warn(`[coding-worker] selectTools dropped unknown tool names: ${missing.join(', ')}`);
+  }
   return tools.filter((tool) => wanted.has(tool.name));
 }
 
@@ -143,4 +149,3 @@ export {
   createCodingTestDebugSubagent,
   createCodingTriageSubagent,
 };
-
