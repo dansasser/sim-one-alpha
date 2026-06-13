@@ -8,6 +8,7 @@ import orchestratorAgent from '../agents/orchestrator.js';
 import { evaluateCodingApproval, createCodingApprovalRequest } from '../workers/coding-worker/approvals/approval-policy.js';
 import { createCodingGitHubTools } from '../workers/coding-worker/github/github-tools.js';
 import { GhCliGitHubClient } from '../workers/coding-worker/github/gh-cli-client.js';
+import { createCodingWorkerSubagent } from '../workers/coding-worker/coding-worker.js';
 import { InMemoryCodingProgressReporter } from '../workers/coding-worker/events/progress-reporter.js';
 import { createCodingWorkerEvent } from '../workers/coding-worker/events/coding-worker-events.js';
 import { createOrchestratorProgressUpdate } from '../workers/coding-worker/events/orchestrator-bridge.js';
@@ -25,6 +26,8 @@ import {
 import { createCodingVerificationPlan } from '../workers/coding-worker/repo/verification.js';
 import { createCodingGitTools } from '../workers/coding-worker/tools/coding-git-tools.js';
 import { createCodingRepoTools } from '../workers/coding-worker/tools/coding-repo-tools.js';
+import { evaluateCodingShellCommand } from '../workers/coding-worker/tools/command-policy.js';
+import { createFlueLocalCodingSandbox } from '../workers/coding-worker/tools/sandbox-runtime.js';
 import { resolveCodingWorkspaceTarget } from '../workers/coding-worker/repo/workspace-target.js';
 import { createFlueCodingSubagentDelegate } from '../workers/coding-worker/workflow/coordination.js';
 import {
@@ -168,6 +171,24 @@ test('coding workspace resolver stores projects and repos under the runtime work
         resolveCodingWorkspaceTarget({
           workspaceRoot,
           targetKind: 'project',
+          projectSlug: '.',
+        }),
+      /letter or number/,
+    );
+    assert.throws(
+      () =>
+        resolveCodingWorkspaceTarget({
+          workspaceRoot,
+          targetKind: 'repo',
+          projectSlug: '..',
+        }),
+      /letter or number/,
+    );
+    assert.throws(
+      () =>
+        resolveCodingWorkspaceTarget({
+          workspaceRoot,
+          targetKind: 'project',
           projectRelativePath: '../outside',
         }),
       /escape|relative/,
@@ -175,6 +196,24 @@ test('coding workspace resolver stores projects and repos under the runtime work
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
   }
+});
+
+test('coding shell command policy blocks nested git and GitHub write bypasses', () => {
+  const blockedCases: Array<{ command: string; approvalAction: string }> = [
+    { command: 'bash -c "git push origin main"', approvalAction: 'git.write' },
+    { command: "sh -c 'gh pr merge 13'", approvalAction: 'github.write' },
+    { command: 'echo $(gh pr merge 13)', approvalAction: 'github.write' },
+    { command: 'echo `git push origin main`', approvalAction: 'git.write' },
+  ];
+
+  for (const blockedCase of blockedCases) {
+    const result = evaluateCodingShellCommand(blockedCase.command);
+    assert.equal(result.allowed, false, blockedCase.command);
+    assert.equal(result.approvalAction, blockedCase.approvalAction);
+  }
+
+  assert.equal(evaluateCodingShellCommand('bash -c "git status --short"').allowed, true);
+  assert.equal(evaluateCodingShellCommand('echo $(gh pr view 13)').allowed, true);
 });
 
 test('public coding worker events reject raw thinking or internal prompt fields', () => {
@@ -378,6 +417,54 @@ test('GitHub CLI client validates repository identifiers before running gh', asy
   );
 });
 
+test('coding worker profile wires GitHub read context with a client and supports repoPath-only scope', async () => {
+  const project = createWorkspaceProject();
+
+  try {
+    writeFileSync(join(project.repoPath, 'README.md'), '# scoped repo\n');
+    const subagent = createCodingWorkerSubagent({
+      repoPath: project.repoPath,
+      githubClient: {
+        async getIssue() {
+          return { number: 7, title: 'Scoped issue', state: 'OPEN' };
+        },
+        async getPullRequest() {
+          return { number: 8, title: 'Scoped PR', state: 'OPEN' };
+        },
+        async listPullRequestChecks() {
+          return [{ name: 'unit', status: 'COMPLETED', conclusion: 'SUCCESS' }];
+        },
+      },
+    });
+
+    const readContext = getTool(subagent.tools ?? [], 'coding_github_read_context');
+    const context = JSON.parse(
+      await readContext.execute({
+        owner: 'dansasser',
+        repo: 'astro-flue-agent',
+        issueNumber: 7,
+        pullRequestNumber: 8,
+      }),
+    ) as {
+      available?: boolean;
+      issue?: { title?: string };
+      pullRequest?: { title?: string };
+      checks?: Array<{ conclusion?: string }>;
+    };
+
+    assert.equal(context.available, true);
+    assert.equal(context.issue?.title, 'Scoped issue');
+    assert.equal(context.pullRequest?.title, 'Scoped PR');
+    assert.equal(context.checks?.[0]?.conclusion, 'SUCCESS');
+
+    const readFile = getTool(subagent.tools ?? [], 'coding_repo_read_file');
+    const file = JSON.parse(await readFile.execute({ path: 'README.md' })) as { content?: string };
+    assert.equal(file.content, '# scoped repo\n');
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
 test('coding worker tools create projects under the workspace root and scope file edits there', async () => {
   const workspaceRoot = createTempWorkspace();
 
@@ -494,6 +581,61 @@ test('coding worker workspace scope can edit workspace files and reject path esc
   }
 });
 
+test('coding worker execFile only exposes baseline and approved environment variables', async () => {
+  const project = createWorkspaceProject();
+  const previousSecret = process.env.CODING_WORKER_SECRET_LEAK;
+  process.env.CODING_WORKER_SECRET_LEAK = 'host-secret';
+
+  try {
+    const sandbox = await createFlueLocalCodingSandbox({
+      workspaceRoot: project.workspaceRoot,
+      targetKind: 'project',
+      projectRelativePath: project.projectRelativePath,
+      env: {
+        CODING_WORKER_APPROVED_BASE: 'base-value',
+      },
+    });
+    const output = await sandbox.execFile(
+      process.execPath,
+      [
+        '-e',
+        [
+          'console.log(JSON.stringify({',
+          'secret: process.env.CODING_WORKER_SECRET_LEAK ?? null,',
+          'base: process.env.CODING_WORKER_APPROVED_BASE ?? null,',
+          'override: process.env.CODING_WORKER_APPROVED_OVERRIDE ?? null,',
+          'hasPath: typeof process.env.PATH === "string" && process.env.PATH.length > 0',
+          '}));',
+        ].join(''),
+      ],
+      {
+        env: {
+          CODING_WORKER_APPROVED_OVERRIDE: 'override-value',
+        },
+      },
+    );
+    const env = JSON.parse(output.stdout) as {
+      secret: string | null;
+      base: string | null;
+      override: string | null;
+      hasPath: boolean;
+    };
+
+    assert.equal(output.exitCode, 0);
+    assert.equal(env.secret, null);
+    assert.equal(env.base, 'base-value');
+    assert.equal(env.override, 'override-value');
+    assert.equal(env.hasPath, true);
+  } finally {
+    if (previousSecret === undefined) {
+      delete process.env.CODING_WORKER_SECRET_LEAK;
+    } else {
+      process.env.CODING_WORKER_SECRET_LEAK = previousSecret;
+    }
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
 test('coding worker shell tool blocks git and GitHub writes without approval', async () => {
   const project = createExecutableWorkspaceProject();
 
@@ -600,6 +742,43 @@ test('coding worker GitHub PR creation tool is approval-gated', async () => {
     ) as { blocked?: boolean };
 
     assert.equal(output.blocked, true);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding task workflow emits completion telemetry for blocked verification commands', async () => {
+  const project = createExecutableWorkspaceProject();
+  const reporter = new InMemoryCodingProgressReporter();
+
+  try {
+    const result = await runCodingTaskWorkflow(
+      {
+        taskId: 'task-blocked-verification',
+        text: 'Run blocked verification.',
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+        verificationCommands: [
+          {
+            name: 'blocked-git-write',
+            command: 'git push origin main',
+            required: true,
+            reason: 'Git writes must be approval gated.',
+          },
+        ],
+      },
+      { reporter },
+    );
+
+    const events = reporter.events();
+    assert.equal(result.status, 'blocked');
+    assert.equal(events.filter((event) => event.type === 'coding.verification.started').length, 1);
+    assert.equal(events.filter((event) => event.type === 'coding.verification.completed').length, 1);
+    assert.equal(
+      result.verification.evidence[0]?.summary,
+      'Git write commands must use the coding-worker approval-gated git/GitHub path.',
+    );
   } finally {
     rmSync(project.workspaceRoot, { recursive: true, force: true });
   }

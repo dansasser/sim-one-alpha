@@ -10,7 +10,9 @@ import {
   composeWorkspaceInstructions,
   resolveWorkspaceDirectory,
 } from '../../workspace-loader.js';
+import { GhCliGitHubClient } from './github/gh-cli-client.js';
 import { createCodingGitHubTools } from './github/github-tools.js';
+import type { GitHubClient } from './github/github-client.js';
 import { createCodingWorkerRuntimeCapabilityBlock } from './runtime-capabilities.js';
 import { codingWorkerSkills, createCodingWorkerSkillCapabilityBlock } from './skills.js';
 import { createCodingWorkerInternalSubagents } from './subagents/index.js';
@@ -25,6 +27,7 @@ export interface CodingWorkerSubagentOptions extends CodingWorkspaceTargetInput 
   model?: string;
   env?: Record<string, string | undefined>;
   allowLocalDevFallback?: boolean;
+  githubClient?: GitHubClient;
 }
 
 export const codingWorkerInstructions = [
@@ -70,7 +73,9 @@ export function createCodingWorkerSubagent(options: string | CodingWorkerSubagen
         env: resolvedOptions.env,
         sessionId: 'coding-worker-git-tools',
       }),
-      ...createCodingGitHubTools(),
+      ...createCodingGitHubTools(
+        resolvedOptions.githubClient ?? new GhCliGitHubClient(resolvedOptions.env),
+      ),
     ],
     skills: codingWorkerSkills,
     subagents: createCodingWorkerInternalSubagents(resolvedOptions.model),
@@ -116,9 +121,9 @@ function resolveCodingWorkerWorkspaceRoot(env: Record<string, unknown>): string 
   );
 }
 
-function resolveSubagentWorkspaceRoot(options: CodingWorkerSubagentOptions): string | undefined {
+function resolveSubagentWorkspaceRoot(options: CodingWorkerSubagentOptions): string {
   if (options.workspaceRoot || options.repoPath) {
-    return options.workspaceRoot;
+    return options.workspaceRoot ?? options.repoPath!;
   }
   if (options.allowLocalDevFallback) {
     return process.cwd();

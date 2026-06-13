@@ -10,25 +10,33 @@ import type {
 const execFileAsync = promisify(execFile);
 
 export class GhCliGitHubClient implements GitHubClient {
+  constructor(private readonly env?: Record<string, string | undefined>) {}
+
   async getIssue(owner: string, repo: string, issueNumber: number): Promise<GithubIssueSummary> {
     validateOwnerRepo(owner, repo);
     validatePositiveInteger('issueNumber', issueNumber);
-    const data = await runGhJson(['issue', 'view', String(issueNumber), '--repo', `${owner}/${repo}`, '--json', 'number,title,state,url']);
+    const data = await runGhJson(
+      ['issue', 'view', String(issueNumber), '--repo', `${owner}/${repo}`, '--json', 'number,title,state,url'],
+      this.env,
+    );
     return data as GithubIssueSummary;
   }
 
   async getPullRequest(owner: string, repo: string, pullRequestNumber: number): Promise<GithubPullRequestSummary> {
     validateOwnerRepo(owner, repo);
     validatePositiveInteger('pullRequestNumber', pullRequestNumber);
-    const data = await runGhJson([
-      'pr',
-      'view',
-      String(pullRequestNumber),
-      '--repo',
-      `${owner}/${repo}`,
-      '--json',
-      'number,title,state,url,headRefName,baseRefName',
-    ]);
+    const data = await runGhJson(
+      [
+        'pr',
+        'view',
+        String(pullRequestNumber),
+        '--repo',
+        `${owner}/${repo}`,
+        '--json',
+        'number,title,state,url,headRefName,baseRefName',
+      ],
+      this.env,
+    );
     const pr = data as GithubPullRequestSummary & { headRefName?: string; baseRefName?: string };
     return {
       ...pr,
@@ -40,22 +48,29 @@ export class GhCliGitHubClient implements GitHubClient {
   async listPullRequestChecks(owner: string, repo: string, pullRequestNumber: number): Promise<GithubCheckSummary[]> {
     validateOwnerRepo(owner, repo);
     validatePositiveInteger('pullRequestNumber', pullRequestNumber);
-    const data = await runGhJson([
-      'pr',
-      'checks',
-      String(pullRequestNumber),
-      '--repo',
-      `${owner}/${repo}`,
-      '--json',
-      'name,status,conclusion,detailsUrl',
-    ]);
+    const data = await runGhJson(
+      [
+        'pr',
+        'checks',
+        String(pullRequestNumber),
+        '--repo',
+        `${owner}/${repo}`,
+        '--json',
+        'name,status,conclusion,detailsUrl',
+      ],
+      this.env,
+    );
     return Array.isArray(data) ? (data as GithubCheckSummary[]) : [];
   }
 }
 
-async function runGhJson(args: string[]): Promise<unknown> {
+async function runGhJson(
+  args: string[],
+  env: Record<string, string | undefined> | undefined,
+): Promise<unknown> {
   try {
     const result = await execFileAsync('gh', args, {
+      env: createGhEnv(env),
       windowsHide: true,
       timeout: 30_000,
     });
@@ -63,6 +78,23 @@ async function runGhJson(args: string[]): Promise<unknown> {
   } catch (error) {
     throw new Error(`GitHub CLI failed: ${formatGhError(error)}`);
   }
+}
+
+function createGhEnv(env: Record<string, string | undefined> | undefined): NodeJS.ProcessEnv {
+  const merged: NodeJS.ProcessEnv = {};
+  for (const key of ['PATH', 'HOME', 'SystemRoot', 'ComSpec'] as const) {
+    const value = process.env[key];
+    if (typeof value === 'string' && value.length > 0) {
+      merged[key] = value;
+    }
+  }
+  for (const key of ['GH_TOKEN', 'GITHUB_TOKEN'] as const) {
+    const value = env?.[key] ?? process.env[key];
+    if (typeof value === 'string' && value.length > 0) {
+      merged[key] = value;
+    }
+  }
+  return merged;
 }
 
 function validateOwnerRepo(owner: string, repo: string): void {

@@ -80,7 +80,7 @@ export function normalizeProjectSlug(value: string): string {
     .replace(/[^a-z0-9._-]+/g, '-')
     .replace(/^-+|-+$/g, '');
 
-  if (!slug) {
+  if (!slug || !/[a-z0-9]/.test(slug)) {
     throw new Error('Project slug must contain at least one letter or number.');
   }
 

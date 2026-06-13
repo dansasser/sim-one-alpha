@@ -14,6 +14,7 @@ import {
 import type { CodingWorkspaceTargetKind } from '../types.js';
 
 const execFileAsync = promisify(execFile);
+const baselineExecEnvKeys = ['PATH', 'HOME', 'SystemRoot', 'ComSpec'] as const;
 
 export interface CodingSandboxRuntime {
   workspaceRoot: string;
@@ -188,7 +189,7 @@ function mergeEnv(
   base: Record<string, string | undefined> | undefined,
   override: Record<string, string> | undefined,
 ): NodeJS.ProcessEnv {
-  const merged: NodeJS.ProcessEnv = { ...process.env };
+  const merged = createBaselineExecEnv();
   for (const [key, value] of Object.entries(base ?? {})) {
     if (value === undefined) {
       delete merged[key];
@@ -200,6 +201,17 @@ function mergeEnv(
     merged[key] = value;
   }
   return merged;
+}
+
+function createBaselineExecEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const key of baselineExecEnvKeys) {
+    const value = process.env[key];
+    if (typeof value === 'string' && value.length > 0) {
+      env[key] = value;
+    }
+  }
+  return env;
 }
 
 function isExecFileError(error: unknown): error is Error & {
