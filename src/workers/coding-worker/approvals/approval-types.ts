@@ -20,6 +20,11 @@ export type CodingApprovalStatus = 'pending' | 'approved' | 'denied' | 'expired'
 
 export type CodingApprovalMetadata = Record<string, string | number | boolean>;
 
+export interface CodingApprovalPrincipal {
+  id: string;
+  roles: string[];
+}
+
 export interface CodingApprovalRequest {
   id: string;
   taskId: string;

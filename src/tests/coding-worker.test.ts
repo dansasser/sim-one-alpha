@@ -440,14 +440,38 @@ test('approval service persists trusted decisions and rejects untrusted actors',
           requestId: request.id,
           approved: true,
           decidedBy: '',
+          principal: { id: '', roles: ['operator'] },
         }),
       /trusted decidedBy actor/,
+    );
+
+    await assert.rejects(
+      () =>
+        service.recordDecision({
+          requestId: request.id,
+          approved: true,
+          decidedBy: 'operator',
+          principal: { id: 'operator', roles: ['viewer'] },
+        }),
+      /role required to record approval decisions/,
+    );
+
+    await assert.rejects(
+      () =>
+        service.recordDecision({
+          requestId: request.id,
+          approved: true,
+          decidedBy: 'operator',
+          principal: { id: 'other-operator', roles: ['operator'] },
+        }),
+      /does not match the authenticated principal/,
     );
 
     await service.recordDecision({
       requestId: request.id,
       approved: true,
       decidedBy: 'operator',
+      principal: { id: 'operator', roles: ['operator'] },
     });
     assert.deepEqual(await service.evaluateRequest(request), {
       allowed: true,
@@ -486,8 +510,8 @@ test('concurrent file-store approval service serializes create and recordDecisio
     await Promise.all([
       ...created.map((request, index) =>
         index % 2 === 0
-          ? serviceA.recordDecision({ requestId: request.id, approved: true, decidedBy: 'operator-a' })
-          : serviceB.recordDecision({ requestId: request.id, approved: false, decidedBy: 'operator-b' }),
+          ? serviceA.recordDecision({ requestId: request.id, approved: true, decidedBy: 'operator-a', principal: { id: 'operator-a', roles: ['operator'] } })
+          : serviceB.recordDecision({ requestId: request.id, approved: false, decidedBy: 'operator-b', principal: { id: 'operator-b', roles: ['operator'] } }),
       ),
       serviceA.createRequest({
         taskId: 'task-concurrent-extra',
@@ -532,6 +556,7 @@ test('approval service expires stale requests fail closed', async () => {
         requestId: request.id,
         approved: true,
         decidedBy: 'operator',
+        principal: { id: 'operator', roles: ['operator'] },
       }),
     /not pending: expired/,
   );
@@ -698,6 +723,7 @@ test('GitHub tools read extended PR context and gate PR updates through approval
     requestId: blocked.request.id,
     approved: true,
     decidedBy: 'operator',
+    principal: { id: 'operator', roles: ['operator'] },
   });
   const approved = JSON.parse(
     await updatePr.execute({
@@ -843,6 +869,7 @@ test('repo workflow tools gate branch creation through approval service', async 
       requestId: blocked.request.id,
       approved: true,
       decidedBy: 'operator',
+      principal: { id: 'operator', roles: ['operator'] },
     });
     const created = JSON.parse(
       await branchTool.execute({
@@ -890,6 +917,7 @@ test('repo workflow tools clone, register, and discover workspace repositories t
       requestId: blockedClone.request.id,
       approved: true,
       decidedBy: 'operator',
+      principal: { id: 'operator', roles: ['operator'] },
     });
     const cloned = JSON.parse(
       await clone.execute({
@@ -918,6 +946,7 @@ test('repo workflow tools clone, register, and discover workspace repositories t
       requestId: blockedRegister.request.id,
       approved: true,
       decidedBy: 'operator',
+      principal: { id: 'operator', roles: ['operator'] },
     });
     const registered = JSON.parse(
       await register.execute({
@@ -1133,6 +1162,7 @@ test('coding worker git commit tool requires approval and commits when approved'
       requestId: approvalRequest.id,
       approved: true,
       decidedBy: 'test',
+      principal: { id: 'test', roles: ['operator'] },
     });
 
     const approvedCommit = getTool(

@@ -10,6 +10,7 @@ import {
 import type {
   CodingApprovalDecision,
   CodingApprovalEvaluation,
+  CodingApprovalPrincipal,
   CodingApprovalRecord,
   CodingApprovalRequest,
 } from './approval-types.js';
@@ -23,10 +24,10 @@ export interface RecordCodingApprovalDecisionInput {
   reason?: string;
   decidedAt?: string;
   /**
-   * Optional authenticated principal. When supplied, it must match decidedBy.
-   * Callers should provide this from the transport/auth layer.
+   * Authenticated principal from the transport/auth layer. Must include an
+   * operator/admin role and its id must match decidedBy.
    */
-  trustedActor?: string;
+  principal: CodingApprovalPrincipal;
 }
 
 export interface CodingApprovalService {
@@ -108,8 +109,18 @@ class DefaultCodingApprovalService implements CodingApprovalService {
     if (!input.decidedBy.trim()) {
       throw new Error('Approval decision requires a trusted decidedBy actor.');
     }
-    if (input.trustedActor !== undefined && input.trustedActor !== input.decidedBy) {
-      throw new Error('Approval decidedBy does not match the authenticated trusted actor.');
+    if (!input.principal?.id?.trim()) {
+      throw new Error('Approval decision requires an authenticated principal.');
+    }
+    if (!Array.isArray(input.principal.roles) || input.principal.roles.length === 0) {
+      throw new Error('Approval decision requires principal roles.');
+    }
+    const allowedRoles = new Set(['operator', 'admin']);
+    if (!input.principal.roles.some((role) => allowedRoles.has(role))) {
+      throw new Error('Principal lacks role required to record approval decisions.');
+    }
+    if (input.principal.id !== input.decidedBy) {
+      throw new Error('Approval decidedBy does not match the authenticated principal.');
     }
 
     const record = await this.getRecord(input.requestId);
