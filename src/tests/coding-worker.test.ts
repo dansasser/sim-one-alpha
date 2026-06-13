@@ -619,7 +619,7 @@ test('coding worker profile wires GitHub read context with a client and supports
 
   try {
     writeFileSync(join(project.repoPath, 'README.md'), '# scoped repo\n');
-    const subagent = createCodingWorkerSubagent({
+    const subagent = await createCodingWorkerSubagent({
       repoPath: project.repoPath,
       githubClient: {
         async getIssue() {

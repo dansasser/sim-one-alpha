@@ -54,9 +54,23 @@ export class InMemoryCodingTaskRunStore implements CodingTaskRunStore {
   }
 }
 
+const fileLocks = new Map<string, <T>(job: () => Promise<T>) => Promise<T>>();
+
+function getOrCreateFileLock(filePath: string): <T>(job: () => Promise<T>) => Promise<T> {
+  const existing = fileLocks.get(filePath);
+  if (existing) {
+    return existing;
+  }
+  const lock = createAsyncMutex();
+  fileLocks.set(filePath, lock);
+  return lock;
+}
+
 export class JsonFileCodingTaskRunStore implements CodingTaskRunStore {
-  constructor(private readonly filePath: string) {}
-  readonly #lock = createAsyncMutex();
+  readonly #lock: <T>(job: () => Promise<T>) => Promise<T>;
+  constructor(private readonly filePath: string) {
+    this.#lock = getOrCreateFileLock(filePath);
+  }
 
   static atWorkspaceRoot(workspaceRoot: string): JsonFileCodingTaskRunStore {
     return new JsonFileCodingTaskRunStore(

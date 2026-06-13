@@ -4,6 +4,7 @@ import {
   createInMemoryCodingApprovalService,
   type CodingApprovalService,
 } from '../approvals/approval-service.js';
+import { createCodingApprovalRequest } from '../approvals/approval-policy.js';
 import type {
   CodingApprovalActionType,
   CodingApprovalRequest,
@@ -236,6 +237,24 @@ async function evaluateGitApproval(
   metadata?: Record<string, string | number | boolean>;
   },
 ) {
+  const proposedRequest = createCodingApprovalRequest({
+    taskId: input.taskId,
+    actionType: input.actionType,
+    summary: input.summary,
+    reason: input.reason,
+    risk: input.risk,
+    target: input.target,
+    metadata: input.metadata,
+  });
+  const latest = (await input.approvalService.listRecords(proposedRequest.taskId))
+    .filter((record) => record.request.dedupeKey === proposedRequest.dedupeKey)
+    .sort((left, right) => right.request.createdAt.localeCompare(left.request.createdAt))[0];
+  if (latest) {
+    const evaluation = await input.approvalService.evaluateRequest(latest.request);
+    if (evaluation.allowed) {
+      return { request: latest.request, evaluation };
+    }
+  }
   const request = await input.approvalService.createRequest({
     taskId: input.taskId,
     actionType: input.actionType,

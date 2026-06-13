@@ -52,9 +52,11 @@ class DefaultCodingApprovalService implements CodingApprovalService {
 
   async createRequest(input: CreateCodingApprovalRequestInput): Promise<CodingApprovalRequest> {
     const request = createCodingApprovalRequest(input);
-    const existing = await this.store.getRecord(request.id);
-    if (existing) {
-      if (isExpired(existing.request) && existing.status === 'pending') {
+    const existing = (await this.store.listRecords(request.taskId)).find(
+      (record) => record.request.dedupeKey === request.dedupeKey,
+    );
+    if (existing?.status === 'pending') {
+      if (isExpired(existing.request)) {
         await this.store.upsertRecord({
           ...existing,
           status: 'expired',

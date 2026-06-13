@@ -1,4 +1,4 @@
-﻿import { mkdir, readFile, writeFile } from 'node:fs/promises';
+﻿import { mkdir, open, readFile, rename, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { lock } from 'proper-lockfile';
 import type {
@@ -107,8 +107,20 @@ export class JsonFileCodingApprovalStore implements CodingApprovalStore {
   }
 
   private async writeRecords(records: CodingApprovalRecord[]): Promise<void> {
-    await mkdir(dirname(this.filePath), { recursive: true });
-    await writeFile(this.filePath, `${JSON.stringify(records, null, 2)}\n`, 'utf8');
+    const dir = dirname(this.filePath);
+    await mkdir(dir, { recursive: true });
+    const tempPath = `${this.filePath}.tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const handle = await open(tempPath, 'w', 0o644);
+    try {
+      await handle.writeFile(`${JSON.stringify(records, null, 2)}\n`, 'utf8');
+      await handle.sync();
+    } catch (error) {
+      await rm(tempPath, { force: true }).catch(() => undefined);
+      throw error;
+    } finally {
+      await handle.close();
+    }
+    await rename(tempPath, this.filePath);
   }
 }
 

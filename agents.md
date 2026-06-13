@@ -444,7 +444,7 @@ Execution uses Flue's Node local sandbox, scoped under `workspaceRoot` (`project
 
 The researcher subagent owns web research. The Coding Worker must not directly call web search or web-capable retrieval paths.
 
-Every turn of the Coding Worker loop — tool execution, subagent handoff, plan update, verification result, commit/push/PR action — must emit structured progress events that reach the user UI. The Coding Worker must not behave like a black box.
+Every turn of the Coding Worker loop â€” tool execution, subagent handoff, plan update, verification result, commit/push/PR action â€” must emit structured progress events that reach the user UI. The Coding Worker must not behave like a black box.
 
 
 ## Progress and Handoff Visibility

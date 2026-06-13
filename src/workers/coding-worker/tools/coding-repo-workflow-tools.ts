@@ -3,6 +3,7 @@ import {
   createInMemoryCodingApprovalService,
   type CodingApprovalService,
 } from '../approvals/approval-service.js';
+import { createCodingApprovalRequest } from '../approvals/approval-policy.js';
 import type { CodingApprovalActionType, CodingApprovalRequest } from '../approvals/approval-types.js';
 import type { CodingProgressReporter } from '../events/progress-reporter.js';
 import { parseGitStatusShort } from '../repo/git-state.js';
@@ -404,6 +405,16 @@ async function evaluateRepoApproval(
     target: string;
   },
 ) {
+  const proposedRequest = createCodingApprovalRequest(input);
+  const latest = (await approvalService.listRecords(proposedRequest.taskId))
+    .filter((record) => record.request.dedupeKey === proposedRequest.dedupeKey)
+    .sort((left, right) => right.request.createdAt.localeCompare(left.request.createdAt))[0];
+  if (latest) {
+    const evaluation = await approvalService.evaluateRequest(latest.request);
+    if (evaluation.allowed) {
+      return { request: latest.request, evaluation };
+    }
+  }
   const request = await approvalService.createRequest(input);
   const evaluation = await approvalService.evaluateRequest(request);
   if (!evaluation.allowed && evaluation.requiresApproval) {

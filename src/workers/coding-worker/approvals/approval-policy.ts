@@ -79,19 +79,23 @@ export function evaluateCodingApproval(
 }
 
 export function createCodingApprovalRequest(
-  input: Omit<CodingApprovalRequest, 'id' | 'createdAt'> & {
+  input: Omit<CodingApprovalRequest, 'id' | 'dedupeKey' | 'createdAt'> & {
     id?: string;
+    dedupeKey?: string;
     createdAt?: string;
   },
 ): CodingApprovalRequest {
   const createdAt = input.createdAt ?? new Date().toISOString();
   const normalized = normalizeApprovalMetadata(input.metadata);
-  const { metadata: _metadata, ...inputWithoutMetadata } = input;
-  return {
-    ...inputWithoutMetadata,
-    createdAt,
-    ...(normalized ? { metadata: normalized } : {}),
-    id: input.id ?? createDeterministicApprovalId({
+  const {
+    metadata: _metadata,
+    id: _id,
+    dedupeKey: _dedupeKey,
+    ...inputWithoutMetadata
+  } = input;
+  const dedupeKey =
+    input.dedupeKey ??
+    createDeterministicApprovalId({
       taskId: input.taskId,
       actionType: input.actionType,
       summary: input.summary,
@@ -99,7 +103,13 @@ export function createCodingApprovalRequest(
       risk: input.risk,
       target: input.target,
       metadata: normalized,
-    }),
+    });
+  return {
+    ...inputWithoutMetadata,
+    createdAt,
+    ...(normalized ? { metadata: normalized } : {}),
+    dedupeKey,
+    id: input.id ?? `${dedupeKey}:${Date.now()}`,
   };
 }
 

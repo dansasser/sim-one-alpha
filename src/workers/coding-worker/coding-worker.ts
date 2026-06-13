@@ -51,14 +51,14 @@ export const codingWorkerInstructions = [
 /**
  * Creates the reusable coding worker Flue subagent profile used by the orchestrator.
  */
-export function createCodingWorkerSubagent(options: CodingWorkerSubagentOptions = {}): AgentProfile {
+export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOptions = {}): Promise<AgentProfile> {
   const resolvedOptions = options;
   const workspaceRoot = resolveSubagentWorkspaceRoot(resolvedOptions);
   const approvalRoot = resolveApprovalRoot(resolvedOptions, workspaceRoot);
   if (!approvalRoot) {
     throw new Error('Missing coding-worker approval storage root configuration.');
   }
-  assertApprovalRootOutsideWorkspace(approvalRoot, workspaceRoot);
+  await assertApprovalRootOutsideWorkspace(approvalRoot, workspaceRoot);
   const approvalService = createFileCodingApprovalService(approvalRoot);
   const githubClient = resolvedOptions.githubClient ?? createDefaultGitHubClient(resolvedOptions.env);
 
@@ -122,13 +122,13 @@ export function createCodingWorkerSubagent(options: CodingWorkerSubagentOptions 
   });
 }
 
-export default createAgent(({ env }) => {
+export default createAgent(async ({ env }) => {
   const models = configureRuntimeModels(env);
   const selectedModelCard = models.selectedModelCard;
   const workspaceRoot = resolveCodingWorkerWorkspaceRoot(env);
 
   return {
-    profile: createCodingWorkerSubagent({
+    profile: await createCodingWorkerSubagent({
       model: selectedModelCard.specifier,
       workspaceRoot,
       approvalRoot: readOptionalEnv(env, 'GOROMBO_APPROVAL_ROOT'),

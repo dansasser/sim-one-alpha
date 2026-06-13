@@ -6,7 +6,7 @@
 
 ## Goal
 
-Close the gap between the current coding-worker runtime foundation (PR #14) and a fully autonomous, approval-gated coding agent inside GOROMBO Agent. The coding worker must be able to take a natural-language coding task, plan, read code, generate edits, run tests, debug on failure, commit, push, and open/update PRs against `main` — with every turn emitting structured progress events back to the user UI.
+Close the gap between the current coding-worker runtime foundation (PR #14) and a fully autonomous, approval-gated coding agent inside GOROMBO Agent. The coding worker must be able to take a natural-language coding task, plan, read code, generate edits, run tests, debug on failure, commit, push, and open/update PRs against `main` â€” with every turn emitting structured progress events back to the user UI.
 
 ## Product context
 
@@ -21,7 +21,7 @@ Close the gap between the current coding-worker runtime foundation (PR #14) and 
 
 A swarm means multiple agents work in parallel in sibling worktrees. To avoid collisions, the shared loop contract must land first. Then the parallel workstreams can swarm against that contract.
 
-### Phase 1 — Contract branch (one agent, lands first)
+### Phase 1 â€” Contract branch (one agent, lands first)
 
 Branch: `codex/coding-worker-loop-contract`
 
@@ -39,7 +39,7 @@ This branch must include architecture-contract tests proving:
 - The orchestrator exposes `coding-worker` and does not expose internal `coding-worker-*` subagents.
 - The coding worker loop emits progress events at each defined checkpoint.
 
-### Phase 2 — Parallel swarm branches (each targets `main`)
+### Phase 2 â€” Parallel swarm branches (each targets `main`)
 
 Each branch lives in its own sibling worktree. Each depends only on the contract from Phase 1, not on other Phase 2 branches.
 
@@ -103,8 +103,7 @@ Before declaring any PR complete, run:
 
 ```sh
 corepack pnpm run typecheck
-corepack pnpm run test:unit
-corepack pnpm test
+corepack pnpm test  # runs test:unit, build, and HTTP integration
 git diff --check
 ```
 

@@ -27,6 +27,7 @@ export interface CodingApprovalPrincipal {
 
 export interface CodingApprovalRequest {
   id: string;
+  dedupeKey: string;
   taskId: string;
   actionType: CodingApprovalActionType;
   summary: string;

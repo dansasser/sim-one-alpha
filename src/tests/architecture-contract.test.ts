@@ -119,11 +119,11 @@ test('Flue orchestrator requires an explicit coding-worker workspace root', asyn
   );
 });
 
-test('coding worker owns its workspace-backed lead profile', () => {
+test('coding worker owns its workspace-backed lead profile', async () => {
   const workspaceRoot = mkdtempSync(join(tmpdir(), 'coding-worker-workspace-'));
   const approvalRoot = mkdtempSync(join(tmpdir(), 'coding-worker-approvals-'));
   try {
-    const subagent = createCodingWorkerSubagent({ workspaceRoot, approvalRoot });
+    const subagent = await createCodingWorkerSubagent({ workspaceRoot, approvalRoot });
 
     assert.equal(subagent.name, 'coding-worker');
   assert.equal(subagent.model, undefined);
