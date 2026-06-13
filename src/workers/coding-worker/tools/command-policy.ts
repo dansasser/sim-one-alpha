@@ -102,20 +102,70 @@ function isReadOnlyGitCommand(tokens: string[]): boolean {
 
 function isReadOnlyGhCommand(tokens: string[]): boolean {
   if (tokens[0] === 'api') {
-    return !tokens.some((token, index) => {
-      const previous = tokens[index - 1]?.toUpperCase();
-      const normalized = token.toUpperCase();
-      return (
-        /^-X(POST|PUT|PATCH|DELETE)$/.test(normalized) ||
-        /^--method=(POST|PUT|PATCH|DELETE)$/.test(normalized) ||
-        ((previous === '-X' || previous === '--METHOD') &&
-          ['POST', 'PUT', 'PATCH', 'DELETE'].includes(normalized))
-      );
-    });
+    return isReadOnlyGhApiCommand(tokens);
   }
 
   const pair = `${tokens[0]?.toLowerCase() ?? ''} ${tokens[1]?.toLowerCase() ?? ''}`;
   return ghReadOnlyPairs.has(pair);
+}
+
+function isReadOnlyGhApiCommand(tokens: string[]): boolean {
+  const method = readGhApiMethod(tokens);
+  if (method && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    return false;
+  }
+  if (hasGhApiInputBody(tokens)) {
+    return false;
+  }
+  if (hasGhApiFieldParameters(tokens) && method !== 'GET') {
+    return false;
+  }
+  return true;
+}
+
+function readGhApiMethod(tokens: string[]): string | undefined {
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (!token) {
+      continue;
+    }
+    const normalized = token.toUpperCase();
+    const compactMethod = /^-X([A-Z]+)$/.exec(normalized);
+    if (compactMethod?.[1]) {
+      return compactMethod[1];
+    }
+    const longMethod = /^--METHOD=([A-Z]+)$/.exec(normalized);
+    if (longMethod?.[1]) {
+      return longMethod[1];
+    }
+    if (normalized === '-X' || normalized === '--METHOD') {
+      return tokens[index + 1]?.toUpperCase();
+    }
+  }
+  return undefined;
+}
+
+function hasGhApiInputBody(tokens: string[]): boolean {
+  return tokens.some((token) => {
+    const normalized = token.toLowerCase();
+    return normalized === '--input' || normalized.startsWith('--input=');
+  });
+}
+
+function hasGhApiFieldParameters(tokens: string[]): boolean {
+  return tokens.some((token) => {
+    const normalized = token.toLowerCase();
+    return (
+      token === '-f' ||
+      token.startsWith('-f') ||
+      token === '-F' ||
+      token.startsWith('-F') ||
+      normalized === '--raw-field' ||
+      normalized.startsWith('--raw-field=') ||
+      normalized === '--field' ||
+      normalized.startsWith('--field=')
+    );
+  });
 }
 
 function findGitSubcommandIndex(tokens: string[]): number {
@@ -247,7 +297,7 @@ function findCommandSubstitutionEnd(command: string, startIndex: number): number
 
 function splitCommandSegments(command: string): string[] {
   return command
-    .split(/&&|\|\||[;|]/)
+    .split(/&&|\|\||\r?\n|[;|]/)
     .map((segment) => segment.trim())
     .filter(Boolean);
 }

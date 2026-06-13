@@ -9,13 +9,21 @@ import type {
 
 const execFileAsync = promisify(execFile);
 
+type GhJsonRunner = (
+  args: string[],
+  env: Record<string, string | undefined> | undefined,
+) => Promise<unknown>;
+
 export class GhCliGitHubClient implements GitHubClient {
-  constructor(private readonly env?: Record<string, string | undefined>) {}
+  constructor(
+    private readonly env?: Record<string, string | undefined>,
+    private readonly ghJsonRunner: GhJsonRunner = runGhJson,
+  ) {}
 
   async getIssue(owner: string, repo: string, issueNumber: number): Promise<GithubIssueSummary> {
     validateOwnerRepo(owner, repo);
     validatePositiveInteger('issueNumber', issueNumber);
-    const data = await runGhJson(
+    const data = await this.ghJsonRunner(
       ['issue', 'view', String(issueNumber), '--repo', `${owner}/${repo}`, '--json', 'number,title,state,url'],
       this.env,
     );
@@ -25,7 +33,7 @@ export class GhCliGitHubClient implements GitHubClient {
   async getPullRequest(owner: string, repo: string, pullRequestNumber: number): Promise<GithubPullRequestSummary> {
     validateOwnerRepo(owner, repo);
     validatePositiveInteger('pullRequestNumber', pullRequestNumber);
-    const data = await runGhJson(
+    const data = await this.ghJsonRunner(
       [
         'pr',
         'view',
@@ -48,7 +56,7 @@ export class GhCliGitHubClient implements GitHubClient {
   async listPullRequestChecks(owner: string, repo: string, pullRequestNumber: number): Promise<GithubCheckSummary[]> {
     validateOwnerRepo(owner, repo);
     validatePositiveInteger('pullRequestNumber', pullRequestNumber);
-    const data = await runGhJson(
+    const data = await this.ghJsonRunner(
       [
         'pr',
         'checks',
@@ -56,12 +64,26 @@ export class GhCliGitHubClient implements GitHubClient {
         '--repo',
         `${owner}/${repo}`,
         '--json',
-        'name,status,conclusion,detailsUrl',
+        'name,state,bucket,link',
       ],
       this.env,
     );
-    return Array.isArray(data) ? (data as GithubCheckSummary[]) : [];
+    return Array.isArray(data) ? data.map(normalizeGhPrCheckSummary) : [];
   }
+}
+
+function normalizeGhPrCheckSummary(value: unknown): GithubCheckSummary {
+  const check = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+  return {
+    name: readString(check.name) ?? 'unknown',
+    status: readString(check.state) ?? readString(check.bucket) ?? 'unknown',
+    conclusion: readString(check.bucket),
+    detailsUrl: readString(check.link),
+  };
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 async function runGhJson(

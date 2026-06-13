@@ -204,6 +204,10 @@ test('coding shell command policy blocks nested git and GitHub write bypasses', 
     { command: "sh -c 'gh pr merge 13'", approvalAction: 'github.write' },
     { command: 'echo $(gh pr merge 13)', approvalAction: 'github.write' },
     { command: 'echo `git push origin main`', approvalAction: 'git.write' },
+    { command: 'git status\ngit push origin main', approvalAction: 'git.write' },
+    { command: 'gh api repos/example/example/issues -f title=x -f body=x', approvalAction: 'github.write' },
+    { command: 'gh api repos/example/example/issues --field title=x', approvalAction: 'github.write' },
+    { command: 'gh api repos/example/example/rulesets --input ruleset.json', approvalAction: 'github.write' },
   ];
 
   for (const blockedCase of blockedCases) {
@@ -214,6 +218,7 @@ test('coding shell command policy blocks nested git and GitHub write bypasses', 
 
   assert.equal(evaluateCodingShellCommand('bash -c "git status --short"').allowed, true);
   assert.equal(evaluateCodingShellCommand('echo $(gh pr view 13)').allowed, true);
+  assert.equal(evaluateCodingShellCommand('gh api repos/example/example/issues --method GET -f state=open').allowed, true);
 });
 
 test('public coding worker events reject raw thinking or internal prompt fields', () => {
@@ -415,6 +420,41 @@ test('GitHub CLI client validates repository identifiers before running gh', asy
     () => client.listPullRequestChecks('owner', 'repo', 0),
     /Invalid GitHub pullRequestNumber/,
   );
+});
+
+test('GitHub CLI client requests valid PR check fields and maps them to worker summaries', async () => {
+  let capturedArgs: string[] = [];
+  const client = new GhCliGitHubClient(undefined, async (args: string[]) => {
+    capturedArgs = args;
+    return [
+      {
+        name: 'unit',
+        state: 'SUCCESS',
+        bucket: 'pass',
+        link: 'https://github.example/checks/unit',
+      },
+    ];
+  });
+
+  const checks = await client.listPullRequestChecks('owner', 'repo', 13);
+
+  assert.deepEqual(capturedArgs, [
+    'pr',
+    'checks',
+    '13',
+    '--repo',
+    'owner/repo',
+    '--json',
+    'name,state,bucket,link',
+  ]);
+  assert.deepEqual(checks, [
+    {
+      name: 'unit',
+      status: 'SUCCESS',
+      conclusion: 'pass',
+      detailsUrl: 'https://github.example/checks/unit',
+    },
+  ]);
 });
 
 test('coding worker profile wires GitHub read context with a client and supports repoPath-only scope', async () => {

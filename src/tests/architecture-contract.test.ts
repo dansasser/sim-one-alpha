@@ -98,6 +98,21 @@ test('Flue orchestrator routes research to the researcher instead of owning web 
   assert.match(config.instructions ?? '', /providerFailures/);
 });
 
+test('Flue orchestrator requires an explicit coding-worker workspace root', async () => {
+  const { GOROMBO_WORKSPACE_ROOT: _workspaceRoot, ...envWithoutWorkspaceRoot } = createModelEnv();
+
+  await assert.rejects(
+    async () => {
+      await Promise.resolve(orchestratorAgent.initialize({
+        id: 'architecture-contract-missing-workspace-root',
+        env: envWithoutWorkspaceRoot,
+        payload: undefined,
+      }));
+    },
+    /Missing coding-worker workspace root configuration/,
+  );
+});
+
 test('coding worker owns its workspace-backed lead profile', () => {
   const subagent = createCodingWorkerSubagent({ workspaceRoot: process.cwd() });
 

@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 if (!existsSync('dist/server.mjs')) {
   throw new Error('dist/server.mjs does not exist. Run corepack pnpm run build before the built HTTP test.');
@@ -11,6 +13,7 @@ const baseUrl = `http://127.0.0.1:${port}`;
 const envFileValues = parseEnvFile('.env');
 const requestSecret = process.env.GOROMBO_HTTP_TEST_API_SECRET || envFileValues.API_SECRET || 'built-http-test-secret';
 const nodeArgs = existsSync('.env') ? ['--env-file=.env', 'dist/server.mjs'] : ['dist/server.mjs'];
+const codingWorkspaceRoot = mkdtempSync(join(tmpdir(), 'built-http-coding-workspace-'));
 const modelEnv = {
   OLLAMA_API_KEY: process.env.OLLAMA_API_KEY || envFileValues.OLLAMA_API_KEY || 'built-http-test-key',
   CODEX_BRAIN_LOCAL_API_KEY:
@@ -26,6 +29,7 @@ const child = spawn(process.execPath, nodeArgs, {
     ...modelEnv,
     PORT: String(port),
     API_SECRET: requestSecret,
+    GOROMBO_WORKSPACE_ROOT: codingWorkspaceRoot,
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
@@ -273,6 +277,7 @@ try {
   console.log('Built HTTP integration test passed.');
 } finally {
   await stopChild(child);
+  rmSync(codingWorkspaceRoot, { recursive: true, force: true });
 }
 
 function parseEnvFile(path) {
