@@ -26,7 +26,10 @@ export const orchestratorInstructions = [
 export default createAgent(({ env }) => {
   const models = configureRuntimeModels(env);
   const selectedModelCard = models.selectedModelCard;
-  const codingWorker = createCodingWorkerSubagent();
+  const codingWorker = createCodingWorkerSubagent({
+    workspaceRoot: resolveCodingWorkerWorkspaceRoot(env),
+    env: createCodingWorkerToolEnv(env),
+  });
   const researcher = createResearcherSubagent();
 
   return {
@@ -55,6 +58,37 @@ export function createFlueCompactionConfig(modelCard: AgentModelCard): {
   };
 }
 
+function resolveCodingWorkerWorkspaceRoot(env: Record<string, unknown>): string {
+  const configuredRoot =
+    readOptionalEnv(env, 'GOROMBO_WORKSPACE_ROOT') ??
+    readOptionalEnv(env, 'GOROMBO_CODING_WORKSPACE_ROOT') ??
+    readOptionalEnv(env, 'GOROMBO_CODING_REPO_PATH');
+
+  if (configuredRoot) {
+    return configuredRoot;
+  }
+
+  if (readOptionalEnv(env, 'GOROMBO_ALLOW_CWD_WORKSPACE_FALLBACK') === 'true') {
+    return process.cwd();
+  }
+
+  throw new Error(
+    'Missing coding-worker workspace root configuration. Set GOROMBO_WORKSPACE_ROOT, GOROMBO_CODING_WORKSPACE_ROOT, or GOROMBO_CODING_REPO_PATH.',
+  );
+}
+
+function createCodingWorkerToolEnv(env: Record<string, unknown>): Record<string, string | undefined> {
+  return {
+    GH_TOKEN: readOptionalEnv(env, 'GH_TOKEN'),
+    GITHUB_TOKEN: readOptionalEnv(env, 'GITHUB_TOKEN'),
+  };
+}
+
+function readOptionalEnv(env: Record<string, unknown>, key: string): string | undefined {
+  const value = env[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
 /**
  * Describes the orchestrator capabilities that are actually wired at runtime.
  */
@@ -66,11 +100,13 @@ The following capabilities are actually attached to this main agent at runtime:
 - Tool: \`load_protocols\`
 - Tool: \`retrieve_memory\`
 - Subagent: \`researcher\`
-- Subagent: \`coding-worker\` placeholder
+- Subagent: \`coding-worker\`
 
 Use the configured model card from the project model registry. Do not claim protocol, memory, RAG, search, email, calendar, repository, or other integrations are live beyond the tools and subagents that are actually wired.
 
 For any current, external, web, source-backed, or research task, delegate with the Flue task tool using agent: "researcher". Do not perform web search directly and do not call web-capable retrieval tools from the main agent. The researcher owns \`web_research\`, including basic, standard, and deep research modes.
+
+For coding-related work, delegate with the Flue task tool using agent: "coding-worker". Do not call coding-worker internal subagents directly. The coding-worker lead decides whether triage, implementer, test-debug, code-review, GitHub/PR, or future worker-local subagents are needed. Surface coding-worker public progress events and structured results to the user when available.
 
 Use \`load_protocols\` before final reasoning. Use \`retrieve_memory\` when stored conversation, project, or user context would materially help. Pass delegated findings into the final answer, and mention \`providerFailures\` when they affect confidence.`;
 }

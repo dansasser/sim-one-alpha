@@ -460,5 +460,6 @@ function createModelEnv(): Record<string, string> {
     OLLAMA_API_KEY: 'test-key',
     CODEX_BRAIN_LOCAL_API_KEY: 'test-key',
     CODEX_BRAIN_LOCAL_API_URL: 'https://dt1.example.test/v1',
+    GOROMBO_WORKSPACE_ROOT: process.cwd(),
   };
 }

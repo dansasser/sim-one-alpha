@@ -31,10 +31,22 @@ function copyWorkspaceDirectories(outputRoot) {
       continue;
     }
 
-    copyDirectoryIfExists(
-      join(workersRoot, entry.name, 'workspace'),
-      join(outputRoot, 'workers', entry.name, 'workspace'),
+    copyNestedWorkspaceDirectories(
+      join(workersRoot, entry.name),
+      join(outputRoot, 'workers', entry.name),
     );
+  }
+}
+
+function copyNestedWorkspaceDirectories(sourceRoot, targetRoot) {
+  copyDirectoryIfExists(join(sourceRoot, 'workspace'), join(targetRoot, 'workspace'));
+
+  for (const entry of readdirSync(sourceRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name === 'workspace') {
+      continue;
+    }
+
+    copyNestedWorkspaceDirectories(join(sourceRoot, entry.name), join(targetRoot, entry.name));
   }
 }
 

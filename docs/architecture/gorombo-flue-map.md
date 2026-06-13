@@ -108,13 +108,30 @@ src/workers/researcher/workspace/
   Researcher subagent user-editable workspace persona files.
 
 src/workers/coding-worker/coding-worker.ts
-  Placeholder coding worker subagent profile.
-  Owns coding-worker instructions and placeholder runtime boundary.
-  Does not attach coding tools yet.
+  Coding worker lead subagent profile.
+  Owns coding-worker instructions, worker-local GitHub tools, coding-process skills, approval-aware side-effect boundaries, public progress event rules, and worker-local internal subagent profiles.
+  The main orchestrator delegates coding work only to this lead profile.
+  Receives the configured runtime workspace root from the orchestrator and passes it to worker-owned tools.
 
 src/workers/coding-worker/workspace/
   Coding worker user-editable workspace persona files.
-  Currently documents placeholder-only behavior until coding tools and approval flow are implemented.
+  Documents the lead coding worker identity, principal hierarchy, tools, approval gates, verification rules, and progress expectations.
+
+src/workers/coding-worker/subagents/
+  Worker-local internal coding subagents used only by the coding-worker lead.
+  Includes triage, implementer, test-debug, code-review, and GitHub/PR specialists.
+  These are not top-level orchestrator-addressable workers.
+
+src/workers/coding-worker/tools/
+  Worker-local workspace/project, shell, git, GitHub, and approval-aware execution tools.
+  File/shell/git/test execution is backed by Flue's Node local sandbox factory.
+  The sandbox is rooted at the configured runtime workspace root. User-editable workspace files live at that root; projects live under `projects/**`; repositories live under `repos/**`.
+  The coding worker must create or resolve new project work under that runtime workspace root, not inside the agent source checkout.
+  The main orchestrator does not own these tools directly.
+
+src/workers/coding-worker/subagents/<name>/workspace/
+  Worker-local subagent user-editable workspace persona files.
+  `USER.md` describes the coding-worker lead as the immediate principal, on behalf of the main orchestrator.
 
 src/workspace-loader.ts
   Shared workspace markdown loader.

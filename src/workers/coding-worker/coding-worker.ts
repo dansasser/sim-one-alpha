@@ -1,11 +1,34 @@
-import { defineAgentProfile, type AgentProfile } from '@flue/runtime';
+import {
+  createAgent,
+  defineAgentProfile,
+  type AgentProfile,
+  type AgentRouteHandler,
+} from '@flue/runtime';
+import { local } from '@flue/runtime/node';
+import { configureRuntimeModels } from '../../models/index.js';
 import {
   composeWorkspaceInstructions,
   resolveWorkspaceDirectory,
 } from '../../workspace-loader.js';
-import type { WorkerRunRequest, WorkerRunResult } from '../../types/index.js';
+import { GhCliGitHubClient } from './github/gh-cli-client.js';
+import { createCodingGitHubTools } from './github/github-tools.js';
+import type { GitHubClient } from './github/github-client.js';
+import { createCodingWorkerRuntimeCapabilityBlock } from './runtime-capabilities.js';
+import { codingWorkerSkills, createCodingWorkerSkillCapabilityBlock } from './skills.js';
+import { createCodingWorkerInternalSubagents } from './subagents/index.js';
+import { createCodingGitTools } from './tools/coding-git-tools.js';
+import { createCodingRepoTools } from './tools/coding-repo-tools.js';
+import type { CodingWorkspaceTargetInput } from './repo/workspace-target.js';
 
 export const codingWorkerAgentName = 'coding-worker';
+export const route: AgentRouteHandler = async (_c, next) => next();
+
+export interface CodingWorkerSubagentOptions extends CodingWorkspaceTargetInput {
+  model?: string;
+  env?: Record<string, string | undefined>;
+  allowLocalDevFallback?: boolean;
+  githubClient?: GitHubClient;
+}
 
 export const codingWorkerInstructions = [
   composeWorkspaceInstructions({
@@ -13,41 +36,109 @@ export const codingWorkerInstructions = [
     title: 'Coding Worker Workspace Instructions',
   }),
   createCodingWorkerRuntimeCapabilityBlock(),
+  createCodingWorkerSkillCapabilityBlock(),
 ].join('\n\n');
 
 /**
  * Creates the reusable coding worker Flue subagent profile used by the orchestrator.
  */
-export function createCodingWorkerSubagent(): AgentProfile {
+export function createCodingWorkerSubagent(options: string | CodingWorkerSubagentOptions = {}): AgentProfile {
+  const resolvedOptions = typeof options === 'string' ? { model: options } : options;
+  const workspaceRoot = resolveSubagentWorkspaceRoot(resolvedOptions);
+
   return defineAgentProfile({
     name: codingWorkerAgentName,
-    description: 'placeholder coding worker for future plan, edit, test, debug loop, diff, and approval behavior.',
-    model: false,
+    description:
+      'coding worker lead that coordinates worker-local triage, implementation, test/debug, code review, and GitHub subagents.',
+    ...(resolvedOptions.model ? { model: resolvedOptions.model } : {}),
     instructions: codingWorkerInstructions,
+    tools: [
+      ...createCodingRepoTools({
+        workspaceRoot,
+        targetKind: resolvedOptions.targetKind,
+        projectId: resolvedOptions.projectId,
+        projectSlug: resolvedOptions.projectSlug,
+        projectRelativePath: resolvedOptions.projectRelativePath,
+        repoPath: resolvedOptions.repoPath,
+        env: resolvedOptions.env,
+        sessionId: 'coding-worker-profile-tools',
+      }),
+      ...createCodingGitTools({
+        workspaceRoot,
+        targetKind: resolvedOptions.targetKind,
+        projectId: resolvedOptions.projectId,
+        projectSlug: resolvedOptions.projectSlug,
+        projectRelativePath: resolvedOptions.projectRelativePath,
+        repoPath: resolvedOptions.repoPath,
+        env: resolvedOptions.env,
+        sessionId: 'coding-worker-git-tools',
+      }),
+      ...createCodingGitHubTools(
+        resolvedOptions.githubClient ?? new GhCliGitHubClient(resolvedOptions.env),
+      ),
+    ],
+    skills: codingWorkerSkills,
+    subagents: createCodingWorkerInternalSubagents(resolvedOptions.model),
   });
 }
 
-export async function runCodingWorkerPlaceholder(
-  request: WorkerRunRequest,
-): Promise<WorkerRunResult> {
+export default createAgent(({ env }) => {
+  const models = configureRuntimeModels(env);
+  const selectedModelCard = models.selectedModelCard;
+  const workspaceRoot = resolveCodingWorkerWorkspaceRoot(env);
+
   return {
-    id: `coding-worker-result:${request.id}`,
-    workerId: request.workerId,
-    status: 'not_implemented',
-    summary:
-      'Coding worker runtime is intentionally placeholder-only in Phase 1. Future behavior will add plan, edit, test, debug loop, diff, and approval.',
-    artifacts: [],
+    profile: createCodingWorkerSubagent({
+      model: selectedModelCard.specifier,
+      workspaceRoot,
+      env: createCodingWorkerToolEnv(env),
+    }),
+    model: selectedModelCard.specifier,
+    cwd: workspaceRoot,
+    sandbox: local({
+      cwd: workspaceRoot,
+      env: {
+        GH_TOKEN: readOptionalEnv(env, 'GH_TOKEN'),
+        GITHUB_TOKEN: readOptionalEnv(env, 'GITHUB_TOKEN'),
+      },
+    }),
+  };
+});
+
+function resolveCodingWorkerWorkspaceRoot(env: Record<string, unknown>): string {
+  const configuredRoot =
+    readOptionalEnv(env, 'GOROMBO_WORKSPACE_ROOT') ??
+    readOptionalEnv(env, 'GOROMBO_CODING_WORKSPACE_ROOT') ??
+    readOptionalEnv(env, 'GOROMBO_CODING_REPO_PATH');
+  if (configuredRoot) {
+    return configuredRoot;
+  }
+  if (readOptionalEnv(env, 'GOROMBO_ALLOW_CWD_WORKSPACE_FALLBACK') === 'true') {
+    return process.cwd();
+  }
+  throw new Error(
+    'Missing coding-worker workspace root configuration. Set GOROMBO_WORKSPACE_ROOT or GOROMBO_CODING_WORKSPACE_ROOT.',
+  );
+}
+
+function resolveSubagentWorkspaceRoot(options: CodingWorkerSubagentOptions): string {
+  if (options.workspaceRoot || options.repoPath) {
+    return options.workspaceRoot ?? options.repoPath!;
+  }
+  if (options.allowLocalDevFallback) {
+    return process.cwd();
+  }
+  throw new Error('Missing coding-worker workspace root configuration.');
+}
+
+function createCodingWorkerToolEnv(env: Record<string, unknown>): Record<string, string | undefined> {
+  return {
+    GH_TOKEN: readOptionalEnv(env, 'GH_TOKEN'),
+    GITHUB_TOKEN: readOptionalEnv(env, 'GITHUB_TOKEN'),
   };
 }
 
-/**
- * Describes the coding worker capabilities that are actually wired at runtime.
- */
-function createCodingWorkerRuntimeCapabilityBlock(): string {
-  return `# Runtime Capabilities
-
-The coding worker is registered as a placeholder subagent only.
-
-No coding tools, filesystem tools, repository tools, shell tools, or approval workflow are attached to this worker yet. If invoked, state that implementation is pending instead of claiming to plan, edit, test, debug, diff, or approve code changes.`;
+function readOptionalEnv(env: Record<string, unknown>, key: string): string | undefined {
+  const value = env[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
-
