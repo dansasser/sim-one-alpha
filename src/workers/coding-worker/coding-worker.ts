@@ -24,6 +24,7 @@ export const route: AgentRouteHandler = async (_c, next) => next();
 export interface CodingWorkerSubagentOptions extends CodingWorkspaceTargetInput {
   model?: string;
   env?: Record<string, string | undefined>;
+  allowLocalDevFallback?: boolean;
 }
 
 export const codingWorkerInstructions = [
@@ -40,8 +41,7 @@ export const codingWorkerInstructions = [
  */
 export function createCodingWorkerSubagent(options: string | CodingWorkerSubagentOptions = {}): AgentProfile {
   const resolvedOptions = typeof options === 'string' ? { model: options } : options;
-  const workspaceRoot =
-    resolvedOptions.workspaceRoot ?? (resolvedOptions.repoPath ? undefined : process.cwd());
+  const workspaceRoot = resolveSubagentWorkspaceRoot(resolvedOptions);
 
   return defineAgentProfile({
     name: codingWorkerAgentName,
@@ -101,12 +101,29 @@ export default createAgent(({ env }) => {
 });
 
 function resolveCodingWorkerWorkspaceRoot(env: Record<string, unknown>): string {
-  return (
+  const configuredRoot =
     readOptionalEnv(env, 'GOROMBO_WORKSPACE_ROOT') ??
     readOptionalEnv(env, 'GOROMBO_CODING_WORKSPACE_ROOT') ??
-    readOptionalEnv(env, 'GOROMBO_CODING_REPO_PATH') ??
-    process.cwd()
+    readOptionalEnv(env, 'GOROMBO_CODING_REPO_PATH');
+  if (configuredRoot) {
+    return configuredRoot;
+  }
+  if (readOptionalEnv(env, 'GOROMBO_ALLOW_CWD_WORKSPACE_FALLBACK') === 'true') {
+    return process.cwd();
+  }
+  throw new Error(
+    'Missing coding-worker workspace root configuration. Set GOROMBO_WORKSPACE_ROOT or GOROMBO_CODING_WORKSPACE_ROOT.',
   );
+}
+
+function resolveSubagentWorkspaceRoot(options: CodingWorkerSubagentOptions): string | undefined {
+  if (options.workspaceRoot || options.repoPath) {
+    return options.workspaceRoot;
+  }
+  if (options.allowLocalDevFallback) {
+    return process.cwd();
+  }
+  throw new Error('Missing coding-worker workspace root configuration.');
 }
 
 function createCodingWorkerToolEnv(env: Record<string, unknown>): Record<string, string | undefined> {

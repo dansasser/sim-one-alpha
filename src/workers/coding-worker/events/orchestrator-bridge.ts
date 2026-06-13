@@ -1,5 +1,8 @@
 import type { CodingWorkerRunResult } from '../types.js';
-import type { CodingWorkerEvent } from './coding-worker-events.js';
+import {
+  assertPublicCodingWorkerEvent,
+  type CodingWorkerEvent,
+} from './coding-worker-events.js';
 
 export interface OrchestratorCodingProgressUpdate {
   taskId: string;
@@ -11,12 +14,17 @@ export function createOrchestratorProgressUpdate(
   taskId: string,
   events: CodingWorkerEvent[],
 ): OrchestratorCodingProgressUpdate {
-  const latest = [...events].reverse().find((event) => event.summary || event.nextAction || event.decision);
+  for (const event of events) {
+    assertPublicCodingWorkerEvent(event);
+  }
+
+  const publicEvents = events.map((event) => ({ ...event }));
+  const latest = [...publicEvents].reverse().find((event) => event.summary || event.nextAction || event.decision);
 
   return {
     taskId,
     latestSummary: latest?.summary ?? latest?.nextAction ?? latest?.decision ?? 'Coding worker progress updated.',
-    events,
+    events: publicEvents,
   };
 }
 
@@ -26,4 +34,3 @@ export function createOrchestratorResultSummary(result: CodingWorkerRunResult): 
 
   return `${result.status}: ${result.summary}.${verificationSummary}`;
 }
-

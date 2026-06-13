@@ -7,20 +7,30 @@ import test from 'node:test';
 import orchestratorAgent from '../agents/orchestrator.js';
 import { evaluateCodingApproval, createCodingApprovalRequest } from '../workers/coding-worker/approvals/approval-policy.js';
 import { createCodingGitHubTools } from '../workers/coding-worker/github/github-tools.js';
+import { GhCliGitHubClient } from '../workers/coding-worker/github/gh-cli-client.js';
 import { InMemoryCodingProgressReporter } from '../workers/coding-worker/events/progress-reporter.js';
 import { createCodingWorkerEvent } from '../workers/coding-worker/events/coding-worker-events.js';
+import { createOrchestratorProgressUpdate } from '../workers/coding-worker/events/orchestrator-bridge.js';
 import { createCodingWorkerSessionPlan } from '../workers/coding-worker/session/child-session-names.js';
 import {
   codingWorkerInternalSubagentNames,
   createCodingWorkerInternalSubagents,
 } from '../workers/coding-worker/subagents/index.js';
-import { runCodingRepoPreflight } from '../workers/coding-worker/repo/preflight.js';
+import { readPackageScripts, runCodingRepoPreflight } from '../workers/coding-worker/repo/preflight.js';
+import { parseGitStatusShort } from '../workers/coding-worker/repo/git-state.js';
+import {
+  packageManagerRunCommand,
+  packageManagerTestCommand,
+} from '../workers/coding-worker/repo/package-manager.js';
 import { createCodingVerificationPlan } from '../workers/coding-worker/repo/verification.js';
 import { createCodingGitTools } from '../workers/coding-worker/tools/coding-git-tools.js';
 import { createCodingRepoTools } from '../workers/coding-worker/tools/coding-repo-tools.js';
 import { resolveCodingWorkspaceTarget } from '../workers/coding-worker/repo/workspace-target.js';
 import { createFlueCodingSubagentDelegate } from '../workers/coding-worker/workflow/coordination.js';
-import { runCodingTaskWorkflow } from '../workers/coding-worker/workflow/coding-task.js';
+import {
+  createInitialCodingPlan,
+  runCodingTaskWorkflow,
+} from '../workers/coding-worker/workflow/coding-task.js';
 import { assertCodingWorkerCanComplete } from '../workers/coding-worker/workflow/result-schema.js';
 import type { ToolDefinition } from '@flue/runtime';
 
@@ -49,6 +59,23 @@ test('coding worker child session names are stable and scoped by task', () => {
   assert.equal(plan.childSessions['test-debug'], 'support-session:test-debug');
   assert.equal(plan.childSessions['code-review'], 'support-session:code-review');
   assert.equal(plan.childSessions.github, 'support-session:github');
+});
+
+test('coding worker child session names avoid placeholder collisions for empty inputs', () => {
+  const first = createCodingWorkerSessionPlan('', '');
+  const second = createCodingWorkerSessionPlan('', '');
+  const invalidSession = createCodingWorkerSessionPlan('Fix Bug #42', '---');
+
+  assert.match(first.leadSessionName, /^coding-task-[a-z0-9]{10}$/);
+  assert.match(invalidSession.leadSessionName, /^coding-fix-bug-42-[a-z0-9]{10}$/);
+  assert.notEqual(first.leadSessionName, second.leadSessionName);
+  assert.equal(new Set([first.leadSessionName, ...Object.values(first.childSessions)]).size, 6);
+  assert.equal(
+    Object.values(first.childSessions).every((sessionName) =>
+      sessionName.startsWith(`${first.leadSessionName}:`),
+    ),
+    true,
+  );
 });
 
 test('coding worker live delegate uses Flue task delegation to worker-local subagent names', async () => {
@@ -80,13 +107,28 @@ test('coding worker live delegate uses Flue task delegation to worker-local suba
         text: 'Classify this change.',
         workspaceRoot,
         targetKind: 'workspace',
+        verificationCommands: [
+          {
+            name: 'custom',
+            command: 'node custom-check.js',
+            required: true,
+          },
+        ],
       },
       sessionPlan,
       preflight: {
         repoPath: workspaceRoot,
         packageManager: 'pnpm',
         scripts: {},
-        verificationPlan: [],
+        verificationPlan: [
+          {
+            name: 'preflight',
+            command: 'node preflight-check.js',
+            required: true,
+            reason: 'Preflight fallback.',
+            status: 'pending',
+          },
+        ],
       },
       plan: [],
     });
@@ -94,6 +136,8 @@ test('coding worker live delegate uses Flue task delegation to worker-local suba
     assert.equal(calls[0]?.agent, 'coding-worker-triage');
     assert.match(calls[0]?.text ?? '', /delegate-session:triage/);
     assert.match(calls[0]?.text ?? '', /workspaceRoot/);
+    assert.match(calls[0]?.text ?? '', /node custom-check\.js/);
+    assert.doesNotMatch(calls[0]?.text ?? '', /node preflight-check\.js/);
     assert.equal(result.summary, 'triage complete');
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
@@ -155,6 +199,41 @@ test('public coding worker events reject raw thinking or internal prompt fields'
   );
 });
 
+test('orchestrator progress bridge revalidates public coding worker events', () => {
+  const safeEvent = createCodingWorkerEvent({
+    type: 'coding.action.completed',
+    taskId: 'task-safe-event',
+    summary: 'Patched file.',
+  });
+
+  assert.equal(
+    createOrchestratorProgressUpdate('task-safe-event', [safeEvent]).latestSummary,
+    'Patched file.',
+  );
+  assert.throws(
+    () =>
+      createOrchestratorProgressUpdate('task-unsafe-event', [
+        {
+          ...safeEvent,
+          rawPrompt: 'private prompt',
+        } as never,
+      ]),
+    /must not expose private model context/,
+  );
+});
+
+test('coding worker plan includes GitHub stage when GitHub context is present', () => {
+  const plan = createInitialCodingPlan({
+    taskId: 'task-github-plan',
+    text: 'Prepare PR work.',
+    github: {
+      pullRequestNumber: 13,
+    },
+  });
+
+  assert.equal(plan.some((item) => item.owner === 'github'), true);
+});
+
 test('repo preflight detects pnpm and exact configured verification scripts', () => {
   const repoPath = createTempRepo({
     scripts: {
@@ -185,6 +264,19 @@ test('repo preflight detects pnpm and exact configured verification scripts', ()
   }
 });
 
+test('repo preflight returns no scripts for invalid package json', () => {
+  const repoPath = mkdtempSync(join(tmpdir(), 'coding-worker-invalid-package-'));
+
+  try {
+    writeFileSync(join(repoPath, 'package.json'), '{ invalid json');
+
+    assert.deepEqual(readPackageScripts(repoPath), {});
+    assert.deepEqual(runCodingRepoPreflight(repoPath).scripts, {});
+  } finally {
+    rmSync(repoPath, { recursive: true, force: true });
+  }
+});
+
 test('verification planner keeps named check scripts exact when present', () => {
   const plan = createCodingVerificationPlan({
     packageManager: 'pnpm',
@@ -198,6 +290,33 @@ test('verification planner keeps named check scripts exact when present', () => 
   assert.equal(plan.some((command) => command.command === 'corepack pnpm run lint'), true);
   assert.equal(plan.some((command) => command.command === 'corepack pnpm run check'), true);
   assert.equal(plan.some((command) => command.command === 'corepack pnpm test'), true);
+});
+
+test('package manager command builders fail closed when package manager is unknown', () => {
+  assert.throws(
+    () => packageManagerRunCommand('unknown', 'test'),
+    /unknown package manager/i,
+  );
+  assert.throws(
+    () => packageManagerTestCommand('unknown'),
+    /unknown package manager/i,
+  );
+  assert.deepEqual(
+    createCodingVerificationPlan({
+      packageManager: 'unknown',
+      scripts: {
+        test: 'node test.js',
+      },
+    }),
+    [],
+  );
+});
+
+test('git status parser preserves paths before removing status columns', () => {
+  assert.deepEqual(
+    parseGitStatusShort('## main\n M src/index.ts\nR  old.ts -> src/new.ts\n?? README.md\n').changedFiles,
+    ['src/index.ts', 'src/new.ts', 'README.md'],
+  );
 });
 
 test('GitHub side effects are approval-gated and GitHub read tool is mockable', async () => {
@@ -240,6 +359,23 @@ test('GitHub side effects are approval-gated and GitHub read tool is mockable', 
 
   assert.equal(output.issue?.title, 'Fix parser');
   assert.equal(output.checks?.[0]?.conclusion, 'SUCCESS');
+});
+
+test('GitHub CLI client validates repository identifiers before running gh', async () => {
+  const client = new GhCliGitHubClient();
+
+  await assert.rejects(
+    () => client.getIssue('--bad', 'repo', 1),
+    /Invalid GitHub owner/,
+  );
+  await assert.rejects(
+    () => client.getPullRequest('owner', 'bad repo', 1),
+    /Invalid GitHub repo/,
+  );
+  await assert.rejects(
+    () => client.listPullRequestChecks('owner', 'repo', 0),
+    /Invalid GitHub pullRequestNumber/,
+  );
 });
 
 test('coding worker tools create projects under the workspace root and scope file edits there', async () => {
@@ -370,13 +506,19 @@ test('coding worker shell tool blocks git and GitHub writes without approval', a
       }),
       'coding_shell_run',
     );
-    const output = JSON.parse(await shell.execute({ command: 'git push origin main' })) as {
+    const output = JSON.parse(await shell.execute({ command: 'git -C . push origin main' })) as {
+      blocked?: boolean;
+      approvalAction?: string;
+    };
+    const ghOutput = JSON.parse(await shell.execute({ command: 'gh api repos/example/example -XPOST' })) as {
       blocked?: boolean;
       approvalAction?: string;
     };
 
     assert.equal(output.blocked, true);
     assert.equal(output.approvalAction, 'git.write');
+    assert.equal(ghOutput.blocked, true);
+    assert.equal(ghOutput.approvalAction, 'github.write');
   } finally {
     rmSync(project.workspaceRoot, { recursive: true, force: true });
   }
@@ -401,22 +543,34 @@ test('coding worker git commit tool requires approval and commits when approved'
         taskId: 'task-commit',
         message: 'Update answer',
         paths: ['index.js'],
-        approvalRequestId: 'task-commit:wrong',
         approved: true,
       }),
     ) as { blocked?: boolean };
     assert.equal(blocked.blocked, true);
 
+    const approvedCommit = getTool(
+      createCodingGitTools({
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+        resolveApprovalDecision: (request) => ({
+          requestId: request.id,
+          approved: true,
+          decidedBy: 'test',
+        }),
+      }),
+      'coding_git_commit',
+    );
+    const injectedMessage = 'Update answer $(node -e "require(\'fs\').writeFileSync(\'pwned.txt\',\'x\')")';
     const output = JSON.parse(
-      await commit.execute({
+      await approvedCommit.execute({
         taskId: 'task-commit',
-        message: 'Update answer',
+        message: injectedMessage,
         paths: ['index.js'],
-        approvalRequestId: 'task-commit:git.commit',
-        approved: true,
       }),
     ) as { status?: string };
     assert.equal(output.status, 'committed');
+    assert.equal(existsSync(join(project.repoPath, 'pwned.txt')), false);
 
     const log = execFileSync('git', ['log', '--oneline', '-1'], { cwd: project.repoPath, encoding: 'utf8' });
     assert.match(log, /Update answer/);
@@ -442,9 +596,6 @@ test('coding worker GitHub PR creation tool is approval-gated', async () => {
         taskId: 'task-pr',
         title: 'Test PR',
         body: 'Test body',
-        approvalRequestId: 'task-pr:github.pr.create',
-        approved: false,
-        approvalReason: 'not approved',
       }),
     ) as { blocked?: boolean };
 
@@ -714,5 +865,6 @@ function createModelEnv(): Record<string, string> {
     OLLAMA_API_KEY: 'test-key',
     CODEX_BRAIN_LOCAL_API_KEY: 'test-key',
     CODEX_BRAIN_LOCAL_API_URL: 'https://dt1.example.test/v1',
+    GOROMBO_WORKSPACE_ROOT: process.cwd(),
   };
 }

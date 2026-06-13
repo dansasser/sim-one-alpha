@@ -28,8 +28,21 @@ export function readPackageScripts(repoPath: string): Record<string, string> {
   if (!existsSync(packageJsonPath)) {
     return {};
   }
-  const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
-    scripts?: Record<string, string>;
-  };
-  return packageJson.scripts ?? {};
+
+  try {
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
+      scripts?: unknown;
+    };
+    return isScriptRecord(packageJson.scripts) ? packageJson.scripts : {};
+  } catch {
+    return {};
+  }
+}
+
+function isScriptRecord(value: unknown): value is Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  return Object.values(value).every((script) => typeof script === 'string');
 }

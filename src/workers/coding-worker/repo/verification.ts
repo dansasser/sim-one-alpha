@@ -13,6 +13,10 @@ export interface VerificationPlanInput {
 
 export function createCodingVerificationPlan(input: VerificationPlanInput): CodingVerificationCommand[] {
   const commands: CodingVerificationCommand[] = [];
+  if (input.packageManager === 'unknown') {
+    return commands;
+  }
+
   const addScript = (name: string, reason: string, required = true) => {
     if (input.scripts[name]) {
       commands.push(createCommand(name, packageManagerRunCommand(input.packageManager, name), reason, required));
@@ -70,4 +74,3 @@ function createCommand(
     status,
   };
 }
-

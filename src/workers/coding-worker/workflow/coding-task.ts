@@ -213,7 +213,7 @@ export async function runCodingTaskWorkflow(
 }
 
 export function createInitialCodingPlan(task: CodingWorkerTaskRequest): CodingPlanItem[] {
-  return [
+  const plan: CodingPlanItem[] = [
     {
       id: `${task.taskId}:triage`,
       description: 'Triage request, workspace/project scope, repository state, GitHub context, and required internal subagents.',
@@ -239,6 +239,17 @@ export function createInitialCodingPlan(task: CodingWorkerTaskRequest): CodingPl
       status: 'pending',
     },
   ];
+
+  if (task.github?.issueNumber || task.github?.pullRequestNumber || task.github?.url) {
+    plan.push({
+      id: `${task.taskId}:github`,
+      description: 'Gather GitHub context and prepare approval-gated remote actions.',
+      owner: 'github',
+      status: 'pending',
+    });
+  }
+
+  return plan;
 }
 
 export function chooseSubagents(task: CodingWorkerTaskRequest): CodingSubagentKind[] {
@@ -412,6 +423,13 @@ async function runVerification(
       };
       state.verificationEvidence.push(evidence);
       results.push({ command, evidence, required: command.required });
+      state.reporter.emit({
+        type: 'coding.verification.completed',
+        taskId: state.task.taskId,
+        command: command.command,
+        status: evidence.status,
+        summary: evidence.summary,
+      });
       continue;
     }
 

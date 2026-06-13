@@ -1,6 +1,8 @@
 import type { SessionEnv, ShellResult } from '@flue/runtime';
 import { local } from '@flue/runtime/node';
+import { execFile } from 'node:child_process';
 import { relative, resolve } from 'node:path';
+import { promisify } from 'node:util';
 import {
   assertInsideCodingScope,
   assertInsideWorkspaceRoot,
@@ -10,6 +12,8 @@ import {
   type ResolvedCodingWorkspaceTarget,
 } from '../repo/workspace-target.js';
 import type { CodingWorkspaceTargetKind } from '../types.js';
+
+const execFileAsync = promisify(execFile);
 
 export interface CodingSandboxRuntime {
   workspaceRoot: string;
@@ -29,6 +33,7 @@ export interface CodingSandboxRuntime {
   exists(path: string): Promise<boolean>;
   stat(path: string): Promise<{ isFile: boolean; isDirectory: boolean }>;
   exec(command: string, options?: CodingShellOptions): Promise<ShellResult>;
+  execFile(file: string, args: string[], options?: CodingShellOptions): Promise<ShellResult>;
   resolveScopePath(path: string): string;
   resolveRepoPath(path: string): string;
   resolveWorkspacePath(path: string): string;
@@ -55,13 +60,14 @@ export async function createFlueLocalCodingSandbox({
 }: CodingSandboxOptions): Promise<CodingSandboxRuntime> {
   const target = resolveCodingWorkspaceTarget(targetInput);
   const sessionEnv = await local({ cwd: target.workspaceRoot, env }).createSessionEnv({ id: sessionId });
-  return new FlueLocalCodingSandboxRuntime(target, sessionEnv);
+  return new FlueLocalCodingSandboxRuntime(target, sessionEnv, env);
 }
 
 class FlueLocalCodingSandboxRuntime implements CodingSandboxRuntime {
   constructor(
     private readonly target: ResolvedCodingWorkspaceTarget,
     private readonly sessionEnv: SessionEnv,
+    private readonly env?: Record<string, string | undefined>,
   ) {}
 
   get workspaceRoot(): string {
@@ -129,6 +135,34 @@ class FlueLocalCodingSandboxRuntime implements CodingSandboxRuntime {
     });
   }
 
+  async execFile(file: string, args: string[], options: CodingShellOptions = {}): Promise<ShellResult> {
+    try {
+      const result = await execFileAsync(file, args, {
+        cwd: options.cwd ? this.resolveScopePath(options.cwd) : this.scopePath,
+        env: mergeEnv(this.env, options.env),
+        windowsHide: true,
+        timeout: options.timeoutSeconds ? options.timeoutSeconds * 1_000 : undefined,
+        signal: options.signal,
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024,
+      });
+      return {
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: 0,
+      };
+    } catch (error) {
+      if (isExecFileError(error)) {
+        return {
+          stdout: typeof error.stdout === 'string' ? error.stdout : '',
+          stderr: typeof error.stderr === 'string' ? error.stderr : String(error.message ?? ''),
+          exitCode: typeof error.code === 'number' ? error.code : 1,
+        };
+      }
+      throw error;
+    }
+  }
+
   resolveScopePath(path: string): string {
     return assertInsideCodingScope(this.scopePath, path);
   }
@@ -148,6 +182,32 @@ class FlueLocalCodingSandboxRuntime implements CodingSandboxRuntime {
   async writeWorkspaceFile(path: string, content: string): Promise<void> {
     await this.sessionEnv.writeFile(this.resolveWorkspacePath(path), content);
   }
+}
+
+function mergeEnv(
+  base: Record<string, string | undefined> | undefined,
+  override: Record<string, string> | undefined,
+): NodeJS.ProcessEnv {
+  const merged: NodeJS.ProcessEnv = { ...process.env };
+  for (const [key, value] of Object.entries(base ?? {})) {
+    if (value === undefined) {
+      delete merged[key];
+    } else {
+      merged[key] = value;
+    }
+  }
+  for (const [key, value] of Object.entries(override ?? {})) {
+    merged[key] = value;
+  }
+  return merged;
+}
+
+function isExecFileError(error: unknown): error is Error & {
+  code?: number | string;
+  stdout?: string;
+  stderr?: string;
+} {
+  return Boolean(error && typeof error === 'object' && 'code' in error);
 }
 
 export function assertInsideRepo(repoPath: string, path: string): string {

@@ -58,6 +58,10 @@ function createSubagentTaskPrompt(
   subagent: CodingSubagentKind,
   request: CodingTaskSubagentRequest,
 ): string {
+  const verificationCommands = request.task.verificationCommands?.length
+    ? request.task.verificationCommands.map((command) => command.command)
+    : request.preflight.verificationPlan.map((command) => command.command);
+
   return `You are the ${subagent} internal coding-worker subagent.
 
 Purpose: ${describeSubagentPurpose(subagent)}
@@ -76,7 +80,7 @@ ${JSON.stringify(
     projectRelativePath: request.task.projectRelativePath,
     repoPath: request.preflight.repoPath,
     packageManager: request.preflight.packageManager,
-    verificationCommands: request.preflight.verificationPlan.map((command) => command.command),
+    verificationCommands,
     plan: request.plan,
     childSession: request.sessionPlan.childSessions[subagent],
   },

@@ -30,7 +30,7 @@ export function packageManagerRunCommand(packageManager: RepoPackageManager, scr
     case 'bun':
       return `bun run ${script}`;
     case 'unknown':
-      return `npm run ${script}`;
+      throw new Error(`Cannot build run command for unknown package manager (script: ${script}).`);
   }
 }
 
@@ -45,7 +45,6 @@ export function packageManagerTestCommand(packageManager: RepoPackageManager): s
     case 'bun':
       return 'bun test';
     case 'unknown':
-      return 'npm test';
+      throw new Error('Cannot build test command for unknown package manager.');
   }
 }
-

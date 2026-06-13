@@ -57,10 +57,20 @@ export interface CodingPlanItem {
   status: 'pending' | 'in_progress' | 'completed' | 'blocked';
 }
 
+/**
+ * Exact text edit applied by the coding worker.
+ *
+ * When `expectedOccurrences` is omitted, every occurrence of `oldText` is
+ * replaced. Set `expectedOccurrences` when callers need a strict occurrence
+ * count guard before replacement.
+ */
 export interface CodingFileEdit {
   path: string;
   oldText: string;
   newText: string;
+  /**
+   * Optional strict count guard for `oldText` before applying the edit.
+   */
   expectedOccurrences?: number;
 }
 

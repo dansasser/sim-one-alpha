@@ -76,8 +76,11 @@ test('Flue orchestrator routes research to the researcher instead of owning web 
 
   assert.equal(config.subagents?.some((agent) => agent.name === 'researcher'), true);
   assert.equal(config.subagents?.some((agent) => agent.name === 'coding-worker'), true);
-  assert.equal(config.subagents?.some((agent) => agent.name === 'coding-worker-triage'), false);
-  assert.equal(config.subagents?.some((agent) => agent.name === 'coding-worker-implementer'), false);
+  const orchestratorExposedInternal = (config.subagents ?? [])
+    .map((agent) => agent.name)
+    .filter((name): name is string => typeof name === 'string')
+    .filter((name) => name.startsWith('coding-worker-') && name !== 'coding-worker');
+  assert.deepEqual(orchestratorExposedInternal, []);
   assert.equal(config.subagents?.find((agent) => agent.name === 'researcher')?.model, undefined);
   assert.equal(config.subagents?.find((agent) => agent.name === 'coding-worker')?.model, undefined);
   assert.equal(config.tools?.some((tool) => tool.name === 'retrieve_context'), false);
@@ -96,15 +99,23 @@ test('Flue orchestrator routes research to the researcher instead of owning web 
 });
 
 test('coding worker owns its workspace-backed lead profile', () => {
-  const subagent = createCodingWorkerSubagent();
+  const subagent = createCodingWorkerSubagent({ workspaceRoot: process.cwd() });
 
   assert.equal(subagent.name, 'coding-worker');
   assert.equal(subagent.model, undefined);
   assert.match(subagent.instructions ?? '', /Coding Worker Workspace Instructions/);
   assert.match(subagent.instructions ?? '', /worker-local internal subagents/);
   assert.match(subagent.instructions ?? '', /Do not expose raw hidden thinking/);
-  assert.equal(subagent.subagents?.some((agent) => agent.name === 'coding-worker-triage'), true);
-  assert.equal(subagent.subagents?.some((agent) => agent.name === 'coding-worker-code-review'), true);
+  assert.deepEqual(
+    (subagent.subagents ?? []).map((agent) => agent.name).sort(),
+    [
+      'coding-worker-code-review',
+      'coding-worker-github',
+      'coding-worker-implementer',
+      'coding-worker-test-debug',
+      'coding-worker-triage',
+    ],
+  );
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_github_read_context'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_project_create'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_repo_apply_patch'), true);
@@ -137,5 +148,6 @@ function createModelEnv(): Record<string, string> {
     OLLAMA_API_KEY: 'test-key',
     CODEX_BRAIN_LOCAL_API_KEY: 'test-key',
     CODEX_BRAIN_LOCAL_API_URL: 'https://dt1.example.test/v1',
+    GOROMBO_WORKSPACE_ROOT: process.cwd(),
   };
 }
