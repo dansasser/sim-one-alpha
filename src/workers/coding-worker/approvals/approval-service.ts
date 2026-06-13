@@ -22,6 +22,11 @@ export interface RecordCodingApprovalDecisionInput {
   decidedBy: string;
   reason?: string;
   decidedAt?: string;
+  /**
+   * Optional authenticated principal. When supplied, it must match decidedBy.
+   * Callers should provide this from the transport/auth layer.
+   */
+  trustedActor?: string;
 }
 
 export interface CodingApprovalService {
@@ -103,6 +108,9 @@ class DefaultCodingApprovalService implements CodingApprovalService {
     if (!input.decidedBy.trim()) {
       throw new Error('Approval decision requires a trusted decidedBy actor.');
     }
+    if (input.trustedActor !== undefined && input.trustedActor !== input.decidedBy) {
+      throw new Error('Approval decidedBy does not match the authenticated trusted actor.');
+    }
 
     const record = await this.getRecord(input.requestId);
     if (!record) {
@@ -158,10 +166,19 @@ class DefaultCodingApprovalService implements CodingApprovalService {
   }
 
   async evaluateRequest(request: CodingApprovalRequest): Promise<CodingApprovalEvaluation> {
-    return evaluateCodingApproval(request, await this.resolveDecision(request));
+    const record = await this.store.getRecord(request.id);
+    const persistedRequest = record?.request ?? request;
+    return evaluateCodingApproval(persistedRequest, record?.decision);
   }
 }
 
 function isExpired(request: CodingApprovalRequest): boolean {
-  return Boolean(request.expiresAt && Date.parse(request.expiresAt) <= Date.now());
+  if (!request.expiresAt) {
+    return false;
+  }
+  const parsed = Date.parse(request.expiresAt);
+  if (Number.isNaN(parsed)) {
+    return true;
+  }
+  return parsed <= Date.now();
 }

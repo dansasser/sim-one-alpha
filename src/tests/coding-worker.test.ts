@@ -45,7 +45,7 @@ import { assertCodingWorkerCanComplete } from '../workers/coding-worker/workflow
 import type { ToolDefinition } from '@flue/runtime';
 
 test('coding worker internal subagents are worker-local profiles with distinct context identities', () => {
-  const subagents = createCodingWorkerInternalSubagents('ollama-cloud/minimax-m3');
+  const subagents = createCodingWorkerInternalSubagents({ model: 'ollama-cloud/minimax-m3' });
 
   assert.deepEqual(
     subagents.map((agent) => agent.name),
@@ -458,6 +458,56 @@ test('approval service persists trusted decisions and rejects untrusted actors',
 
     const reloaded = createFileCodingApprovalService(workspaceRoot);
     assert.equal((await reloaded.getRecord(request.id))?.status, 'approved');
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('concurrent file-store approval service serializes create and recordDecision', async () => {
+  const workspaceRoot = createTempWorkspace();
+
+  try {
+    const serviceA = createFileCodingApprovalService(workspaceRoot);
+    const serviceB = createFileCodingApprovalService(workspaceRoot);
+
+    const created: Awaited<ReturnType<typeof serviceA.createRequest>>[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      created.push(
+        await serviceA.createRequest({
+          taskId: 'task-concurrent',
+          actionType: 'git.push',
+          summary: `Push branch ${i}`,
+          reason: 'Pushes remote refs.',
+          risk: 'This mutates remote repository state.',
+        }),
+      );
+    }
+
+    await Promise.all([
+      ...created.map((request, index) =>
+        index % 2 === 0
+          ? serviceA.recordDecision({ requestId: request.id, approved: true, decidedBy: 'operator-a' })
+          : serviceB.recordDecision({ requestId: request.id, approved: false, decidedBy: 'operator-b' }),
+      ),
+      serviceA.createRequest({
+        taskId: 'task-concurrent-extra',
+        actionType: 'repo.sync',
+        summary: 'Concurrent sync.',
+        reason: 'Syncing mutates local refs.',
+        risk: 'This mutates local repository state.',
+      }),
+    ]);
+
+    const reloaded = createFileCodingApprovalService(workspaceRoot);
+    for (const request of created) {
+      const record = await reloaded.getRecord(request.id);
+      assert.ok(record, `record should exist for ${request.id}`);
+      assert.equal(
+        record.status,
+        (await serviceA.getRecord(request.id))?.status,
+        'all service instances see the same persisted status',
+      );
+    }
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
   }

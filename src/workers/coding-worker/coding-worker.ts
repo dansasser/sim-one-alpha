@@ -5,6 +5,7 @@ import {
   type AgentRouteHandler,
 } from '@flue/runtime';
 import { local } from '@flue/runtime/node';
+import { resolve as resolvePath, sep } from 'node:path';
 import { configureRuntimeModels } from '../../models/index.js';
 import {
   composeWorkspaceInstructions,
@@ -30,6 +31,11 @@ export interface CodingWorkerSubagentOptions extends CodingWorkspaceTargetInput 
   env?: Record<string, string | undefined>;
   allowLocalDevFallback?: boolean;
   githubClient?: GitHubClient;
+  /**
+   * Root directory for approval persistence. Must be outside workspaceRoot.
+   * Falls back to a sibling of workspaceRoot when omitted.
+   */
+  approvalRoot?: string;
 }
 
 export const codingWorkerInstructions = [
@@ -44,13 +50,14 @@ export const codingWorkerInstructions = [
 /**
  * Creates the reusable coding worker Flue subagent profile used by the orchestrator.
  */
-export function createCodingWorkerSubagent(options: string | CodingWorkerSubagentOptions = {}): AgentProfile {
-  const resolvedOptions = typeof options === 'string' ? { model: options } : options;
+export function createCodingWorkerSubagent(options: CodingWorkerSubagentOptions = {}): AgentProfile {
+  const resolvedOptions = options;
   const workspaceRoot = resolveSubagentWorkspaceRoot(resolvedOptions);
-  const approvalRoot = workspaceRoot ?? resolvedOptions.repoPath;
+  const approvalRoot = resolveApprovalRoot(resolvedOptions, workspaceRoot);
   if (!approvalRoot) {
     throw new Error('Missing coding-worker approval storage root configuration.');
   }
+  assertApprovalRootOutsideWorkspace(approvalRoot, workspaceRoot);
   const approvalService = createFileCodingApprovalService(approvalRoot);
   const githubClient = resolvedOptions.githubClient ?? createDefaultGitHubClient(resolvedOptions.env);
 
@@ -123,6 +130,7 @@ export default createAgent(({ env }) => {
     profile: createCodingWorkerSubagent({
       model: selectedModelCard.specifier,
       workspaceRoot,
+      approvalRoot: readOptionalEnv(env, 'GOROMBO_APPROVAL_ROOT'),
       env: createCodingWorkerToolEnv(env),
     }),
     model: selectedModelCard.specifier,
@@ -151,6 +159,34 @@ function resolveCodingWorkerWorkspaceRoot(env: Record<string, unknown>): string 
   throw new Error(
     'Missing coding-worker workspace root configuration. Set GOROMBO_WORKSPACE_ROOT or GOROMBO_CODING_WORKSPACE_ROOT.',
   );
+}
+
+function resolveApprovalRoot(
+  options: CodingWorkerSubagentOptions,
+  workspaceRoot: string | undefined,
+): string | undefined {
+  if (options.approvalRoot) {
+    return resolvePath(options.approvalRoot);
+  }
+  if (workspaceRoot) {
+    return resolvePath(workspaceRoot, '..', '.gorombo-approvals');
+  }
+  return options.repoPath ? resolvePath(options.repoPath, '..', '.gorombo-approvals') : undefined;
+}
+
+function assertApprovalRootOutsideWorkspace(approvalRoot: string, workspaceRoot: string | undefined): void {
+  if (!workspaceRoot) {
+    return;
+  }
+  const normalizedApproval = resolvePath(approvalRoot).toLowerCase();
+  const normalizedWorkspace = resolvePath(workspaceRoot).toLowerCase();
+  const workspacePrefix = normalizedWorkspace.endsWith(sep) ? normalizedWorkspace : normalizedWorkspace + sep;
+  if (normalizedApproval === workspacePrefix.slice(0, -1) || normalizedApproval.startsWith(workspacePrefix)) {
+    throw new Error(
+      'Approval persistence root must be outside the coding-worker workspace root to prevent model tampering. ' +
+        `approvalRoot=${approvalRoot} workspaceRoot=${workspaceRoot}`,
+    );
+  }
 }
 
 function resolveSubagentWorkspaceRoot(options: CodingWorkerSubagentOptions): string {

@@ -231,7 +231,11 @@ export function createCodingRepoWorkflowTools(options: CodingRepoWorkflowToolsOp
         prune: Type.Optional(Type.Boolean()),
       }),
       execute: async (args) => {
-        const remote = readString(args.remote) ?? 'origin';
+        const rawRemote = readString(args.remote) ?? 'origin';
+        if (rawRemote.startsWith('-')) {
+          return toInvalidOperandResult('remote', rawRemote);
+        }
+        const remote = rawRemote;
         const approval = await evaluateRepoApproval(approvalService, options, {
           taskId: requireString(args.taskId, 'taskId'),
           actionType: 'repo.fetch',
@@ -260,7 +264,11 @@ export function createCodingRepoWorkflowTools(options: CodingRepoWorkflowToolsOp
         prune: Type.Optional(Type.Boolean()),
       }),
       execute: async (args) => {
-        const remote = readString(args.remote) ?? 'origin';
+        const rawRemote = readString(args.remote) ?? 'origin';
+        if (rawRemote.startsWith('-')) {
+          return toInvalidOperandResult('remote', rawRemote);
+        }
+        const remote = rawRemote;
         const branch = readString(args.branch);
         if (branch) {
           normalizeGitRef(branch, 'branch');
@@ -303,6 +311,9 @@ export function createCodingRepoWorkflowTools(options: CodingRepoWorkflowToolsOp
       execute: async (args) => {
         const branch = normalizeGitRef(requireString(args.branch, 'branch'), 'branch');
         const startPoint = readString(args.startPoint);
+        if (startPoint !== undefined && startPoint.startsWith('-')) {
+          return toInvalidOperandResult('startPoint', startPoint);
+        }
         const approval = await evaluateRepoApproval(approvalService, options, {
           taskId: requireString(args.taskId, 'taskId'),
           actionType: 'repo.branch.create',
@@ -342,6 +353,10 @@ export function createCodingRepoWorkflowTools(options: CodingRepoWorkflowToolsOp
       }),
       execute: async (args) => {
         const branch = normalizeGitRef(requireString(args.branch, 'branch'), 'branch');
+        const rawStartPoint = readString(args.startPoint);
+        if (rawStartPoint !== undefined && rawStartPoint.startsWith('-')) {
+          return toInvalidOperandResult('startPoint', rawStartPoint);
+        }
         const slug = normalizeProjectSlug(readString(args.directoryName) ?? branch);
         const worktreeRelativePath = `repos/${slug}`;
         const approval = await evaluateRepoApproval(approvalService, options, {
@@ -357,12 +372,13 @@ export function createCodingRepoWorkflowTools(options: CodingRepoWorkflowToolsOp
         }
         const sandbox = await getSandbox();
         const worktreePath = sandbox.resolveWorkspacePath(worktreeRelativePath);
+        const startPoint = rawStartPoint;
         const argsList = [
           'worktree',
           'add',
           ...(args.createBranch === false ? [] : ['-b', branch]),
           worktreePath,
-          ...(readString(args.startPoint) ? [readString(args.startPoint) ?? ''] : args.createBranch === false ? [branch] : []),
+          ...(startPoint ? [startPoint] : args.createBranch === false ? [branch] : []),
         ];
         const worktree = await sandbox.execFile('git', argsList, { timeoutSeconds: 120 });
         return toToolJson({
@@ -419,6 +435,20 @@ function normalizeGitRef(value: string, name: string): string {
     throw new Error(`Invalid git ${name}: ${value}`);
   }
   return value;
+}
+
+function rejectGitOperand(value: string | undefined, name: string): string | undefined {
+  if (value === undefined || value.length === 0) {
+    return value;
+  }
+  if (value.startsWith('-')) {
+    throw new Error(`Invalid git ${name} operand: ${value}`);
+  }
+  return value;
+}
+
+function toInvalidOperandResult(name: string, value: string): ReturnType<typeof toToolJson> {
+  return toToolJson({ blocked: true, reason: `invalid git operand for ${name}: ${value}` });
 }
 
 async function discoverWorkspaceRepos(
@@ -490,7 +520,7 @@ function normalizeRepoWorkspaceRelativePath(value: string): string {
 }
 
 function normalizeRepoUrl(value: string): string {
-  if (!value.trim() || value.includes('\0')) {
+  if (!value.trim() || value.includes('\0') || value.startsWith('-')) {
     throw new Error(`Invalid git remoteUrl: ${value}`);
   }
   return value;

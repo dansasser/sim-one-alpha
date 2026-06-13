@@ -35,6 +35,7 @@ export class InMemoryCodingApprovalStore implements CodingApprovalStore {
 
 export class JsonFileCodingApprovalStore implements CodingApprovalStore {
   constructor(private readonly filePath: string) {}
+  readonly #lock = createAsyncMutex();
 
   static atWorkspaceRoot(workspaceRoot: string): JsonFileCodingApprovalStore {
     return new JsonFileCodingApprovalStore(
@@ -48,14 +49,16 @@ export class JsonFileCodingApprovalStore implements CodingApprovalStore {
   }
 
   async upsertRecord(record: CodingApprovalRecord): Promise<void> {
-    const records = await this.readRecords();
-    const index = records.findIndex((entry) => entry.request.id === record.request.id);
-    if (index >= 0) {
-      records[index] = cloneRecord(record);
-    } else {
-      records.push(cloneRecord(record));
-    }
-    await this.writeRecords(records);
+    await this.#lock(async () => {
+      const records = await this.readRecords();
+      const index = records.findIndex((entry) => entry.request.id === record.request.id);
+      if (index >= 0) {
+        records[index] = cloneRecord(record);
+      } else {
+        records.push(cloneRecord(record));
+      }
+      await this.writeRecords(records);
+    });
   }
 
   async listRecords(taskId?: string): Promise<CodingApprovalRecord[]> {
@@ -125,6 +128,15 @@ function cloneRecord(record: CodingApprovalRecord): CodingApprovalRecord {
 
 function cloneDecision(decision: CodingApprovalDecision): CodingApprovalDecision {
   return { ...decision };
+}
+
+function createAsyncMutex(): <T>(job: () => Promise<T>) => Promise<T> {
+  let tail: Promise<unknown> = Promise.resolve();
+  return async (job) => {
+    const next = tail.then(async () => job());
+    tail = next.catch(() => undefined);
+    return next;
+  };
 }
 
 function isMissingFileError(error: unknown): boolean {

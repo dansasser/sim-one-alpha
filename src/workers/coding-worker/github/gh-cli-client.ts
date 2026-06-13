@@ -77,7 +77,7 @@ export class GhCliGitHubClient implements GitHubClient {
   async listPullRequestComments(owner: string, repo: string, pullRequestNumber: number): Promise<GithubCommentSummary[]> {
     validateOwnerRepo(owner, repo);
     validatePositiveInteger('pullRequestNumber', pullRequestNumber);
-    const data = await runGhJson(
+    const data = await this.ghJsonRunner(
       [
         'pr',
         'view',
@@ -105,7 +105,7 @@ export class GhCliGitHubClient implements GitHubClient {
   ): Promise<GithubReviewThreadSummary[]> {
     validateOwnerRepo(owner, repo);
     validatePositiveInteger('pullRequestNumber', pullRequestNumber);
-    const data = await runGhJson(
+    const data = await this.ghJsonRunner(
       [
         'api',
         'graphql',
@@ -421,6 +421,8 @@ function writeSummary(status: string, stdout: string): GithubWriteSummary {
   return { status, stdout };
 }
 
+// Note: reviewThreadsQuery caps pagination at first: 100 for both review threads and
+// nested comments. Review threads or comment pages beyond 100 are not fetched.
 const reviewThreadsQuery = `
 query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {

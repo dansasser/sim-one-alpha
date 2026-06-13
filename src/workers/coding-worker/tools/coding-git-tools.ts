@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { defineTool, Type, type ToolDefinition } from '@flue/runtime';
 import {
   createInMemoryCodingApprovalService,
@@ -163,18 +164,28 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
       }),
       execute: async (args) => {
         const taskId = requireString(args.taskId, 'taskId');
+        const base = readString(args.base);
+        const head = readString(args.head);
+        const prPayload = {
+          title: requireString(args.title, 'title'),
+          body: requireString(args.body, 'body'),
+          base,
+          head,
+          draft: args.draft !== false,
+        };
         const approval = await evaluateGitApproval(options, {
           approvalService,
           taskId,
           actionType: 'github.pr.create',
-          summary: `Create GitHub PR: ${requireString(args.title, 'title')}`,
+          summary: `Create GitHub PR: ${prPayload.title} (${hashApprovalPayload(prPayload)})`,
           reason: 'Opening a PR publishes work to GitHub for review.',
           risk: 'This mutates remote GitHub state.',
-          target: readString(args.head) ?? readString(args.base) ?? requireString(args.title, 'title'),
+          target: head ?? base ?? prPayload.title,
           metadata: {
-            draft: args.draft !== false,
-            ...(readString(args.base) ? { base: readString(args.base) ?? '' } : {}),
-            ...(readString(args.head) ? { head: readString(args.head) ?? '' } : {}),
+            draft: prPayload.draft,
+            ...(base ? { base } : {}),
+            ...(head ? { head } : {}),
+            payloadHash: hashApprovalPayload(prPayload),
           },
         });
         if (!approval.evaluation.allowed) {
@@ -193,8 +204,8 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
           requireString(args.title, 'title'),
           '--body',
           requireString(args.body, 'body'),
-          readString(args.base) ? ['--base', readString(args.base) ?? ''] : undefined,
-          readString(args.head) ? ['--head', readString(args.head) ?? ''] : undefined,
+          base ? ['--base', base] : undefined,
+          head ? ['--head', head] : undefined,
         ].filter(Boolean);
         const sandbox = await getSandbox();
         const pr = await sandbox.execFile('gh', flags.flat() as string[], { timeoutSeconds: 120 });
@@ -202,6 +213,14 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
       },
     }),
   ];
+}
+
+function hashApprovalPayload(payload: Record<string, unknown>): string {
+  const digest = createHash('sha256')
+    .update(JSON.stringify(payload, Object.keys(payload).sort()))
+    .digest('hex')
+    .slice(0, 12);
+  return digest;
 }
 
 async function evaluateGitApproval(

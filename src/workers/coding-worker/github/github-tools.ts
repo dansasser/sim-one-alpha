@@ -1,9 +1,10 @@
+import { createHash } from 'node:crypto';
 import { defineTool, Type, type ToolDefinition } from '@flue/runtime';
 import {
   createInMemoryCodingApprovalService,
   type CodingApprovalService,
 } from '../approvals/approval-service.js';
-import type { CodingApprovalActionType, CodingApprovalRequest } from '../approvals/approval-types.js';
+import type { CodingApprovalActionType, CodingApprovalMetadata, CodingApprovalRequest } from '../approvals/approval-types.js';
 import type { CodingProgressReporter } from '../events/progress-reporter.js';
 import type {
   GitHubClient,
@@ -156,7 +157,9 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
           target: readString(args.target),
         });
         const evaluation = await approvalService.evaluateRequest(request);
-        emitApprovalRequested(options, request, evaluation.reason);
+        if (!evaluation.allowed && evaluation.requiresApproval) {
+          emitApprovalRequested(options, request, evaluation.reason);
+        }
         return JSON.stringify({
           request,
           evaluation,
@@ -179,13 +182,24 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         if (!options.client?.updatePullRequest) {
           return unavailableWriteTool();
         }
+        const prUpdatePayload = {
+          title: readString(args.title),
+          body: readString(args.body),
+          base: readString(args.base),
+        };
         const approval = await evaluateGitHubApproval(approvalService, options, {
           taskId: args.taskId,
           actionType: 'github.pr.update',
-          summary: `Update GitHub PR #${args.pullRequestNumber}.`,
+          summary: `Update GitHub PR #${args.pullRequestNumber} (${hashApprovalPayload(prUpdatePayload)})`,
           reason: 'Updating PR metadata mutates remote GitHub state.',
           risk: 'This can change review context, PR body, title, or target base.',
           target: `${args.owner}/${args.repo}#${args.pullRequestNumber}`,
+          metadata: {
+            ...(prUpdatePayload.title ? { title: prUpdatePayload.title } : {}),
+            ...(prUpdatePayload.body ? { body: prUpdatePayload.body } : {}),
+            ...(prUpdatePayload.base ? { base: prUpdatePayload.base } : {}),
+            payloadHash: hashApprovalPayload(prUpdatePayload),
+          },
         });
         if (!approval.evaluation.allowed) {
           return JSON.stringify({ blocked: true, ...approval });
@@ -215,13 +229,18 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         if (!options.client?.setPullRequestReady) {
           return unavailableWriteTool();
         }
+        const readyPayload = { ready: args.ready };
         const approval = await evaluateGitHubApproval(approvalService, options, {
           taskId: args.taskId,
           actionType: 'github.pr.ready',
-          summary: `${args.ready ? 'Mark ready' : 'Convert to draft'} GitHub PR #${args.pullRequestNumber}.`,
+          summary: `${args.ready ? 'Mark ready' : 'Convert to draft'} GitHub PR #${args.pullRequestNumber} (${hashApprovalPayload(readyPayload)})`,
           reason: 'Changing ready/draft state affects remote review automation and reviewer visibility.',
           risk: 'This mutates remote GitHub PR state.',
           target: `${args.owner}/${args.repo}#${args.pullRequestNumber}`,
+          metadata: {
+            ready: args.ready,
+            payloadHash: hashApprovalPayload(readyPayload),
+          },
         });
         if (!approval.evaluation.allowed) {
           return JSON.stringify({ blocked: true, ...approval });
@@ -249,13 +268,17 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         if (!options.client?.commentOnPullRequest) {
           return unavailableWriteTool();
         }
+        const commentPayload = { body: args.body };
         const approval = await evaluateGitHubApproval(approvalService, options, {
           taskId: args.taskId,
           actionType: 'github.comment',
-          summary: `Comment on GitHub PR #${args.pullRequestNumber}.`,
+          summary: `Comment on GitHub PR #${args.pullRequestNumber} (${hashApprovalPayload(commentPayload)})`,
           reason: 'Posting a PR comment publishes remote GitHub state.',
           risk: 'This may notify users and affect review context.',
           target: `${args.owner}/${args.repo}#${args.pullRequestNumber}`,
+          metadata: {
+            payloadHash: hashApprovalPayload(commentPayload),
+          },
         });
         if (!approval.evaluation.allowed) {
           return JSON.stringify({ blocked: true, ...approval });
@@ -284,13 +307,22 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         if (!options.client?.updateIssue) {
           return unavailableWriteTool();
         }
+        const issuePayload = {
+          title: readString(args.title),
+          body: readString(args.body),
+        };
         const approval = await evaluateGitHubApproval(approvalService, options, {
           taskId: args.taskId,
           actionType: 'github.issue.update',
-          summary: `Update GitHub issue #${args.issueNumber}.`,
+          summary: `Update GitHub issue #${args.issueNumber} (${hashApprovalPayload(issuePayload)})`,
           reason: 'Updating issue metadata mutates remote GitHub state.',
           risk: 'This can change user-facing issue context.',
           target: `${args.owner}/${args.repo}#${args.issueNumber}`,
+          metadata: {
+            ...(issuePayload.title ? { title: issuePayload.title } : {}),
+            ...(issuePayload.body ? { body: issuePayload.body } : {}),
+            payloadHash: hashApprovalPayload(issuePayload),
+          },
         });
         if (!approval.evaluation.allowed) {
           return JSON.stringify({ blocked: true, ...approval });
@@ -318,13 +350,22 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         if (!options.client?.updateReviewThread) {
           return unavailableWriteTool();
         }
+        const threadPayload = {
+          replyBody: readString(args.replyBody),
+          resolve: typeof args.resolve === 'boolean' ? args.resolve : undefined,
+        };
         const approval = await evaluateGitHubApproval(approvalService, options, {
           taskId: args.taskId,
           actionType: 'github.review-thread.update',
-          summary: `Update GitHub review thread ${args.threadId}.`,
+          summary: `Update GitHub review thread ${args.threadId} (${hashApprovalPayload(threadPayload)})`,
           reason: 'Review-thread replies and resolution mutate remote review state.',
           risk: 'This affects reviewer-visible PR review state.',
           target: args.threadId,
+          metadata: {
+            ...(threadPayload.replyBody ? { replyBody: threadPayload.replyBody } : {}),
+            ...(threadPayload.resolve !== undefined ? { resolve: threadPayload.resolve } : {}),
+            payloadHash: hashApprovalPayload(threadPayload),
+          },
         });
         if (!approval.evaluation.allowed) {
           return JSON.stringify({ blocked: true, ...approval });
@@ -357,6 +398,7 @@ async function evaluateGitHubApproval(
     reason: string;
     risk: string;
     target?: string;
+    metadata?: CodingApprovalMetadata;
   },
 ) {
   const request = await approvalService.createRequest(input);
@@ -383,6 +425,14 @@ function emitApprovalRequested(
     decision: reason,
     evidence: [request.id],
   });
+}
+
+function hashApprovalPayload(payload: Record<string, unknown>): string {
+  const digest = createHash('sha256')
+    .update(JSON.stringify(payload, Object.keys(payload).sort()))
+    .digest('hex')
+    .slice(0, 12);
+  return digest;
 }
 
 function unavailableWriteTool(): string {

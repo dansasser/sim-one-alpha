@@ -28,7 +28,7 @@ export function createCodingInternalSubagent(config: CodingInternalSubagentConfi
     name: config.name,
     description: config.description,
     ...(config.model ? { model: config.model } : {}),
-    ...(config.tools ? { tools: config.tools } : {}),
+    tools: config.tools ?? [],
     instructions,
   });
 }

@@ -79,6 +79,8 @@ export async function runCodingTaskWorkflow(
   const sessionPlan = createCodingWorkerSessionPlan(task.taskId, task.sessionId);
   const taskRunStore = dependencies.taskRunStore ?? JsonFileCodingTaskRunStore.atWorkspaceRoot(workspaceTarget.workspaceRoot);
   const createdAt = new Date().toISOString();
+  let plan: CodingPlanItem[] = [];
+  let state: WorkflowExecutionState | undefined;
 
   reporter.emit({
     type: 'coding.task.accepted',
@@ -101,187 +103,208 @@ export async function runCodingTaskWorkflow(
     createdAt,
   });
 
-  reporter.emit({
-    type: 'coding.action.started',
-    taskId: task.taskId,
-    action: 'repo-preflight',
-    purpose: 'Detect package manager, scripts, and verification commands before model work.',
-  });
-
-  const preflightRunner =
-    dependencies.preflight ?? ((scopePath: string) => runCodingRepoPreflight(scopePath));
-  const preflight = preflightRunner(repoPath, workspaceTarget);
-  const verificationCommands = resolveVerificationCommands(task.verificationCommands, preflight);
-
-  reporter.emit({
-    type: 'coding.action.completed',
-    taskId: task.taskId,
-    action: 'repo-preflight',
-    summary: `Detected ${preflight.packageManager} with ${Object.keys(preflight.scripts).length} package scripts.`,
-    evidence: verificationCommands.map((command) => command.command),
-  });
-
-  const plan = createInitialCodingPlan(task);
-  reporter.emit({
-    type: 'coding.plan.updated',
-    taskId: task.taskId,
-    purpose: 'Make the worker-local subagent plan visible before execution.',
-    plan,
-    summary: 'Initial coding-worker plan created.',
-  });
-  await persistTaskRun(taskRunStore, {
-    task,
-    status: 'accepted',
-    sessionPlan,
-    plan,
-    reporter,
-    verificationEvidence: dependencies.verificationEvidence ?? [],
-    createdAt,
-  });
-
-  if (!dependencies.delegate && !hasStructuredExecutionPlan(task)) {
-    setPlanStatus(plan, 'triage', 'blocked');
+  try {
     reporter.emit({
-      type: 'coding.blocked',
+      type: 'coding.action.started',
       taskId: task.taskId,
-      risk: 'No live subagent delegate or structured execution plan was supplied.',
-      summary: 'Coding worker cannot execute a natural-language coding task in workflow mode without live delegation.',
-      nextAction: 'Run through the coding-worker Flue agent profile or supply a structured execution plan.',
+      action: 'repo-preflight',
+      purpose: 'Detect package manager, scripts, and verification commands before model work.',
+    });
+
+    const preflightRunner =
+      dependencies.preflight ?? ((scopePath: string) => runCodingRepoPreflight(scopePath));
+    const preflight = preflightRunner(repoPath, workspaceTarget);
+    const verificationCommands = resolveVerificationCommands(task.verificationCommands, preflight);
+
+    reporter.emit({
+      type: 'coding.action.completed',
+      taskId: task.taskId,
+      action: 'repo-preflight',
+      summary: `Detected ${preflight.packageManager} with ${Object.keys(preflight.scripts).length} package scripts.`,
+      evidence: verificationCommands.map((command) => command.command),
+    });
+
+    plan = createInitialCodingPlan(task);
+    reporter.emit({
+      type: 'coding.plan.updated',
+      taskId: task.taskId,
+      purpose: 'Make the worker-local subagent plan visible before execution.',
+      plan,
+      summary: 'Initial coding-worker plan created.',
     });
     await persistTaskRun(taskRunStore, {
       task,
-      status: 'blocked',
+      status: 'accepted',
       sessionPlan,
       plan,
       reporter,
       verificationEvidence: dependencies.verificationEvidence ?? [],
       createdAt,
     });
-    return createBlockedResult(task, plan, [], verificationCommands, dependencies.verificationEvidence ?? [], reporter);
-  }
 
-  const sandbox =
-    dependencies.sandbox ??
-    (await (dependencies.createSandbox ?? createDefaultSandbox)(workspaceTarget, sessionPlan));
-  const state: WorkflowExecutionState = {
-    task,
-    sessionPlan,
-    preflight,
-    plan,
-    reporter,
-    sandbox,
-    verificationCommands,
-    verificationEvidence: [...(dependencies.verificationEvidence ?? [])],
-  };
+    if (!dependencies.delegate && !hasStructuredExecutionPlan(task)) {
+      setPlanStatus(plan, 'triage', 'blocked');
+      reporter.emit({
+        type: 'coding.blocked',
+        taskId: task.taskId,
+        risk: 'No live subagent delegate or structured execution plan was supplied.',
+        summary: 'Coding worker cannot execute a natural-language coding task in workflow mode without live delegation.',
+        nextAction: 'Run through the coding-worker Flue agent profile or supply a structured execution plan.',
+      });
+      await persistTaskRun(taskRunStore, {
+        task,
+        status: 'blocked',
+        sessionPlan,
+        plan,
+        reporter,
+        verificationEvidence: dependencies.verificationEvidence ?? [],
+        createdAt,
+      });
+      return createBlockedResult(task, plan, [], verificationCommands, dependencies.verificationEvidence ?? [], reporter);
+    }
 
-  const subagentResults: CodingSubagentRunResult[] = [];
+    const sandbox =
+      dependencies.sandbox ??
+      (await (dependencies.createSandbox ?? createDefaultSandbox)(workspaceTarget, sessionPlan));
+    state = {
+      task,
+      sessionPlan,
+      preflight,
+      plan,
+      reporter,
+      sandbox,
+      verificationCommands,
+      verificationEvidence: [...(dependencies.verificationEvidence ?? [])],
+    };
 
-  for (const subagent of chooseSubagents(task)) {
+    const subagentResults: CodingSubagentRunResult[] = [];
+
+    for (const subagent of chooseSubagents(task)) {
+      await persistTaskRun(taskRunStore, {
+        task,
+        status: statusForCodingSubagent(subagent),
+        sessionPlan,
+        plan,
+        reporter,
+        verificationEvidence: state.verificationEvidence,
+        createdAt,
+      });
+      reporter.emit({
+        type: subagent === 'triage' ? 'coding.triage.started' : 'coding.subagent.started',
+        taskId: task.taskId,
+        subagent,
+        purpose: `Run worker-local ${subagent} subagent in its focused child session.`,
+        evidence: [sessionPlan.childSessions[subagent]],
+      });
+
+      const result = dependencies.delegate
+        ? await dependencies.delegate(subagent, {
+            task,
+            sessionPlan,
+            preflight,
+            plan,
+          })
+        : await runBuiltInSubagentStep(subagent, state);
+      subagentResults.push(result);
+
+      reporter.emit({
+        type: subagent === 'triage' ? 'coding.triage.completed' : 'coding.subagent.completed',
+        taskId: task.taskId,
+        subagent,
+        summary: result.summary,
+        evidence: result.evidence,
+        nextAction: result.nextAction,
+      });
+      await persistTaskRun(taskRunStore, {
+        task,
+        status: statusForCodingSubagent(subagent),
+        sessionPlan,
+        plan,
+        reporter,
+        verificationEvidence: state.verificationEvidence,
+        createdAt,
+      });
+    }
+
+    const commandsWithEvidence = applyVerificationEvidence(verificationCommands, state.verificationEvidence);
+
+    if (!hasPassingRequiredVerification(commandsWithEvidence)) {
+      reporter.emit({
+        type: 'coding.blocked',
+        taskId: task.taskId,
+        risk: 'Completing without required verification would violate the coding-worker contract.',
+        summary: 'Coding worker cannot report completed without required verification evidence.',
+        nextAction: 'Run required verification commands and attach passing evidence.',
+      });
+      await persistTaskRun(taskRunStore, {
+        task,
+        status: 'blocked',
+        sessionPlan,
+        plan,
+        reporter,
+        verificationEvidence: state.verificationEvidence,
+        createdAt,
+      });
+
+      return createBlockedResult(
+        task,
+        plan,
+        subagentResults,
+        commandsWithEvidence,
+        state.verificationEvidence,
+        reporter,
+      );
+    }
+
+    reporter.emit({
+      type: 'coding.completed',
+      taskId: task.taskId,
+      summary: 'Coding worker completed with required verification evidence.',
+      evidence: state.verificationEvidence.map((item) => `${item.command}: ${item.status}`),
+    });
     await persistTaskRun(taskRunStore, {
       task,
-      status: statusForCodingSubagent(subagent),
+      status: 'completed',
       sessionPlan,
       plan,
       reporter,
       verificationEvidence: state.verificationEvidence,
       createdAt,
     });
-    reporter.emit({
-      type: subagent === 'triage' ? 'coding.triage.started' : 'coding.subagent.started',
+
+    return {
       taskId: task.taskId,
-      subagent,
-      purpose: `Run worker-local ${subagent} subagent in its focused child session.`,
-      evidence: [sessionPlan.childSessions[subagent]],
-    });
-
-    const result = dependencies.delegate
-      ? await dependencies.delegate(subagent, {
-          task,
-          sessionPlan,
-          preflight,
-          plan,
-        })
-      : await runBuiltInSubagentStep(subagent, state);
-    subagentResults.push(result);
-
-    reporter.emit({
-      type: subagent === 'triage' ? 'coding.triage.completed' : 'coding.subagent.completed',
-      taskId: task.taskId,
-      subagent,
-      summary: result.summary,
-      evidence: result.evidence,
-      nextAction: result.nextAction,
-    });
-    await persistTaskRun(taskRunStore, {
-      task,
-      status: statusForCodingSubagent(subagent),
-      sessionPlan,
-      plan,
-      reporter,
-      verificationEvidence: state.verificationEvidence,
-      createdAt,
-    });
-  }
-
-  const commandsWithEvidence = applyVerificationEvidence(verificationCommands, state.verificationEvidence);
-
-  if (!hasPassingRequiredVerification(commandsWithEvidence)) {
-    reporter.emit({
-      type: 'coding.blocked',
-      taskId: task.taskId,
-      risk: 'Completing without required verification would violate the coding-worker contract.',
-      summary: 'Coding worker cannot report completed without required verification evidence.',
-      nextAction: 'Run required verification commands and attach passing evidence.',
-    });
-    await persistTaskRun(taskRunStore, {
-      task,
-      status: 'blocked',
-      sessionPlan,
-      plan,
-      reporter,
-      verificationEvidence: state.verificationEvidence,
-      createdAt,
-    });
-
-    return createBlockedResult(
-      task,
+      status: 'completed',
+      summary: 'Coding worker completed with required verification evidence.',
       plan,
       subagentResults,
-      commandsWithEvidence,
-      state.verificationEvidence,
+      verification: {
+        requiredCommands: commandsWithEvidence,
+        evidence: state.verificationEvidence,
+      },
+      publicEvents: createOrchestratorProgressUpdate(task.taskId, reporter.events()).events,
+      artifacts: [],
+    };
+  } catch (error) {
+    const errorSummary = error instanceof Error ? error.message : String(error);
+    reporter.emit({
+      type: 'coding.error',
+      taskId: task.taskId,
+      risk: 'Coding task workflow failed with an unhandled error.',
+      summary: `Coding task failed: ${errorSummary}`,
+      evidence: [errorSummary],
+    });
+    await persistTaskRun(taskRunStore, {
+      task,
+      status: 'failed',
+      sessionPlan,
+      plan,
       reporter,
-    );
+      verificationEvidence: state?.verificationEvidence ?? [],
+      createdAt,
+    });
+    throw error;
   }
-
-  reporter.emit({
-    type: 'coding.completed',
-    taskId: task.taskId,
-    summary: 'Coding worker completed with required verification evidence.',
-    evidence: state.verificationEvidence.map((item) => `${item.command}: ${item.status}`),
-  });
-  await persistTaskRun(taskRunStore, {
-    task,
-    status: 'completed',
-    sessionPlan,
-    plan,
-    reporter,
-    verificationEvidence: state.verificationEvidence,
-    createdAt,
-  });
-
-  return {
-    taskId: task.taskId,
-    status: 'completed',
-    summary: 'Coding worker completed with required verification evidence.',
-    plan,
-    subagentResults,
-    verification: {
-      requiredCommands: commandsWithEvidence,
-      evidence: state.verificationEvidence,
-    },
-    publicEvents: createOrchestratorProgressUpdate(task.taskId, reporter.events()).events,
-    artifacts: [],
-  };
 }
 
 export function createInitialCodingPlan(task: CodingWorkerTaskRequest): CodingPlanItem[] {

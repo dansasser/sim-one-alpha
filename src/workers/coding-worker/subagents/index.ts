@@ -48,7 +48,13 @@ function createInternalToolsets(options: CodingWorkerInternalSubagentsOptions): 
   github?: ToolDefinition[];
 } {
   if (!options.workspaceRoot && !options.repoPath) {
-    return {};
+    return {
+      triage: [],
+      implementer: [],
+      testDebug: [],
+      codeReview: [],
+      github: [],
+    };
   }
 
   const commonTarget = {

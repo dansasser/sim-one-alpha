@@ -86,8 +86,9 @@ export function createCodingApprovalRequest(
 ): CodingApprovalRequest {
   const createdAt = input.createdAt ?? new Date().toISOString();
   const normalized = normalizeApprovalMetadata(input.metadata);
+  const { metadata: _metadata, ...inputWithoutMetadata } = input;
   return {
-    ...input,
+    ...inputWithoutMetadata,
     createdAt,
     ...(normalized ? { metadata: normalized } : {}),
     id: input.id ?? createDeterministicApprovalId({
@@ -159,6 +160,13 @@ function normalizeApprovalMetadata(
 }
 
 function isExpired(request: CodingApprovalRequest): boolean {
-  return Boolean(request.expiresAt && Date.parse(request.expiresAt) <= Date.now());
+  if (!request.expiresAt) {
+    return false;
+  }
+  const parsed = Date.parse(request.expiresAt);
+  if (Number.isNaN(parsed)) {
+    return true;
+  }
+  return parsed <= Date.now();
 }
 

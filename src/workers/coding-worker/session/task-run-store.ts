@@ -56,6 +56,7 @@ export class InMemoryCodingTaskRunStore implements CodingTaskRunStore {
 
 export class JsonFileCodingTaskRunStore implements CodingTaskRunStore {
   constructor(private readonly filePath: string) {}
+  readonly #lock = createAsyncMutex();
 
   static atWorkspaceRoot(workspaceRoot: string): JsonFileCodingTaskRunStore {
     return new JsonFileCodingTaskRunStore(
@@ -69,14 +70,16 @@ export class JsonFileCodingTaskRunStore implements CodingTaskRunStore {
   }
 
   async upsert(record: CodingTaskRunRecord): Promise<void> {
-    const records = await this.readRecords();
-    const index = records.findIndex((entry) => entry.taskId === record.taskId);
-    if (index >= 0) {
-      records[index] = cloneRecord(record);
-    } else {
-      records.push(cloneRecord(record));
-    }
-    await this.writeRecords(records);
+    await this.#lock(async () => {
+      const records = await this.readRecords();
+      const index = records.findIndex((entry) => entry.taskId === record.taskId);
+      if (index >= 0) {
+        records[index] = cloneRecord(record);
+      } else {
+        records.push(cloneRecord(record));
+      }
+      await this.writeRecords(records);
+    });
   }
 
   async list(): Promise<CodingTaskRunRecord[]> {
@@ -102,6 +105,15 @@ export class JsonFileCodingTaskRunStore implements CodingTaskRunStore {
     await mkdir(dirname(this.filePath), { recursive: true });
     await writeFile(this.filePath, `${JSON.stringify(records, null, 2)}\n`, 'utf8');
   }
+}
+
+function createAsyncMutex(): <T>(job: () => Promise<T>) => Promise<T> {
+  let tail: Promise<unknown> = Promise.resolve();
+  return async (job) => {
+    const next = tail.then(async () => job());
+    tail = next.catch(() => undefined);
+    return next;
+  };
 }
 
 export function statusForCodingSubagent(subagent: CodingSubagentKind): CodingTaskRunStatus {

@@ -38,6 +38,7 @@ export class InMemoryCodingRepoRegistry implements CodingRepoRegistry {
 
 export class JsonFileCodingRepoRegistry implements CodingRepoRegistry {
   constructor(private readonly filePath: string) {}
+  readonly #lock = createAsyncMutex();
 
   static atWorkspaceRoot(workspaceRoot: string): JsonFileCodingRepoRegistry {
     return new JsonFileCodingRepoRegistry(
@@ -55,15 +56,17 @@ export class JsonFileCodingRepoRegistry implements CodingRepoRegistry {
   }
 
   async upsert(repo: CodingRegisteredRepo): Promise<void> {
-    const records = await this.readRecords();
-    const index = records.findIndex((entry) => entry.slug === repo.slug);
-    const next = cloneRepo(repo);
-    if (index >= 0) {
-      records[index] = next;
-    } else {
-      records.push(next);
-    }
-    await this.writeRecords(records);
+    await this.#lock(async () => {
+      const records = await this.readRecords();
+      const index = records.findIndex((entry) => entry.slug === repo.slug);
+      const next = cloneRepo(repo);
+      if (index >= 0) {
+        records[index] = next;
+      } else {
+        records.push(next);
+      }
+      await this.writeRecords(records);
+    });
   }
 
   private async readRecords(): Promise<CodingRegisteredRepo[]> {
@@ -85,6 +88,15 @@ export class JsonFileCodingRepoRegistry implements CodingRepoRegistry {
     await mkdir(dirname(this.filePath), { recursive: true });
     await writeFile(this.filePath, `${JSON.stringify(records, null, 2)}\n`, 'utf8');
   }
+}
+
+function createAsyncMutex(): <T>(job: () => Promise<T>) => Promise<T> {
+  let tail: Promise<unknown> = Promise.resolve();
+  return async (job) => {
+    const next = tail.then(async () => job());
+    tail = next.catch(() => undefined);
+    return next;
+  };
 }
 
 export function createRegisteredRepo(input: {
