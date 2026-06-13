@@ -25,14 +25,14 @@ A swarm means multiple agents work in parallel in sibling worktrees. To avoid co
 
 Branch: `codex/coding-worker-loop-contract`
 
-Define the shared surface that every other branch depends on:
+Define the shared surface that every other branch depends on, replacing the procedural state machine with a **Flue-native loop** where the orchestrator delegates using natural language and the `coding-worker` lead orchestrates subagents via tool-calling:
 
-- Loop state machine and checkpoint/resume shape in `src/workers/coding-worker/workflow/coding-task.ts`.
-- Subagent input/output schemas (triage, implementer, test-debug, code-review, github).
-- `CodingFileEdit` and related edit/verification result types.
-- Progress event shapes in `src/workers/coding-worker/events/coding-worker-events.ts`.
+- Remove the hardcoded `runCodingTaskWorkflow` procedural state machine from `src/workers/coding-worker/workflow/coding-task.ts` and formalize the Flue-native loop's checkpoint/resume shape.
+- Strict subagent input/output schemas (triage, implementer, test-debug, code-review, github) in `src/workers/coding-worker/types.ts`.
+- `CodingFileEdit` and related edit/verification result types must be defined as structured outputs from these subagents.
+- Progress event shapes in `src/workers/coding-worker/events/coding-worker-events.ts` to ensure all loop checkpoints and tool calls emit typed events.
 - Task-run persistence checkpoint shape in `src/workers/coding-worker/session/task-run-store.ts`.
-- Orchestrator-to-coding-worker invocation contract in `src/agents/orchestrator.ts` and `src/workspace/`.
+- Orchestrator-to-coding-worker invocation contract in `src/agents/orchestrator.ts` and `src/workspace/` explicitly documenting natural language delegation.
 
 This branch must include architecture-contract tests proving:
 
