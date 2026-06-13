@@ -1,9 +1,9 @@
-import type { AgentProfile } from '@flue/runtime';
+import type { AgentProfile, ToolDefinition } from '@flue/runtime';
 import { createCodingInternalSubagent } from '../profile-factory.js';
 
 export const codingCodeReviewSubagentName = 'coding-worker-code-review';
 
-export function createCodingCodeReviewSubagent(model?: string): AgentProfile {
+export function createCodingCodeReviewSubagent(model?: string, tools?: ToolDefinition[]): AgentProfile {
   return createCodingInternalSubagent({
     kind: 'code-review',
     name: codingCodeReviewSubagentName,
@@ -12,5 +12,6 @@ export function createCodingCodeReviewSubagent(model?: string): AgentProfile {
     runtimeRole:
       'Review the resulting diff against requirements, verify test evidence, identify risks, and return findings to the lead.',
     model,
+    tools,
   });
 }

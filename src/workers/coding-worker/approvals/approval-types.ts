@@ -1,12 +1,24 @@
 export type CodingApprovalActionType =
   | 'file.edit'
   | 'shell.execute'
+  | 'repo.clone'
+  | 'repo.register'
+  | 'repo.branch.create'
+  | 'repo.worktree.create'
+  | 'repo.fetch'
+  | 'repo.sync'
   | 'git.commit'
   | 'git.push'
   | 'github.comment'
   | 'github.pr.create'
   | 'github.pr.update'
+  | 'github.pr.ready'
+  | 'github.issue.update'
   | 'github.review-thread.update';
+
+export type CodingApprovalStatus = 'pending' | 'approved' | 'denied' | 'expired' | 'cancelled';
+
+export type CodingApprovalMetadata = Record<string, string | number | boolean>;
 
 export interface CodingApprovalRequest {
   id: string;
@@ -15,12 +27,18 @@ export interface CodingApprovalRequest {
   summary: string;
   reason: string;
   risk: string;
+  target?: string;
+  requestedBy?: string;
+  createdAt: string;
+  expiresAt?: string;
+  metadata?: CodingApprovalMetadata;
 }
 
 export interface CodingApprovalDecision {
   requestId: string;
   approved: boolean;
-  decidedBy?: string;
+  decidedBy: string;
+  decidedAt: string;
   reason?: string;
 }
 
@@ -28,5 +46,13 @@ export interface CodingApprovalEvaluation {
   allowed: boolean;
   requiresApproval: boolean;
   reason: string;
+  status: CodingApprovalStatus;
+}
+
+export interface CodingApprovalRecord {
+  request: CodingApprovalRequest;
+  status: CodingApprovalStatus;
+  decision?: CodingApprovalDecision;
+  updatedAt: string;
 }
 

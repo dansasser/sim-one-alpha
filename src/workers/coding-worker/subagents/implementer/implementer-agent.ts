@@ -1,9 +1,9 @@
-import type { AgentProfile } from '@flue/runtime';
+import type { AgentProfile, ToolDefinition } from '@flue/runtime';
 import { createCodingInternalSubagent } from '../profile-factory.js';
 
 export const codingImplementerSubagentName = 'coding-worker-implementer';
 
-export function createCodingImplementerSubagent(model?: string): AgentProfile {
+export function createCodingImplementerSubagent(model?: string, tools?: ToolDefinition[]): AgentProfile {
   return createCodingInternalSubagent({
     kind: 'implementer',
     name: codingImplementerSubagentName,
@@ -12,5 +12,6 @@ export function createCodingImplementerSubagent(model?: string): AgentProfile {
     runtimeRole:
       'Apply approved scoped code changes using the Flue local sandbox supplied by the coding task workflow.',
     model,
+    tools,
   });
 }

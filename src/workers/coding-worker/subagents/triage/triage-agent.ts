@@ -1,9 +1,9 @@
-import type { AgentProfile } from '@flue/runtime';
+import type { AgentProfile, ToolDefinition } from '@flue/runtime';
 import { createCodingInternalSubagent } from '../profile-factory.js';
 
 export const codingTriageSubagentName = 'coding-worker-triage';
 
-export function createCodingTriageSubagent(model?: string): AgentProfile {
+export function createCodingTriageSubagent(model?: string, tools?: ToolDefinition[]): AgentProfile {
   return createCodingInternalSubagent({
     kind: 'triage',
     name: codingTriageSubagentName,
@@ -12,5 +12,6 @@ export function createCodingTriageSubagent(model?: string): AgentProfile {
     runtimeRole:
       'Classify the coding request, identify required context, choose needed internal coding subagents, and produce a public triage summary.',
     model,
+    tools,
   });
 }

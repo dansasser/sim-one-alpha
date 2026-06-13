@@ -1,30 +1,30 @@
 import { defineTool, Type, type ToolDefinition } from '@flue/runtime';
 import {
-  createCodingApprovalRequest,
-  evaluateCodingApproval,
-} from '../approvals/approval-policy.js';
+  createInMemoryCodingApprovalService,
+  type CodingApprovalService,
+} from '../approvals/approval-service.js';
 import type {
   CodingApprovalActionType,
-  CodingApprovalDecision,
   CodingApprovalRequest,
 } from '../approvals/approval-types.js';
 import {
   createFlueLocalCodingSandbox,
   type CodingSandboxRuntime,
 } from './sandbox-runtime.js';
+import type { CodingProgressReporter } from '../events/progress-reporter.js';
 import type { CodingWorkspaceTargetInput } from '../repo/workspace-target.js';
 
 export interface CodingGitToolsOptions extends CodingWorkspaceTargetInput {
   env?: Record<string, string | undefined>;
   sandbox?: CodingSandboxRuntime;
   sessionId?: string;
-  resolveApprovalDecision?: (
-    request: CodingApprovalRequest,
-  ) => Promise<CodingApprovalDecision | undefined> | CodingApprovalDecision | undefined;
+  approvalService?: CodingApprovalService;
+  reporter?: CodingProgressReporter;
 }
 
 export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefinition[] {
   let sandboxPromise: Promise<CodingSandboxRuntime> | undefined;
+  const approvalService = options.approvalService ?? createInMemoryCodingApprovalService();
   const getSandbox = async () => {
     sandboxPromise ??= options.sandbox
       ? Promise.resolve(options.sandbox)
@@ -76,12 +76,15 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
       }),
       execute: async (args) => {
         const taskId = requireString(args.taskId, 'taskId');
+        const paths = readStringArray(args.paths);
         const approval = await evaluateGitApproval(options, {
+          approvalService,
           taskId,
           actionType: 'git.commit',
           summary: `Commit local changes: ${requireString(args.message, 'message')}`,
           reason: 'Committing records local repository state.',
           risk: 'This mutates git history in the local branch.',
+          target: paths.length ? paths.join(', ') : 'all tracked workspace changes',
         });
         if (!approval.evaluation.allowed) {
           return toToolJson({
@@ -92,7 +95,6 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
         }
 
         const sandbox = await getSandbox();
-        const paths = readStringArray(args.paths);
         const add = await sandbox.execFile('git', paths.length ? ['add', '--', ...paths] : ['add', '-A'], {
           timeoutSeconds: 30,
         });
@@ -120,11 +122,17 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
         const remote = readString(args.remote) ?? 'origin';
         const branch = requireString(args.branch, 'branch');
         const approval = await evaluateGitApproval(options, {
+          approvalService,
           taskId,
           actionType: 'git.push',
           summary: `Push ${branch} to ${remote}.`,
           reason: 'Pushing publishes branch state to the remote.',
           risk: 'This mutates remote repository state.',
+          target: `${remote}/${branch}`,
+          metadata: {
+            remote,
+            branch,
+          },
         });
         if (!approval.evaluation.allowed) {
           return toToolJson({
@@ -156,11 +164,18 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
       execute: async (args) => {
         const taskId = requireString(args.taskId, 'taskId');
         const approval = await evaluateGitApproval(options, {
+          approvalService,
           taskId,
           actionType: 'github.pr.create',
           summary: `Create GitHub PR: ${requireString(args.title, 'title')}`,
           reason: 'Opening a PR publishes work to GitHub for review.',
           risk: 'This mutates remote GitHub state.',
+          target: readString(args.head) ?? readString(args.base) ?? requireString(args.title, 'title'),
+          metadata: {
+            draft: args.draft !== false,
+            ...(readString(args.base) ? { base: readString(args.base) ?? '' } : {}),
+            ...(readString(args.head) ? { head: readString(args.head) ?? '' } : {}),
+          },
         });
         if (!approval.evaluation.allowed) {
           return toToolJson({
@@ -192,25 +207,51 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
 async function evaluateGitApproval(
   options: CodingGitToolsOptions,
   input: {
+  approvalService: CodingApprovalService;
   taskId: string;
   actionType: CodingApprovalActionType;
   summary: string;
   reason: string;
   risk: string;
+  target?: string;
+  metadata?: Record<string, string | number | boolean>;
   },
 ) {
-  const request = createCodingApprovalRequest({
+  const request = await input.approvalService.createRequest({
     taskId: input.taskId,
     actionType: input.actionType,
     summary: input.summary,
     reason: input.reason,
     risk: input.risk,
+    target: input.target,
+    metadata: input.metadata,
   });
-  const decision = await options.resolveApprovalDecision?.(request);
+  const evaluation = await input.approvalService.evaluateRequest(request);
+  if (!evaluation.allowed && evaluation.requiresApproval) {
+    emitApprovalRequested(options, request, evaluation.reason);
+  }
   return {
     request,
-    evaluation: evaluateCodingApproval(request, decision),
+    evaluation,
   };
+}
+
+function emitApprovalRequested(
+  options: CodingGitToolsOptions,
+  request: CodingApprovalRequest,
+  reason: string,
+): void {
+  options.reporter?.emit({
+    type: 'coding.approval.requested',
+    taskId: request.taskId,
+    action: request.actionType,
+    summary: request.summary,
+    approvalReason: request.reason,
+    risk: request.risk,
+    status: 'pending',
+    decision: reason,
+    evidence: [request.id],
+  });
 }
 
 function requireString(value: unknown, name: string): string {

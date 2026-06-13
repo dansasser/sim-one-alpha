@@ -134,8 +134,36 @@ test('coding worker owns its workspace-backed lead profile', () => {
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_github_read_context'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_project_create'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_repo_apply_patch'), true);
+  assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_repo_discover'), true);
+  assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_repo_clone'), true);
+  assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_repo_branch_create'), true);
+  assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_repo_sync'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_shell_run'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_git_commit'), true);
+  assert.equal(
+    subagent.subagents?.find((agent) => agent.name === 'coding-worker-implementer')?.tools?.some(
+      (tool) => tool.name === 'coding_repo_apply_patch',
+    ),
+    true,
+  );
+  assert.equal(
+    subagent.subagents?.find((agent) => agent.name === 'coding-worker-test-debug')?.tools?.some(
+      (tool) => tool.name === 'coding_shell_run',
+    ),
+    true,
+  );
+  assert.equal(
+    subagent.subagents?.find((agent) => agent.name === 'coding-worker-github')?.tools?.some(
+      (tool) => tool.name === 'coding_github_verify_pr',
+    ),
+    true,
+  );
+  assert.equal(
+    subagent.subagents?.find((agent) => agent.name === 'coding-worker-github')?.tools?.some(
+      (tool) => tool.name === 'coding_github_update_pr',
+    ),
+    true,
+  );
   assert.equal(subagent.skills?.some((skill) => skill.name === 'coding-worker.code-change-loop'), true);
   assert.equal(existsSync('src/workflows/coding-task.ts'), false);
   assert.equal(existsSync('src/agents/coding-worker.ts'), false);

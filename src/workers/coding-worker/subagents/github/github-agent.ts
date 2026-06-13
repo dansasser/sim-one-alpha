@@ -1,9 +1,9 @@
-import type { AgentProfile } from '@flue/runtime';
+import type { AgentProfile, ToolDefinition } from '@flue/runtime';
 import { createCodingInternalSubagent } from '../profile-factory.js';
 
 export const codingGithubSubagentName = 'coding-worker-github';
 
-export function createCodingGithubSubagent(model?: string): AgentProfile {
+export function createCodingGithubSubagent(model?: string, tools?: ToolDefinition[]): AgentProfile {
   return createCodingInternalSubagent({
     kind: 'github',
     name: codingGithubSubagentName,
@@ -12,5 +12,6 @@ export function createCodingGithubSubagent(model?: string): AgentProfile {
     runtimeRole:
       'Gather GitHub context and prepare approval-gated GitHub side effects without performing unapproved writes.',
     model,
+    tools,
   });
 }

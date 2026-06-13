@@ -15,6 +15,12 @@ import {
   type ResolvedCodingWorkspaceTarget,
 } from '../repo/workspace-target.js';
 import { createCodingWorkerSessionPlan, type CodingWorkerSessionPlan } from '../session/child-session-names.js';
+import {
+  JsonFileCodingTaskRunStore,
+  statusForCodingSubagent,
+  type CodingTaskRunStatus,
+  type CodingTaskRunStore,
+} from '../session/task-run-store.js';
 import type {
   CodingFileEdit,
   CodingPlanItem,
@@ -37,6 +43,7 @@ export interface CodingTaskWorkflowDependencies {
   ) => Promise<CodingSandboxRuntime>;
   delegate?: (subagent: CodingSubagentKind, request: CodingTaskSubagentRequest) => Promise<CodingSubagentRunResult>;
   verificationEvidence?: CodingVerificationEvidence[];
+  taskRunStore?: CodingTaskRunStore;
 }
 
 export interface CodingTaskSubagentRequest {
@@ -70,6 +77,8 @@ export async function runCodingTaskWorkflow(
   const workspaceTarget = resolveCodingWorkspaceTarget(task);
   const repoPath = workspaceTarget.scopePath;
   const sessionPlan = createCodingWorkerSessionPlan(task.taskId, task.sessionId);
+  const taskRunStore = dependencies.taskRunStore ?? JsonFileCodingTaskRunStore.atWorkspaceRoot(workspaceTarget.workspaceRoot);
+  const createdAt = new Date().toISOString();
 
   reporter.emit({
     type: 'coding.task.accepted',
@@ -81,6 +90,15 @@ export async function runCodingTaskWorkflow(
       `workspaceRoot=${workspaceTarget.workspaceRoot}`,
       `scope=${workspaceTarget.projectRelativePath}`,
     ],
+  });
+  await persistTaskRun(taskRunStore, {
+    task,
+    status: 'accepted',
+    sessionPlan,
+    plan: [],
+    reporter,
+    verificationEvidence: dependencies.verificationEvidence ?? [],
+    createdAt,
   });
 
   reporter.emit({
@@ -111,6 +129,15 @@ export async function runCodingTaskWorkflow(
     plan,
     summary: 'Initial coding-worker plan created.',
   });
+  await persistTaskRun(taskRunStore, {
+    task,
+    status: 'accepted',
+    sessionPlan,
+    plan,
+    reporter,
+    verificationEvidence: dependencies.verificationEvidence ?? [],
+    createdAt,
+  });
 
   if (!dependencies.delegate && !hasStructuredExecutionPlan(task)) {
     setPlanStatus(plan, 'triage', 'blocked');
@@ -120,6 +147,15 @@ export async function runCodingTaskWorkflow(
       risk: 'No live subagent delegate or structured execution plan was supplied.',
       summary: 'Coding worker cannot execute a natural-language coding task in workflow mode without live delegation.',
       nextAction: 'Run through the coding-worker Flue agent profile or supply a structured execution plan.',
+    });
+    await persistTaskRun(taskRunStore, {
+      task,
+      status: 'blocked',
+      sessionPlan,
+      plan,
+      reporter,
+      verificationEvidence: dependencies.verificationEvidence ?? [],
+      createdAt,
     });
     return createBlockedResult(task, plan, [], verificationCommands, dependencies.verificationEvidence ?? [], reporter);
   }
@@ -141,6 +177,15 @@ export async function runCodingTaskWorkflow(
   const subagentResults: CodingSubagentRunResult[] = [];
 
   for (const subagent of chooseSubagents(task)) {
+    await persistTaskRun(taskRunStore, {
+      task,
+      status: statusForCodingSubagent(subagent),
+      sessionPlan,
+      plan,
+      reporter,
+      verificationEvidence: state.verificationEvidence,
+      createdAt,
+    });
     reporter.emit({
       type: subagent === 'triage' ? 'coding.triage.started' : 'coding.subagent.started',
       taskId: task.taskId,
@@ -167,6 +212,15 @@ export async function runCodingTaskWorkflow(
       evidence: result.evidence,
       nextAction: result.nextAction,
     });
+    await persistTaskRun(taskRunStore, {
+      task,
+      status: statusForCodingSubagent(subagent),
+      sessionPlan,
+      plan,
+      reporter,
+      verificationEvidence: state.verificationEvidence,
+      createdAt,
+    });
   }
 
   const commandsWithEvidence = applyVerificationEvidence(verificationCommands, state.verificationEvidence);
@@ -178,6 +232,15 @@ export async function runCodingTaskWorkflow(
       risk: 'Completing without required verification would violate the coding-worker contract.',
       summary: 'Coding worker cannot report completed without required verification evidence.',
       nextAction: 'Run required verification commands and attach passing evidence.',
+    });
+    await persistTaskRun(taskRunStore, {
+      task,
+      status: 'blocked',
+      sessionPlan,
+      plan,
+      reporter,
+      verificationEvidence: state.verificationEvidence,
+      createdAt,
     });
 
     return createBlockedResult(
@@ -195,6 +258,15 @@ export async function runCodingTaskWorkflow(
     taskId: task.taskId,
     summary: 'Coding worker completed with required verification evidence.',
     evidence: state.verificationEvidence.map((item) => `${item.command}: ${item.status}`),
+  });
+  await persistTaskRun(taskRunStore, {
+    task,
+    status: 'completed',
+    sessionPlan,
+    plan,
+    reporter,
+    verificationEvidence: state.verificationEvidence,
+    createdAt,
   });
 
   return {
@@ -541,6 +613,30 @@ function setPlanStatus(
 function summarizeShellResult(stdout: string, stderr: string): string {
   const combined = `${stdout}\n${stderr}`.trim();
   return combined ? combined.slice(0, 1_000) : 'Command produced no output.';
+}
+
+async function persistTaskRun(
+  store: CodingTaskRunStore,
+  input: {
+    task: CodingWorkerTaskRequest;
+    status: CodingTaskRunStatus;
+    sessionPlan: CodingWorkerSessionPlan;
+    plan: CodingPlanItem[];
+    reporter: CodingProgressReporter;
+    verificationEvidence: CodingVerificationEvidence[];
+    createdAt: string;
+  },
+): Promise<void> {
+  await store.upsert({
+    taskId: input.task.taskId,
+    status: input.status,
+    sessionPlan: input.sessionPlan,
+    plan: input.plan,
+    events: input.reporter.events(),
+    verificationEvidence: input.verificationEvidence,
+    createdAt: input.createdAt,
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 async function createDefaultSandbox(

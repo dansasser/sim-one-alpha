@@ -10,7 +10,8 @@ import {
   composeWorkspaceInstructions,
   resolveWorkspaceDirectory,
 } from '../../workspace-loader.js';
-import { GhCliGitHubClient } from './github/gh-cli-client.js';
+import { createFileCodingApprovalService } from './approvals/approval-service.js';
+import { createDefaultGitHubClient } from './github/gh-cli-client.js';
 import { createCodingGitHubTools } from './github/github-tools.js';
 import type { GitHubClient } from './github/github-client.js';
 import { createCodingWorkerRuntimeCapabilityBlock } from './runtime-capabilities.js';
@@ -18,6 +19,7 @@ import { codingWorkerSkills, createCodingWorkerSkillCapabilityBlock } from './sk
 import { createCodingWorkerInternalSubagents } from './subagents/index.js';
 import { createCodingGitTools } from './tools/coding-git-tools.js';
 import { createCodingRepoTools } from './tools/coding-repo-tools.js';
+import { createCodingRepoWorkflowTools } from './tools/coding-repo-workflow-tools.js';
 import type { CodingWorkspaceTargetInput } from './repo/workspace-target.js';
 
 export const codingWorkerAgentName = 'coding-worker';
@@ -45,6 +47,12 @@ export const codingWorkerInstructions = [
 export function createCodingWorkerSubagent(options: string | CodingWorkerSubagentOptions = {}): AgentProfile {
   const resolvedOptions = typeof options === 'string' ? { model: options } : options;
   const workspaceRoot = resolveSubagentWorkspaceRoot(resolvedOptions);
+  const approvalRoot = workspaceRoot ?? resolvedOptions.repoPath;
+  if (!approvalRoot) {
+    throw new Error('Missing coding-worker approval storage root configuration.');
+  }
+  const approvalService = createFileCodingApprovalService(approvalRoot);
+  const githubClient = resolvedOptions.githubClient ?? createDefaultGitHubClient(resolvedOptions.env);
 
   return defineAgentProfile({
     name: codingWorkerAgentName,
@@ -72,13 +80,37 @@ export function createCodingWorkerSubagent(options: string | CodingWorkerSubagen
         repoPath: resolvedOptions.repoPath,
         env: resolvedOptions.env,
         sessionId: 'coding-worker-git-tools',
+        approvalService,
       }),
-      ...createCodingGitHubTools(
-        resolvedOptions.githubClient ?? new GhCliGitHubClient(resolvedOptions.env),
-      ),
+      ...createCodingRepoWorkflowTools({
+        workspaceRoot,
+        targetKind: resolvedOptions.targetKind,
+        projectId: resolvedOptions.projectId,
+        projectSlug: resolvedOptions.projectSlug,
+        projectRelativePath: resolvedOptions.projectRelativePath,
+        repoPath: resolvedOptions.repoPath,
+        env: resolvedOptions.env,
+        sessionId: 'coding-worker-repo-workflow-tools',
+        approvalService,
+      }),
+      ...createCodingGitHubTools({
+        client: githubClient,
+        approvalService,
+      }),
     ],
     skills: codingWorkerSkills,
-    subagents: createCodingWorkerInternalSubagents(resolvedOptions.model),
+    subagents: createCodingWorkerInternalSubagents({
+      model: resolvedOptions.model,
+      workspaceRoot,
+      targetKind: resolvedOptions.targetKind,
+      projectId: resolvedOptions.projectId,
+      projectSlug: resolvedOptions.projectSlug,
+      projectRelativePath: resolvedOptions.projectRelativePath,
+      repoPath: resolvedOptions.repoPath,
+      env: resolvedOptions.env,
+      approvalService,
+      githubClient,
+    }),
   });
 }
 
