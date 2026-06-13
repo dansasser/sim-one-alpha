@@ -6,6 +6,10 @@ import { join } from 'node:path';
 import test from 'node:test';
 import orchestratorAgent from '../agents/orchestrator.js';
 import { evaluateCodingApproval, createCodingApprovalRequest } from '../workers/coding-worker/approvals/approval-policy.js';
+import {
+  createFileCodingApprovalService,
+  createInMemoryCodingApprovalService,
+} from '../workers/coding-worker/approvals/approval-service.js';
 import { createCodingGitHubTools } from '../workers/coding-worker/github/github-tools.js';
 import { GhCliGitHubClient } from '../workers/coding-worker/github/gh-cli-client.js';
 import { createCodingWorkerSubagent } from '../workers/coding-worker/coding-worker.js';
@@ -19,6 +23,7 @@ import {
 } from '../workers/coding-worker/subagents/index.js';
 import { readPackageScripts, runCodingRepoPreflight } from '../workers/coding-worker/repo/preflight.js';
 import { parseGitStatusShort } from '../workers/coding-worker/repo/git-state.js';
+import { InMemoryCodingRepoRegistry } from '../workers/coding-worker/repo/repo-registry.js';
 import {
   packageManagerRunCommand,
   packageManagerTestCommand,
@@ -26,9 +31,11 @@ import {
 import { createCodingVerificationPlan } from '../workers/coding-worker/repo/verification.js';
 import { createCodingGitTools } from '../workers/coding-worker/tools/coding-git-tools.js';
 import { createCodingRepoTools } from '../workers/coding-worker/tools/coding-repo-tools.js';
+import { createCodingRepoWorkflowTools } from '../workers/coding-worker/tools/coding-repo-workflow-tools.js';
 import { evaluateCodingShellCommand } from '../workers/coding-worker/tools/command-policy.js';
 import { createFlueLocalCodingSandbox } from '../workers/coding-worker/tools/sandbox-runtime.js';
 import { resolveCodingWorkspaceTarget } from '../workers/coding-worker/repo/workspace-target.js';
+import { JsonFileCodingTaskRunStore } from '../workers/coding-worker/session/task-run-store.js';
 import { createFlueCodingSubagentDelegate } from '../workers/coding-worker/workflow/coordination.js';
 import {
   createInitialCodingPlan,
@@ -38,7 +45,7 @@ import { assertCodingWorkerCanComplete } from '../workers/coding-worker/workflow
 import type { ToolDefinition } from '@flue/runtime';
 
 test('coding worker internal subagents are worker-local profiles with distinct context identities', () => {
-  const subagents = createCodingWorkerInternalSubagents('ollama-cloud/minimax-m3');
+  const subagents = createCodingWorkerInternalSubagents({ model: 'ollama-cloud/minimax-m3' });
 
   assert.deepEqual(
     subagents.map((agent) => agent.name),
@@ -376,6 +383,7 @@ test('GitHub side effects are approval-gated and GitHub read tool is mockable', 
     allowed: false,
     requiresApproval: true,
     reason: 'Action requires explicit approval before execution.',
+    status: 'pending',
   });
 
   const tools = createCodingGitHubTools({
@@ -403,6 +411,155 @@ test('GitHub side effects are approval-gated and GitHub read tool is mockable', 
 
   assert.equal(output.issue?.title, 'Fix parser');
   assert.equal(output.checks?.[0]?.conclusion, 'SUCCESS');
+});
+
+test('approval service persists trusted decisions and rejects untrusted actors', async () => {
+  const workspaceRoot = createTempWorkspace();
+
+  try {
+    const service = createFileCodingApprovalService(workspaceRoot);
+    const request = await service.createRequest({
+      taskId: 'task-approval',
+      actionType: 'github.pr.update',
+      summary: 'Update PR body.',
+      reason: 'PR body is remote review context.',
+      risk: 'This mutates remote GitHub state.',
+      target: 'owner/repo#13',
+    });
+
+    assert.match(request.id, /^task-approval:github\.pr\.update:/);
+    assert.deepEqual(await service.evaluateRequest(request), {
+      allowed: false,
+      requiresApproval: true,
+      reason: 'Action requires explicit approval before execution.',
+      status: 'pending',
+    });
+    await assert.rejects(
+      () =>
+        service.recordDecision({
+          requestId: request.id,
+          approved: true,
+          decidedBy: '',
+          principal: { id: '', roles: ['operator'] },
+        }),
+      /trusted decidedBy actor/,
+    );
+
+    await assert.rejects(
+      () =>
+        service.recordDecision({
+          requestId: request.id,
+          approved: true,
+          decidedBy: 'operator',
+          principal: { id: 'operator', roles: ['viewer'] },
+        }),
+      /role required to record approval decisions/,
+    );
+
+    await assert.rejects(
+      () =>
+        service.recordDecision({
+          requestId: request.id,
+          approved: true,
+          decidedBy: 'operator',
+          principal: { id: 'other-operator', roles: ['operator'] },
+        }),
+      /does not match the authenticated principal/,
+    );
+
+    await service.recordDecision({
+      requestId: request.id,
+      approved: true,
+      decidedBy: 'operator',
+      principal: { id: 'operator', roles: ['operator'] },
+    });
+    assert.deepEqual(await service.evaluateRequest(request), {
+      allowed: true,
+      requiresApproval: true,
+      reason: 'Action approved.',
+      status: 'approved',
+    });
+
+    const reloaded = createFileCodingApprovalService(workspaceRoot);
+    assert.equal((await reloaded.getRecord(request.id))?.status, 'approved');
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('concurrent file-store approval service serializes create and recordDecision', async () => {
+  const workspaceRoot = createTempWorkspace();
+
+  try {
+    const serviceA = createFileCodingApprovalService(workspaceRoot);
+    const serviceB = createFileCodingApprovalService(workspaceRoot);
+
+    const created: Awaited<ReturnType<typeof serviceA.createRequest>>[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      created.push(
+        await serviceA.createRequest({
+          taskId: 'task-concurrent',
+          actionType: 'git.push',
+          summary: `Push branch ${i}`,
+          reason: 'Pushes remote refs.',
+          risk: 'This mutates remote repository state.',
+        }),
+      );
+    }
+
+    await Promise.all([
+      ...created.map((request, index) =>
+        index % 2 === 0
+          ? serviceA.recordDecision({ requestId: request.id, approved: true, decidedBy: 'operator-a', principal: { id: 'operator-a', roles: ['operator'] } })
+          : serviceB.recordDecision({ requestId: request.id, approved: false, decidedBy: 'operator-b', principal: { id: 'operator-b', roles: ['operator'] } }),
+      ),
+      serviceA.createRequest({
+        taskId: 'task-concurrent-extra',
+        actionType: 'repo.sync',
+        summary: 'Concurrent sync.',
+        reason: 'Syncing mutates local refs.',
+        risk: 'This mutates local repository state.',
+      }),
+    ]);
+
+    const reloaded = createFileCodingApprovalService(workspaceRoot);
+    for (const request of created) {
+      const record = await reloaded.getRecord(request.id);
+      assert.ok(record, `record should exist for ${request.id}`);
+      assert.equal(
+        record.status,
+        (await serviceA.getRecord(request.id))?.status,
+        'all service instances see the same persisted status',
+      );
+    }
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('approval service expires stale requests fail closed', async () => {
+  const service = createInMemoryCodingApprovalService();
+  const request = await service.createRequest({
+    taskId: 'task-expired',
+    actionType: 'git.push',
+    summary: 'Push branch.',
+    reason: 'Pushes remote refs.',
+    risk: 'This mutates remote repository state.',
+    expiresAt: '2000-01-01T00:00:00.000Z',
+  });
+
+  assert.equal((await service.evaluateRequest(request)).status, 'expired');
+  assert.equal((await service.getRecord(request.id))?.status, 'expired');
+  await assert.rejects(
+    () =>
+      service.recordDecision({
+        requestId: request.id,
+        approved: true,
+        decidedBy: 'operator',
+        principal: { id: 'operator', roles: ['operator'] },
+      }),
+    /not pending: expired/,
+  );
 });
 
 test('GitHub CLI client validates repository identifiers before running gh', async () => {
@@ -462,7 +619,7 @@ test('coding worker profile wires GitHub read context with a client and supports
 
   try {
     writeFileSync(join(project.repoPath, 'README.md'), '# scoped repo\n');
-    const subagent = createCodingWorkerSubagent({
+    const subagent = await createCodingWorkerSubagent({
       repoPath: project.repoPath,
       githubClient: {
         async getIssue() {
@@ -503,6 +660,133 @@ test('coding worker profile wires GitHub read context with a client and supports
   } finally {
     rmSync(project.workspaceRoot, { recursive: true, force: true });
   }
+});
+
+test('GitHub tools read extended PR context and gate PR updates through approval service', async () => {
+  const approvalService = createInMemoryCodingApprovalService();
+  let updateCount = 0;
+  const tools = createCodingGitHubTools({
+    approvalService,
+    client: {
+      async getIssue() {
+        return { number: 7, title: 'Issue', state: 'OPEN' };
+      },
+      async getPullRequest() {
+        return { number: 13, title: 'PR', state: 'OPEN', baseRef: 'main', headRef: 'branch' };
+      },
+      async listPullRequestChecks() {
+        return [{ name: 'test', status: 'COMPLETED', conclusion: 'SUCCESS' }];
+      },
+      async listPullRequestComments() {
+        return [{ id: 'comment-1', author: 'reviewer', body: 'Looks good.' }];
+      },
+      async listPullRequestReviewThreads() {
+        return [{ id: 'thread-1', isResolved: false, isOutdated: false, comments: [] }];
+      },
+      async updatePullRequest() {
+        updateCount += 1;
+        return { status: 'updated' };
+      },
+    },
+  });
+
+  const readContext = getTool(tools, 'coding_github_read_context');
+  const context = JSON.parse(
+    await readContext.execute({
+      owner: 'dansasser',
+      repo: 'astro-flue-agent',
+      issueNumber: 7,
+      pullRequestNumber: 13,
+    }),
+  ) as {
+    comments?: Array<{ id: string }>;
+    reviewThreads?: Array<{ id: string }>;
+  };
+  assert.equal(context.comments?.[0]?.id, 'comment-1');
+  assert.equal(context.reviewThreads?.[0]?.id, 'thread-1');
+
+  const updatePr = getTool(tools, 'coding_github_update_pr');
+  const blocked = JSON.parse(
+    await updatePr.execute({
+      taskId: 'task-gh-update',
+      owner: 'dansasser',
+      repo: 'astro-flue-agent',
+      pullRequestNumber: 13,
+      body: 'Updated body',
+    }),
+  ) as { blocked?: boolean; request?: { id: string } };
+  assert.equal(blocked.blocked, true);
+  assert.ok(blocked.request?.id);
+  assert.equal(updateCount, 0);
+
+  await approvalService.recordDecision({
+    requestId: blocked.request.id,
+    approved: true,
+    decidedBy: 'operator',
+    principal: { id: 'operator', roles: ['operator'] },
+  });
+  const approved = JSON.parse(
+    await updatePr.execute({
+      taskId: 'task-gh-update',
+      owner: 'dansasser',
+      repo: 'astro-flue-agent',
+      pullRequestNumber: 13,
+      body: 'Updated body',
+    }),
+  ) as { status?: string };
+  assert.equal(approved.status, 'updated');
+  assert.equal(updateCount, 1);
+});
+
+test('GitHub tools verify explicit PR base, head, draft status, and checks', async () => {
+  const tools = createCodingGitHubTools({
+    client: {
+      async getIssue() {
+        return { number: 7, title: 'Issue', state: 'OPEN' };
+      },
+      async getPullRequest() {
+        return {
+          number: 13,
+          title: 'Runtime PR',
+          state: 'OPEN',
+          baseRef: 'codex/coding-worker-agent-subsystem',
+          headRef: 'codex/coding-worker-runtime-approvals',
+          isDraft: false,
+        };
+      },
+      async listPullRequestChecks() {
+        return [{ name: 'unit', status: 'COMPLETED', conclusion: 'SUCCESS' }];
+      },
+    },
+  });
+  const verifyPr = getTool(tools, 'coding_github_verify_pr');
+
+  const verified = JSON.parse(
+    await verifyPr.execute({
+      owner: 'dansasser',
+      repo: 'astro-flue-agent',
+      pullRequestNumber: 13,
+      expectedBase: 'codex/coding-worker-agent-subsystem',
+      expectedHead: 'codex/coding-worker-runtime-approvals',
+      expectedDraft: false,
+      requireChecksPassed: true,
+    }),
+  ) as { verified?: boolean; mismatches?: string[] };
+  assert.equal(verified.verified, true);
+  assert.deepEqual(verified.mismatches, []);
+
+  const mismatch = JSON.parse(
+    await verifyPr.execute({
+      owner: 'dansasser',
+      repo: 'astro-flue-agent',
+      pullRequestNumber: 13,
+      expectedBase: 'main',
+      expectedDraft: true,
+    }),
+  ) as { verified?: boolean; mismatches?: string[] };
+  assert.equal(mismatch.verified, false);
+  assert.match(mismatch.mismatches?.join('\n') ?? '', /Expected base main/);
+  assert.match(mismatch.mismatches?.join('\n') ?? '', /Expected draft status true/);
 });
 
 test('coding worker tools create projects under the workspace root and scope file edits there', async () => {
@@ -553,6 +837,140 @@ test('coding worker tools create projects under the workspace root and scope fil
     assert.match(output.content, /return 42/);
     await assert.rejects(() => read.execute({ path: '../README.md' }), /escapes coding-worker/);
   } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('repo workflow tools gate branch creation through approval service', async () => {
+  const project = createGitWorkspaceProject();
+  const approvalService = createInMemoryCodingApprovalService();
+
+  try {
+    const branchTool = getTool(
+      createCodingRepoWorkflowTools({
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+        approvalService,
+      }),
+      'coding_repo_branch_create',
+    );
+
+    const blocked = JSON.parse(
+      await branchTool.execute({
+        taskId: 'task-branch',
+        branch: 'feature-runtime',
+      }),
+    ) as { blocked?: boolean; request?: { id: string } };
+    assert.equal(blocked.blocked, true);
+    assert.ok(blocked.request?.id);
+
+    await approvalService.recordDecision({
+      requestId: blocked.request.id,
+      approved: true,
+      decidedBy: 'operator',
+      principal: { id: 'operator', roles: ['operator'] },
+    });
+    const created = JSON.parse(
+      await branchTool.execute({
+        taskId: 'task-branch',
+        branch: 'feature-runtime',
+      }),
+    ) as { status?: string };
+    assert.equal(created.status, 'created');
+
+    const branches = execFileSync('git', ['branch', '--list', 'feature-runtime'], {
+      cwd: project.repoPath,
+      encoding: 'utf8',
+    });
+    assert.match(branches, /feature-runtime/);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('repo workflow tools clone, register, and discover workspace repositories through approval service', async () => {
+  const source = createGitWorkspaceProject();
+  const workspaceRoot = createTempWorkspace();
+  const approvalService = createInMemoryCodingApprovalService();
+  const repoRegistry = new InMemoryCodingRepoRegistry();
+
+  try {
+    const tools = createCodingRepoWorkflowTools({
+      workspaceRoot,
+      targetKind: 'workspace',
+      approvalService,
+      repoRegistry,
+    });
+    const clone = getTool(tools, 'coding_repo_clone');
+    const blockedClone = JSON.parse(
+      await clone.execute({
+        taskId: 'task-clone',
+        remoteUrl: source.repoPath,
+        slug: 'cloned-repo',
+      }),
+    ) as { blocked?: boolean; request?: { id: string } };
+    assert.equal(blockedClone.blocked, true);
+    assert.ok(blockedClone.request?.id);
+
+    await approvalService.recordDecision({
+      requestId: blockedClone.request.id,
+      approved: true,
+      decidedBy: 'operator',
+      principal: { id: 'operator', roles: ['operator'] },
+    });
+    const cloned = JSON.parse(
+      await clone.execute({
+        taskId: 'task-clone',
+        remoteUrl: source.repoPath,
+        slug: 'cloned-repo',
+      }),
+    ) as { status?: string; repo?: { repoRelativePath?: string } };
+    assert.equal(cloned.status, 'cloned');
+    assert.equal(cloned.repo?.repoRelativePath, 'repos/cloned-repo');
+    assert.equal(existsSync(join(workspaceRoot, 'repos', 'cloned-repo', '.git')), true);
+
+    const register = getTool(tools, 'coding_repo_register');
+    const blockedRegister = JSON.parse(
+      await register.execute({
+        taskId: 'task-register',
+        slug: 'cloned-alias',
+        repoRelativePath: 'repos/cloned-repo',
+        remoteUrl: source.repoPath,
+      }),
+    ) as { blocked?: boolean; request?: { id: string } };
+    assert.equal(blockedRegister.blocked, true);
+    assert.ok(blockedRegister.request?.id);
+
+    await approvalService.recordDecision({
+      requestId: blockedRegister.request.id,
+      approved: true,
+      decidedBy: 'operator',
+      principal: { id: 'operator', roles: ['operator'] },
+    });
+    const registered = JSON.parse(
+      await register.execute({
+        taskId: 'task-register',
+        slug: 'cloned-alias',
+        repoRelativePath: 'repos/cloned-repo',
+        remoteUrl: source.repoPath,
+      }),
+    ) as { status?: string; repo?: { slug?: string } };
+    assert.equal(registered.status, 'registered');
+    assert.equal(registered.repo?.slug, 'cloned-alias');
+
+    const discover = getTool(tools, 'coding_repo_discover');
+    const discovered = JSON.parse(await discover.execute({})) as {
+      registered?: Array<{ slug: string }>;
+      discovered?: Array<{ repoRelativePath: string }>;
+    };
+    assert.equal(discovered.registered?.some((repo) => repo.slug === 'cloned-alias'), true);
+    assert.equal(
+      discovered.discovered?.some((repo) => repo.repoRelativePath === 'repos/cloned-repo'),
+      true,
+    );
+  } finally {
+    rmSync(source.workspaceRoot, { recursive: true, force: true });
     rmSync(workspaceRoot, { recursive: true, force: true });
   }
 });
@@ -730,20 +1148,32 @@ test('coding worker git commit tool requires approval and commits when approved'
     ) as { blocked?: boolean };
     assert.equal(blocked.blocked, true);
 
+    const approvalService = createInMemoryCodingApprovalService();
+    const injectedMessage = 'Update answer $(node -e "require(\'fs\').writeFileSync(\'pwned.txt\',\'x\')")';
+    const approvalRequest = await approvalService.createRequest({
+      taskId: 'task-commit',
+      actionType: 'git.commit',
+      summary: `Commit local changes: ${injectedMessage}`,
+      reason: 'Committing records local repository state.',
+      risk: 'This mutates git history in the local branch.',
+      target: 'index.js',
+    });
+    await approvalService.recordDecision({
+      requestId: approvalRequest.id,
+      approved: true,
+      decidedBy: 'test',
+      principal: { id: 'test', roles: ['operator'] },
+    });
+
     const approvedCommit = getTool(
       createCodingGitTools({
         workspaceRoot: project.workspaceRoot,
         targetKind: 'project',
         projectRelativePath: project.projectRelativePath,
-        resolveApprovalDecision: (request) => ({
-          requestId: request.id,
-          approved: true,
-          decidedBy: 'test',
-        }),
+        approvalService,
       }),
       'coding_git_commit',
     );
-    const injectedMessage = 'Update answer $(node -e "require(\'fs\').writeFileSync(\'pwned.txt\',\'x\')")';
     const output = JSON.parse(
       await approvedCommit.execute({
         taskId: 'task-commit',
@@ -873,6 +1303,7 @@ test('coding task workflow edits a temp repo and completes only after verificati
   const project = createExecutableWorkspaceProject();
 
   try {
+    const taskRunStore = JsonFileCodingTaskRunStore.atWorkspaceRoot(project.workspaceRoot);
     const result = await runCodingTaskWorkflow({
       taskId: 'task-with-real-edit',
       text: 'Fix answer implementation.',
@@ -895,13 +1326,17 @@ test('coding task workflow edits a temp repo and completes only after verificati
           reason: 'Temp repo unit verification must pass.',
         },
       ],
-    });
+    }, { taskRunStore });
 
     assert.equal(result.status, 'completed');
     assert.match(readFileSync(join(project.repoPath, 'index.js'), 'utf8'), /return 42/);
     assert.equal(result.subagentResults.some((item) => item.subagent === 'implementer'), true);
     assert.equal(result.publicEvents.some((event) => JSON.stringify(event).includes('coding.verification.completed')), true);
     assert.doesNotThrow(() => assertCodingWorkerCanComplete(result));
+    const stored = await taskRunStore.get('task-with-real-edit');
+    assert.equal(stored?.status, 'completed');
+    assert.equal(stored?.sessionPlan.childSessions.implementer.includes(':implementer'), true);
+    assert.equal(stored?.events.some((event) => event.type === 'coding.completed'), true);
   } finally {
     rmSync(project.workspaceRoot, { recursive: true, force: true });
   }

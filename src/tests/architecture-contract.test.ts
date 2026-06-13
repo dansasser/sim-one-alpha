@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import orchestratorAgent from '../agents/orchestrator.js';
 import { createCodingWorkerSubagent } from '../workers/coding-worker/coding-worker.js';
@@ -88,6 +90,10 @@ test('Flue orchestrator routes research to the researcher instead of owning web 
   assert.equal(config.tools?.some((tool) => tool.name === 'coding_github_read_context'), false);
   assert.equal(config.tools?.some((tool) => tool.name === 'coding_repo_apply_patch'), false);
   assert.equal(config.tools?.some((tool) => tool.name === 'coding_git_commit'), false);
+  assert.equal(config.tools?.some((tool) => tool.name === 'coding_repo_discover'), false);
+  assert.equal(config.tools?.some((tool) => tool.name === 'coding_repo_clone'), false);
+  assert.equal(config.tools?.some((tool) => tool.name === 'coding_repo_branch_create'), false);
+  assert.equal(config.tools?.some((tool) => tool.name === 'coding_repo_sync'), false);
   assert.match(config.instructions ?? '', /Main Agent Workspace Instructions/);
   assert.match(config.instructions ?? '', /Runtime Capabilities/);
   assert.match(config.instructions ?? '', /delegate with the Flue task tool using agent: "researcher"/);
@@ -113,10 +119,13 @@ test('Flue orchestrator requires an explicit coding-worker workspace root', asyn
   );
 });
 
-test('coding worker owns its workspace-backed lead profile', () => {
-  const subagent = createCodingWorkerSubagent({ workspaceRoot: process.cwd() });
+test('coding worker owns its workspace-backed lead profile', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'coding-worker-workspace-'));
+  const approvalRoot = mkdtempSync(join(tmpdir(), 'coding-worker-approvals-'));
+  try {
+    const subagent = await createCodingWorkerSubagent({ workspaceRoot, approvalRoot });
 
-  assert.equal(subagent.name, 'coding-worker');
+    assert.equal(subagent.name, 'coding-worker');
   assert.equal(subagent.model, undefined);
   assert.match(subagent.instructions ?? '', /Coding Worker Workspace Instructions/);
   assert.match(subagent.instructions ?? '', /worker-local internal subagents/);
@@ -134,11 +143,43 @@ test('coding worker owns its workspace-backed lead profile', () => {
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_github_read_context'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_project_create'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_repo_apply_patch'), true);
+  assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_repo_discover'), true);
+  assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_repo_clone'), true);
+  assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_repo_branch_create'), true);
+  assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_repo_sync'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_shell_run'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_git_commit'), true);
+  assert.equal(
+    subagent.subagents?.find((agent) => agent.name === 'coding-worker-implementer')?.tools?.some(
+      (tool) => tool.name === 'coding_repo_apply_patch',
+    ),
+    true,
+  );
+  assert.equal(
+    subagent.subagents?.find((agent) => agent.name === 'coding-worker-test-debug')?.tools?.some(
+      (tool) => tool.name === 'coding_shell_run',
+    ),
+    true,
+  );
+  assert.equal(
+    subagent.subagents?.find((agent) => agent.name === 'coding-worker-github')?.tools?.some(
+      (tool) => tool.name === 'coding_github_verify_pr',
+    ),
+    true,
+  );
+  assert.equal(
+    subagent.subagents?.find((agent) => agent.name === 'coding-worker-github')?.tools?.some(
+      (tool) => tool.name === 'coding_github_update_pr',
+    ),
+    true,
+  );
   assert.equal(subagent.skills?.some((skill) => skill.name === 'coding-worker.code-change-loop'), true);
   assert.equal(existsSync('src/workflows/coding-task.ts'), false);
   assert.equal(existsSync('src/agents/coding-worker.ts'), false);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmSync(approvalRoot, { recursive: true, force: true });
+  }
 });
 
 test('researcher owns the web research tool', () => {

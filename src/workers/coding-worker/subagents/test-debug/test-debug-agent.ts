@@ -1,9 +1,9 @@
-import type { AgentProfile } from '@flue/runtime';
+import type { AgentProfile, ToolDefinition } from '@flue/runtime';
 import { createCodingInternalSubagent } from '../profile-factory.js';
 
 export const codingTestDebugSubagentName = 'coding-worker-test-debug';
 
-export function createCodingTestDebugSubagent(model?: string): AgentProfile {
+export function createCodingTestDebugSubagent(model?: string, tools?: ToolDefinition[]): AgentProfile {
   return createCodingInternalSubagent({
     kind: 'test-debug',
     name: codingTestDebugSubagentName,
@@ -12,5 +12,6 @@ export function createCodingTestDebugSubagent(model?: string): AgentProfile {
     runtimeRole:
       'Run focused and full verification through the Flue local sandbox, diagnose failures, and report evidence.',
     model,
+    tools,
   });
 }

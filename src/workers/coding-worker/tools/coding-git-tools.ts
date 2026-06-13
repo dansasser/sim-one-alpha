@@ -1,30 +1,32 @@
+import { createHash } from 'node:crypto';
 import { defineTool, Type, type ToolDefinition } from '@flue/runtime';
 import {
-  createCodingApprovalRequest,
-  evaluateCodingApproval,
-} from '../approvals/approval-policy.js';
+  createInMemoryCodingApprovalService,
+  type CodingApprovalService,
+} from '../approvals/approval-service.js';
+import { createCodingApprovalRequest } from '../approvals/approval-policy.js';
 import type {
   CodingApprovalActionType,
-  CodingApprovalDecision,
   CodingApprovalRequest,
 } from '../approvals/approval-types.js';
 import {
   createFlueLocalCodingSandbox,
   type CodingSandboxRuntime,
 } from './sandbox-runtime.js';
+import type { CodingProgressReporter } from '../events/progress-reporter.js';
 import type { CodingWorkspaceTargetInput } from '../repo/workspace-target.js';
 
 export interface CodingGitToolsOptions extends CodingWorkspaceTargetInput {
   env?: Record<string, string | undefined>;
   sandbox?: CodingSandboxRuntime;
   sessionId?: string;
-  resolveApprovalDecision?: (
-    request: CodingApprovalRequest,
-  ) => Promise<CodingApprovalDecision | undefined> | CodingApprovalDecision | undefined;
+  approvalService?: CodingApprovalService;
+  reporter?: CodingProgressReporter;
 }
 
 export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefinition[] {
   let sandboxPromise: Promise<CodingSandboxRuntime> | undefined;
+  const approvalService = options.approvalService ?? createInMemoryCodingApprovalService();
   const getSandbox = async () => {
     sandboxPromise ??= options.sandbox
       ? Promise.resolve(options.sandbox)
@@ -76,12 +78,15 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
       }),
       execute: async (args) => {
         const taskId = requireString(args.taskId, 'taskId');
+        const paths = readStringArray(args.paths);
         const approval = await evaluateGitApproval(options, {
+          approvalService,
           taskId,
           actionType: 'git.commit',
           summary: `Commit local changes: ${requireString(args.message, 'message')}`,
           reason: 'Committing records local repository state.',
           risk: 'This mutates git history in the local branch.',
+          target: paths.length ? paths.join(', ') : 'all tracked workspace changes',
         });
         if (!approval.evaluation.allowed) {
           return toToolJson({
@@ -92,7 +97,6 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
         }
 
         const sandbox = await getSandbox();
-        const paths = readStringArray(args.paths);
         const add = await sandbox.execFile('git', paths.length ? ['add', '--', ...paths] : ['add', '-A'], {
           timeoutSeconds: 30,
         });
@@ -120,11 +124,17 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
         const remote = readString(args.remote) ?? 'origin';
         const branch = requireString(args.branch, 'branch');
         const approval = await evaluateGitApproval(options, {
+          approvalService,
           taskId,
           actionType: 'git.push',
           summary: `Push ${branch} to ${remote}.`,
           reason: 'Pushing publishes branch state to the remote.',
           risk: 'This mutates remote repository state.',
+          target: `${remote}/${branch}`,
+          metadata: {
+            remote,
+            branch,
+          },
         });
         if (!approval.evaluation.allowed) {
           return toToolJson({
@@ -155,12 +165,29 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
       }),
       execute: async (args) => {
         const taskId = requireString(args.taskId, 'taskId');
+        const base = readString(args.base);
+        const head = readString(args.head);
+        const prPayload = {
+          title: requireString(args.title, 'title'),
+          body: requireString(args.body, 'body'),
+          base,
+          head,
+          draft: args.draft !== false,
+        };
         const approval = await evaluateGitApproval(options, {
+          approvalService,
           taskId,
           actionType: 'github.pr.create',
-          summary: `Create GitHub PR: ${requireString(args.title, 'title')}`,
+          summary: `Create GitHub PR: ${prPayload.title} (${hashApprovalPayload(prPayload)})`,
           reason: 'Opening a PR publishes work to GitHub for review.',
           risk: 'This mutates remote GitHub state.',
+          target: head ?? base ?? prPayload.title,
+          metadata: {
+            draft: prPayload.draft,
+            ...(base ? { base } : {}),
+            ...(head ? { head } : {}),
+            payloadHash: hashApprovalPayload(prPayload),
+          },
         });
         if (!approval.evaluation.allowed) {
           return toToolJson({
@@ -178,8 +205,8 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
           requireString(args.title, 'title'),
           '--body',
           requireString(args.body, 'body'),
-          readString(args.base) ? ['--base', readString(args.base) ?? ''] : undefined,
-          readString(args.head) ? ['--head', readString(args.head) ?? ''] : undefined,
+          base ? ['--base', base] : undefined,
+          head ? ['--head', head] : undefined,
         ].filter(Boolean);
         const sandbox = await getSandbox();
         const pr = await sandbox.execFile('gh', flags.flat() as string[], { timeoutSeconds: 120 });
@@ -189,28 +216,80 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
   ];
 }
 
+function hashApprovalPayload(payload: Record<string, unknown>): string {
+  const digest = createHash('sha256')
+    .update(JSON.stringify(payload, Object.keys(payload).sort()))
+    .digest('hex')
+    .slice(0, 12);
+  return digest;
+}
+
 async function evaluateGitApproval(
   options: CodingGitToolsOptions,
   input: {
+  approvalService: CodingApprovalService;
   taskId: string;
   actionType: CodingApprovalActionType;
   summary: string;
   reason: string;
   risk: string;
+  target?: string;
+  metadata?: Record<string, string | number | boolean>;
   },
 ) {
-  const request = createCodingApprovalRequest({
+  const proposedRequest = createCodingApprovalRequest({
     taskId: input.taskId,
     actionType: input.actionType,
     summary: input.summary,
     reason: input.reason,
     risk: input.risk,
+    target: input.target,
+    metadata: input.metadata,
   });
-  const decision = await options.resolveApprovalDecision?.(request);
+  const latest = (await input.approvalService.listRecords(proposedRequest.taskId))
+    .filter((record) => record.request.dedupeKey === proposedRequest.dedupeKey)
+    .sort((left, right) => right.request.createdAt.localeCompare(left.request.createdAt))[0];
+  if (latest) {
+    const evaluation = await input.approvalService.evaluateRequest(latest.request);
+    if (evaluation.allowed) {
+      return { request: latest.request, evaluation };
+    }
+  }
+  const request = await input.approvalService.createRequest({
+    taskId: input.taskId,
+    actionType: input.actionType,
+    summary: input.summary,
+    reason: input.reason,
+    risk: input.risk,
+    target: input.target,
+    metadata: input.metadata,
+  });
+  const evaluation = await input.approvalService.evaluateRequest(request);
+  if (!evaluation.allowed && evaluation.requiresApproval) {
+    emitApprovalRequested(options, request, evaluation.reason);
+  }
   return {
     request,
-    evaluation: evaluateCodingApproval(request, decision),
+    evaluation,
   };
+}
+
+function emitApprovalRequested(
+  options: CodingGitToolsOptions,
+  request: CodingApprovalRequest,
+  reason: string,
+): void {
+  options.reporter?.emit({
+    type: 'coding.approval.requested',
+    taskId: request.taskId,
+    action: request.actionType,
+    summary: request.summary,
+    approvalReason: request.reason,
+    risk: request.risk,
+    status: 'pending',
+    decision: reason,
+    evidence: [request.id],
+  });
 }
 
 function requireString(value: unknown, name: string): string {

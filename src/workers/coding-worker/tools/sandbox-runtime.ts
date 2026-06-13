@@ -38,7 +38,11 @@ export interface CodingSandboxRuntime {
   resolveScopePath(path: string): string;
   resolveRepoPath(path: string): string;
   resolveWorkspacePath(path: string): string;
+  readWorkspaceFile(path: string): Promise<string>;
+  readdirWorkspace(path: string): Promise<string[]>;
   mkdirWorkspace(path: string, options?: { recursive?: boolean }): Promise<void>;
+  existsWorkspace(path: string): Promise<boolean>;
+  statWorkspace(path: string): Promise<{ isFile: boolean; isDirectory: boolean }>;
   writeWorkspaceFile(path: string, content: string): Promise<void>;
 }
 
@@ -176,8 +180,28 @@ class FlueLocalCodingSandboxRuntime implements CodingSandboxRuntime {
     return assertInsideWorkspaceRoot(this.workspaceRoot, path);
   }
 
+  async readWorkspaceFile(path: string): Promise<string> {
+    return this.sessionEnv.readFile(this.resolveWorkspacePath(path));
+  }
+
+  async readdirWorkspace(path: string): Promise<string[]> {
+    return this.sessionEnv.readdir(this.resolveWorkspacePath(path));
+  }
+
   async mkdirWorkspace(path: string, options?: { recursive?: boolean }): Promise<void> {
     await this.sessionEnv.mkdir(this.resolveWorkspacePath(path), options);
+  }
+
+  async existsWorkspace(path: string): Promise<boolean> {
+    return this.sessionEnv.exists(this.resolveWorkspacePath(path));
+  }
+
+  async statWorkspace(path: string): Promise<{ isFile: boolean; isDirectory: boolean }> {
+    const stat = await this.sessionEnv.stat(this.resolveWorkspacePath(path));
+    return {
+      isFile: stat.isFile,
+      isDirectory: stat.isDirectory,
+    };
   }
 
   async writeWorkspaceFile(path: string, content: string): Promise<void> {

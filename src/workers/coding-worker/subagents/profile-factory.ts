@@ -1,4 +1,4 @@
-import { defineAgentProfile, type AgentProfile } from '@flue/runtime';
+import { defineAgentProfile, type AgentProfile, type ToolDefinition } from '@flue/runtime';
 import {
   composeWorkspaceInstructions,
   resolveWorkspaceDirectory,
@@ -12,6 +12,7 @@ export interface CodingInternalSubagentConfig {
   workspacePath: string;
   runtimeRole: string;
   model?: string;
+  tools?: ToolDefinition[];
 }
 
 export function createCodingInternalSubagent(config: CodingInternalSubagentConfig): AgentProfile {
@@ -27,6 +28,7 @@ export function createCodingInternalSubagent(config: CodingInternalSubagentConfi
     name: config.name,
     description: config.description,
     ...(config.model ? { model: config.model } : {}),
+    tools: config.tools ?? [],
     instructions,
   });
 }

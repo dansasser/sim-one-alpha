@@ -13,10 +13,13 @@ export type CodingWorkerEventType =
   | 'coding.verification.completed'
   | 'coding.review.started'
   | 'coding.review.completed'
+  | 'coding.approval.requested'
+  | 'coding.approval.completed'
   | 'coding.github.approval_requested'
   | 'coding.github.action_completed'
   | 'coding.completed'
-  | 'coding.blocked';
+  | 'coding.blocked'
+  | 'coding.error';
 
 export interface CodingWorkerEvent {
   type: CodingWorkerEventType;
