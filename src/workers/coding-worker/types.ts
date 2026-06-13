@@ -103,10 +103,47 @@ export interface CodingVerificationEvidence {
   summary: string;
 }
 
+export interface CodingTriageResult {
+  plan: CodingPlanItem[];
+  filesToInspect: string[];
+  recommendedExecutionPath: 'implementer' | 'github' | 'test-debug' | 'code-review' | 'manual';
+}
+
+export interface CodingImplementerResult {
+  fileEdits: CodingFileEdit[];
+  writeFiles: CodingFileWrite[];
+  verificationCommands: CodingVerificationCommandRequest[];
+}
+
+export interface CodingTestDebugResult {
+  debugEdits: CodingFileEdit[];
+  verificationCommands: CodingVerificationCommandRequest[];
+}
+
+export interface CodingCodeReviewResult {
+  findings: string[];
+  approved: boolean;
+}
+
+export interface CodingGithubResult {
+  actions: Array<{
+    action: 'comment' | 'create_pr' | 'update_pr' | 'merge_pr' | 'close_pr';
+    payload: Record<string, unknown>;
+  }>;
+}
+
+export type CodingSubagentStructuredOutput =
+  | { type: 'triage'; result: CodingTriageResult }
+  | { type: 'implementer'; result: CodingImplementerResult }
+  | { type: 'test-debug'; result: CodingTestDebugResult }
+  | { type: 'code-review'; result: CodingCodeReviewResult }
+  | { type: 'github'; result: CodingGithubResult };
+
 export interface CodingSubagentRunResult {
   subagent: CodingSubagentKind;
   summary: string;
   evidence: string[];
+  structuredOutput?: CodingSubagentStructuredOutput;
   nextAction?: string;
 }
 

@@ -13,10 +13,10 @@ The legacy state machine `runCodingTaskWorkflow` must be removed from `src/worke
 
 ## Sibling Branches
 
-### 1. `codex/coding-worker-implementer`
+### 1. `codex/coding-worker-implementer` (Completed)
 Owns: `src/workers/coding-worker/subagents/implementer/`
-- Update the implementer subagent to emit the exact `CodingImplementerResult` structured output defined in the types.
-- Build tools to emit `CodingFileEdit` correctly based on file contents.
+- Update the implementer subagent to emit the exact `CodingImplementerResult` structured output defined in the types. *(Completed via `coding_implementer_submit_result` tool)*
+- Build tools to emit `CodingFileEdit` correctly based on file contents. *(Completed by updating `coding_repo_apply_patch` and `TOOLS.md` instructions)*
 
 ### 2. `codex/coding-worker-test-debug`
 Owns: `src/workers/coding-worker/subagents/test-debug/`

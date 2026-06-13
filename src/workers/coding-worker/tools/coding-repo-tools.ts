@@ -128,7 +128,7 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
     defineTool({
       name: 'coding_repo_apply_patch',
       description:
-        'Apply exact text replacements to one UTF-8 file inside the selected coding-worker workspace/project scope. Each edit must include oldText and newText.',
+        'Apply exact text replacements to one UTF-8 file inside the selected coding-worker workspace/project scope. Each edit must include oldText and newText. You can use this to apply and verify your code edits before building your final submit_result.',
       parameters: Type.Object({
         path: Type.String(),
         edits: Type.Array(
