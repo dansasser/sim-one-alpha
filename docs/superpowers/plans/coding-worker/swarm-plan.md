@@ -27,7 +27,7 @@ Branch: `codex/coding-worker-loop-contract`
 
 Define the shared surface that every other branch depends on, replacing the procedural state machine with a **Flue-native loop** where the orchestrator delegates using natural language and the `coding-worker` lead orchestrates subagents via tool-calling:
 
-- Remove the hardcoded `runCodingTaskWorkflow` procedural state machine from `src/workers/coding-worker/workflow/coding-task.ts` and formalize the Flue-native loop's checkpoint/resume shape.
+- Remove the hardcoded `runCodingTaskWorkflow` procedural state machine from `src/workers/coding-worker/workflow/coding-task.ts` and formalize the bounded, approval-gated tool-calling loop's checkpoint/resume shape.
 - Strict subagent input/output schemas (triage, implementer, test-debug, code-review, github) in `src/workers/coding-worker/types.ts`.
 - `CodingFileEdit` and related edit/verification result types must be defined as structured outputs from these subagents.
 - Progress event shapes in `src/workers/coding-worker/events/coding-worker-events.ts` to ensure all loop checkpoints and tool calls emit typed events.

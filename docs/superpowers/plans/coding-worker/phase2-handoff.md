@@ -9,7 +9,7 @@ This document details the required implementations for the parallel branches of 
 - The task state persistence tracks `CodingWorkerEvent`s natively.
 
 ## The Flue-Native Loop (Shared Effort)
-The legacy state machine `runCodingTaskWorkflow` must be removed from `src/workers/coding-worker/workflow/coding-task.ts`. The implementation must be replaced by giving the `coding-worker` lead the explicitly defined subagent tools (wrapping the internal agents) and letting the model perform tool calling in a deterministic loop using the Flue context budget.
+The legacy state machine `runCodingTaskWorkflow` must be removed from `src/workers/coding-worker/workflow/coding-task.ts`. The implementation must be replaced by giving the `coding-worker` lead the explicitly defined subagent tools (wrapping the internal agents) and letting the model perform tool calling in a bounded, approval-gated tool-calling loop using the Flue context budget.
 
 ## Sibling Branches
 

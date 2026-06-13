@@ -38,7 +38,7 @@ The agent/worker part must be able to take a natural-language coding task, plan,
 
 ## Remaining gaps
 
-1. **No closed-loop autonomy.** `runCodingTaskWorkflow` in `src/workers/coding-worker/workflow/coding-task.ts` is only exercised by tests. The live Flue profile in `src/workers/coding-worker/coding-worker.ts` exposes tools and subagents but does not drive a deterministic planning/execution/replanning loop.
+1. **No closed-loop autonomy.** `runCodingTaskWorkflow` in `src/workers/coding-worker/workflow/coding-task.ts` is only exercised by tests. The live Flue profile in `src/workers/coding-worker/coding-worker.ts` exposes tools and subagents but does not drive a bounded, approval-gated tool-calling loop for planning, execution, and replanning.
 2. **Subagents are thin shells.** `src/workers/coding-worker/subagents/index.ts` returns profiles, but there is no delegation loop that gives each subagent a tool-calling turn and consumes structured outputs. `createFlueCodingSubagentDelegate` in `workflow/coordination.ts` returns free text, not structured plans/edits/findings.
 3. **No generated edits.** The implementer subagent does not produce `CodingFileEdit` objects. The workflow applies only caller-supplied `fileEdits`/`debugEdits`.
 4. **No iteration on failure.** When verification fails, the workflow runs at most one rerun with pre-supplied `debugEdits`. There is no loop back to planning/implementation with failure context.
@@ -54,7 +54,7 @@ The agent/worker part must be able to take a natural-language coding task, plan,
 
 ## Proposed next goal (under 4000 characters)
 
-> Close the autonomy gap in `src/workers/coding-worker` so the lead Flue profile can execute a model-driven, multi-turn coding workflow end-to-end from a natural-language task to verified, committed code. We will replace the hardcoded `runCodingTaskWorkflow` state machine with a **Flue-native loop** where the `coding-worker` lead is given explicit planning/replanning tools and directly orchestrates the subagents via tool calling. The main orchestrator will delegate to the `coding-worker` using natural language rather than building structured payloads itself. Give each internal subagent a structured tool-calling turn that returns concrete outputs (files to read, exact edits, verification commands, review findings, GitHub actions), and let the lead iterate: replan when blocked, rerun tests after generated debug edits, and drive approval-gated commits, pushes, and PR creation. Add a planning/replanning tool, generated-edit output from the implementer, structured test-result parsing, and deterministic run resume. Keep all PRs targeting `main` by default and cover the loop with unit + integration tests. Do not declare complete until an integration test proves the agent can take a natural-language bug-fix task, edit code, pass tests, commit, and push to a feature branch through an approval gate.
+> Close the autonomy gap in `src/workers/coding-worker` so the lead Flue profile can execute a model-driven, multi-turn coding workflow end-to-end from a natural-language task to verified, committed code. We will replace the hardcoded `runCodingTaskWorkflow` state machine with a **Flue-native loop** where the `coding-worker` lead is given explicit planning/replanning tools and directly orchestrates the subagents via tool calling. The main orchestrator will delegate to the `coding-worker` using natural language rather than building structured payloads itself. Give each internal subagent a structured tool-calling turn that returns concrete outputs (files to read, exact edits, verification commands, review findings, GitHub actions), and let the lead iterate: replan when blocked, rerun tests after generated debug edits, and drive approval-gated commits, pushes, and PR creation. Add a planning/replanning tool, generated-edit output from the implementer, structured test-result parsing, and a bounded, approval-gated tool-calling loop run resume. Keep all PRs targeting `main` by default and cover the loop with unit + integration tests. Do not declare complete until an integration test proves the agent can take a natural-language bug-fix task, edit code, pass tests, commit, and push to a feature branch through an approval gate.
 
 ## Recommended plan
 
@@ -67,10 +67,8 @@ The agent/worker part must be able to take a natural-language coding task, plan,
    - Planning/replanning tool and iteration loop (dynamic plan updates, failure-driven replanning).
    - Structured test-result parsing.
    - Expanded GitHub surface and approval transport adapter (TUI/Telegram/Discord).
+   - Code-intelligence tools (AST parsing, symbol navigation, import graph, explicit LSP integration, semantic search).
 4. Before declaring each PR complete, verify PR metadata with `gh pr view <n> --json baseRefName,headRefName,isDraft`.
-
-## Future Addendums (Post-Phase 2)
-- Code-intelligence tools (AST parsing, symbol navigation, import graph, explicit LSP integration, semantic search). These will be prioritized in a future phase once the core autonomy loop is stable.
 
 ## What "done" looks like
 
