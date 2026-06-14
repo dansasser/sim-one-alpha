@@ -122,3 +122,41 @@ export const CodingGithubResultSchema = v.object({
 });
 
 export type CodingGithubResult = v.InferOutput<typeof CodingGithubResultSchema>;
+
+export const CodingEditOperationResultSchema = v.object({
+  path: v.string(),
+  operation: v.union([v.literal('write'), v.literal('patch')]),
+  status: v.union([v.literal('applied'), v.literal('rolled_back'), v.literal('failed')]),
+  replacements: v.optional(v.number()),
+  reason: v.optional(v.string()),
+});
+
+export type CodingEditOperationResult = v.InferOutput<typeof CodingEditOperationResultSchema>;
+
+export const CodingEditTransactionFailureSchema = v.object({
+  path: v.string(),
+  operation: v.union([v.literal('write'), v.literal('patch')]),
+  reason: v.string(),
+});
+
+export type CodingEditTransactionFailure = v.InferOutput<typeof CodingEditTransactionFailureSchema>;
+
+/**
+ * Atomic multi-file edit transaction.
+ *
+ * A transaction groups file writes and exact-text patches. All operations are
+ * validated before any mutation is applied. On the first failure every change
+ * made so far is rolled back and the transaction ends with status `failed`.
+ */
+export const CodingEditTransactionSchema = v.object({
+  id: v.string(),
+  status: v.union([v.literal('pending'), v.literal('applied'), v.literal('rolled_back'), v.literal('failed')]),
+  edits: v.array(CodingFileEditSchema),
+  writes: v.array(CodingFileWriteSchema),
+  results: v.array(CodingEditOperationResultSchema),
+  failure: v.optional(CodingEditTransactionFailureSchema),
+  createdAt: v.string(),
+  updatedAt: v.string(),
+});
+
+export type CodingEditTransaction = v.InferOutput<typeof CodingEditTransactionSchema>;

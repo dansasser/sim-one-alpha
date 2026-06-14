@@ -30,7 +30,11 @@ import {
 } from '../workers/coding-worker/repo/package-manager.js';
 import { createCodingVerificationPlan } from '../workers/coding-worker/repo/verification.js';
 import { createCodingGitTools } from '../workers/coding-worker/tools/coding-git-tools.js';
-import { createCodingRepoTools } from '../workers/coding-worker/tools/coding-repo-tools.js';
+import {
+  applyCodingEditTransaction,
+  createCodingEditTransaction,
+  createCodingRepoTools,
+} from '../workers/coding-worker/tools/coding-repo-tools.js';
 import { createCodingRepoWorkflowTools } from '../workers/coding-worker/tools/coding-repo-workflow-tools.js';
 import { evaluateCodingShellCommand } from '../workers/coding-worker/tools/command-policy.js';
 import { createFlueLocalCodingSandbox } from '../workers/coding-worker/tools/sandbox-runtime.js';
@@ -857,6 +861,191 @@ test('coding worker tools create projects under the workspace root and scope fil
     const output = JSON.parse(await read.execute({ path: 'index.js' })) as { content: string };
     assert.match(output.content, /return 42/);
     await assert.rejects(() => read.execute({ path: '../README.md' }), /escapes coding-worker/);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker edit transaction applies multi-file writes and patches atomically', async () => {
+  const workspaceRoot = createTempWorkspace();
+
+  try {
+    const sandbox = await createFlueLocalCodingSandbox({
+      workspaceRoot,
+      targetKind: 'workspace',
+    });
+    writeFileSync(join(workspaceRoot, 'a.js'), 'const a = 1;\n');
+    writeFileSync(join(workspaceRoot, 'b.js'), 'const b = 2;\n');
+
+    const transaction = createCodingEditTransaction('tx-success', [
+      { path: 'a.js', oldText: 'const a = 1;', newText: 'const a = 2;', expectedOccurrences: 1 },
+      { path: 'b.js', oldText: 'const b = 2;', newText: 'const b = 3;', expectedOccurrences: 1 },
+    ], [{ path: 'c.js', content: 'const c = 4;\n' }]);
+
+    const result = await applyCodingEditTransaction(sandbox, transaction);
+
+    assert.equal(result.status, 'applied');
+    assert.equal(result.results.length, 3);
+    assert.equal(result.results.every((r) => r.status === 'applied'), true);
+    assert.equal(readFileSync(join(workspaceRoot, 'a.js'), 'utf8'), 'const a = 2;\n');
+    assert.equal(readFileSync(join(workspaceRoot, 'b.js'), 'utf8'), 'const b = 3;\n');
+    assert.equal(readFileSync(join(workspaceRoot, 'c.js'), 'utf8'), 'const c = 4;\n');
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker edit transaction rolls back all changes on first application failure', async () => {
+  const workspaceRoot = createTempWorkspace();
+
+  try {
+    const sandbox = await createFlueLocalCodingSandbox({
+      workspaceRoot,
+      targetKind: 'workspace',
+    });
+    writeFileSync(join(workspaceRoot, 'a.js'), 'const a = 1;\n');
+
+    const transaction = createCodingEditTransaction('tx-rollback', [], [
+      // a.js is a regular file, so writing through it as a directory fails during application.
+      { path: 'c.js', content: 'const c = 4;\n' },
+      { path: 'a.js/b.js', content: 'const b = 3;\n' },
+    ]);
+
+    const result = await applyCodingEditTransaction(sandbox, transaction);
+
+    assert.equal(result.status, 'failed');
+    assert.ok(result.failure);
+    assert.equal(result.failure?.path, 'a.js/b.js');
+    assert.equal(result.failure?.operation, 'write');
+    assert.match(result.failure?.reason ?? '', /EEXIST|ENOTDIR|not a directory|file already exists/i);
+
+    // c.js was created and then deleted during rollback.
+    assert.equal(existsSync(join(workspaceRoot, 'c.js')), false);
+    // a.js is unchanged because the patch step never ran.
+    assert.equal(readFileSync(join(workspaceRoot, 'a.js'), 'utf8'), 'const a = 1;\n');
+
+    const cResult = result.results.find((r) => r.path === 'c.js');
+    assert.equal(cResult?.status, 'rolled_back');
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker edit transaction remains atomic when pre-flight validation fails', async () => {
+  const workspaceRoot = createTempWorkspace();
+
+  try {
+    const sandbox = await createFlueLocalCodingSandbox({
+      workspaceRoot,
+      targetKind: 'workspace',
+    });
+    writeFileSync(join(workspaceRoot, 'a.js'), 'const a = 1;\n');
+
+    const transaction = createCodingEditTransaction('tx-atomic', [
+      { path: 'a.js', oldText: 'const a = 1;', newText: 'const a = 2;', expectedOccurrences: 1 },
+      { path: 'missing.js', oldText: 'old', newText: 'new', expectedOccurrences: 1 },
+    ], []);
+
+    const result = await applyCodingEditTransaction(sandbox, transaction);
+
+    assert.equal(result.status, 'failed');
+    assert.equal(result.failure?.path, 'missing.js');
+    // No files should have been mutated because validation runs before any write.
+    assert.equal(readFileSync(join(workspaceRoot, 'a.js'), 'utf8'), 'const a = 1;\n');
+    assert.equal(result.results.length, 0);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker edit transaction rejects binary patch targets', async () => {
+  const workspaceRoot = createTempWorkspace();
+
+  try {
+    const sandbox = await createFlueLocalCodingSandbox({
+      workspaceRoot,
+      targetKind: 'workspace',
+    });
+    writeFileSync(join(workspaceRoot, 'binary.bin'), Buffer.from([0x00, 0x01, 0x02]));
+
+    const transaction = createCodingEditTransaction('tx-binary', [
+      { path: 'binary.bin', oldText: '\x00', newText: 'x', expectedOccurrences: 1 },
+    ], []);
+
+    const result = await applyCodingEditTransaction(sandbox, transaction);
+
+    assert.equal(result.status, 'failed');
+    assert.equal(result.failure?.path, 'binary.bin');
+    assert.match(result.failure?.reason ?? '', /binary file/);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker edit transaction rejects patches to missing files', async () => {
+  const workspaceRoot = createTempWorkspace();
+
+  try {
+    const sandbox = await createFlueLocalCodingSandbox({
+      workspaceRoot,
+      targetKind: 'workspace',
+    });
+
+    const transaction = createCodingEditTransaction('tx-missing', [
+      { path: 'missing.js', oldText: 'old', newText: 'new', expectedOccurrences: 1 },
+    ], []);
+
+    const result = await applyCodingEditTransaction(sandbox, transaction);
+
+    assert.equal(result.status, 'failed');
+    assert.equal(result.failure?.path, 'missing.js');
+    assert.match(result.failure?.reason ?? '', /does not exist/);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker edit transaction tool applies and rolls back through the repo tools surface', async () => {
+  const workspaceRoot = createTempWorkspace();
+
+  try {
+    writeFileSync(join(workspaceRoot, 'x.js'), 'const x = 1;\n');
+    writeFileSync(join(workspaceRoot, 'y.js'), 'const y = 2;\n');
+
+    const tools = createCodingRepoTools({ workspaceRoot, targetKind: 'workspace' });
+    const applyTransaction = getTool(tools, 'coding_repo_apply_transaction');
+
+    const success = JSON.parse(
+      await applyTransaction.execute({
+        id: 'tool-tx',
+        edits: [
+          { path: 'x.js', oldText: 'const x = 1;', newText: 'const x = 2;', expectedOccurrences: 1 },
+        ],
+        writes: [{ path: 'z.js', content: 'const z = 3;\n' }],
+      }),
+    ) as { status?: string; results?: Array<{ path: string; status: string }>; failure?: { path: string } };
+
+    assert.equal(success.status, 'applied');
+    assert.equal(readFileSync(join(workspaceRoot, 'x.js'), 'utf8'), 'const x = 2;\n');
+    assert.equal(readFileSync(join(workspaceRoot, 'z.js'), 'utf8'), 'const z = 3;\n');
+
+    const fail = JSON.parse(
+      await applyTransaction.execute({
+        id: 'tool-tx-fail',
+        edits: [
+          { path: 'x.js', oldText: 'const x = 1;', newText: 'const x = 9;', expectedOccurrences: 1 },
+          { path: 'y.js', oldText: 'const y = 2;', newText: 'const y = 9;', expectedOccurrences: 1 },
+        ],
+        writes: [{ path: 'w.js', content: 'const w = 4;\n' }],
+      }),
+    ) as { status?: string; failure?: { path: string; reason: string } };
+
+    assert.equal(fail.status, 'failed');
+    assert.equal(fail.failure?.path, 'x.js');
+    assert.match(fail.failure?.reason ?? '', /oldText was not found/);
+    assert.equal(readFileSync(join(workspaceRoot, 'x.js'), 'utf8'), 'const x = 2;\n');
+    assert.equal(readFileSync(join(workspaceRoot, 'y.js'), 'utf8'), 'const y = 2;\n');
+    assert.equal(existsSync(join(workspaceRoot, 'w.js')), false);
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
   }
