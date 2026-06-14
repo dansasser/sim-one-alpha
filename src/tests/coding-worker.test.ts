@@ -32,6 +32,7 @@ import { createCodingVerificationPlan } from '../workers/coding-worker/repo/veri
 import { createCodingGitTools } from '../workers/coding-worker/tools/coding-git-tools.js';
 import { createCodingRepoTools } from '../workers/coding-worker/tools/coding-repo-tools.js';
 import { createCodingRepoWorkflowTools } from '../workers/coding-worker/tools/coding-repo-workflow-tools.js';
+import { createCodingTestDebugTools } from '../workers/coding-worker/tools/coding-test-debug-tools.js';
 import { evaluateCodingShellCommand } from '../workers/coding-worker/tools/command-policy.js';
 import { createFlueLocalCodingSandbox } from '../workers/coding-worker/tools/sandbox-runtime.js';
 import { resolveCodingWorkspaceTarget } from '../workers/coding-worker/repo/workspace-target.js';
@@ -362,6 +363,51 @@ test('verification planner keeps named check scripts exact when present', () => 
   assert.equal(plan.some((command) => command.command === 'corepack pnpm run lint'), true);
   assert.equal(plan.some((command) => command.command === 'corepack pnpm run check'), true);
   assert.equal(plan.some((command) => command.command === 'corepack pnpm test'), true);
+});
+
+test('test-debug tools expose a submit result tool for structured output', () => {
+  const tools = createCodingTestDebugTools();
+  const submit = getTool(tools, 'coding_test_debug_submit_result');
+
+  assert.ok(submit);
+  assert.match(submit.description ?? '', /CodingTestDebugResult/i);
+});
+
+test('test-debug submit result tool returns debug edits from fake failing verification output', async () => {
+  const tools = createCodingTestDebugTools();
+  const submit = getTool(tools, 'coding_test_debug_submit_result');
+
+  const fakeFailureOutput = [
+    'expected 42, got 40',
+    'at Object.answer (/workspace/index.js:2:42)',
+  ].join('\n');
+
+  const output = JSON.parse(
+    await submit.execute({
+      debugEdits: [
+        {
+          path: 'index.js',
+          oldText: 'return 40;',
+          newText: 'return 42;',
+          expectedOccurrences: 1,
+        },
+      ],
+      verificationCommands: [
+        {
+          name: 'unit',
+          command: 'node test.js',
+          required: true,
+          reason: 'Confirm the debug edit resolves the failing assertion.',
+        },
+      ],
+      analysis: `Unit test failed with: ${fakeFailureOutput}. The answer function returns 40 instead of 42; updating the return value fixes the assertion.`,
+    }),
+  ) as { status?: string; result?: { debugEdits: unknown[]; verificationCommands: unknown[]; analysis: string } };
+
+  assert.equal(output.status, 'submitted');
+  assert.equal(output.result?.debugEdits.length, 1);
+  assert.equal(output.result?.verificationCommands.length, 1);
+  assert.match(output.result?.analysis ?? '', /40 instead of 42/);
 });
 
 test('package manager command builders fail closed when package manager is unknown', () => {
