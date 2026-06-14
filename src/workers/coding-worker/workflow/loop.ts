@@ -49,6 +49,7 @@ export interface CodingWorkerLoopDependencies {
   preflight?: (scopePath: string, target: ResolvedCodingWorkspaceTarget) => CodingRepoPreflight;
   delegate?: (subagent: CodingSubagentKind, request: CodingTaskSubagentRequest) => Promise<CodingSubagentRunResult>;
   maxTurns?: number;
+  maxReplans?: number;
   createSandbox?: (
     target: ResolvedCodingWorkspaceTarget,
     sessionPlan: CodingWorkerSessionPlan,
@@ -61,6 +62,7 @@ interface LoopVerificationCommand extends CodingVerificationCommand {
 }
 
 const DEFAULT_MAX_TURNS = 10;
+const DEFAULT_MAX_REPLANS = 3;
 
 export async function runCodingWorkerLoop(
   task: CodingWorkerTaskRequest,
@@ -418,7 +420,24 @@ async function runCodeReviewStep(
   if (result.structuredOutput?.type === 'code-review') {
     const reviewResult = result.structuredOutput.result;
     if (!reviewResult.approved) {
+      const maxReplans = dependencies.maxReplans ?? DEFAULT_MAX_REPLANS;
       state.replanCount += 1;
+
+      if (state.replanCount > maxReplans) {
+        state.lastFailureSummary = `Code review rejected the change and the replan budget (${maxReplans}) is exhausted.`;
+        setPlanStatus(state.plan, 'code-review', 'blocked');
+        reporter.emit({
+          type: 'coding.blocked',
+          taskId: state.task.taskId,
+          step: 'code-review',
+          summary: state.lastFailureSummary,
+          risk: reviewResult.findings.map((finding) => finding.message).join('; '),
+          nextAction: 'Human review is required; the loop cannot auto-resolve repeated rejections.',
+        });
+        state.currentStep = 'blocked';
+        return;
+      }
+
       setPlanStatus(state.plan, 'code-review', 'blocked');
       reporter.emit({
         type: 'coding.replanned',

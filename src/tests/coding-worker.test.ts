@@ -21,6 +21,7 @@ import {
   codingWorkerInternalSubagentNames,
   createCodingWorkerInternalSubagents,
 } from '../workers/coding-worker/subagents/index.js';
+import { parseCodingCodeReviewText } from '../workers/coding-worker/subagents/code-review/code-review-agent.js';
 import { readPackageScripts, runCodingRepoPreflight } from '../workers/coding-worker/repo/preflight.js';
 import { parseGitStatusShort } from '../workers/coding-worker/repo/git-state.js';
 import { InMemoryCodingRepoRegistry } from '../workers/coding-worker/repo/repo-registry.js';
@@ -86,6 +87,59 @@ test('coding worker child session names avoid placeholder collisions for empty i
     ),
     true,
   );
+});
+
+test('code review text parser extracts findings with severity, file, and line range', () => {
+  const text = `## Review
+
+- [BLOCKER] \`src/utils.ts:14-16\` — unsafe parsing of user input
+- [WARNING] \`src/index.ts:42\` missing input validation
+- [INFO] README updated
+
+Approved: false`;
+
+  const result = parseCodingCodeReviewText(text);
+
+  assert.equal(result.approved, false);
+  assert.equal(result.findings.length, 3);
+
+  const [blocker, warning, info] = result.findings;
+  assert.equal(blocker.severity, 'blocker');
+  assert.equal(blocker.file, 'src/utils.ts');
+  assert.equal(blocker.lineStart, 14);
+  assert.equal(blocker.lineEnd, 16);
+  assert.match(blocker.message, /unsafe parsing/);
+
+  assert.equal(warning.severity, 'warning');
+  assert.equal(warning.file, 'src/index.ts');
+  assert.equal(warning.lineStart, 42);
+  assert.equal(warning.lineEnd, undefined);
+  assert.match(warning.message, /missing input validation/);
+
+  assert.equal(info.severity, 'info');
+  assert.equal(info.file, undefined);
+  assert.equal(info.lineStart, undefined);
+  assert.match(info.message, /README updated/);
+});
+
+test('code review text parser infers approval from blockers unless explicitly overridden', () => {
+  const onlyWarnings = parseCodingCodeReviewText('- [WARNING] `src/a.ts:1` style issue\n');
+  assert.equal(onlyWarnings.approved, true);
+  assert.equal(onlyWarnings.findings.length, 1);
+
+  const onlyBlocker = parseCodingCodeReviewText('- [BLOCKER] `src/b.ts:2` crash\n');
+  assert.equal(onlyBlocker.approved, false);
+
+  const explicitApproved = parseCodingCodeReviewText(
+    '- [WARNING] `src/c.ts:3` nit\napproved: true',
+  );
+  assert.equal(explicitApproved.approved, true);
+
+  const explicitRejected = parseCodingCodeReviewText(
+    '- [INFO] `src/d.ts:4` note\napproved: no',
+  );
+  assert.equal(explicitRejected.approved, false);
+  assert.equal(explicitRejected.findings.length, 1);
 });
 
 test('coding worker live delegate uses Flue task delegation to worker-local subagent names', async () => {
@@ -1715,6 +1769,54 @@ test('coding worker loop replans when code review rejects', async () => {
     assert.equal(implementerCalls, 2);
     assert.equal(reporter.events().some((event) => event.type === 'coding.replanned'), true);
     assert.equal((result.checkpoint?.replanCount ?? 0) >= 1, true);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker loop pauses when code review repeatedly rejects and replan budget is exhausted', async () => {
+  const project = createExecutableWorkspaceProject();
+  const reporter = new InMemoryCodingProgressReporter();
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
+
+  try {
+    const result = await runCodingWorkerLoop(
+      {
+        taskId: 'task-review-reject-exhausted',
+        text: 'Fix answer implementation.',
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+        verificationCommands: [
+          {
+            name: 'unit',
+            command: 'node -e "process.exit(0)"',
+            required: true,
+            reason: 'Synthetic verification must pass.',
+          },
+        ],
+        maxTurns: 20,
+      },
+      {
+        reporter,
+        approvalService,
+        maxReplans: 1,
+        delegate: createFakeDelegate({
+          implementer: { fileEdits: [] },
+          codeReview: {
+            approved: false,
+            findings: [{ severity: 'blocker', message: 'Repeated rejection.' }],
+          },
+        }),
+      },
+    );
+
+    assert.equal(result.status, 'blocked');
+    assert.match(result.summary, /replan budget/);
+    assert.equal(reporter.events().some((event) => event.type === 'coding.replanned'), true);
+    assert.equal(reporter.events().some((event) => event.type === 'coding.blocked'), true);
+    assert.ok(result.checkpoint);
+    assert.equal((result.checkpoint?.replanCount ?? 0) >= 2, true);
   } finally {
     rmSync(project.workspaceRoot, { recursive: true, force: true });
   }
