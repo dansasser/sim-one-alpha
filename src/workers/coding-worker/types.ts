@@ -1,3 +1,4 @@
+import * as v from 'valibot';
 import type { NormalizedMessageEvent } from '../../types/index.js';
 
 export type CodingSubagentKind =
@@ -109,11 +110,34 @@ export interface CodingTriageResult {
   recommendedExecutionPath: 'implementer' | 'github' | 'test-debug' | 'code-review' | 'manual';
 }
 
-export interface CodingImplementerResult {
-  fileEdits: CodingFileEdit[];
-  writeFiles: CodingFileWrite[];
-  verificationCommands: CodingVerificationCommandRequest[];
-}
+export const CodingImplementerResultSchema = v.object({
+  fileEdits: v.array(
+    v.object({
+      path: v.string(),
+      oldText: v.string(),
+      newText: v.string(),
+      expectedOccurrences: v.optional(v.number()),
+    })
+  ),
+  writeFiles: v.array(
+    v.object({
+      path: v.string(),
+      content: v.string(),
+    })
+  ),
+  verificationCommands: v.array(
+    v.object({
+      name: v.string(),
+      command: v.string(),
+      required: v.optional(v.boolean()),
+      reason: v.optional(v.string()),
+      cwd: v.optional(v.string()),
+      timeoutSeconds: v.optional(v.number()),
+    })
+  ),
+});
+
+export type CodingImplementerResult = v.InferOutput<typeof CodingImplementerResultSchema>;
 
 export interface CodingTestDebugResult {
   debugEdits: CodingFileEdit[];

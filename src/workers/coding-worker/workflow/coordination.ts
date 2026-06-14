@@ -6,7 +6,7 @@ import {
   codingTestDebugSubagentName,
   codingTriageSubagentName,
 } from '../subagents/index.js';
-import type { CodingSubagentKind, CodingSubagentRunResult, CodingWorkerTaskRequest } from '../types.js';
+import { CodingImplementerResultSchema, type CodingSubagentKind, type CodingSubagentRunResult, type CodingWorkerTaskRequest } from '../types.js';
 import type { CodingTaskSubagentRequest } from './coding-task.js';
 
 export function shouldUseGithubSubagent(task: CodingWorkerTaskRequest): boolean {
@@ -42,6 +42,23 @@ export function createFlueCodingSubagentDelegate(session: Pick<FlueSession, 'tas
     request: CodingTaskSubagentRequest,
   ): Promise<CodingSubagentRunResult> => {
     const agent = codingSubagentFlueNames[subagent];
+
+    if (subagent === 'implementer') {
+      const response = await session.task(createSubagentTaskPrompt(subagent, request), {
+        agent,
+        result: CodingImplementerResultSchema,
+      });
+      const result = response.data;
+      const summary = `Implementer submitted ${result.fileEdits.length} edit(s), ${result.writeFiles.length} file write(s), and ${result.verificationCommands.length} verification command(s).`;
+      const evidence = [agent, request.sessionPlan.childSessions[subagent]];
+      return {
+        subagent,
+        summary,
+        evidence,
+        structuredOutput: { type: 'implementer', result },
+      };
+    }
+
     const response = await session.task(createSubagentTaskPrompt(subagent, request), {
       agent,
     });
@@ -50,8 +67,6 @@ export function createFlueCodingSubagentDelegate(session: Pick<FlueSession, 'tas
 
     switch (subagent) {
       case 'triage':
-        return { subagent, summary, evidence };
-      case 'implementer':
         return { subagent, summary, evidence };
       case 'test-debug':
         return { subagent, summary, evidence };
