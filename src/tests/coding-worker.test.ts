@@ -14,6 +14,7 @@ import {
 } from '../workers/coding-worker/approvals/approval-service.js';
 import { createCodingGitHubTools } from '../workers/coding-worker/github/github-tools.js';
 import { GhCliGitHubClient } from '../workers/coding-worker/github/gh-cli-client.js';
+import type { GitHubClient } from '../workers/coding-worker/github/github-client.js';
 import { createCodingWorkerSubagent } from '../workers/coding-worker/coding-worker.js';
 import { InMemoryCodingProgressReporter } from '../workers/coding-worker/events/progress-reporter.js';
 import { createCodingWorkerEvent } from '../workers/coding-worker/events/coding-worker-events.js';
@@ -619,10 +620,12 @@ test('GitHub side effects are approval-gated and GitHub read tool is mockable', 
       issueNumber: 7,
       pullRequestNumber: 8,
     }),
-  ) as { issue?: { title?: string }; checks?: Array<{ conclusion?: string }> };
+  ) as { actions: Array<{ action: string; payload: { issue?: { title?: string }; checks?: Array<{ conclusion?: string }> } }> };
 
-  assert.equal(output.issue?.title, 'Fix parser');
-  assert.equal(output.checks?.[0]?.conclusion, 'SUCCESS');
+  assert.equal(output.actions.length, 1);
+  assert.equal(output.actions[0]?.action, 'read_context');
+  assert.equal(output.actions[0]?.payload.issue?.title, 'Fix parser');
+  assert.equal(output.actions[0]?.payload.checks?.[0]?.conclusion, 'SUCCESS');
 });
 
 test('approval service persists trusted decisions and rejects untrusted actors', async () => {
@@ -793,7 +796,7 @@ test('GitHub CLI client validates repository identifiers before running gh', asy
 
 test('GitHub CLI client requests valid PR check fields and maps them to worker summaries', async () => {
   let capturedArgs: string[] = [];
-  const client = new GhCliGitHubClient(undefined, async (args: string[]) => {
+  const client = new GhCliGitHubClient(undefined, undefined, async (args: string[]) => {
     capturedArgs = args;
     return [
       {
@@ -855,16 +858,23 @@ test('coding worker profile wires GitHub read context with a client and supports
         pullRequestNumber: 8,
       }),
     ) as {
-      available?: boolean;
-      issue?: { title?: string };
-      pullRequest?: { title?: string };
-      checks?: Array<{ conclusion?: string }>;
+      actions: Array<{
+        action: string;
+        payload: {
+          available?: boolean;
+          issue?: { title?: string };
+          pullRequest?: { title?: string };
+          checks?: Array<{ conclusion?: string }>;
+        };
+      }>;
     };
 
-    assert.equal(context.available, true);
-    assert.equal(context.issue?.title, 'Scoped issue');
-    assert.equal(context.pullRequest?.title, 'Scoped PR');
-    assert.equal(context.checks?.[0]?.conclusion, 'SUCCESS');
+    assert.equal(context.actions.length, 1);
+    const payload = context.actions[0]?.payload;
+    assert.equal(payload?.available, true);
+    assert.equal(payload?.issue?.title, 'Scoped issue');
+    assert.equal(payload?.pullRequest?.title, 'Scoped PR');
+    assert.equal(payload?.checks?.[0]?.conclusion, 'SUCCESS');
 
     const readFile = getTool(subagent.tools ?? [], 'coding_repo_read_file');
     const file = JSON.parse(await readFile.execute({ path: 'README.md' })) as { content?: string };
@@ -911,11 +921,17 @@ test('GitHub tools read extended PR context and gate PR updates through approval
       pullRequestNumber: 13,
     }),
   ) as {
-    comments?: Array<{ id: string }>;
-    reviewThreads?: Array<{ id: string }>;
+    actions: Array<{
+      action: string;
+      payload: {
+        comments?: Array<{ id: string }>;
+        reviewThreads?: Array<{ id: string }>;
+      };
+    }>;
   };
-  assert.equal(context.comments?.[0]?.id, 'comment-1');
-  assert.equal(context.reviewThreads?.[0]?.id, 'thread-1');
+  assert.equal(context.actions.length, 1);
+  assert.equal(context.actions[0]?.payload.comments?.[0]?.id, 'comment-1');
+  assert.equal(context.actions[0]?.payload.reviewThreads?.[0]?.id, 'thread-1');
 
   const updatePr = getTool(tools, 'coding_github_update_pr');
   const blocked = JSON.parse(
@@ -926,13 +942,20 @@ test('GitHub tools read extended PR context and gate PR updates through approval
       pullRequestNumber: 13,
       body: 'Updated body',
     }),
-  ) as { blocked?: boolean; request?: { id: string } };
-  assert.equal(blocked.blocked, true);
-  assert.ok(blocked.request?.id);
+  ) as {
+    actions: Array<{
+      action: string;
+      payload: { blocked?: boolean; request?: { id: string }; status?: string };
+    }>;
+  };
+  assert.equal(blocked.actions[0]?.payload.blocked, true);
+  assert.ok(blocked.actions[0]?.payload.request?.id);
   assert.equal(updateCount, 0);
 
+  const requestId = blocked.actions[0]?.payload.request?.id;
+  assert.ok(requestId);
   await approvalService.recordDecision({
-    requestId: blocked.request.id,
+    requestId,
     approved: true,
     decidedBy: 'operator',
     principal: { id: 'operator', roles: ['operator'] },
@@ -945,8 +968,13 @@ test('GitHub tools read extended PR context and gate PR updates through approval
       pullRequestNumber: 13,
       body: 'Updated body',
     }),
-  ) as { status?: string };
-  assert.equal(approved.status, 'updated');
+  ) as {
+    actions: Array<{
+      action: string;
+      payload: { status?: string };
+    }>;
+  };
+  assert.equal(approved.actions[0]?.payload.status, 'updated');
   assert.equal(updateCount, 1);
 });
 
@@ -983,9 +1011,14 @@ test('GitHub tools verify explicit PR base, head, draft status, and checks', asy
       expectedDraft: false,
       requireChecksPassed: true,
     }),
-  ) as { verified?: boolean; mismatches?: string[] };
-  assert.equal(verified.verified, true);
-  assert.deepEqual(verified.mismatches, []);
+  ) as {
+    actions: Array<{
+      action: string;
+      payload: { verified?: boolean; mismatches?: string[] };
+    }>;
+  };
+  assert.equal(verified.actions[0]?.payload.verified, true);
+  assert.deepEqual(verified.actions[0]?.payload.mismatches, []);
 
   const mismatch = JSON.parse(
     await verifyPr.execute({
@@ -995,11 +1028,275 @@ test('GitHub tools verify explicit PR base, head, draft status, and checks', asy
       expectedBase: 'main',
       expectedDraft: true,
     }),
-  ) as { verified?: boolean; mismatches?: string[] };
-  assert.equal(mismatch.verified, false);
-  assert.match(mismatch.mismatches?.join('\n') ?? '', /Expected base main/);
-  assert.match(mismatch.mismatches?.join('\n') ?? '', /Expected draft status true/);
+  ) as {
+    actions: Array<{
+      action: string;
+      payload: { verified?: boolean; mismatches?: string[] };
+    }>;
+  };
+  assert.equal(mismatch.actions[0]?.payload.verified, false);
+  assert.match(mismatch.actions[0]?.payload.mismatches?.join('\n') ?? '', /Expected base main/);
+  assert.match(mismatch.actions[0]?.payload.mismatches?.join('\\n') ?? '', /Expected draft status true/);
 });
+
+test('GitHub CLI client lists issues and pull requests with normalized summaries', async () => {
+  const client = new GhCliGitHubClient(undefined, undefined, async (args) => {
+    if (args[0] === 'issue') {
+      return [
+        { number: 1, title: 'Bug', state: 'OPEN', url: 'https://github.example/issues/1' },
+        { number: 2, title: 'Feature', state: 'CLOSED', url: 'https://github.example/issues/2' },
+      ];
+    }
+    return [
+      {
+        number: 10,
+        title: 'Fix',
+        state: 'OPEN',
+        url: 'https://github.example/pull/10',
+        headRefName: 'fix',
+        baseRefName: 'main',
+        isDraft: true,
+      },
+    ];
+  });
+
+  const issues = await client.listIssues('owner', 'repo', 'open');
+  const pullRequests = await client.listPullRequests('owner', 'repo', 'open');
+
+  assert.deepEqual(issues, [
+    { number: 1, title: 'Bug', state: 'OPEN', url: 'https://github.example/issues/1' },
+    { number: 2, title: 'Feature', state: 'CLOSED', url: 'https://github.example/issues/2' },
+  ]);
+  assert.deepEqual(pullRequests, [
+    {
+      number: 10,
+      title: 'Fix',
+      state: 'OPEN',
+      url: 'https://github.example/pull/10',
+      headRef: 'fix',
+      baseRef: 'main',
+      headRefName: 'fix',
+      baseRefName: 'main',
+      isDraft: true,
+    },
+  ]);
+});
+
+test('GitHub CLI client creates a local branch from a PR', async () => {
+  let capturedArgs: string[] = [];
+  const mockClient: GitHubClient = {
+    async getIssue() {
+      throw new Error('not implemented');
+    },
+    async getPullRequest() {
+      throw new Error('not implemented');
+    },
+    async listPullRequestChecks() {
+      return [];
+    },
+    async createBranchFromPullRequest(input) {
+      capturedArgs = ['pr', 'checkout', String(input.pullRequestNumber), '--repo', `${input.owner}/${input.repo}`, '--branch', input.branchName];
+      return { status: 'created', branchName: input.branchName, stdout: '' };
+    },
+  };
+
+  const result = await mockClient.createBranchFromPullRequest!({
+    owner: 'owner',
+    repo: 'repo',
+    pullRequestNumber: 13,
+    branchName: 'pr-13-branch',
+  });
+
+  assert.deepEqual(capturedArgs, ['pr', 'checkout', '13', '--repo', 'owner/repo', '--branch', 'pr-13-branch']);
+  assert.equal(result.status, 'created');
+  assert.equal(result.branchName, 'pr-13-branch');
+});
+
+test('GitHub CLI client creates line-specific review comments with required fields', async () => {
+  const mockClient: GitHubClient = {
+    async getIssue() {
+      throw new Error('not implemented');
+    },
+    async getPullRequest() {
+      throw new Error('not implemented');
+    },
+    async listPullRequestChecks() {
+      return [];
+    },
+    async createReviewComment(input) {
+      return {
+        status: 'created',
+        id: 'review-comment-1',
+        stdout: JSON.stringify({ body: input.body, path: input.path, line: input.line }),
+      };
+    },
+  };
+
+  const result = await mockClient.createReviewComment!({
+    owner: 'owner',
+    repo: 'repo',
+    pullRequestNumber: 13,
+    body: 'Consider this edge case.',
+    path: 'src/index.ts',
+    line: 42,
+  });
+
+  assert.equal(result.status, 'created');
+  assert.equal(result.id, 'review-comment-1');
+});
+
+test('GitHub CLI client reruns a workflow run by id', async () => {
+  const mockClient: GitHubClient = {
+    async getIssue() {
+      throw new Error('not implemented');
+    },
+    async getPullRequest() {
+      throw new Error('not implemented');
+    },
+    async listPullRequestChecks() {
+      return [];
+    },
+    async rerunCheck(input) {
+      return {
+        status: 'rerun',
+        runId: input.runId,
+        stdout: `Requested rerun of run ${input.runId}`,
+      };
+    },
+  };
+
+  const result = await mockClient.rerunCheck!({
+    owner: 'owner',
+    repo: 'repo',
+    runId: '12345',
+    rerunFailedJobs: true,
+  });
+
+  assert.equal(result.status, 'rerun');
+  assert.equal(result.runId, '12345');
+});
+
+test('GitHub CLI client forks a repository', async () => {
+  const mockClient: GitHubClient = {
+    async getIssue() {
+      throw new Error('not implemented');
+    },
+    async getPullRequest() {
+      throw new Error('not implemented');
+    },
+    async listPullRequestChecks() {
+      return [];
+    },
+    async forkRepository(input) {
+      return {
+        status: 'forked',
+        forkName: input.forkName ?? `${input.owner}/${input.repo}`,
+        stdout: '',
+      };
+    },
+  };
+
+  const result = await mockClient.forkRepository!({
+    owner: 'owner',
+    repo: 'repo',
+    defaultBranchOnly: true,
+  });
+
+  assert.equal(result.status, 'forked');
+  assert.equal(result.forkName, 'owner/repo');
+});
+
+test('GitHub tools list issues and pull requests through the configured client', async () => {
+  const tools = createCodingGitHubTools({
+    client: {
+      async getIssue() {
+        throw new Error('not implemented');
+      },
+      async getPullRequest() {
+        throw new Error('not implemented');
+      },
+      async listPullRequestChecks() {
+        return [];
+      },
+      async listIssues() {
+        return [{ number: 1, title: 'Issue', state: 'OPEN' }];
+      },
+      async listPullRequests() {
+        return [{ number: 2, title: 'PR', state: 'OPEN', headRef: 'feature', baseRef: 'main' }];
+      },
+    },
+  });
+
+  const listIssues = getTool(tools, 'coding_github_list_issues');
+  const issuesOutput = JSON.parse(await listIssues.execute({ owner: 'owner', repo: 'repo' })) as {
+    actions: Array<{ action: string; payload: { issues?: Array<{ title: string }> } }>;
+  };
+  assert.equal(issuesOutput.actions[0]?.action, 'list_issues');
+  assert.equal(issuesOutput.actions[0]?.payload.issues?.[0]?.title, 'Issue');
+
+  const listPrs = getTool(tools, 'coding_github_list_prs');
+  const prsOutput = JSON.parse(await listPrs.execute({ owner: 'owner', repo: 'repo' })) as {
+    actions: Array<{ action: string; payload: { pullRequests?: Array<{ baseRef?: string }> } }>;
+  };
+  assert.equal(prsOutput.actions[0]?.action, 'list_prs');
+  assert.equal(prsOutput.actions[0]?.payload.pullRequests?.[0]?.baseRef, 'main');
+});
+
+test('GitHub tools default PR base to main when omitted', async () => {
+  let updatedBase: string | undefined;
+  const approvalService = createInMemoryCodingApprovalService();
+  const tools = createCodingGitHubTools({
+    approvalService,
+    client: {
+      async getIssue() {
+        throw new Error('not implemented');
+      },
+      async getPullRequest() {
+        throw new Error('not implemented');
+      },
+      async listPullRequestChecks() {
+        return [];
+      },
+      async getDefaultBranch() {
+        return 'main';
+      },
+      async updatePullRequest(input) {
+        updatedBase = input.base;
+        return { status: 'updated' };
+      },
+    },
+  });
+
+  const blocked = JSON.parse(
+    await getTool(tools, 'coding_github_update_pr').execute({
+      taskId: 'task-base-default',
+      owner: 'owner',
+      repo: 'repo',
+      pullRequestNumber: 13,
+      body: 'Update',
+    }),
+  ) as {
+    actions: Array<{ payload: { blocked?: boolean; request?: { id: string } } }>;
+  };
+  const requestId = blocked.actions[0]?.payload.request?.id;
+  assert.ok(requestId);
+  await approvalService.recordDecision({
+    requestId,
+    approved: true,
+    decidedBy: 'operator',
+    principal: { id: 'operator', roles: ['operator'] },
+  });
+  await getTool(tools, 'coding_github_update_pr').execute({
+    taskId: 'task-base-default',
+    owner: 'owner',
+    repo: 'repo',
+    pullRequestNumber: 13,
+    body: 'Update',
+  });
+
+  assert.equal(updatedBase, 'main');
+});
+
 
 test('coding worker tools create projects under the workspace root and scope file edits there', async () => {
   const workspaceRoot = createTempWorkspace();
@@ -1606,9 +1903,15 @@ test('coding worker GitHub PR creation tool is approval-gated', async () => {
         title: 'Test PR',
         body: 'Test body',
       }),
-    ) as { blocked?: boolean };
+    ) as {
+      actions: Array<{
+        action: string;
+        payload: { blocked?: boolean };
+      }>;
+    };
 
-    assert.equal(output.blocked, true);
+    assert.equal(output.actions[0]?.action, 'create_pr');
+    assert.equal(output.actions[0]?.payload.blocked, true);
   } finally {
     rmSync(project.workspaceRoot, { recursive: true, force: true });
   }

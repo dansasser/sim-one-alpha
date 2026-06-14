@@ -393,9 +393,9 @@ export function createCodingRepoWorkflowTools(options: CodingRepoWorkflowToolsOp
   ];
 }
 
-async function evaluateRepoApproval(
+export async function evaluateRepoApproval(
   approvalService: CodingApprovalService,
-  options: CodingRepoWorkflowToolsOptions,
+  options: { reporter?: CodingProgressReporter },
   input: {
     taskId: string;
     actionType: CodingApprovalActionType;
