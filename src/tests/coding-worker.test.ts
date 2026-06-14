@@ -43,6 +43,7 @@ import { resolveCodingWorkspaceTarget } from '../workers/coding-worker/repo/work
 import { JsonFileCodingTaskRunStore } from '../workers/coding-worker/session/task-run-store.js';
 import { createFlueCodingSubagentDelegate } from '../workers/coding-worker/workflow/coordination.js';
 import { createInitialCodingPlan } from '../workers/coding-worker/workflow/coding-task.js';
+import { createInitialPlan, replan } from '../workers/coding-worker/workflow/planning.js';
 import { runCodingWorkerLoop, createInitialLoopState, createLoopCheckpoint } from '../workers/coding-worker/workflow/loop.js';
 import { assertCodingWorkerCanComplete } from '../workers/coding-worker/workflow/result-schema.js';
 import type { CodingSubagentKind, CodingSubagentRunResult, CodingWorkerTaskRequest } from '../workers/coding-worker/types.js';
@@ -362,6 +363,89 @@ test('coding worker plan includes GitHub stage when GitHub context is present', 
   });
 
   assert.equal(plan.some((item) => item.owner === 'github'), true);
+});
+
+test('createInitialPlan produces explicit plan items with context', () => {
+  const plan = createInitialPlan(
+    {
+      taskId: 'task-plan-context',
+      text: 'Fix parser bug.',
+      filesToInspect: ['src/parser.ts', 'src/lexer.ts'],
+    },
+    {
+      preflight: { repoPath: '/tmp/repo', packageManager: 'pnpm' },
+      filesToInspect: ['src/parser.ts', 'src/lexer.ts'],
+    },
+  );
+
+  assert.equal(plan.length, 4);
+  assert.equal(plan[0].owner, 'triage');
+  assert.match(plan[0].description, /src\/parser\.ts/);
+  assert.match(plan[0].description, /src\/lexer\.ts/);
+  assert.equal(plan[1].owner, 'implementer');
+  assert.match(plan[1].description, /pnpm/);
+  assert.equal(plan[2].owner, 'test-debug');
+  assert.equal(plan[3].owner, 'code-review');
+});
+
+test('createInitialPlan adds GitHub stage when GitHub context is provided', () => {
+  const plan = createInitialPlan(
+    {
+      taskId: 'task-plan-github',
+      text: 'Update PR.',
+    },
+    {
+      github: { issueNumber: 7 },
+    },
+  );
+
+  assert.equal(plan.some((item) => item.owner === 'github'), true);
+});
+
+test('replan marks failed step blocked and surfaces review findings', () => {
+  const state = createMinimalLoopState('task-replan-review', [
+    { id: 'task-replan-review:review', description: 'Review', owner: 'code-review', status: 'in_progress' },
+    { id: 'task-replan-review:implement', description: 'Implement', owner: 'implementer', status: 'completed' },
+  ]);
+
+  const plan = replan(state, {
+    step: 'code-review',
+    summary: 'Review rejected the change.',
+    reviewFindings: [
+      { severity: 'blocker', message: 'Missing input validation.', file: 'src/index.ts', lineStart: 42 },
+      { severity: 'warning', message: 'Consider a named constant.' },
+    ],
+  });
+
+  assert.equal(plan.some((item) => item.id === 'task-replan-review:replan-1'), true);
+  assert.equal(plan.find((item) => item.owner === 'code-review')?.status, 'blocked');
+  assert.equal(plan.find((item) => item.owner === 'implementer')?.status, 'in_progress');
+  assert.equal(plan.filter((item) => item.owner === 'implementer').length, 2);
+  assert.equal(
+    plan.some((item) => item.description.includes('Missing input validation') && item.description.includes('src/index.ts:42')),
+    true,
+  );
+  assert.equal(plan.some((item) => item.description.includes('Consider a named constant')), false);
+});
+
+test('replan surfaces failed verification evidence as test-debug items', () => {
+  const state = createMinimalLoopState('task-replan-verify', [
+    { id: 'task-replan-verify:verify', description: 'Verify', owner: 'test-debug', status: 'blocked' },
+    { id: 'task-replan-verify:implement', description: 'Implement', owner: 'implementer', status: 'completed' },
+  ]);
+
+  const plan = replan(state, {
+    step: 'test-debug',
+    summary: 'Required verification did not pass.',
+    verificationEvidence: [
+      { command: 'node test.js', status: 'failed', exitCode: 1, summary: 'expected 42, got 40' },
+      { command: 'node lint.js', status: 'passed', exitCode: 0, summary: 'ok' },
+    ],
+  });
+
+  assert.equal(plan.some((item) => item.id === 'task-replan-verify:replan-1'), true);
+  assert.equal(plan.find((item) => item.owner === 'test-debug' && item.id.startsWith('task-replan-verify:replan-1:verify-'))?.description.includes('node test.js'), true);
+  assert.equal(plan.filter((item) => item.owner === 'test-debug').length, 2);
 });
 
 test('repo preflight detects pnpm and exact configured verification scripts', () => {
@@ -2068,6 +2152,47 @@ test('coding worker loop respects the max turn guard and returns blocked', async
     rmSync(project.workspaceRoot, { recursive: true, force: true });
   }
 });
+
+function createMinimalLoopState(
+  taskId: string,
+  plan: import('../workers/coding-worker/types.js').CodingPlanItem[],
+): import('../workers/coding-worker/types.js').CodingWorkerLoopState {
+  return {
+    task: { taskId, text: 'test task' },
+    sessionPlan: {
+      taskId,
+      leadSessionName: 'test-session',
+      childSessions: {
+        triage: 'test-session:triage',
+        implementer: 'test-session:implementer',
+        'test-debug': 'test-session:test-debug',
+        'code-review': 'test-session:code-review',
+        github: 'test-session:github',
+      },
+    },
+    preflight: {
+      repoPath: '',
+      packageManager: 'pnpm',
+      scripts: {},
+      verificationPlan: [],
+    },
+    currentStep: 'triage',
+    turn: 1,
+    maxTurns: 10,
+    plan,
+    approvalQueue: [],
+    pendingEdits: {
+      fileEdits: [],
+      writeFiles: [],
+    },
+    verificationResults: {
+      requiredCommands: [],
+      evidence: [],
+    },
+    subagentHistory: [],
+    replanCount: 0,
+  };
+}
 
 function getTool(tools: ToolDefinition[], name: string) {
   const tool = tools.find((item) => item.name === name);

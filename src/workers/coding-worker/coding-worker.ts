@@ -20,6 +20,7 @@ import { createCodingWorkerRuntimeCapabilityBlock } from './runtime-capabilities
 import { codingWorkerSkills, createCodingWorkerSkillCapabilityBlock } from './skills.js';
 import { createCodingWorkerInternalSubagents } from './subagents/index.js';
 import { createCodingGitTools } from './tools/coding-git-tools.js';
+import { createCodingPlanningTools } from './tools/coding-planning-tools.js';
 import { createCodingRepoTools } from './tools/coding-repo-tools.js';
 import { createCodingRepoWorkflowTools } from './tools/coding-repo-workflow-tools.js';
 import { createCodingWorkerLoopDelegate } from './workflow/loop.js';
@@ -59,8 +60,8 @@ The coding-worker lead runs a bounded, approval-gated, Flue-native tool-calling 
 2. Run triage to classify the task and produce a plan.
 3. Run the implementer subagent to produce file edits and file writes.
 4. Apply edits only after an explicit file.edit approval record exists.
-5. Run the test-debug subagent to verify changes; on failure, request debug edits, apply them after approval, and rerun.
-6. Run the code-review subagent; if rejected, replan and return to implementation up to the configured replan budget. If rejections persist, pause with a blocked status for human review.
+5. Run the test-debug subagent to verify changes; on failure, request debug edits, apply them after approval, and rerun. If verification still fails, use the coding_plan_replan tool to update the plan with the failure context.
+6. Run the code-review subagent; if rejected, use the coding_plan_replan tool to surface the findings and return to implementation, up to the configured replan budget. If rejections persist, pause with a blocked status for human review.
 7. If GitHub context is present, run the github subagent to prepare commit/push/PR actions and execute them through the approval-gated git/GitHub tools.
 8. Emit public progress events at every checkpoint and persist a loop checkpoint to the task-run store.
 
@@ -124,6 +125,7 @@ export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOp
         client: githubClient,
         approvalService,
       }),
+      ...createCodingPlanningTools(),
     ],
     skills: codingWorkerSkills,
     subagents: createCodingWorkerInternalSubagents({

@@ -37,6 +37,7 @@ import type {
 } from '../types.js';
 import type { FlueSession } from '@flue/runtime';
 import { createInitialCodingPlan, chooseSubagents, setPlanStatus } from './coding-task.js';
+import { createInitialPlan, replan } from './planning.js';
 import type { CodingTaskSubagentRequest } from './coding-task.js';
 import { createFlueCodingSubagentDelegate } from './coordination.js';
 
@@ -163,7 +164,11 @@ export function createInitialLoopState(
   preflight: CodingRepoPreflight,
   maxTurns: number,
 ): CodingWorkerLoopState {
-  const plan = createInitialCodingPlan(task);
+  const plan = createInitialPlan(task, {
+    preflight,
+    filesToInspect: task.filesToInspect,
+    github: task.github,
+  });
   return {
     task,
     sessionPlan,
@@ -372,9 +377,36 @@ async function runTestDebugStep(
   }
 
   if (!passing) {
+    const maxReplans = dependencies.maxReplans ?? DEFAULT_MAX_REPLANS;
     state.replanCount += 1;
+
+    if (state.replanCount > maxReplans) {
+      state.lastFailureSummary = `Required verification commands did not pass and the replan budget (${maxReplans}) is exhausted.`;
+      reporter.emit({
+        type: 'coding.blocked',
+        taskId: state.task.taskId,
+        step: 'test-debug',
+        risk: state.lastFailureSummary,
+        summary: state.lastFailureSummary,
+        nextAction: 'Human review is required; the loop cannot auto-resolve repeated verification failures.',
+      });
+      state.currentStep = 'blocked';
+      return;
+    }
+
     state.lastFailureSummary = 'Coding worker cannot complete without passing required verification evidence.';
-    setPlanStatus(state.plan, 'test-debug', 'blocked');
+    state.plan = replan(state, {
+      step: 'test-debug',
+      summary: state.lastFailureSummary,
+      verificationEvidence: state.verificationResults.evidence,
+    });
+    reporter.emit({
+      type: 'coding.plan.updated',
+      taskId: state.task.taskId,
+      purpose: 'Update the worker-local plan after verification failure.',
+      plan: state.plan,
+      summary: 'Plan updated with verification failure context.',
+    });
     reporter.emit({
       type: 'coding.blocked',
       taskId: state.task.taskId,
@@ -438,7 +470,18 @@ async function runCodeReviewStep(
         return;
       }
 
-      setPlanStatus(state.plan, 'code-review', 'blocked');
+      state.plan = replan(state, {
+        step: 'code-review',
+        summary: 'Code review rejected the change; replanning from implementation.',
+        reviewFindings: reviewResult.findings,
+      });
+      reporter.emit({
+        type: 'coding.plan.updated',
+        taskId: state.task.taskId,
+        purpose: 'Update the worker-local plan after code-review rejection.',
+        plan: state.plan,
+        summary: 'Plan updated with code-review findings.',
+      });
       reporter.emit({
         type: 'coding.replanned',
         taskId: state.task.taskId,
@@ -859,4 +902,4 @@ export function createCodingWorkerLoopDelegate(session: { task: FlueSession['tas
   return createFlueCodingSubagentDelegate(session);
 }
 
-export { createInitialCodingPlan, chooseSubagents };
+export { createInitialCodingPlan, chooseSubagents, replan };

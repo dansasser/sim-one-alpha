@@ -63,7 +63,7 @@ export function createFlueCodingSubagentDelegate(session: Pick<FlueSession, 'tas
           result: CodingTriageResultSchema,
         });
         const result = response.data;
-        const summary = `Triage selected execution path: ${result.recommendedExecutionPath}.`;
+        const summary = `Triage selected execution path: ${result.recommendedExecutionPath} with explicit plan (${result.plan.length} item(s)).`;
         return {
           subagent,
           summary,

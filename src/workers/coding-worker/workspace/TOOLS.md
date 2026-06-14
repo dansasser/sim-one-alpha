@@ -13,6 +13,7 @@ Wired worker-local capability groups:
 - Approval tools: create backend approval requests for GitHub, git, and repo side effects. The model cannot approve its own requests.
 - Durable task-run store: task status, child session names, public events, and verification evidence are persisted under the runtime workspace root.
 - Repo support modules: preflight, package-manager detection, verification planning, git-state parsing, and diff summaries.
+- Planning tools: `coding_plan_create` builds an explicit initial plan; `coding_plan_replan` updates the plan after verification failure, code-review rejection, or newly discovered context.
 - Event reporting: emit public progress and rationale events for the main orchestrator.
 
 The runtime workspace root is the coding worker's access root. Do not treat the agent source checkout or `process.cwd()` as the default user project. Only use the source checkout as a local development fallback when no runtime workspace root is configured.

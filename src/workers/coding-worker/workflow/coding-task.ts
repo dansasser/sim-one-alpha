@@ -19,6 +19,7 @@ import type {
   CodingVerificationEvidence,
   CodingWorkerTaskRequest,
 } from '../types.js';
+import { createInitialPlan, type PlanningContext } from './planning.js';
 
 export interface CodingTaskWorkflowDependencies {
   preflight?: (scopePath: string, target: ResolvedCodingWorkspaceTarget) => CodingRepoPreflight;
@@ -44,45 +45,14 @@ interface WorkflowVerificationCommand extends CodingVerificationCommand {
   timeoutSeconds?: number;
 }
 
+/**
+ * @deprecated Use `createInitialPlan` from `./planning.js` for context-aware planning.
+ */
 export function createInitialCodingPlan(task: CodingWorkerTaskRequest): CodingPlanItem[] {
-  const plan: CodingPlanItem[] = [
-    {
-      id: `${task.taskId}:triage`,
-      description: 'Triage request, workspace/project scope, repository state, GitHub context, and required internal subagents.',
-      owner: 'triage',
-      status: 'pending',
-    },
-    {
-      id: `${task.taskId}:implementation`,
-      description: 'Implement scoped changes through the coding-worker local sandbox when required.',
-      owner: 'implementer',
-      status: 'pending',
-    },
-    {
-      id: `${task.taskId}:verification`,
-      description: 'Run focused and required verification before completion.',
-      owner: 'test-debug',
-      status: 'pending',
-    },
-    {
-      id: `${task.taskId}:review`,
-      description: 'Review the resulting diff, risks, and verification evidence independently.',
-      owner: 'code-review',
-      status: 'pending',
-    },
-  ];
-
-  if (task.github?.issueNumber || task.github?.pullRequestNumber || task.github?.url) {
-    plan.push({
-      id: `${task.taskId}:github`,
-      description: 'Gather GitHub context and prepare approval-gated remote actions.',
-      owner: 'github',
-      status: 'pending',
-    });
-  }
-
-  return plan;
+  return createInitialPlan(task);
 }
+
+export { createInitialPlan, type PlanningContext };
 
 export function chooseSubagents(task: CodingWorkerTaskRequest): CodingSubagentKind[] {
   const subagents: CodingSubagentKind[] = ['triage', 'implementer', 'test-debug', 'code-review'];
