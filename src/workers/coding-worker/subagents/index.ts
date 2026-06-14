@@ -7,6 +7,7 @@ import { createCodingGitTools } from '../tools/coding-git-tools.js';
 import { createCodingImplementerTools } from '../tools/coding-implementer-tools.js';
 import { createCodingRepoTools } from '../tools/coding-repo-tools.js';
 import { createCodingRepoWorkflowTools } from '../tools/coding-repo-workflow-tools.js';
+import { createCodingTestDebugTools } from '../tools/coding-test-debug-tools.js';
 import { createCodingCodeReviewSubagent, codingCodeReviewSubagentName } from './code-review/code-review-agent.js';
 import { createCodingGithubSubagent, codingGithubSubagentName } from './github/github-agent.js';
 import { createCodingImplementerSubagent, codingImplementerSubagentName } from './implementer/implementer-agent.js';
@@ -53,7 +54,7 @@ function createInternalToolsets(options: CodingWorkerInternalSubagentsOptions): 
     return {
       triage: [],
       implementer: createCodingImplementerTools(),
-      testDebug: [],
+      testDebug: createCodingTestDebugTools(),
       codeReview: [],
       github: [],
     };
@@ -87,6 +88,7 @@ function createInternalToolsets(options: CodingWorkerInternalSubagentsOptions): 
     approvalService: options.approvalService,
   });
   const implementerOutputTools = createCodingImplementerTools();
+  const testDebugTools = createCodingTestDebugTools();
 
   return {
     triage: selectTools(
@@ -110,12 +112,13 @@ function createInternalToolsets(options: CodingWorkerInternalSubagentsOptions): 
       'coding_implementer_submit_result',
     ),
     testDebug: selectTools(
-      [...repoTools, ...repoWorkflowTools],
+      [...repoTools, ...repoWorkflowTools, ...testDebugTools],
       'coding_repo_read_file',
       'coding_repo_search',
       'coding_shell_run',
       'coding_repo_git_state',
       'coding_progress_emit',
+      'coding_test_debug_submit_result',
     ),
     codeReview: selectTools(
       [...repoTools, ...gitTools, ...repoWorkflowTools],
