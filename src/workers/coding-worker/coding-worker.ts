@@ -60,7 +60,7 @@ The coding-worker lead runs a bounded, approval-gated, Flue-native tool-calling 
 3. Run the implementer subagent to produce file edits and file writes.
 4. Apply edits only after an explicit file.edit approval record exists.
 5. Run the test-debug subagent to verify changes; on failure, request debug edits, apply them after approval, and rerun.
-6. Run the code-review subagent; if rejected, replan and return to implementation.
+6. Run the code-review subagent; if rejected, replan and return to implementation up to the configured replan budget. If rejections persist, pause with a blocked status for human review.
 7. If GitHub context is present, run the github subagent to prepare commit/push/PR actions and execute them through the approval-gated git/GitHub tools.
 8. Emit public progress events at every checkpoint and persist a loop checkpoint to the task-run store.
 
