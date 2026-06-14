@@ -2645,6 +2645,271 @@ test('coding worker loop respects the max turn guard and returns blocked', async
   }
 });
 
+test('coding worker end-to-end fixes bug, commits, pushes branch, and prepares a PR', async () => {
+  const { project, remotePath } = createGitWorkspaceProjectWithRemote();
+  const reporter = new InMemoryCodingProgressReporter();
+  const approvalService = createAutoApprovingApprovalService([
+    'file.edit',
+    'git.commit',
+    'git.push',
+    'repo.branch.create',
+    'github.pr.create',
+  ]);
+  const fakeClient = createFakeGitHubClient();
+  const sandbox = await createFlueLocalCodingSandbox({
+    workspaceRoot: project.workspaceRoot,
+    targetKind: 'project',
+    projectRelativePath: project.projectRelativePath,
+    sessionId: 'task-e2e-fix-and-pr',
+  });
+
+  try {
+    const result = await runCodingWorkerLoop(
+      {
+        taskId: 'task-e2e-fix-and-pr',
+        text: 'Fix the off-by-one bug in index.js and open a PR.',
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+        github: { owner: 'dansasser', repo: 'astro-flue-agent', issueNumber: 7 },
+        verificationCommands: [
+          {
+            name: 'unit',
+            command: 'node test.js',
+            required: true,
+            reason: 'Unit test must pass after the off-by-one fix.',
+          },
+        ],
+        maxTurns: 10,
+      },
+      {
+        reporter,
+        approvalService,
+        sandbox,
+        delegate: createEndToEndDelegate({ approvalService, fakeClient, project, sandbox }),
+      },
+    );
+
+    assert.equal(result.status, 'completed');
+    assert.doesNotThrow(() => assertCodingWorkerCanComplete(result));
+    assert.ok(result.checkpoint);
+    assert.equal(result.checkpoint.turn <= result.checkpoint.maxTurns, true);
+
+    // The implementer edit fixed the bug.
+    assert.match(readFileSync(join(project.repoPath, 'index.js'), 'utf8'), /return 42/);
+
+    // Verification passed.
+    assert.equal(result.verification.evidence.some((item) => item.command === 'node test.js' && item.status === 'passed'), true);
+
+    // An approval-gated commit was created in the temp repo.
+    const log = execFileSync('git', ['log', '--oneline', '-1'], { cwd: project.repoPath, encoding: 'utf8' });
+    assert.match(log, /Fix off-by-one bug/);
+
+    // The feature branch was pushed to the local bare remote.
+    const remoteBranches = execFileSync('git', ['ls-remote', '--heads', remotePath], {
+      cwd: project.repoPath,
+      encoding: 'utf8',
+    });
+    assert.match(remoteBranches, /refs\/heads\/feature\/fix-off-by-one/);
+
+    // The GitHub subagent produced a create_pr action and surfaced evidence.
+    const githubResult = result.subagentResults.find((item) => item.subagent === 'github');
+    assert.ok(githubResult);
+    assert.equal(githubResult.structuredOutput?.type, 'github');
+    const createPrAction = githubResult.structuredOutput?.result.actions.find(
+      (action) => action.action === 'create_pr',
+    );
+    assert.ok(createPrAction);
+    assert.equal(createPrAction.payload.head, 'feature/fix-off-by-one');
+    assert.equal(createPrAction.payload.base, 'main');
+
+    // Public progress events cover every major checkpoint.
+    const events = reporter.events();
+    assert.equal(events.some((event) => event.type === 'coding.triage.completed'), true);
+    assert.equal(events.some((event) => event.type === 'coding.implementer.completed'), true);
+    assert.equal(events.some((event) => event.type === 'coding.test-debug.completed'), true);
+    assert.equal(events.some((event) => event.type === 'coding.review.completed'), true);
+    assert.equal(events.some((event) => event.type === 'coding.github.completed'), true);
+    assert.equal(events.some((event) => event.type === 'coding.completed'), true);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmSync(remotePath, { recursive: true, force: true });
+  }
+});
+
+function createGitWorkspaceProjectWithRemote(): { project: TempWorkspaceProject; remotePath: string } {
+  const project = createGitWorkspaceProject();
+  const remotePath = mkdtempSync(join(tmpdir(), 'coding-worker-remote-'));
+  execFileSync('git', ['init', '--bare'], { cwd: remotePath });
+  execFileSync('git', ['remote', 'add', 'origin', remotePath], { cwd: project.repoPath });
+  return { project, remotePath };
+}
+
+function createFakeGitHubClient(): GitHubClient {
+  return {
+    async getIssue() {
+      return { number: 7, title: 'Fix off-by-one bug', state: 'OPEN' };
+    },
+    async getPullRequest() {
+      return {
+        number: 13,
+        title: 'Fix off-by-one bug in index.js',
+        state: 'OPEN',
+        baseRef: 'main',
+        headRef: 'feature/fix-off-by-one',
+      };
+    },
+    async listPullRequestChecks() {
+      return [{ name: 'unit', status: 'COMPLETED', conclusion: 'SUCCESS' }];
+    },
+  };
+}
+
+interface EndToEndDelegateInput {
+  approvalService: import('../workers/coding-worker/approvals/approval-service.js').CodingApprovalService;
+  fakeClient: GitHubClient;
+  project: TempWorkspaceProject;
+  sandbox: import('../workers/coding-worker/tools/sandbox-runtime.js').CodingSandboxRuntime;
+}
+
+function createEndToEndDelegate(input: EndToEndDelegateInput): (
+  subagent: CodingSubagentKind,
+  request: CodingTaskSubagentRequest,
+) => Promise<CodingSubagentRunResult> {
+  const base = createFakeDelegate({
+    triage: { recommendedExecutionPath: 'implementer' },
+    implementer: {
+      fileEdits: [
+        {
+          path: 'index.js',
+          oldText: 'return 41;',
+          newText: 'return 42;',
+          expectedOccurrences: 1,
+        },
+      ],
+      verificationCommands: [
+        {
+          name: 'unit',
+          command: 'node test.js',
+          required: true,
+          reason: 'Unit test must pass after the off-by-one fix.',
+        },
+      ],
+    },
+    testDebug: { debugEdits: [], verificationCommands: [] },
+    codeReview: { approved: true, findings: [] },
+  });
+
+  return async (subagent, request) => {
+    if (subagent !== 'github') {
+      return base(subagent, request);
+    }
+
+    const branch = 'feature/fix-off-by-one';
+    const message = 'Fix off-by-one bug in index.js';
+
+    // Approval-gated branch creation.
+    const workflowTools = createCodingRepoWorkflowTools({
+      workspaceRoot: input.project.workspaceRoot,
+      targetKind: 'project',
+      projectRelativePath: input.project.projectRelativePath,
+      approvalService: input.approvalService,
+      sandbox: input.sandbox,
+    });
+    const branchTool = getTool(workflowTools, 'coding_repo_branch_create');
+    const branchResult = JSON.parse(
+      await branchTool.execute({
+        taskId: request.task.taskId,
+        branch,
+        checkout: true,
+      }),
+    ) as { status?: string };
+    assert.equal(branchResult.status, 'created');
+
+    // Approval-gated commit.
+    const gitTools = createCodingGitTools({
+      workspaceRoot: input.project.workspaceRoot,
+      targetKind: 'project',
+      projectRelativePath: input.project.projectRelativePath,
+      approvalService: input.approvalService,
+      sandbox: input.sandbox,
+    });
+    const commitTool = getTool(gitTools, 'coding_git_commit');
+    const commitResult = JSON.parse(
+      await commitTool.execute({
+        taskId: request.task.taskId,
+        message,
+        paths: ['index.js'],
+      }),
+    ) as { status?: string };
+    assert.equal(commitResult.status, 'committed');
+    assert.equal(
+      execFileSync('git', ['branch', '--show-current'], { cwd: input.project.repoPath, encoding: 'utf8' }).trim(),
+      branch,
+    );
+
+    // Approval-gated push to the local bare remote.
+    const pushTool = getTool(gitTools, 'coding_git_push');
+    const pushResult = JSON.parse(
+      await pushTool.execute({
+        taskId: request.task.taskId,
+        remote: 'origin',
+        branch,
+      }),
+    ) as { status?: string };
+    assert.equal(pushResult.status, 'pushed');
+
+    // Approval-gated PR preparation through the GitHub tools surface.
+    const githubTools = createCodingGitHubTools({
+      client: input.fakeClient,
+      approvalService: input.approvalService,
+    });
+    const requestApproval = getTool(githubTools, 'coding_github_request_approval');
+    const approvalResult = JSON.parse(
+      await requestApproval.execute({
+        taskId: request.task.taskId,
+        actionType: 'github.pr.create',
+        summary: 'Create PR for off-by-one fix',
+        reason: 'Publish the fix for review.',
+        risk: 'This opens remote PR state on GitHub.',
+      }),
+    ) as {
+      actions: Array<{
+        payload: {
+          request: { id: string };
+          evaluation: { allowed: boolean };
+        };
+      }>;
+    };
+    assert.equal(approvalResult.actions[0]?.payload.evaluation.allowed, true);
+
+    return {
+      subagent: 'github',
+      summary: 'Created branch, committed, pushed, and prepared PR.',
+      evidence: [branch, message, `approval:${approvalResult.actions[0]?.payload.request.id}`],
+      structuredOutput: {
+        type: 'github',
+        result: {
+          actions: [
+            {
+              action: 'create_pr',
+              payload: {
+                owner: 'dansasser',
+                repo: 'astro-flue-agent',
+                title: message,
+                body: 'Fixes the off-by-one bug in index.js.',
+                head: branch,
+                base: 'main',
+                status: 'prepared',
+              },
+            },
+          ],
+        },
+      },
+    };
+  };
+}
+
 function createMinimalLoopState(
   taskId: string,
   plan: import('../workers/coding-worker/types.js').CodingPlanItem[],
