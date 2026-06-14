@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { codexBrainCard, deepseekV4ProCard, minimaxM3Card, qwen35Card, resolveModelCard } from '../models/catalog.js';
+import { codexBrainCard, deepseekV4ProCard, kimik27codeCard, minimaxM3Card, qwen35Card, resolveModelCard } from '../models/catalog.js';
 import { configureRuntimeModels, createModelRegistry, selectModelCardForRole } from '../models/index.js';
 import { registerOllamaCloudProvider } from '../models/providers/ollama-cloud/index.js';
 import { resolveOllamaLocalProviderRegistration } from '../models/providers/ollama-local/index.js';
@@ -56,6 +56,16 @@ test('latest DeepSeek card tracks cloud context limits', () => {
   assert.deepEqual(deepseekV4ProCard.env?.apiKey, ['OLLAMA_API_KEY', 'OLLAMA_CLOUD_API_KEY']);
   assert.equal(deepseekV4ProCard.contextWindow, 1_048_576);
   assert.equal(deepseekV4ProCard.maxOutputTokens, 1_048_576);
+});
+
+test('Kimi K2.7 Code card tracks advertised and Ollama-reported context limits', () => {
+  assert.equal(kimik27codeCard.specifier, 'ollama-cloud/kimi-k2.7-code:cloud');
+  assert.deepEqual(kimik27codeCard.env?.apiKey, ['OLLAMA_API_KEY', 'OLLAMA_CLOUD_API_KEY']);
+  assert.equal(kimik27codeCard.env?.baseUrl, 'OLLAMA_CLOUD_BASE_URL');
+  assert.equal(kimik27codeCard.contextWindow, 1_000_000);
+  assert.equal(kimik27codeCard.guaranteedContextWindow, 256_000);
+  assert.equal(kimik27codeCard.providerReportedContextWindow, 262_144);
+  assert.equal(kimik27codeCard.maxOutputTokens, 32_768);
 });
 
 test('Qwen 3.5 card tracks cloud context limits', () => {

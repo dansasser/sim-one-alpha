@@ -1,4 +1,4 @@
-import { codexBrainCard, deepseekV4ProCard, minimaxM3Card, qwen35Card } from './catalog.js';
+import { codexBrainCard, deepseekV4ProCard, kimik27codeCard, minimaxM3Card, qwen35Card } from './catalog.js';
 import { loadGoromboConfig, type LoadGoromboConfigOptions } from '../config/index.js';
 import { resolveModelCardEnv } from './env.js';
 import { codexBrainProviderId, ollamaCloudProviderId } from './provider-ids.js';
@@ -59,6 +59,7 @@ function createModelCards(): AgentModelCard[] {
     minimaxM3Card,
     deepseekV4ProCard,
     qwen35Card,
+    kimik27codeCard,
     codexBrainCard,
   ];
 }
