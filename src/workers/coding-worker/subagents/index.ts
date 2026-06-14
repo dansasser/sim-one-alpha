@@ -1,9 +1,10 @@
-﻿import type { AgentProfile, ToolDefinition } from '@flue/runtime';
+import type { AgentProfile, ToolDefinition } from '@flue/runtime';
 import type { CodingApprovalService } from '../approvals/approval-service.js';
 import type { GitHubClient } from '../github/github-client.js';
 import { createCodingGitHubTools } from '../github/github-tools.js';
 import type { CodingWorkspaceTargetInput } from '../repo/workspace-target.js';
 import { createCodingGitTools } from '../tools/coding-git-tools.js';
+import { createCodingImplementerTools } from '../tools/coding-implementer-tools.js';
 import { createCodingRepoTools } from '../tools/coding-repo-tools.js';
 import { createCodingRepoWorkflowTools } from '../tools/coding-repo-workflow-tools.js';
 import { createCodingCodeReviewSubagent, codingCodeReviewSubagentName } from './code-review/code-review-agent.js';
@@ -51,7 +52,7 @@ function createInternalToolsets(options: CodingWorkerInternalSubagentsOptions): 
   if (!options.workspaceRoot && !options.repoPath) {
     return {
       triage: [],
-      implementer: [],
+      implementer: createCodingImplementerTools(),
       testDebug: [],
       codeReview: [],
       github: [],
@@ -85,6 +86,7 @@ function createInternalToolsets(options: CodingWorkerInternalSubagentsOptions): 
     client: options.githubClient,
     approvalService: options.approvalService,
   });
+  const implementerOutputTools = createCodingImplementerTools();
 
   return {
     triage: selectTools(
@@ -97,7 +99,7 @@ function createInternalToolsets(options: CodingWorkerInternalSubagentsOptions): 
       'coding_github_read_context',
     ),
     implementer: selectTools(
-      repoTools,
+      [...repoTools, ...implementerOutputTools],
       'coding_repo_list_files',
       'coding_repo_read_file',
       'coding_repo_search',
@@ -105,6 +107,7 @@ function createInternalToolsets(options: CodingWorkerInternalSubagentsOptions): 
       'coding_repo_apply_patch',
       'coding_shell_run',
       'coding_progress_emit',
+      'coding_implementer_submit_result',
     ),
     testDebug: selectTools(
       [...repoTools, ...repoWorkflowTools],

@@ -19,6 +19,7 @@ Every top-level `src/` directory should fit one of these categories. If a new di
 | `src/rag/` | Shared retrieval subsystem | Retrieval provider interfaces and routing. This name is pending a user-selected rename, but the concept remains top-level because it is shared architecture. |
 | `src/registries/` | Registry subsystem | Typed registries for tools, skills, agents, protocols, and future discoverable capabilities. |
 | `src/routes/` | HTTP route modules | Concrete app-owned Hono route registration modules. |
+| `src/schemas/` | Shared runtime schemas | Valibot schemas for structured-output contracts and cross-subsystem data shapes. Each domain owns a file here when its schemas are reused outside a single file. Imported by `src/types/` and worker type contracts; kept separate so type-only consumers do not pull in schema runtime code. |
 | `src/session/` | Session/context subsystem | Flue session persistence, compaction policy, context budget, and usage tracking. |
 | `src/telemetry/` | Observability subsystem | Sanitized Flue event capture and run summaries. |
 | `src/tests/` | Test suite | Node test files compiled to `.tmp/tsc/tests`. |
@@ -82,6 +83,11 @@ src/routes/telemetry.ts
   Protected app-owned telemetry inspection routes.
   Exposes sanitized Flue event summaries by workflow run id.
   Falls back to persisted Flue run events when the in-memory telemetry observer no longer has the run.
+
+src/schemas/
+  Shared Valibot schemas for structured runtime contracts.
+  Owned by the subsystem that defines the shape; promoted here only when the schema is reused across files or subsystems.
+  Example: `src/schemas/coding-worker.ts` holds `CodingImplementerResultSchema` and the derived `CodingImplementerResult` type, used by the implementer subagent tool, the delegation path in `src/workers/coding-worker/workflow/coordination.ts`, and re-exported from `src/workers/coding-worker/types.ts`.
 
 src/telemetry/flue-telemetry.ts
   Registers Flue observe(...) once per running application context.

@@ -1,5 +1,20 @@
 import type { NormalizedMessageEvent } from '../../types/index.js';
 
+import {
+  CodingFileEditSchema,
+  CodingFileWriteSchema,
+  CodingVerificationCommandRequestSchema,
+  CodingImplementerResultSchema,
+} from '../../schemas/coding-worker.js';
+
+export { CodingImplementerResultSchema };
+export type CodingFileEdit = import('../../schemas/coding-worker.js').CodingFileEdit;
+export type CodingFileWrite = import('../../schemas/coding-worker.js').CodingFileWrite;
+export type CodingVerificationCommandRequest = import('../../schemas/coding-worker.js').CodingVerificationCommandRequest;
+export type CodingImplementerResult = import('../../schemas/coding-worker.js').CodingImplementerResult;
+
+// Re-export schemas as type-only references so isolatedModules remains happy
+export type { CodingFileEditSchema, CodingFileWriteSchema, CodingVerificationCommandRequestSchema };
 export type CodingSubagentKind =
   | 'triage'
   | 'implementer'
@@ -57,37 +72,6 @@ export interface CodingPlanItem {
   status: 'pending' | 'in_progress' | 'completed' | 'blocked';
 }
 
-/**
- * Exact text edit applied by the coding worker.
- *
- * When `expectedOccurrences` is omitted, every occurrence of `oldText` is
- * replaced. Set `expectedOccurrences` when callers need a strict occurrence
- * count guard before replacement.
- */
-export interface CodingFileEdit {
-  path: string;
-  oldText: string;
-  newText: string;
-  /**
-   * Optional strict count guard for `oldText` before applying the edit.
-   */
-  expectedOccurrences?: number;
-}
-
-export interface CodingFileWrite {
-  path: string;
-  content: string;
-}
-
-export interface CodingVerificationCommandRequest {
-  name: string;
-  command: string;
-  required?: boolean;
-  reason?: string;
-  cwd?: string;
-  timeoutSeconds?: number;
-}
-
 export interface CodingVerificationCommand {
   name: string;
   command: string;
@@ -103,12 +87,51 @@ export interface CodingVerificationEvidence {
   summary: string;
 }
 
-export interface CodingSubagentRunResult {
-  subagent: CodingSubagentKind;
+export interface CodingTriageResult {
+  plan: CodingPlanItem[];
+  filesToInspect: string[];
+  recommendedExecutionPath: 'implementer' | 'github' | 'test-debug' | 'code-review' | 'manual';
+}
+
+
+export interface CodingTestDebugResult {
+  debugEdits: CodingFileEdit[];
+  verificationCommands: CodingVerificationCommandRequest[];
+}
+
+export interface CodingCodeReviewResult {
+  findings: string[];
+  approved: boolean;
+}
+
+export interface CodingGithubResult {
+  actions: Array<{
+    action: 'comment' | 'create_pr' | 'update_pr' | 'merge_pr' | 'close_pr';
+    payload: Record<string, unknown>;
+  }>;
+}
+
+export type CodingSubagentStructuredOutput =
+  | { type: 'triage'; result: CodingTriageResult }
+  | { type: 'implementer'; result: CodingImplementerResult }
+  | { type: 'test-debug'; result: CodingTestDebugResult }
+  | { type: 'code-review'; result: CodingCodeReviewResult }
+  | { type: 'github'; result: CodingGithubResult };
+
+type CodingSubagentRunResultBase<K extends CodingSubagentKind, R> = {
+  subagent: K;
   summary: string;
   evidence: string[];
+  structuredOutput?: { type: K; result: R };
   nextAction?: string;
-}
+};
+
+export type CodingSubagentRunResult =
+  | CodingSubagentRunResultBase<'triage', CodingTriageResult>
+  | CodingSubagentRunResultBase<'implementer', CodingImplementerResult>
+  | CodingSubagentRunResultBase<'test-debug', CodingTestDebugResult>
+  | CodingSubagentRunResultBase<'code-review', CodingCodeReviewResult>
+  | CodingSubagentRunResultBase<'github', CodingGithubResult>;
 
 export interface CodingWorkerRunResult {
   taskId: string;
