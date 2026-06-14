@@ -22,6 +22,7 @@ import { createCodingWorkerInternalSubagents } from './subagents/index.js';
 import { createCodingGitTools } from './tools/coding-git-tools.js';
 import { createCodingRepoTools } from './tools/coding-repo-tools.js';
 import { createCodingRepoWorkflowTools } from './tools/coding-repo-workflow-tools.js';
+import { createCodingWorkerLoopDelegate } from './workflow/loop.js';
 import type { CodingWorkspaceTargetInput } from './repo/workspace-target.js';
 
 export const codingWorkerAgentName = 'coding-worker';
@@ -46,7 +47,25 @@ export const codingWorkerInstructions = [
   }),
   createCodingWorkerRuntimeCapabilityBlock(),
   createCodingWorkerSkillCapabilityBlock(),
+  createCodingWorkerLoopCapabilityBlock(),
 ].join('\n\n');
+
+export function createCodingWorkerLoopCapabilityBlock(): string {
+  return `# Lead Loop Contract
+
+The coding-worker lead runs a bounded, approval-gated, Flue-native tool-calling loop:
+
+1. Accept a natural-language coding task scoped to the configured workspace/project/repo.
+2. Run triage to classify the task and produce a plan.
+3. Run the implementer subagent to produce file edits and file writes.
+4. Apply edits only after an explicit file.edit approval record exists.
+5. Run the test-debug subagent to verify changes; on failure, request debug edits, apply them after approval, and rerun.
+6. Run the code-review subagent; if rejected, replan and return to implementation.
+7. If GitHub context is present, run the github subagent to prepare commit/push/PR actions and execute them through the approval-gated git/GitHub tools.
+8. Emit public progress events at every checkpoint and persist a loop checkpoint to the task-run store.
+
+Default max turns: 10. The loop returns blocked if it exceeds the turn guard without completing. All mutating side effects (file edits, git commit, push, PR create/update) require an explicit approval record. The model cannot approve its own requests.`;
+}
 
 /**
  * Creates the reusable coding worker Flue subagent profile used by the orchestrator.
@@ -214,6 +233,8 @@ function createCodingWorkerToolEnv(env: Record<string, unknown>): Record<string,
     GITHUB_TOKEN: readOptionalEnv(env, 'GITHUB_TOKEN'),
   };
 }
+
+export { createCodingWorkerLoopDelegate } from './workflow/loop.js';
 
 function readOptionalEnv(env: Record<string, unknown>, key: string): string | undefined {
   const value = env[key];

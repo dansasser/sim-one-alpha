@@ -1,18 +1,25 @@
-import type { CodingPlanItem, CodingSubagentKind } from '../types.js';
+import type { CodingPlanItem, CodingSubagentKind, CodingWorkerLoopStep } from '../types.js';
 
 export type CodingWorkerEventType =
   | 'coding.task.accepted'
   | 'coding.triage.started'
   | 'coding.triage.completed'
+  | 'coding.implementer.started'
+  | 'coding.implementer.completed'
+  | 'coding.test-debug.started'
+  | 'coding.test-debug.completed'
+  | 'coding.review.started'
+  | 'coding.review.completed'
+  | 'coding.github.started'
+  | 'coding.github.completed'
   | 'coding.plan.updated'
+  | 'coding.replanned'
   | 'coding.subagent.started'
   | 'coding.subagent.completed'
   | 'coding.action.started'
   | 'coding.action.completed'
   | 'coding.verification.started'
   | 'coding.verification.completed'
-  | 'coding.review.started'
-  | 'coding.review.completed'
   | 'coding.approval.requested'
   | 'coding.approval.completed'
   | 'coding.github.approval_requested'
@@ -26,6 +33,7 @@ export interface CodingWorkerEvent {
   taskId: string;
   timestamp: string;
   subagent?: CodingSubagentKind;
+  step?: CodingWorkerLoopStep;
   purpose?: string;
   summary?: string;
   evidence?: string[];
@@ -84,4 +92,3 @@ function findForbiddenKey(value: unknown): string | undefined {
 
   return undefined;
 }
-

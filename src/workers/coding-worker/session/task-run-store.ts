@@ -5,6 +5,7 @@ import type {
   CodingPlanItem,
   CodingSubagentKind,
   CodingVerificationEvidence,
+  CodingWorkerLoopCheckpoint,
 } from '../types.js';
 import type { CodingWorkerSessionPlan } from './child-session-names.js';
 
@@ -27,6 +28,7 @@ export interface CodingTaskRunRecord {
   plan: CodingPlanItem[];
   events: CodingWorkerEvent[];
   verificationEvidence: CodingVerificationEvidence[];
+  checkpoint?: CodingWorkerLoopCheckpoint;
   createdAt: string;
   updatedAt: string;
 }
@@ -162,7 +164,34 @@ function isTaskRunRecord(value: unknown): value is CodingTaskRunRecord {
       Array.isArray(record.events) &&
       Array.isArray(record.verificationEvidence) &&
       typeof record.createdAt === 'string' &&
-      typeof record.updatedAt === 'string',
+      typeof record.updatedAt === 'string' &&
+      (record.checkpoint === undefined || isLoopCheckpoint(record.checkpoint)),
+  );
+}
+
+function isLoopCheckpoint(value: unknown): value is CodingWorkerLoopCheckpoint {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const checkpoint = value as Partial<CodingWorkerLoopCheckpoint>;
+  return Boolean(
+    typeof checkpoint.taskId === 'string' &&
+      typeof checkpoint.status === 'string' &&
+      typeof checkpoint.currentStep === 'string' &&
+      typeof checkpoint.turn === 'number' &&
+      typeof checkpoint.maxTurns === 'number' &&
+      Array.isArray(checkpoint.plan) &&
+      Array.isArray(checkpoint.approvalQueue) &&
+      checkpoint.pendingEdits &&
+      typeof checkpoint.pendingEdits === 'object' &&
+      Array.isArray(checkpoint.pendingEdits.fileEdits) &&
+      Array.isArray(checkpoint.pendingEdits.writeFiles) &&
+      checkpoint.verificationResults &&
+      typeof checkpoint.verificationResults === 'object' &&
+      Array.isArray(checkpoint.verificationResults.requiredCommands) &&
+      Array.isArray(checkpoint.verificationResults.evidence) &&
+      Array.isArray(checkpoint.subagentHistory) &&
+      typeof checkpoint.replanCount === 'number',
   );
 }
 
@@ -196,8 +225,32 @@ function cloneRecord(record: CodingTaskRunRecord): CodingTaskRunRecord {
       ...(event.evidence ? { evidence: [...event.evidence] } : {}),
     })),
     verificationEvidence: record.verificationEvidence.map((item) => ({ ...item })),
+    ...(record.checkpoint ? { checkpoint: cloneCheckpoint(record.checkpoint) } : {}),
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
+  };
+}
+
+function cloneCheckpoint(checkpoint: CodingWorkerLoopCheckpoint): CodingWorkerLoopCheckpoint {
+  return {
+    taskId: checkpoint.taskId,
+    status: checkpoint.status,
+    currentStep: checkpoint.currentStep,
+    turn: checkpoint.turn,
+    maxTurns: checkpoint.maxTurns,
+    plan: checkpoint.plan.map((item) => ({ ...item })),
+    approvalQueue: checkpoint.approvalQueue.map((item) => ({ ...item })),
+    pendingEdits: {
+      fileEdits: checkpoint.pendingEdits.fileEdits.map((edit) => ({ ...edit })),
+      writeFiles: checkpoint.pendingEdits.writeFiles.map((write) => ({ ...write })),
+    },
+    verificationResults: {
+      requiredCommands: checkpoint.verificationResults.requiredCommands.map((command) => ({ ...command })),
+      evidence: checkpoint.verificationResults.evidence.map((item) => ({ ...item })),
+    },
+    subagentHistory: checkpoint.subagentHistory.map((result) => ({ ...result })),
+    replanCount: checkpoint.replanCount,
+    ...(checkpoint.lastFailureSummary ? { lastFailureSummary: checkpoint.lastFailureSummary } : {}),
   };
 }
 

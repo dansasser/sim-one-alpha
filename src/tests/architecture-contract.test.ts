@@ -182,6 +182,69 @@ test('coding worker owns its workspace-backed lead profile', async () => {
   }
 });
 
+
+test('coding worker lead loop is documented in profile instructions', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'coding-worker-workspace-'));
+  const approvalRoot = mkdtempSync(join(tmpdir(), 'coding-worker-approvals-'));
+  try {
+    const subagent = await createCodingWorkerSubagent({ workspaceRoot, approvalRoot });
+
+    assert.match(subagent.instructions ?? '', /Lead Loop Contract/);
+    assert.match(subagent.instructions ?? '', /bounded, approval-gated, Flue-native tool-calling loop/);
+    assert.match(subagent.instructions ?? '', /max turns: 10/i);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmSync(approvalRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker progress events cover every defined loop checkpoint', async () => {
+  const { createCodingWorkerEvent } = await import('../workers/coding-worker/events/coding-worker-events.js');
+  const checkpointTypes = [
+    'coding.task.accepted',
+    'coding.triage.started',
+    'coding.triage.completed',
+    'coding.implementer.started',
+    'coding.implementer.completed',
+    'coding.test-debug.started',
+    'coding.test-debug.completed',
+    'coding.review.started',
+    'coding.review.completed',
+    'coding.github.started',
+    'coding.github.completed',
+    'coding.replanned',
+    'coding.blocked',
+    'coding.completed',
+    'coding.error',
+  ];
+
+  for (const type of checkpointTypes) {
+    assert.doesNotThrow(() =>
+      createCodingWorkerEvent({
+        type: type as import('../workers/coding-worker/events/coding-worker-events.js').CodingWorkerEventType,
+        taskId: 'checkpoint-test',
+        summary: `${type} event.`,
+      }),
+    );
+  }
+});
+
+test('orchestrator only exposes the coding-worker lead, not internal subagents', async () => {
+  const config = await orchestratorAgent.initialize({
+    id: 'architecture-contract-internal-subagents',
+    env: createModelEnv(),
+    payload: undefined,
+  });
+
+  const exposedInternal = (config.subagents ?? [])
+    .map((agent) => agent.name)
+    .filter((name): name is string => typeof name === 'string')
+    .filter((name) => name.startsWith('coding-worker-') && name !== 'coding-worker');
+  assert.deepEqual(exposedInternal, []);
+
+  assert.equal(config.subagents?.some((agent) => agent.name === 'coding-worker'), true);
+});
+
 test('researcher owns the web research tool', () => {
   const subagent = createResearcherSubagent('ollama-cloud/minimax-m3');
 

@@ -8,6 +8,8 @@ import type {
 } from './approval-types.js';
 
 const defaultApprovalRequiredActions = new Set<CodingApprovalActionType>([
+  'file.edit',
+  'shell.execute',
   'repo.clone',
   'repo.register',
   'repo.branch.create',

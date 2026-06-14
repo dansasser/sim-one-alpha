@@ -37,11 +37,11 @@ import { createFlueLocalCodingSandbox } from '../workers/coding-worker/tools/san
 import { resolveCodingWorkspaceTarget } from '../workers/coding-worker/repo/workspace-target.js';
 import { JsonFileCodingTaskRunStore } from '../workers/coding-worker/session/task-run-store.js';
 import { createFlueCodingSubagentDelegate } from '../workers/coding-worker/workflow/coordination.js';
-import {
-  createInitialCodingPlan,
-  runCodingTaskWorkflow,
-} from '../workers/coding-worker/workflow/coding-task.js';
+import { createInitialCodingPlan } from '../workers/coding-worker/workflow/coding-task.js';
+import { runCodingWorkerLoop, createInitialLoopState, createLoopCheckpoint } from '../workers/coding-worker/workflow/loop.js';
 import { assertCodingWorkerCanComplete } from '../workers/coding-worker/workflow/result-schema.js';
+import type { CodingSubagentKind, CodingSubagentRunResult, CodingWorkerTaskRequest } from '../workers/coding-worker/types.js';
+import type { CodingTaskSubagentRequest } from '../workers/coding-worker/workflow/coding-task.js';
 import type { ToolDefinition } from '@flue/runtime';
 
 test('coding worker internal subagents are worker-local profiles with distinct context identities', () => {
@@ -90,12 +90,31 @@ test('coding worker child session names avoid placeholder collisions for empty i
 
 test('coding worker live delegate uses Flue task delegation to worker-local subagent names', async () => {
   const workspaceRoot = createTempWorkspace();
-  const calls: Array<{ text: string; agent?: string }> = [];
+  const calls: Array<{ text: string; agent?: string; result?: boolean }> = [];
   const delegate = createFlueCodingSubagentDelegate({
-    task: async (text: string, options?: { agent?: string }) => {
-      calls.push({ text, agent: options?.agent });
+    task: async (text: string, options?: { agent?: string; result?: unknown }) => {
+      calls.push({ text, agent: options?.agent, result: Boolean(options?.result) });
+      const agent = options?.agent;
+      if (agent === 'coding-worker-triage') {
+        return {
+          data: {
+            plan: [],
+            filesToInspect: [],
+            recommendedExecutionPath: 'implementer',
+          },
+          model: { provider: 'test', id: 'test' },
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
+        };
+      }
       return {
-        text: 'triage complete',
+        text: 'subagent complete',
         model: { provider: 'test', id: 'test' },
         usage: {
           input: 0,
@@ -144,11 +163,13 @@ test('coding worker live delegate uses Flue task delegation to worker-local suba
     });
 
     assert.equal(calls[0]?.agent, 'coding-worker-triage');
+    assert.equal(calls[0]?.result, true);
     assert.match(calls[0]?.text ?? '', /delegate-session:triage/);
     assert.match(calls[0]?.text ?? '', /workspaceRoot/);
     assert.match(calls[0]?.text ?? '', /node custom-check\.js/);
     assert.doesNotMatch(calls[0]?.text ?? '', /node preflight-check\.js/);
-    assert.equal(result.summary, 'triage complete');
+    assert.match(result.summary, /Triage selected execution path/);
+    assert.equal(result.structuredOutput?.type, 'triage');
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
   }
@@ -1217,12 +1238,13 @@ test('coding worker GitHub PR creation tool is approval-gated', async () => {
   }
 });
 
-test('coding task workflow emits completion telemetry for blocked verification commands', async () => {
+test('coding worker loop emits completion telemetry for blocked verification commands', async () => {
   const project = createExecutableWorkspaceProject();
   const reporter = new InMemoryCodingProgressReporter();
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
 
   try {
-    const result = await runCodingTaskWorkflow(
+    const result = await runCodingWorkerLoop(
       {
         taskId: 'task-blocked-verification',
         text: 'Run blocked verification.',
@@ -1238,7 +1260,7 @@ test('coding task workflow emits completion telemetry for blocked verification c
           },
         ],
       },
-      { reporter },
+      { reporter, approvalService, delegate: createFakeDelegate() },
     );
 
     const events = reporter.events();
@@ -1254,12 +1276,13 @@ test('coding task workflow emits completion telemetry for blocked verification c
   }
 });
 
-test('coding task workflow emits public progress and blocks completion without verification evidence', async () => {
+test('coding worker loop emits public progress and blocks completion without verification evidence', async () => {
   const project = createExecutableWorkspaceProject();
   const reporter = new InMemoryCodingProgressReporter();
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
 
   try {
-    const result = await runCodingTaskWorkflow(
+    const result = await runCodingWorkerLoop(
       {
         taskId: 'task-no-verification',
         text: 'Implement a feature',
@@ -1269,6 +1292,8 @@ test('coding task workflow emits public progress and blocks completion without v
       },
       {
         reporter,
+        approvalService,
+        delegate: createFakeDelegate(),
         preflight: () => ({
           repoPath: project.repoPath,
           packageManager: 'pnpm',
@@ -1299,12 +1324,13 @@ test('coding task workflow emits public progress and blocks completion without v
   }
 });
 
-test('coding task workflow edits a temp repo and completes only after verification passes', async () => {
+test('coding worker loop edits a temp repo and completes only after verification passes', async () => {
   const project = createExecutableWorkspaceProject();
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
 
   try {
     const taskRunStore = JsonFileCodingTaskRunStore.atWorkspaceRoot(project.workspaceRoot);
-    const result = await runCodingTaskWorkflow({
+    const result = await runCodingWorkerLoop({
       taskId: 'task-with-real-edit',
       text: 'Fix answer implementation.',
       workspaceRoot: project.workspaceRoot,
@@ -1326,7 +1352,7 @@ test('coding task workflow edits a temp repo and completes only after verificati
           reason: 'Temp repo unit verification must pass.',
         },
       ],
-    }, { taskRunStore });
+    }, { taskRunStore, approvalService, delegate: createFakeDelegate() });
 
     assert.equal(result.status, 'completed');
     assert.match(readFileSync(join(project.repoPath, 'index.js'), 'utf8'), /return 42/);
@@ -1335,6 +1361,7 @@ test('coding task workflow edits a temp repo and completes only after verificati
     assert.doesNotThrow(() => assertCodingWorkerCanComplete(result));
     const stored = await taskRunStore.get('task-with-real-edit');
     assert.equal(stored?.status, 'completed');
+    assert.equal(stored?.checkpoint?.currentStep, 'completed');
     assert.equal(stored?.sessionPlan.childSessions.implementer.includes(':implementer'), true);
     assert.equal(stored?.events.some((event) => event.type === 'coding.completed'), true);
   } finally {
@@ -1342,11 +1369,12 @@ test('coding task workflow edits a temp repo and completes only after verificati
   }
 });
 
-test('coding task workflow debug loop patches after a failed verification run', async () => {
+test('coding worker loop debug loop patches after a failed verification run', async () => {
   const project = createExecutableWorkspaceProject();
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
 
   try {
-    const result = await runCodingTaskWorkflow({
+    const result = await runCodingWorkerLoop({
       taskId: 'task-debug-loop',
       text: 'Fix answer implementation through debug loop.',
       workspaceRoot: project.workspaceRoot,
@@ -1376,7 +1404,7 @@ test('coding task workflow debug loop patches after a failed verification run', 
           reason: 'Temp repo unit verification must pass after debug.',
         },
       ],
-    });
+    }, { approvalService, delegate: createFakeDelegate() });
 
     assert.equal(result.status, 'completed');
     assert.match(readFileSync(join(project.repoPath, 'index.js'), 'utf8'), /return 42/);
@@ -1387,11 +1415,12 @@ test('coding task workflow debug loop patches after a failed verification run', 
   }
 });
 
-test('coding task workflow can complete with passing required verification evidence', async () => {
+test('coding worker loop can complete with passing required verification evidence', async () => {
   const project = createExecutableWorkspaceProject();
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
 
   try {
-  const result = await runCodingTaskWorkflow(
+  const result = await runCodingWorkerLoop(
     {
       taskId: 'task-with-verification',
       text: 'Implement a feature',
@@ -1409,6 +1438,8 @@ test('coding task workflow can complete with passing required verification evide
       ],
     },
     {
+      approvalService,
+      delegate: createFakeDelegate(),
       preflight: () => ({
         repoPath: project.repoPath,
         packageManager: 'pnpm',
@@ -1436,6 +1467,16 @@ test('coding task workflow can complete with passing required verification evide
   }
 });
 
+interface TempWorkspaceProject {
+  workspaceRoot: string;
+  projectRelativePath: string;
+  repoPath: string;
+}
+
+function createTempWorkspace() {
+  return mkdtempSync(join(tmpdir(), 'coding-worker-workspace-'));
+}
+
 function createTempRepo(input: { scripts: Record<string, string> }) {
   const repoPath = mkdtempSync(join(tmpdir(), 'coding-worker-repo-'));
   writeFileSync(
@@ -1449,16 +1490,6 @@ function createTempRepo(input: { scripts: Record<string, string> }) {
     ),
   );
   return repoPath;
-}
-
-interface TempWorkspaceProject {
-  workspaceRoot: string;
-  projectRelativePath: string;
-  repoPath: string;
-}
-
-function createTempWorkspace() {
-  return mkdtempSync(join(tmpdir(), 'coding-worker-workspace-'));
 }
 
 function createWorkspaceProject(projectRelativePath = 'projects/answer-app'): TempWorkspaceProject {
@@ -1508,6 +1539,229 @@ function createGitWorkspaceProject(): TempWorkspaceProject {
   return project;
 }
 
+test('coding worker loop state initializes with bounded turn guard and checkpoint shape', () => {
+  const project = createExecutableWorkspaceProject();
+
+  try {
+    const sessionPlan = createCodingWorkerSessionPlan('task-state', 'state-session');
+    const preflight = runCodingRepoPreflight(project.repoPath);
+    const state = createInitialLoopState(
+      {
+        taskId: 'task-state',
+        text: 'Fix bug.',
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+        maxTurns: 7,
+      },
+      sessionPlan,
+      preflight,
+      7,
+    );
+
+    assert.equal(state.currentStep, 'triage');
+    assert.equal(state.turn, 0);
+    assert.equal(state.maxTurns, 7);
+    assert.equal(state.replanCount, 0);
+    assert.equal(state.sessionPlan.leadSessionName, sessionPlan.leadSessionName);
+    assert.equal(state.preflight.repoPath, project.repoPath);
+
+    const checkpoint = createLoopCheckpoint(state);
+    assert.equal(checkpoint.taskId, 'task-state');
+    assert.equal(checkpoint.currentStep, 'triage');
+    assert.equal(checkpoint.turn, 0);
+    assert.equal(checkpoint.maxTurns, 7);
+    assert.equal(checkpoint.plan.length, 4);
+    assert.equal(checkpoint.pendingEdits.fileEdits.length, 0);
+    assert.equal(checkpoint.pendingEdits.writeFiles.length, 0);
+    assert.equal(checkpoint.verificationResults.requiredCommands.length, preflight.verificationPlan.length);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker loop persists a checkpoint after each turn', async () => {
+  const project = createExecutableWorkspaceProject();
+  const reporter = new InMemoryCodingProgressReporter();
+  const taskRunStore = new JsonFileCodingTaskRunStore(':memory:');
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
+
+  try {
+    const result = await runCodingWorkerLoop(
+      {
+        taskId: 'task-checkpoint',
+        text: 'Fix answer implementation.',
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+        fileEdits: [
+          {
+            path: 'index.js',
+            oldText: 'return 41;',
+            newText: 'return 42;',
+            expectedOccurrences: 1,
+          },
+        ],
+        verificationCommands: [
+          {
+            name: 'unit',
+            command: 'node test.js',
+            required: true,
+            reason: 'Temp repo unit verification must pass.',
+          },
+        ],
+      },
+      { reporter, taskRunStore, approvalService, delegate: createFakeDelegate() },
+    );
+
+    assert.equal(result.status, 'completed');
+    const stored = await taskRunStore.get('task-checkpoint');
+    assert.ok(stored?.checkpoint);
+    assert.equal(stored.checkpoint.status, 'completed');
+    assert.equal(stored.checkpoint.currentStep, 'completed');
+    assert.equal(stored.checkpoint.turn >= 1, true);
+    assert.equal(stored.checkpoint.subagentHistory.length > 0, true);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker loop blocks when file edit approval is denied', async () => {
+  const project = createExecutableWorkspaceProject();
+  const reporter = new InMemoryCodingProgressReporter();
+  const approvalService = createInMemoryCodingApprovalService();
+
+  try {
+    const result = await runCodingWorkerLoop(
+      {
+        taskId: 'task-edit-denied',
+        text: 'Fix answer implementation.',
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+        fileEdits: [
+          {
+            path: 'index.js',
+            oldText: 'return 41;',
+            newText: 'return 42;',
+            expectedOccurrences: 1,
+          },
+        ],
+      },
+      { reporter, approvalService, delegate: createFakeDelegate() },
+    );
+
+    assert.equal(result.status, 'blocked');
+    assert.equal(reporter.events().some((event) => event.type === 'coding.approval.requested'), true);
+    assert.equal(readFileSync(join(project.repoPath, 'index.js'), 'utf8').includes('return 41'), true);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker loop replans when code review rejects', async () => {
+  const project = createExecutableWorkspaceProject();
+  const reporter = new InMemoryCodingProgressReporter();
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
+  let implementerCalls = 0;
+
+  try {
+    const result = await runCodingWorkerLoop(
+      {
+        taskId: 'task-review-reject',
+        text: 'Fix answer implementation.',
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+        fileEdits: [
+          {
+            path: 'index.js',
+            oldText: 'return 41;',
+            newText: 'return 42;',
+            expectedOccurrences: 1,
+          },
+        ],
+        verificationCommands: [
+          {
+            name: 'unit',
+            command: 'node test.js',
+            required: true,
+            reason: 'Temp repo unit verification must pass.',
+          },
+        ],
+      },
+      {
+        reporter,
+        approvalService,
+        delegate: async (subagent, request) => {
+          const base = await createFakeDelegate({
+            implementer: {
+              fileEdits: implementerCalls > 0 ? [] : request.task.fileEdits,
+            },
+            codeReview: {
+              approved: implementerCalls > 1,
+              findings: implementerCalls > 1 ? [] : [{ severity: 'blocker', message: 'Need a better fix.' }],
+            },
+          })(subagent, request);
+          if (subagent === 'implementer') {
+            implementerCalls += 1;
+          }
+          return base;
+        },
+      },
+    );
+
+    assert.equal(result.status, 'completed');
+    assert.equal(implementerCalls, 2);
+    assert.equal(reporter.events().some((event) => event.type === 'coding.replanned'), true);
+    assert.equal((result.checkpoint?.replanCount ?? 0) >= 1, true);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker loop respects the max turn guard and returns blocked', async () => {
+  const project = createExecutableWorkspaceProject();
+  const reporter = new InMemoryCodingProgressReporter();
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
+
+  try {
+    const result = await runCodingWorkerLoop(
+      {
+        taskId: 'task-max-turns',
+        text: 'Fix answer implementation.',
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+        fileEdits: [
+          {
+            path: 'index.js',
+            oldText: 'return 41;',
+            newText: 'return 42;',
+            expectedOccurrences: 1,
+          },
+        ],
+        verificationCommands: [
+          {
+            name: 'unit',
+            command: 'node test.js',
+            required: true,
+            reason: 'Temp repo unit verification must pass.',
+          },
+        ],
+        maxTurns: 2,
+      },
+      { reporter, approvalService, delegate: createFakeDelegate() },
+    );
+
+    assert.equal(result.status, 'blocked');
+    assert.match(result.summary, /Exceeded maximum loop turns/);
+    assert.equal(result.checkpoint?.maxTurns, 2);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
 function getTool(tools: ToolDefinition[], name: string) {
   const tool = tools.find((item) => item.name === name);
   assert.ok(tool);
@@ -1521,4 +1775,96 @@ function createModelEnv(): Record<string, string> {
     CODEX_BRAIN_LOCAL_API_URL: 'https://dt1.example.test/v1',
     GOROMBO_WORKSPACE_ROOT: process.cwd(),
   };
+}
+
+interface FakeDelegateOptions {
+  triage?: Partial<import('../workers/coding-worker/types.js').CodingTriageResult>;
+  implementer?: Partial<import('../workers/coding-worker/types.js').CodingImplementerResult>;
+  testDebug?: Partial<import('../workers/coding-worker/types.js').CodingTestDebugResult>;
+  codeReview?: Partial<import('../workers/coding-worker/types.js').CodingCodeReviewResult>;
+  github?: Partial<import('../workers/coding-worker/types.js').CodingGithubResult>;
+}
+
+function createFakeDelegate(options: FakeDelegateOptions = {}): (
+  subagent: CodingSubagentKind,
+  request: CodingTaskSubagentRequest,
+) => Promise<CodingSubagentRunResult> {
+  return async (subagent, request) => {
+    const base = {
+      summary: `${subagent} result`,
+      evidence: [subagent],
+    };
+
+    switch (subagent) {
+      case 'triage': {
+        const plan = options.triage?.plan ?? createInitialCodingPlan(request.task);
+        const filesToInspect = options.triage?.filesToInspect ?? [];
+        const recommendedExecutionPath = options.triage?.recommendedExecutionPath ?? 'implementer';
+        return {
+          subagent,
+          ...base,
+          structuredOutput: { type: 'triage', result: { plan, filesToInspect, recommendedExecutionPath } },
+        };
+      }
+      case 'implementer': {
+        const fileEdits = options.implementer?.fileEdits ?? request.task.fileEdits ?? [];
+        const writeFiles = options.implementer?.writeFiles ?? request.task.writeFiles ?? [];
+        const verificationCommands = options.implementer?.verificationCommands ?? request.task.verificationCommands ?? [];
+        return {
+          subagent,
+          ...base,
+          structuredOutput: { type: 'implementer', result: { fileEdits, writeFiles, verificationCommands } },
+        };
+      }
+      case 'test-debug': {
+        const debugEdits = options.testDebug?.debugEdits ?? request.task.debugEdits ?? [];
+        const verificationCommands = options.testDebug?.verificationCommands ?? [];
+        const analysis = options.testDebug?.analysis ?? '';
+        return {
+          subagent,
+          ...base,
+          structuredOutput: { type: 'test-debug', result: { debugEdits, verificationCommands, analysis } },
+        };
+      }
+      case 'code-review': {
+        const findings = options.codeReview?.findings ?? [];
+        const approved = options.codeReview?.approved ?? true;
+        return {
+          subagent,
+          ...base,
+          structuredOutput: { type: 'code-review', result: { findings, approved } },
+        };
+      }
+      case 'github': {
+        const actions = options.github?.actions ?? [];
+        return {
+          subagent,
+          ...base,
+          structuredOutput: { type: 'github', result: { actions } },
+        };
+      }
+    }
+  };
+}
+
+function createAutoApprovingApprovalService(actionTypes: string[]): import('../workers/coding-worker/approvals/approval-service.js').CodingApprovalService {
+  const inner = createInMemoryCodingApprovalService();
+  return new Proxy(inner, {
+    get(target, prop) {
+      if (prop === 'evaluateRequest') {
+        return async (request: import('../workers/coding-worker/approvals/approval-types.js').CodingApprovalRequest) => {
+          if (actionTypes.includes(request.actionType)) {
+            return {
+              allowed: true,
+              requiresApproval: true,
+              reason: 'Auto-approved by test harness.',
+              status: 'approved',
+            };
+          }
+          return target.evaluateRequest(request);
+        };
+      }
+      return (target as unknown as Record<string, unknown>)[prop as string];
+    },
+  });
 }
