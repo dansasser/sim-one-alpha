@@ -1,6 +1,7 @@
 import type { SessionEnv, ShellResult } from '@flue/runtime';
 import { local } from '@flue/runtime/node';
 import { execFile } from 'node:child_process';
+import { unlink } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import {
@@ -29,6 +30,7 @@ export interface CodingSandboxRuntime {
   repoPath: string;
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
+  deleteFile(path: string): Promise<void>;
   readdir(path: string): Promise<string[]>;
   mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
   exists(path: string): Promise<boolean>;
@@ -44,6 +46,7 @@ export interface CodingSandboxRuntime {
   existsWorkspace(path: string): Promise<boolean>;
   statWorkspace(path: string): Promise<{ isFile: boolean; isDirectory: boolean }>;
   writeWorkspaceFile(path: string, content: string): Promise<void>;
+  deleteWorkspaceFile(path: string): Promise<void>;
 }
 
 export interface CodingShellOptions {
@@ -109,6 +112,10 @@ class FlueLocalCodingSandboxRuntime implements CodingSandboxRuntime {
 
   async writeFile(path: string, content: string): Promise<void> {
     await this.sessionEnv.writeFile(this.resolveScopePath(path), content);
+  }
+
+  async deleteFile(path: string): Promise<void> {
+    await unlink(this.resolveScopePath(path));
   }
 
   async readdir(path: string): Promise<string[]> {
@@ -206,6 +213,10 @@ class FlueLocalCodingSandboxRuntime implements CodingSandboxRuntime {
 
   async writeWorkspaceFile(path: string, content: string): Promise<void> {
     await this.sessionEnv.writeFile(this.resolveWorkspacePath(path), content);
+  }
+
+  async deleteWorkspaceFile(path: string): Promise<void> {
+    await unlink(this.resolveWorkspacePath(path));
   }
 }
 

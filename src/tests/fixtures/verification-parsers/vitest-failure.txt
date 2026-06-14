@@ -1,0 +1,16 @@
+ FAIL  src/utils.test.ts > my test > adds 1 + 2 to equal 3
+AssertionError: expected 2 to be 3 // Object.is equality
+
+Expected: 3
+Received: 2
+
+ ❯ src/utils.test.ts:3:5
+     1| function sum(a, b) { return a + b; }
+     2| test('adds', () => { expect(sum(1,2)).toBe(3); })
+    > 3|     expect(sum(1, 2)).toBe(3)
+       |      ^
+     4|
+     5|
+
+Test Files  1 failed (1)
+Tests  1 failed (1)

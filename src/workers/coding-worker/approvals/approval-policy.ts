@@ -8,6 +8,8 @@ import type {
 } from './approval-types.js';
 
 const defaultApprovalRequiredActions = new Set<CodingApprovalActionType>([
+  'file.edit',
+  'shell.execute',
   'repo.clone',
   'repo.register',
   'repo.branch.create',
@@ -22,6 +24,10 @@ const defaultApprovalRequiredActions = new Set<CodingApprovalActionType>([
   'github.pr.ready',
   'github.issue.update',
   'github.review-thread.update',
+  'github.branch_from_pr',
+  'github.review_comment',
+  'github.check.rerun',
+  'github.fork_repo',
 ]);
 
 export function requiresCodingApproval(actionType: CodingApprovalActionType): boolean {

@@ -4,7 +4,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import * as v from 'valibot';
 import orchestratorAgent from '../agents/orchestrator.js';
+import { CodingFileEditSchema, CodingImplementerResultSchema } from '../schemas/coding-worker.js';
 import { evaluateCodingApproval, createCodingApprovalRequest } from '../workers/coding-worker/approvals/approval-policy.js';
 import {
   createFileCodingApprovalService,
@@ -12,6 +14,7 @@ import {
 } from '../workers/coding-worker/approvals/approval-service.js';
 import { createCodingGitHubTools } from '../workers/coding-worker/github/github-tools.js';
 import { GhCliGitHubClient } from '../workers/coding-worker/github/gh-cli-client.js';
+import type { GitHubClient } from '../workers/coding-worker/github/github-client.js';
 import { createCodingWorkerSubagent } from '../workers/coding-worker/coding-worker.js';
 import { InMemoryCodingProgressReporter } from '../workers/coding-worker/events/progress-reporter.js';
 import { createCodingWorkerEvent } from '../workers/coding-worker/events/coding-worker-events.js';
@@ -21,6 +24,7 @@ import {
   codingWorkerInternalSubagentNames,
   createCodingWorkerInternalSubagents,
 } from '../workers/coding-worker/subagents/index.js';
+import { parseCodingCodeReviewText } from '../workers/coding-worker/subagents/code-review/code-review-agent.js';
 import { readPackageScripts, runCodingRepoPreflight } from '../workers/coding-worker/repo/preflight.js';
 import { parseGitStatusShort } from '../workers/coding-worker/repo/git-state.js';
 import { InMemoryCodingRepoRegistry } from '../workers/coding-worker/repo/repo-registry.js';
@@ -30,18 +34,25 @@ import {
 } from '../workers/coding-worker/repo/package-manager.js';
 import { createCodingVerificationPlan } from '../workers/coding-worker/repo/verification.js';
 import { createCodingGitTools } from '../workers/coding-worker/tools/coding-git-tools.js';
-import { createCodingRepoTools } from '../workers/coding-worker/tools/coding-repo-tools.js';
+import { createCodingImplementerTools } from '../workers/coding-worker/tools/coding-implementer-tools.js';
+import {
+  applyCodingEditTransaction,
+  createCodingEditTransaction,
+  createCodingRepoTools,
+} from '../workers/coding-worker/tools/coding-repo-tools.js';
 import { createCodingRepoWorkflowTools } from '../workers/coding-worker/tools/coding-repo-workflow-tools.js';
+import { createCodingTestDebugTools } from '../workers/coding-worker/tools/coding-test-debug-tools.js';
 import { evaluateCodingShellCommand } from '../workers/coding-worker/tools/command-policy.js';
 import { createFlueLocalCodingSandbox } from '../workers/coding-worker/tools/sandbox-runtime.js';
 import { resolveCodingWorkspaceTarget } from '../workers/coding-worker/repo/workspace-target.js';
 import { JsonFileCodingTaskRunStore } from '../workers/coding-worker/session/task-run-store.js';
 import { createFlueCodingSubagentDelegate } from '../workers/coding-worker/workflow/coordination.js';
-import {
-  createInitialCodingPlan,
-  runCodingTaskWorkflow,
-} from '../workers/coding-worker/workflow/coding-task.js';
+import { createInitialCodingPlan } from '../workers/coding-worker/workflow/coding-task.js';
+import { createInitialPlan, replan } from '../workers/coding-worker/workflow/planning.js';
+import { runCodingWorkerLoop, createInitialLoopState, createLoopCheckpoint } from '../workers/coding-worker/workflow/loop.js';
 import { assertCodingWorkerCanComplete } from '../workers/coding-worker/workflow/result-schema.js';
+import type { CodingSubagentKind, CodingSubagentRunResult, CodingWorkerTaskRequest } from '../workers/coding-worker/types.js';
+import type { CodingTaskSubagentRequest } from '../workers/coding-worker/workflow/coding-task.js';
 import type { ToolDefinition } from '@flue/runtime';
 
 test('coding worker internal subagents are worker-local profiles with distinct context identities', () => {
@@ -88,14 +99,86 @@ test('coding worker child session names avoid placeholder collisions for empty i
   );
 });
 
+test('code review text parser extracts findings with severity, file, and line range', () => {
+  const text = `## Review
+
+- [BLOCKER] \`src/utils.ts:14-16\` — unsafe parsing of user input
+- [WARNING] \`src/index.ts:42\` missing input validation
+- [INFO] README updated
+
+Approved: false`;
+
+  const result = parseCodingCodeReviewText(text);
+
+  assert.equal(result.approved, false);
+  assert.equal(result.findings.length, 3);
+
+  const [blocker, warning, info] = result.findings;
+  assert.equal(blocker.severity, 'blocker');
+  assert.equal(blocker.file, 'src/utils.ts');
+  assert.equal(blocker.lineStart, 14);
+  assert.equal(blocker.lineEnd, 16);
+  assert.match(blocker.message, /unsafe parsing/);
+
+  assert.equal(warning.severity, 'warning');
+  assert.equal(warning.file, 'src/index.ts');
+  assert.equal(warning.lineStart, 42);
+  assert.equal(warning.lineEnd, undefined);
+  assert.match(warning.message, /missing input validation/);
+
+  assert.equal(info.severity, 'info');
+  assert.equal(info.file, undefined);
+  assert.equal(info.lineStart, undefined);
+  assert.match(info.message, /README updated/);
+});
+
+test('code review text parser infers approval from blockers unless explicitly overridden', () => {
+  const onlyWarnings = parseCodingCodeReviewText('- [WARNING] `src/a.ts:1` style issue\n');
+  assert.equal(onlyWarnings.approved, true);
+  assert.equal(onlyWarnings.findings.length, 1);
+
+  const onlyBlocker = parseCodingCodeReviewText('- [BLOCKER] `src/b.ts:2` crash\n');
+  assert.equal(onlyBlocker.approved, false);
+
+  const explicitApproved = parseCodingCodeReviewText(
+    '- [WARNING] `src/c.ts:3` nit\napproved: true',
+  );
+  assert.equal(explicitApproved.approved, true);
+
+  const explicitRejected = parseCodingCodeReviewText(
+    '- [INFO] `src/d.ts:4` note\napproved: no',
+  );
+  assert.equal(explicitRejected.approved, false);
+  assert.equal(explicitRejected.findings.length, 1);
+});
+
 test('coding worker live delegate uses Flue task delegation to worker-local subagent names', async () => {
   const workspaceRoot = createTempWorkspace();
-  const calls: Array<{ text: string; agent?: string }> = [];
+  const calls: Array<{ text: string; agent?: string; result?: boolean }> = [];
   const delegate = createFlueCodingSubagentDelegate({
-    task: async (text: string, options?: { agent?: string }) => {
-      calls.push({ text, agent: options?.agent });
+    task: async (text: string, options?: { agent?: string; result?: unknown }) => {
+      calls.push({ text, agent: options?.agent, result: Boolean(options?.result) });
+      const agent = options?.agent;
+      if (agent === 'coding-worker-triage') {
+        return {
+          data: {
+            plan: [],
+            filesToInspect: [],
+            recommendedExecutionPath: 'implementer',
+          },
+          model: { provider: 'test', id: 'test' },
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
+        };
+      }
       return {
-        text: 'triage complete',
+        text: 'subagent complete',
         model: { provider: 'test', id: 'test' },
         usage: {
           input: 0,
@@ -144,11 +227,13 @@ test('coding worker live delegate uses Flue task delegation to worker-local suba
     });
 
     assert.equal(calls[0]?.agent, 'coding-worker-triage');
+    assert.equal(calls[0]?.result, true);
     assert.match(calls[0]?.text ?? '', /delegate-session:triage/);
     assert.match(calls[0]?.text ?? '', /workspaceRoot/);
     assert.match(calls[0]?.text ?? '', /node custom-check\.js/);
     assert.doesNotMatch(calls[0]?.text ?? '', /node preflight-check\.js/);
-    assert.equal(result.summary, 'triage complete');
+    assert.match(result.summary, /Triage selected execution path/);
+    assert.equal(result.structuredOutput?.type, 'triage');
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
   }
@@ -285,6 +370,89 @@ test('coding worker plan includes GitHub stage when GitHub context is present', 
   assert.equal(plan.some((item) => item.owner === 'github'), true);
 });
 
+test('createInitialPlan produces explicit plan items with context', () => {
+  const plan = createInitialPlan(
+    {
+      taskId: 'task-plan-context',
+      text: 'Fix parser bug.',
+      filesToInspect: ['src/parser.ts', 'src/lexer.ts'],
+    },
+    {
+      preflight: { repoPath: '/tmp/repo', packageManager: 'pnpm' },
+      filesToInspect: ['src/parser.ts', 'src/lexer.ts'],
+    },
+  );
+
+  assert.equal(plan.length, 4);
+  assert.equal(plan[0].owner, 'triage');
+  assert.match(plan[0].description, /src\/parser\.ts/);
+  assert.match(plan[0].description, /src\/lexer\.ts/);
+  assert.equal(plan[1].owner, 'implementer');
+  assert.match(plan[1].description, /pnpm/);
+  assert.equal(plan[2].owner, 'test-debug');
+  assert.equal(plan[3].owner, 'code-review');
+});
+
+test('createInitialPlan adds GitHub stage when GitHub context is provided', () => {
+  const plan = createInitialPlan(
+    {
+      taskId: 'task-plan-github',
+      text: 'Update PR.',
+    },
+    {
+      github: { issueNumber: 7 },
+    },
+  );
+
+  assert.equal(plan.some((item) => item.owner === 'github'), true);
+});
+
+test('replan marks failed step blocked and surfaces review findings', () => {
+  const state = createMinimalLoopState('task-replan-review', [
+    { id: 'task-replan-review:review', description: 'Review', owner: 'code-review', status: 'in_progress' },
+    { id: 'task-replan-review:implement', description: 'Implement', owner: 'implementer', status: 'completed' },
+  ]);
+
+  const plan = replan(state, {
+    step: 'code-review',
+    summary: 'Review rejected the change.',
+    reviewFindings: [
+      { severity: 'blocker', message: 'Missing input validation.', file: 'src/index.ts', lineStart: 42 },
+      { severity: 'warning', message: 'Consider a named constant.' },
+    ],
+  });
+
+  assert.equal(plan.some((item) => item.id === 'task-replan-review:replan-1'), true);
+  assert.equal(plan.find((item) => item.owner === 'code-review')?.status, 'blocked');
+  assert.equal(plan.find((item) => item.owner === 'implementer')?.status, 'in_progress');
+  assert.equal(plan.filter((item) => item.owner === 'implementer').length, 2);
+  assert.equal(
+    plan.some((item) => item.description.includes('Missing input validation') && item.description.includes('src/index.ts:42')),
+    true,
+  );
+  assert.equal(plan.some((item) => item.description.includes('Consider a named constant')), false);
+});
+
+test('replan surfaces failed verification evidence as test-debug items', () => {
+  const state = createMinimalLoopState('task-replan-verify', [
+    { id: 'task-replan-verify:verify', description: 'Verify', owner: 'test-debug', status: 'blocked' },
+    { id: 'task-replan-verify:implement', description: 'Implement', owner: 'implementer', status: 'completed' },
+  ]);
+
+  const plan = replan(state, {
+    step: 'test-debug',
+    summary: 'Required verification did not pass.',
+    verificationEvidence: [
+      { command: 'node test.js', status: 'failed', exitCode: 1, summary: 'expected 42, got 40' },
+      { command: 'node lint.js', status: 'passed', exitCode: 0, summary: 'ok' },
+    ],
+  });
+
+  assert.equal(plan.some((item) => item.id === 'task-replan-verify:replan-1'), true);
+  assert.equal(plan.find((item) => item.owner === 'test-debug' && item.id.startsWith('task-replan-verify:replan-1:verify-'))?.description.includes('node test.js'), true);
+  assert.equal(plan.filter((item) => item.owner === 'test-debug').length, 2);
+});
+
 test('repo preflight detects pnpm and exact configured verification scripts', () => {
   const repoPath = createTempRepo({
     scripts: {
@@ -341,6 +509,51 @@ test('verification planner keeps named check scripts exact when present', () => 
   assert.equal(plan.some((command) => command.command === 'corepack pnpm run lint'), true);
   assert.equal(plan.some((command) => command.command === 'corepack pnpm run check'), true);
   assert.equal(plan.some((command) => command.command === 'corepack pnpm test'), true);
+});
+
+test('test-debug tools expose a submit result tool for structured output', () => {
+  const tools = createCodingTestDebugTools();
+  const submit = getTool(tools, 'coding_test_debug_submit_result');
+
+  assert.ok(submit);
+  assert.match(submit.description ?? '', /CodingTestDebugResult/i);
+});
+
+test('test-debug submit result tool returns debug edits from fake failing verification output', async () => {
+  const tools = createCodingTestDebugTools();
+  const submit = getTool(tools, 'coding_test_debug_submit_result');
+
+  const fakeFailureOutput = [
+    'expected 42, got 40',
+    'at Object.answer (/workspace/index.js:2:42)',
+  ].join('\n');
+
+  const output = JSON.parse(
+    await submit.execute({
+      debugEdits: [
+        {
+          path: 'index.js',
+          oldText: 'return 40;',
+          newText: 'return 42;',
+          expectedOccurrences: 1,
+        },
+      ],
+      verificationCommands: [
+        {
+          name: 'unit',
+          command: 'node test.js',
+          required: true,
+          reason: 'Confirm the debug edit resolves the failing assertion.',
+        },
+      ],
+      analysis: `Unit test failed with: ${fakeFailureOutput}. The answer function returns 40 instead of 42; updating the return value fixes the assertion.`,
+    }),
+  ) as { status?: string; result?: { debugEdits: unknown[]; verificationCommands: unknown[]; analysis: string } };
+
+  assert.equal(output.status, 'submitted');
+  assert.equal(output.result?.debugEdits.length, 1);
+  assert.equal(output.result?.verificationCommands.length, 1);
+  assert.match(output.result?.analysis ?? '', /40 instead of 42/);
 });
 
 test('package manager command builders fail closed when package manager is unknown', () => {
@@ -407,10 +620,12 @@ test('GitHub side effects are approval-gated and GitHub read tool is mockable', 
       issueNumber: 7,
       pullRequestNumber: 8,
     }),
-  ) as { issue?: { title?: string }; checks?: Array<{ conclusion?: string }> };
+  ) as { actions: Array<{ action: string; payload: { issue?: { title?: string }; checks?: Array<{ conclusion?: string }> } }> };
 
-  assert.equal(output.issue?.title, 'Fix parser');
-  assert.equal(output.checks?.[0]?.conclusion, 'SUCCESS');
+  assert.equal(output.actions.length, 1);
+  assert.equal(output.actions[0]?.action, 'read_context');
+  assert.equal(output.actions[0]?.payload.issue?.title, 'Fix parser');
+  assert.equal(output.actions[0]?.payload.checks?.[0]?.conclusion, 'SUCCESS');
 });
 
 test('approval service persists trusted decisions and rejects untrusted actors', async () => {
@@ -581,7 +796,7 @@ test('GitHub CLI client validates repository identifiers before running gh', asy
 
 test('GitHub CLI client requests valid PR check fields and maps them to worker summaries', async () => {
   let capturedArgs: string[] = [];
-  const client = new GhCliGitHubClient(undefined, async (args: string[]) => {
+  const client = new GhCliGitHubClient(undefined, undefined, async (args: string[]) => {
     capturedArgs = args;
     return [
       {
@@ -643,16 +858,23 @@ test('coding worker profile wires GitHub read context with a client and supports
         pullRequestNumber: 8,
       }),
     ) as {
-      available?: boolean;
-      issue?: { title?: string };
-      pullRequest?: { title?: string };
-      checks?: Array<{ conclusion?: string }>;
+      actions: Array<{
+        action: string;
+        payload: {
+          available?: boolean;
+          issue?: { title?: string };
+          pullRequest?: { title?: string };
+          checks?: Array<{ conclusion?: string }>;
+        };
+      }>;
     };
 
-    assert.equal(context.available, true);
-    assert.equal(context.issue?.title, 'Scoped issue');
-    assert.equal(context.pullRequest?.title, 'Scoped PR');
-    assert.equal(context.checks?.[0]?.conclusion, 'SUCCESS');
+    assert.equal(context.actions.length, 1);
+    const payload = context.actions[0]?.payload;
+    assert.equal(payload?.available, true);
+    assert.equal(payload?.issue?.title, 'Scoped issue');
+    assert.equal(payload?.pullRequest?.title, 'Scoped PR');
+    assert.equal(payload?.checks?.[0]?.conclusion, 'SUCCESS');
 
     const readFile = getTool(subagent.tools ?? [], 'coding_repo_read_file');
     const file = JSON.parse(await readFile.execute({ path: 'README.md' })) as { content?: string };
@@ -699,11 +921,17 @@ test('GitHub tools read extended PR context and gate PR updates through approval
       pullRequestNumber: 13,
     }),
   ) as {
-    comments?: Array<{ id: string }>;
-    reviewThreads?: Array<{ id: string }>;
+    actions: Array<{
+      action: string;
+      payload: {
+        comments?: Array<{ id: string }>;
+        reviewThreads?: Array<{ id: string }>;
+      };
+    }>;
   };
-  assert.equal(context.comments?.[0]?.id, 'comment-1');
-  assert.equal(context.reviewThreads?.[0]?.id, 'thread-1');
+  assert.equal(context.actions.length, 1);
+  assert.equal(context.actions[0]?.payload.comments?.[0]?.id, 'comment-1');
+  assert.equal(context.actions[0]?.payload.reviewThreads?.[0]?.id, 'thread-1');
 
   const updatePr = getTool(tools, 'coding_github_update_pr');
   const blocked = JSON.parse(
@@ -714,13 +942,20 @@ test('GitHub tools read extended PR context and gate PR updates through approval
       pullRequestNumber: 13,
       body: 'Updated body',
     }),
-  ) as { blocked?: boolean; request?: { id: string } };
-  assert.equal(blocked.blocked, true);
-  assert.ok(blocked.request?.id);
+  ) as {
+    actions: Array<{
+      action: string;
+      payload: { blocked?: boolean; request?: { id: string }; status?: string };
+    }>;
+  };
+  assert.equal(blocked.actions[0]?.payload.blocked, true);
+  assert.ok(blocked.actions[0]?.payload.request?.id);
   assert.equal(updateCount, 0);
 
+  const requestId = blocked.actions[0]?.payload.request?.id;
+  assert.ok(requestId);
   await approvalService.recordDecision({
-    requestId: blocked.request.id,
+    requestId,
     approved: true,
     decidedBy: 'operator',
     principal: { id: 'operator', roles: ['operator'] },
@@ -733,8 +968,13 @@ test('GitHub tools read extended PR context and gate PR updates through approval
       pullRequestNumber: 13,
       body: 'Updated body',
     }),
-  ) as { status?: string };
-  assert.equal(approved.status, 'updated');
+  ) as {
+    actions: Array<{
+      action: string;
+      payload: { status?: string };
+    }>;
+  };
+  assert.equal(approved.actions[0]?.payload.status, 'updated');
   assert.equal(updateCount, 1);
 });
 
@@ -771,9 +1011,14 @@ test('GitHub tools verify explicit PR base, head, draft status, and checks', asy
       expectedDraft: false,
       requireChecksPassed: true,
     }),
-  ) as { verified?: boolean; mismatches?: string[] };
-  assert.equal(verified.verified, true);
-  assert.deepEqual(verified.mismatches, []);
+  ) as {
+    actions: Array<{
+      action: string;
+      payload: { verified?: boolean; mismatches?: string[] };
+    }>;
+  };
+  assert.equal(verified.actions[0]?.payload.verified, true);
+  assert.deepEqual(verified.actions[0]?.payload.mismatches, []);
 
   const mismatch = JSON.parse(
     await verifyPr.execute({
@@ -783,11 +1028,275 @@ test('GitHub tools verify explicit PR base, head, draft status, and checks', asy
       expectedBase: 'main',
       expectedDraft: true,
     }),
-  ) as { verified?: boolean; mismatches?: string[] };
-  assert.equal(mismatch.verified, false);
-  assert.match(mismatch.mismatches?.join('\n') ?? '', /Expected base main/);
-  assert.match(mismatch.mismatches?.join('\n') ?? '', /Expected draft status true/);
+  ) as {
+    actions: Array<{
+      action: string;
+      payload: { verified?: boolean; mismatches?: string[] };
+    }>;
+  };
+  assert.equal(mismatch.actions[0]?.payload.verified, false);
+  assert.match(mismatch.actions[0]?.payload.mismatches?.join('\n') ?? '', /Expected base main/);
+  assert.match(mismatch.actions[0]?.payload.mismatches?.join('\\n') ?? '', /Expected draft status true/);
 });
+
+test('GitHub CLI client lists issues and pull requests with normalized summaries', async () => {
+  const client = new GhCliGitHubClient(undefined, undefined, async (args) => {
+    if (args[0] === 'issue') {
+      return [
+        { number: 1, title: 'Bug', state: 'OPEN', url: 'https://github.example/issues/1' },
+        { number: 2, title: 'Feature', state: 'CLOSED', url: 'https://github.example/issues/2' },
+      ];
+    }
+    return [
+      {
+        number: 10,
+        title: 'Fix',
+        state: 'OPEN',
+        url: 'https://github.example/pull/10',
+        headRefName: 'fix',
+        baseRefName: 'main',
+        isDraft: true,
+      },
+    ];
+  });
+
+  const issues = await client.listIssues('owner', 'repo', 'open');
+  const pullRequests = await client.listPullRequests('owner', 'repo', 'open');
+
+  assert.deepEqual(issues, [
+    { number: 1, title: 'Bug', state: 'OPEN', url: 'https://github.example/issues/1' },
+    { number: 2, title: 'Feature', state: 'CLOSED', url: 'https://github.example/issues/2' },
+  ]);
+  assert.deepEqual(pullRequests, [
+    {
+      number: 10,
+      title: 'Fix',
+      state: 'OPEN',
+      url: 'https://github.example/pull/10',
+      headRef: 'fix',
+      baseRef: 'main',
+      headRefName: 'fix',
+      baseRefName: 'main',
+      isDraft: true,
+    },
+  ]);
+});
+
+test('GitHub CLI client creates a local branch from a PR', async () => {
+  let capturedArgs: string[] = [];
+  const mockClient: GitHubClient = {
+    async getIssue() {
+      throw new Error('not implemented');
+    },
+    async getPullRequest() {
+      throw new Error('not implemented');
+    },
+    async listPullRequestChecks() {
+      return [];
+    },
+    async createBranchFromPullRequest(input) {
+      capturedArgs = ['pr', 'checkout', String(input.pullRequestNumber), '--repo', `${input.owner}/${input.repo}`, '--branch', input.branchName];
+      return { status: 'created', branchName: input.branchName, stdout: '' };
+    },
+  };
+
+  const result = await mockClient.createBranchFromPullRequest!({
+    owner: 'owner',
+    repo: 'repo',
+    pullRequestNumber: 13,
+    branchName: 'pr-13-branch',
+  });
+
+  assert.deepEqual(capturedArgs, ['pr', 'checkout', '13', '--repo', 'owner/repo', '--branch', 'pr-13-branch']);
+  assert.equal(result.status, 'created');
+  assert.equal(result.branchName, 'pr-13-branch');
+});
+
+test('GitHub CLI client creates line-specific review comments with required fields', async () => {
+  const mockClient: GitHubClient = {
+    async getIssue() {
+      throw new Error('not implemented');
+    },
+    async getPullRequest() {
+      throw new Error('not implemented');
+    },
+    async listPullRequestChecks() {
+      return [];
+    },
+    async createReviewComment(input) {
+      return {
+        status: 'created',
+        id: 'review-comment-1',
+        stdout: JSON.stringify({ body: input.body, path: input.path, line: input.line }),
+      };
+    },
+  };
+
+  const result = await mockClient.createReviewComment!({
+    owner: 'owner',
+    repo: 'repo',
+    pullRequestNumber: 13,
+    body: 'Consider this edge case.',
+    path: 'src/index.ts',
+    line: 42,
+  });
+
+  assert.equal(result.status, 'created');
+  assert.equal(result.id, 'review-comment-1');
+});
+
+test('GitHub CLI client reruns a workflow run by id', async () => {
+  const mockClient: GitHubClient = {
+    async getIssue() {
+      throw new Error('not implemented');
+    },
+    async getPullRequest() {
+      throw new Error('not implemented');
+    },
+    async listPullRequestChecks() {
+      return [];
+    },
+    async rerunCheck(input) {
+      return {
+        status: 'rerun',
+        runId: input.runId,
+        stdout: `Requested rerun of run ${input.runId}`,
+      };
+    },
+  };
+
+  const result = await mockClient.rerunCheck!({
+    owner: 'owner',
+    repo: 'repo',
+    runId: '12345',
+    rerunFailedJobs: true,
+  });
+
+  assert.equal(result.status, 'rerun');
+  assert.equal(result.runId, '12345');
+});
+
+test('GitHub CLI client forks a repository', async () => {
+  const mockClient: GitHubClient = {
+    async getIssue() {
+      throw new Error('not implemented');
+    },
+    async getPullRequest() {
+      throw new Error('not implemented');
+    },
+    async listPullRequestChecks() {
+      return [];
+    },
+    async forkRepository(input) {
+      return {
+        status: 'forked',
+        forkName: input.forkName ?? `${input.owner}/${input.repo}`,
+        stdout: '',
+      };
+    },
+  };
+
+  const result = await mockClient.forkRepository!({
+    owner: 'owner',
+    repo: 'repo',
+    defaultBranchOnly: true,
+  });
+
+  assert.equal(result.status, 'forked');
+  assert.equal(result.forkName, 'owner/repo');
+});
+
+test('GitHub tools list issues and pull requests through the configured client', async () => {
+  const tools = createCodingGitHubTools({
+    client: {
+      async getIssue() {
+        throw new Error('not implemented');
+      },
+      async getPullRequest() {
+        throw new Error('not implemented');
+      },
+      async listPullRequestChecks() {
+        return [];
+      },
+      async listIssues() {
+        return [{ number: 1, title: 'Issue', state: 'OPEN' }];
+      },
+      async listPullRequests() {
+        return [{ number: 2, title: 'PR', state: 'OPEN', headRef: 'feature', baseRef: 'main' }];
+      },
+    },
+  });
+
+  const listIssues = getTool(tools, 'coding_github_list_issues');
+  const issuesOutput = JSON.parse(await listIssues.execute({ owner: 'owner', repo: 'repo' })) as {
+    actions: Array<{ action: string; payload: { issues?: Array<{ title: string }> } }>;
+  };
+  assert.equal(issuesOutput.actions[0]?.action, 'list_issues');
+  assert.equal(issuesOutput.actions[0]?.payload.issues?.[0]?.title, 'Issue');
+
+  const listPrs = getTool(tools, 'coding_github_list_prs');
+  const prsOutput = JSON.parse(await listPrs.execute({ owner: 'owner', repo: 'repo' })) as {
+    actions: Array<{ action: string; payload: { pullRequests?: Array<{ baseRef?: string }> } }>;
+  };
+  assert.equal(prsOutput.actions[0]?.action, 'list_prs');
+  assert.equal(prsOutput.actions[0]?.payload.pullRequests?.[0]?.baseRef, 'main');
+});
+
+test('GitHub tools do not default PR base when omitted', async () => {
+  let updatedBase: string | undefined = 'initial';
+  const approvalService = createInMemoryCodingApprovalService();
+  const tools = createCodingGitHubTools({
+    approvalService,
+    client: {
+      async getIssue() {
+        throw new Error('not implemented');
+      },
+      async getPullRequest() {
+        throw new Error('not implemented');
+      },
+      async listPullRequestChecks() {
+        return [];
+      },
+      async getDefaultBranch() {
+        return 'main';
+      },
+      async updatePullRequest(input) {
+        updatedBase = input.base;
+        return { status: 'updated' };
+      },
+    },
+  });
+
+  const blocked = JSON.parse(
+    await getTool(tools, 'coding_github_update_pr').execute({
+      taskId: 'task-base-default',
+      owner: 'owner',
+      repo: 'repo',
+      pullRequestNumber: 13,
+      body: 'Update',
+    }),
+  ) as {
+    actions: Array<{ payload: { blocked?: boolean; request?: { id: string } } }>;
+  };
+  const requestId = blocked.actions[0]?.payload.request?.id;
+  assert.ok(requestId);
+  await approvalService.recordDecision({
+    requestId,
+    approved: true,
+    decidedBy: 'operator',
+    principal: { id: 'operator', roles: ['operator'] },
+  });
+  await getTool(tools, 'coding_github_update_pr').execute({
+    taskId: 'task-base-default',
+    owner: 'owner',
+    repo: 'repo',
+    pullRequestNumber: 13,
+    body: 'Update',
+  });
+
+  assert.equal(updatedBase, undefined);
+});
+
 
 test('coding worker tools create projects under the workspace root and scope file edits there', async () => {
   const workspaceRoot = createTempWorkspace();
@@ -836,6 +1345,217 @@ test('coding worker tools create projects under the workspace root and scope fil
     const output = JSON.parse(await read.execute({ path: 'index.js' })) as { content: string };
     assert.match(output.content, /return 42/);
     await assert.rejects(() => read.execute({ path: '../README.md' }), /escapes coding-worker/);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker edit transaction applies multi-file writes and patches atomically', async () => {
+  const workspaceRoot = createTempWorkspace();
+
+  try {
+    const sandbox = await createFlueLocalCodingSandbox({
+      workspaceRoot,
+      targetKind: 'workspace',
+    });
+    writeFileSync(join(workspaceRoot, 'a.js'), 'const a = 1;\n');
+    writeFileSync(join(workspaceRoot, 'b.js'), 'const b = 2;\n');
+
+    const transaction = createCodingEditTransaction('tx-success', [
+      { path: 'a.js', oldText: 'const a = 1;', newText: 'const a = 2;', expectedOccurrences: 1 },
+      { path: 'b.js', oldText: 'const b = 2;', newText: 'const b = 3;', expectedOccurrences: 1 },
+    ], [{ path: 'c.js', content: 'const c = 4;\n' }]);
+
+    const result = await applyCodingEditTransaction(sandbox, transaction);
+
+    assert.equal(result.status, 'applied');
+    assert.equal(result.results.length, 3);
+    assert.equal(result.results.every((r) => r.status === 'applied'), true);
+    assert.equal(readFileSync(join(workspaceRoot, 'a.js'), 'utf8'), 'const a = 2;\n');
+    assert.equal(readFileSync(join(workspaceRoot, 'b.js'), 'utf8'), 'const b = 3;\n');
+    assert.equal(readFileSync(join(workspaceRoot, 'c.js'), 'utf8'), 'const c = 4;\n');
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker edit transaction allows multiple edits targeting the same file', async () => {
+  const workspaceRoot = createTempWorkspace();
+
+  try {
+    const sandbox = await createFlueLocalCodingSandbox({
+      workspaceRoot,
+      targetKind: 'workspace',
+    });
+    writeFileSync(join(workspaceRoot, 'a.js'), 'const a = 1;\nconst b = 2;\n');
+
+    const transaction = createCodingEditTransaction('tx-same-file', [
+      { path: 'a.js', oldText: 'const a = 1;', newText: 'const a = 10;', expectedOccurrences: 1 },
+      { path: 'a.js', oldText: 'const b = 2;', newText: 'const b = 20;', expectedOccurrences: 1 },
+    ], []);
+
+    const result = await applyCodingEditTransaction(sandbox, transaction);
+
+    assert.equal(result.status, 'applied');
+    assert.equal(result.results.length, 2);
+    assert.equal(result.results.every((r) => r.status === 'applied'), true);
+    assert.equal(readFileSync(join(workspaceRoot, 'a.js'), 'utf8'), 'const a = 10;\nconst b = 20;\n');
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker edit transaction rolls back all changes on first application failure', async () => {
+  const workspaceRoot = createTempWorkspace();
+
+  try {
+    const sandbox = await createFlueLocalCodingSandbox({
+      workspaceRoot,
+      targetKind: 'workspace',
+    });
+    writeFileSync(join(workspaceRoot, 'a.js'), 'const a = 1;\n');
+
+    const transaction = createCodingEditTransaction('tx-rollback', [], [
+      // a.js is a regular file, so writing through it as a directory fails during application.
+      { path: 'c.js', content: 'const c = 4;\n' },
+      { path: 'a.js/b.js', content: 'const b = 3;\n' },
+    ]);
+
+    const result = await applyCodingEditTransaction(sandbox, transaction);
+
+    assert.equal(result.status, 'failed');
+    assert.ok(result.failure);
+    assert.equal(result.failure?.path, 'a.js/b.js');
+    assert.equal(result.failure?.operation, 'write');
+    assert.match(result.failure?.reason ?? '', /EEXIST|ENOTDIR|not a directory|file already exists/i);
+
+    // c.js was created and then deleted during rollback.
+    assert.equal(existsSync(join(workspaceRoot, 'c.js')), false);
+    // a.js is unchanged because the patch step never ran.
+    assert.equal(readFileSync(join(workspaceRoot, 'a.js'), 'utf8'), 'const a = 1;\n');
+
+    const cResult = result.results.find((r) => r.path === 'c.js');
+    assert.equal(cResult?.status, 'rolled_back');
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker edit transaction remains atomic when pre-flight validation fails', async () => {
+  const workspaceRoot = createTempWorkspace();
+
+  try {
+    const sandbox = await createFlueLocalCodingSandbox({
+      workspaceRoot,
+      targetKind: 'workspace',
+    });
+    writeFileSync(join(workspaceRoot, 'a.js'), 'const a = 1;\n');
+
+    const transaction = createCodingEditTransaction('tx-atomic', [
+      { path: 'a.js', oldText: 'const a = 1;', newText: 'const a = 2;', expectedOccurrences: 1 },
+      { path: 'missing.js', oldText: 'old', newText: 'new', expectedOccurrences: 1 },
+    ], []);
+
+    const result = await applyCodingEditTransaction(sandbox, transaction);
+
+    assert.equal(result.status, 'failed');
+    assert.equal(result.failure?.path, 'missing.js');
+    // No files should have been mutated because validation runs before any write.
+    assert.equal(readFileSync(join(workspaceRoot, 'a.js'), 'utf8'), 'const a = 1;\n');
+    assert.equal(result.results.length, 0);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker edit transaction rejects binary patch targets', async () => {
+  const workspaceRoot = createTempWorkspace();
+
+  try {
+    const sandbox = await createFlueLocalCodingSandbox({
+      workspaceRoot,
+      targetKind: 'workspace',
+    });
+    writeFileSync(join(workspaceRoot, 'binary.bin'), Buffer.from([0x00, 0x01, 0x02]));
+
+    const transaction = createCodingEditTransaction('tx-binary', [
+      { path: 'binary.bin', oldText: '\x00', newText: 'x', expectedOccurrences: 1 },
+    ], []);
+
+    const result = await applyCodingEditTransaction(sandbox, transaction);
+
+    assert.equal(result.status, 'failed');
+    assert.equal(result.failure?.path, 'binary.bin');
+    assert.match(result.failure?.reason ?? '', /binary file/);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker edit transaction rejects patches to missing files', async () => {
+  const workspaceRoot = createTempWorkspace();
+
+  try {
+    const sandbox = await createFlueLocalCodingSandbox({
+      workspaceRoot,
+      targetKind: 'workspace',
+    });
+
+    const transaction = createCodingEditTransaction('tx-missing', [
+      { path: 'missing.js', oldText: 'old', newText: 'new', expectedOccurrences: 1 },
+    ], []);
+
+    const result = await applyCodingEditTransaction(sandbox, transaction);
+
+    assert.equal(result.status, 'failed');
+    assert.equal(result.failure?.path, 'missing.js');
+    assert.match(result.failure?.reason ?? '', /does not exist/);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker edit transaction tool applies and rolls back through the repo tools surface', async () => {
+  const workspaceRoot = createTempWorkspace();
+
+  try {
+    writeFileSync(join(workspaceRoot, 'x.js'), 'const x = 1;\n');
+    writeFileSync(join(workspaceRoot, 'y.js'), 'const y = 2;\n');
+
+    const tools = createCodingRepoTools({ workspaceRoot, targetKind: 'workspace' });
+    const applyTransaction = getTool(tools, 'coding_repo_apply_transaction');
+
+    const success = JSON.parse(
+      await applyTransaction.execute({
+        id: 'tool-tx',
+        edits: [
+          { path: 'x.js', oldText: 'const x = 1;', newText: 'const x = 2;', expectedOccurrences: 1 },
+        ],
+        writes: [{ path: 'z.js', content: 'const z = 3;\n' }],
+      }),
+    ) as { status?: string; results?: Array<{ path: string; status: string }>; failure?: { path: string } };
+
+    assert.equal(success.status, 'applied');
+    assert.equal(readFileSync(join(workspaceRoot, 'x.js'), 'utf8'), 'const x = 2;\n');
+    assert.equal(readFileSync(join(workspaceRoot, 'z.js'), 'utf8'), 'const z = 3;\n');
+
+    const fail = JSON.parse(
+      await applyTransaction.execute({
+        id: 'tool-tx-fail',
+        edits: [
+          { path: 'x.js', oldText: 'const x = 1;', newText: 'const x = 9;', expectedOccurrences: 1 },
+          { path: 'y.js', oldText: 'const y = 2;', newText: 'const y = 9;', expectedOccurrences: 1 },
+        ],
+        writes: [{ path: 'w.js', content: 'const w = 4;\n' }],
+      }),
+    ) as { status?: string; failure?: { path: string; reason: string } };
+
+    assert.equal(fail.status, 'failed');
+    assert.equal(fail.failure?.path, 'x.js');
+    assert.match(fail.failure?.reason ?? '', /oldText was not found/);
+    assert.equal(readFileSync(join(workspaceRoot, 'x.js'), 'utf8'), 'const x = 2;\n');
+    assert.equal(readFileSync(join(workspaceRoot, 'y.js'), 'utf8'), 'const y = 2;\n');
+    assert.equal(existsSync(join(workspaceRoot, 'w.js')), false);
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
   }
@@ -1209,20 +1929,27 @@ test('coding worker GitHub PR creation tool is approval-gated', async () => {
         title: 'Test PR',
         body: 'Test body',
       }),
-    ) as { blocked?: boolean };
+    ) as {
+      actions: Array<{
+        action: string;
+        payload: { blocked?: boolean };
+      }>;
+    };
 
-    assert.equal(output.blocked, true);
+    assert.equal(output.actions[0]?.action, 'create_pr');
+    assert.equal(output.actions[0]?.payload.blocked, true);
   } finally {
     rmSync(project.workspaceRoot, { recursive: true, force: true });
   }
 });
 
-test('coding task workflow emits completion telemetry for blocked verification commands', async () => {
+test('coding worker loop emits completion telemetry for blocked verification commands', async () => {
   const project = createExecutableWorkspaceProject();
   const reporter = new InMemoryCodingProgressReporter();
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
 
   try {
-    const result = await runCodingTaskWorkflow(
+    const result = await runCodingWorkerLoop(
       {
         taskId: 'task-blocked-verification',
         text: 'Run blocked verification.',
@@ -1238,7 +1965,7 @@ test('coding task workflow emits completion telemetry for blocked verification c
           },
         ],
       },
-      { reporter },
+      { reporter, approvalService, delegate: createFakeDelegate() },
     );
 
     const events = reporter.events();
@@ -1254,12 +1981,13 @@ test('coding task workflow emits completion telemetry for blocked verification c
   }
 });
 
-test('coding task workflow emits public progress and blocks completion without verification evidence', async () => {
+test('coding worker loop emits public progress and blocks completion without verification evidence', async () => {
   const project = createExecutableWorkspaceProject();
   const reporter = new InMemoryCodingProgressReporter();
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
 
   try {
-    const result = await runCodingTaskWorkflow(
+    const result = await runCodingWorkerLoop(
       {
         taskId: 'task-no-verification',
         text: 'Implement a feature',
@@ -1269,6 +1997,8 @@ test('coding task workflow emits public progress and blocks completion without v
       },
       {
         reporter,
+        approvalService,
+        delegate: createFakeDelegate(),
         preflight: () => ({
           repoPath: project.repoPath,
           packageManager: 'pnpm',
@@ -1299,12 +2029,13 @@ test('coding task workflow emits public progress and blocks completion without v
   }
 });
 
-test('coding task workflow edits a temp repo and completes only after verification passes', async () => {
+test('coding worker loop edits a temp repo and completes only after verification passes', async () => {
   const project = createExecutableWorkspaceProject();
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
 
   try {
     const taskRunStore = JsonFileCodingTaskRunStore.atWorkspaceRoot(project.workspaceRoot);
-    const result = await runCodingTaskWorkflow({
+    const result = await runCodingWorkerLoop({
       taskId: 'task-with-real-edit',
       text: 'Fix answer implementation.',
       workspaceRoot: project.workspaceRoot,
@@ -1326,7 +2057,7 @@ test('coding task workflow edits a temp repo and completes only after verificati
           reason: 'Temp repo unit verification must pass.',
         },
       ],
-    }, { taskRunStore });
+    }, { taskRunStore, approvalService, delegate: createFakeDelegate() });
 
     assert.equal(result.status, 'completed');
     assert.match(readFileSync(join(project.repoPath, 'index.js'), 'utf8'), /return 42/);
@@ -1335,6 +2066,7 @@ test('coding task workflow edits a temp repo and completes only after verificati
     assert.doesNotThrow(() => assertCodingWorkerCanComplete(result));
     const stored = await taskRunStore.get('task-with-real-edit');
     assert.equal(stored?.status, 'completed');
+    assert.equal(stored?.checkpoint?.currentStep, 'completed');
     assert.equal(stored?.sessionPlan.childSessions.implementer.includes(':implementer'), true);
     assert.equal(stored?.events.some((event) => event.type === 'coding.completed'), true);
   } finally {
@@ -1342,11 +2074,12 @@ test('coding task workflow edits a temp repo and completes only after verificati
   }
 });
 
-test('coding task workflow debug loop patches after a failed verification run', async () => {
+test('coding worker loop debug loop patches after a failed verification run', async () => {
   const project = createExecutableWorkspaceProject();
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
 
   try {
-    const result = await runCodingTaskWorkflow({
+    const result = await runCodingWorkerLoop({
       taskId: 'task-debug-loop',
       text: 'Fix answer implementation through debug loop.',
       workspaceRoot: project.workspaceRoot,
@@ -1376,7 +2109,7 @@ test('coding task workflow debug loop patches after a failed verification run', 
           reason: 'Temp repo unit verification must pass after debug.',
         },
       ],
-    });
+    }, { approvalService, delegate: createFakeDelegate() });
 
     assert.equal(result.status, 'completed');
     assert.match(readFileSync(join(project.repoPath, 'index.js'), 'utf8'), /return 42/);
@@ -1387,11 +2120,12 @@ test('coding task workflow debug loop patches after a failed verification run', 
   }
 });
 
-test('coding task workflow can complete with passing required verification evidence', async () => {
+test('coding worker loop can complete with passing required verification evidence', async () => {
   const project = createExecutableWorkspaceProject();
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
 
   try {
-  const result = await runCodingTaskWorkflow(
+  const result = await runCodingWorkerLoop(
     {
       taskId: 'task-with-verification',
       text: 'Implement a feature',
@@ -1409,6 +2143,8 @@ test('coding task workflow can complete with passing required verification evide
       ],
     },
     {
+      approvalService,
+      delegate: createFakeDelegate(),
       preflight: () => ({
         repoPath: project.repoPath,
         packageManager: 'pnpm',
@@ -1436,6 +2172,172 @@ test('coding task workflow can complete with passing required verification evide
   }
 });
 
+test('coding implementer submit result validates and emits a CodingImplementerResult', async () => {
+  const tools = createCodingImplementerTools();
+  const submit = getTool(tools, 'coding_implementer_submit_result');
+
+  const result = JSON.parse(
+    await submit.execute({
+      fileEdits: [{ path: 'index.js', oldText: 'return 41;', newText: 'return 42;', expectedOccurrences: 1 }],
+      writeFiles: [{ path: 'new.js', content: 'console.log("ok");\n' }],
+      verificationCommands: [{ name: 'unit', command: 'node test.js', required: true, reason: 'verify' }],
+    }),
+  ) as { status?: string; result?: unknown };
+
+  assert.equal(result.status, 'submitted');
+  const parsedResult = v.parse(CodingImplementerResultSchema, result.result);
+  assert.equal(parsedResult.fileEdits.length, 1);
+  assert.equal(parsedResult.fileEdits[0].path, 'index.js');
+  assert.equal(parsedResult.fileEdits[0].oldText, 'return 41;');
+  assert.equal(parsedResult.fileEdits[0].newText, 'return 42;');
+  assert.equal(parsedResult.fileEdits[0].expectedOccurrences, 1);
+  assert.equal(parsedResult.writeFiles.length, 1);
+  assert.equal(parsedResult.writeFiles[0].path, 'new.js');
+  assert.equal(parsedResult.verificationCommands.length, 1);
+  assert.equal(parsedResult.verificationCommands[0].name, 'unit');
+
+  await assert.rejects(
+    () =>
+      submit.execute({
+        fileEdits: [{ path: 123, oldText: 'a', newText: 'b' }],
+        writeFiles: [],
+        verificationCommands: [],
+      } as never),
+    /Invalid/,
+  );
+});
+
+test('coding repo apply patch produces valid CodingFileEdit objects', async () => {
+  const project = createExecutableWorkspaceProject();
+
+  try {
+    const tools = createCodingRepoTools({
+      workspaceRoot: project.workspaceRoot,
+      targetKind: 'project',
+      projectRelativePath: project.projectRelativePath,
+    });
+    const patch = getTool(tools, 'coding_repo_apply_patch');
+
+    const result = JSON.parse(
+      await patch.execute({
+        path: 'index.js',
+        edits: [{ oldText: 'return 41;', newText: 'return 42;', expectedOccurrences: 1 }],
+      }),
+    ) as { status?: string; replacements?: number; edits?: unknown[] };
+
+    assert.equal(result.status, 'patched');
+    assert.equal(result.replacements, 1);
+    assert.equal(Array.isArray(result.edits), true);
+    assert.equal(result.edits?.length, 1);
+
+    const edit = v.parse(CodingFileEditSchema, result.edits?.[0]);
+    assert.equal(edit.path, 'index.js');
+    assert.equal(edit.oldText, 'return 41;');
+    assert.equal(edit.newText, 'return 42;');
+    assert.equal(edit.expectedOccurrences, 1);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding repo apply exact edit works and returns a valid CodingFileEdit', async () => {
+  const project = createExecutableWorkspaceProject();
+
+  try {
+    const tools = createCodingRepoTools({
+      workspaceRoot: project.workspaceRoot,
+      targetKind: 'project',
+      projectRelativePath: project.projectRelativePath,
+    });
+    const exactEdit = getTool(tools, 'coding_repo_apply_exact_edit');
+
+    const result = JSON.parse(
+      await exactEdit.execute({
+        path: 'index.js',
+        oldText: 'return 41;',
+        newText: 'return 42;',
+        expectedOccurrences: 1,
+      }),
+    ) as { status?: string; replacements?: number; edit?: unknown };
+
+    assert.equal(result.status, 'patched');
+    assert.equal(result.replacements, 1);
+
+    const edit = v.parse(CodingFileEditSchema, result.edit);
+    assert.equal(edit.path, 'index.js');
+    assert.equal(edit.oldText, 'return 41;');
+    assert.equal(edit.newText, 'return 42;');
+    assert.equal(edit.expectedOccurrences, 1);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker lead loop applies implementer structured edits and completes', async () => {
+  const project = createExecutableWorkspaceProject();
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
+
+  try {
+    const result = await runCodingWorkerLoop(
+      {
+        taskId: 'task-implementer-structured',
+        text: 'Fix answer implementation.',
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+        verificationCommands: [
+          {
+            name: 'unit',
+            command: 'node test.js',
+            required: true,
+            reason: 'Temp repo unit verification must pass.',
+          },
+        ],
+      },
+      {
+        approvalService,
+        delegate: createFakeDelegate({
+          implementer: {
+            fileEdits: [
+              {
+                path: 'index.js',
+                oldText: 'return 41;',
+                newText: 'return 42;',
+                expectedOccurrences: 1,
+              },
+            ],
+            verificationCommands: [
+              {
+                name: 'unit',
+                command: 'node test.js',
+                required: true,
+                reason: 'Temp repo unit verification must pass.',
+              },
+            ],
+          },
+        }),
+      },
+    );
+
+    assert.equal(result.status, 'completed');
+    assert.match(readFileSync(join(project.repoPath, 'index.js'), 'utf8'), /return 42/);
+    assert.equal(result.subagentResults.some((item) => item.subagent === 'implementer'), true);
+    assert.doesNotThrow(() => assertCodingWorkerCanComplete(result));
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+interface TempWorkspaceProject {
+  workspaceRoot: string;
+  projectRelativePath: string;
+  repoPath: string;
+}
+
+function createTempWorkspace() {
+  return mkdtempSync(join(tmpdir(), 'coding-worker-workspace-'));
+}
+
 function createTempRepo(input: { scripts: Record<string, string> }) {
   const repoPath = mkdtempSync(join(tmpdir(), 'coding-worker-repo-'));
   writeFileSync(
@@ -1449,16 +2351,6 @@ function createTempRepo(input: { scripts: Record<string, string> }) {
     ),
   );
   return repoPath;
-}
-
-interface TempWorkspaceProject {
-  workspaceRoot: string;
-  projectRelativePath: string;
-  repoPath: string;
-}
-
-function createTempWorkspace() {
-  return mkdtempSync(join(tmpdir(), 'coding-worker-workspace-'));
 }
 
 function createWorkspaceProject(projectRelativePath = 'projects/answer-app'): TempWorkspaceProject {
@@ -1508,6 +2400,583 @@ function createGitWorkspaceProject(): TempWorkspaceProject {
   return project;
 }
 
+test('coding worker loop state initializes with bounded turn guard and checkpoint shape', () => {
+  const project = createExecutableWorkspaceProject();
+
+  try {
+    const sessionPlan = createCodingWorkerSessionPlan('task-state', 'state-session');
+    const preflight = runCodingRepoPreflight(project.repoPath);
+    const state = createInitialLoopState(
+      {
+        taskId: 'task-state',
+        text: 'Fix bug.',
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+        maxTurns: 7,
+      },
+      sessionPlan,
+      preflight,
+      7,
+    );
+
+    assert.equal(state.currentStep, 'triage');
+    assert.equal(state.turn, 0);
+    assert.equal(state.maxTurns, 7);
+    assert.equal(state.replanCount, 0);
+    assert.equal(state.sessionPlan.leadSessionName, sessionPlan.leadSessionName);
+    assert.equal(state.preflight.repoPath, project.repoPath);
+
+    const checkpoint = createLoopCheckpoint(state);
+    assert.equal(checkpoint.taskId, 'task-state');
+    assert.equal(checkpoint.currentStep, 'triage');
+    assert.equal(checkpoint.turn, 0);
+    assert.equal(checkpoint.maxTurns, 7);
+    assert.equal(checkpoint.plan.length, 4);
+    assert.equal(checkpoint.pendingEdits.fileEdits.length, 0);
+    assert.equal(checkpoint.pendingEdits.writeFiles.length, 0);
+    assert.equal(checkpoint.verificationResults.requiredCommands.length, preflight.verificationPlan.length);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker loop persists a checkpoint after each turn', async () => {
+  const project = createExecutableWorkspaceProject();
+  const reporter = new InMemoryCodingProgressReporter();
+  const taskRunStore = new JsonFileCodingTaskRunStore(join(project.workspaceRoot, 'task-runs.json'));
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
+
+  try {
+    const result = await runCodingWorkerLoop(
+      {
+        taskId: 'task-checkpoint',
+        text: 'Fix answer implementation.',
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+        fileEdits: [
+          {
+            path: 'index.js',
+            oldText: 'return 41;',
+            newText: 'return 42;',
+            expectedOccurrences: 1,
+          },
+        ],
+        verificationCommands: [
+          {
+            name: 'unit',
+            command: 'node test.js',
+            required: true,
+            reason: 'Temp repo unit verification must pass.',
+          },
+        ],
+      },
+      { reporter, taskRunStore, approvalService, delegate: createFakeDelegate() },
+    );
+
+    assert.equal(result.status, 'completed');
+    const stored = await taskRunStore.get('task-checkpoint');
+    assert.ok(stored?.checkpoint);
+    assert.equal(stored.checkpoint.status, 'completed');
+    assert.equal(stored.checkpoint.currentStep, 'completed');
+    assert.equal(stored.checkpoint.turn >= 1, true);
+    assert.equal(stored.checkpoint.subagentHistory.length > 0, true);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker loop blocks when file edit approval is denied', async () => {
+  const project = createExecutableWorkspaceProject();
+  const reporter = new InMemoryCodingProgressReporter();
+  const approvalService = createInMemoryCodingApprovalService();
+
+  try {
+    const result = await runCodingWorkerLoop(
+      {
+        taskId: 'task-edit-denied',
+        text: 'Fix answer implementation.',
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+        fileEdits: [
+          {
+            path: 'index.js',
+            oldText: 'return 41;',
+            newText: 'return 42;',
+            expectedOccurrences: 1,
+          },
+        ],
+      },
+      { reporter, approvalService, delegate: createFakeDelegate() },
+    );
+
+    assert.equal(result.status, 'blocked');
+    assert.equal(reporter.events().some((event) => event.type === 'coding.approval.requested'), true);
+    assert.equal(readFileSync(join(project.repoPath, 'index.js'), 'utf8').includes('return 41'), true);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker loop replans when code review rejects', async () => {
+  const project = createExecutableWorkspaceProject();
+  const reporter = new InMemoryCodingProgressReporter();
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
+  let implementerCalls = 0;
+
+  try {
+    const result = await runCodingWorkerLoop(
+      {
+        taskId: 'task-review-reject',
+        text: 'Fix answer implementation.',
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+        fileEdits: [
+          {
+            path: 'index.js',
+            oldText: 'return 41;',
+            newText: 'return 42;',
+            expectedOccurrences: 1,
+          },
+        ],
+        verificationCommands: [
+          {
+            name: 'unit',
+            command: 'node test.js',
+            required: true,
+            reason: 'Temp repo unit verification must pass.',
+          },
+        ],
+      },
+      {
+        reporter,
+        approvalService,
+        delegate: async (subagent, request) => {
+          const base = await createFakeDelegate({
+            implementer: {
+              fileEdits: implementerCalls > 0 ? [] : request.task.fileEdits,
+            },
+            codeReview: {
+              approved: implementerCalls > 1,
+              findings: implementerCalls > 1 ? [] : [{ severity: 'blocker', message: 'Need a better fix.' }],
+            },
+          })(subagent, request);
+          if (subagent === 'implementer') {
+            implementerCalls += 1;
+          }
+          return base;
+        },
+      },
+    );
+
+    assert.equal(result.status, 'completed');
+    assert.equal(implementerCalls, 2);
+    assert.equal(reporter.events().some((event) => event.type === 'coding.replanned'), true);
+    assert.equal((result.checkpoint?.replanCount ?? 0) >= 1, true);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker loop pauses when code review repeatedly rejects and replan budget is exhausted', async () => {
+  const project = createExecutableWorkspaceProject();
+  const reporter = new InMemoryCodingProgressReporter();
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
+
+  try {
+    const result = await runCodingWorkerLoop(
+      {
+        taskId: 'task-review-reject-exhausted',
+        text: 'Fix answer implementation.',
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+        verificationCommands: [
+          {
+            name: 'unit',
+            command: 'node -e "process.exit(0)"',
+            required: true,
+            reason: 'Synthetic verification must pass.',
+          },
+        ],
+        maxTurns: 20,
+      },
+      {
+        reporter,
+        approvalService,
+        maxReplans: 1,
+        delegate: createFakeDelegate({
+          implementer: { fileEdits: [] },
+          codeReview: {
+            approved: false,
+            findings: [{ severity: 'blocker', message: 'Repeated rejection.' }],
+          },
+        }),
+      },
+    );
+
+    assert.equal(result.status, 'blocked');
+    assert.match(result.summary, /replan budget/);
+    assert.equal(reporter.events().some((event) => event.type === 'coding.replanned'), true);
+    assert.equal(reporter.events().some((event) => event.type === 'coding.blocked'), true);
+    assert.ok(result.checkpoint);
+    assert.equal((result.checkpoint?.replanCount ?? 0) >= 2, true);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker loop respects the max turn guard and returns blocked', async () => {
+  const project = createExecutableWorkspaceProject();
+  const reporter = new InMemoryCodingProgressReporter();
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
+
+  try {
+    const result = await runCodingWorkerLoop(
+      {
+        taskId: 'task-max-turns',
+        text: 'Fix answer implementation.',
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+        fileEdits: [
+          {
+            path: 'index.js',
+            oldText: 'return 41;',
+            newText: 'return 42;',
+            expectedOccurrences: 1,
+          },
+        ],
+        verificationCommands: [
+          {
+            name: 'unit',
+            command: 'node test.js',
+            required: true,
+            reason: 'Temp repo unit verification must pass.',
+          },
+        ],
+        maxTurns: 2,
+      },
+      { reporter, approvalService, delegate: createFakeDelegate() },
+    );
+
+    assert.equal(result.status, 'blocked');
+    assert.match(result.summary, /Exceeded maximum loop turns/);
+    assert.equal(result.checkpoint?.maxTurns, 2);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker end-to-end fixes bug, commits, pushes branch, and prepares a PR', async () => {
+  const { project, remotePath } = createGitWorkspaceProjectWithRemote();
+  const reporter = new InMemoryCodingProgressReporter();
+  const approvalService = createAutoApprovingApprovalService([
+    'file.edit',
+    'git.commit',
+    'git.push',
+    'repo.branch.create',
+    'github.pr.create',
+  ]);
+  const fakeClient = createFakeGitHubClient();
+  const sandbox = await createFlueLocalCodingSandbox({
+    workspaceRoot: project.workspaceRoot,
+    targetKind: 'project',
+    projectRelativePath: project.projectRelativePath,
+    sessionId: 'task-e2e-fix-and-pr',
+  });
+
+  try {
+    const result = await runCodingWorkerLoop(
+      {
+        taskId: 'task-e2e-fix-and-pr',
+        text: 'Fix the off-by-one bug in index.js and open a PR.',
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+        github: { owner: 'dansasser', repo: 'astro-flue-agent', issueNumber: 7 },
+        verificationCommands: [
+          {
+            name: 'unit',
+            command: 'node test.js',
+            required: true,
+            reason: 'Unit test must pass after the off-by-one fix.',
+          },
+        ],
+        maxTurns: 10,
+      },
+      {
+        reporter,
+        approvalService,
+        sandbox,
+        delegate: createEndToEndDelegate({ approvalService, fakeClient, project, sandbox }),
+      },
+    );
+
+    assert.equal(result.status, 'completed');
+    assert.doesNotThrow(() => assertCodingWorkerCanComplete(result));
+    assert.ok(result.checkpoint);
+    assert.equal(result.checkpoint.turn <= result.checkpoint.maxTurns, true);
+
+    // The implementer edit fixed the bug.
+    assert.match(readFileSync(join(project.repoPath, 'index.js'), 'utf8'), /return 42/);
+
+    // Verification passed.
+    assert.equal(result.verification.evidence.some((item) => item.command === 'node test.js' && item.status === 'passed'), true);
+
+    // An approval-gated commit was created in the temp repo.
+    const log = execFileSync('git', ['log', '--oneline', '-1'], { cwd: project.repoPath, encoding: 'utf8' });
+    assert.match(log, /Fix off-by-one bug/);
+
+    // The feature branch was pushed to the local bare remote.
+    const remoteBranches = execFileSync('git', ['ls-remote', '--heads', remotePath], {
+      cwd: project.repoPath,
+      encoding: 'utf8',
+    });
+    assert.match(remoteBranches, /refs\/heads\/feature\/fix-off-by-one/);
+
+    // The GitHub subagent produced a create_pr action and surfaced evidence.
+    const githubResult = result.subagentResults.find((item) => item.subagent === 'github');
+    assert.ok(githubResult);
+    assert.equal(githubResult.structuredOutput?.type, 'github');
+    const createPrAction = githubResult.structuredOutput?.result.actions.find(
+      (action) => action.action === 'create_pr',
+    );
+    assert.ok(createPrAction);
+    assert.equal(createPrAction.payload.head, 'feature/fix-off-by-one');
+    assert.equal(createPrAction.payload.base, 'main');
+
+    // Public progress events cover every major checkpoint.
+    const events = reporter.events();
+    assert.equal(events.some((event) => event.type === 'coding.triage.completed'), true);
+    assert.equal(events.some((event) => event.type === 'coding.implementer.completed'), true);
+    assert.equal(events.some((event) => event.type === 'coding.test-debug.completed'), true);
+    assert.equal(events.some((event) => event.type === 'coding.review.completed'), true);
+    assert.equal(events.some((event) => event.type === 'coding.github.completed'), true);
+    assert.equal(events.some((event) => event.type === 'coding.completed'), true);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmSync(remotePath, { recursive: true, force: true });
+  }
+});
+
+function createGitWorkspaceProjectWithRemote(): { project: TempWorkspaceProject; remotePath: string } {
+  const project = createGitWorkspaceProject();
+  const remotePath = mkdtempSync(join(tmpdir(), 'coding-worker-remote-'));
+  execFileSync('git', ['init', '--bare'], { cwd: remotePath });
+  execFileSync('git', ['remote', 'add', 'origin', remotePath], { cwd: project.repoPath });
+  return { project, remotePath };
+}
+
+function createFakeGitHubClient(): GitHubClient {
+  return {
+    async getIssue() {
+      return { number: 7, title: 'Fix off-by-one bug', state: 'OPEN' };
+    },
+    async getPullRequest() {
+      return {
+        number: 13,
+        title: 'Fix off-by-one bug in index.js',
+        state: 'OPEN',
+        baseRef: 'main',
+        headRef: 'feature/fix-off-by-one',
+      };
+    },
+    async listPullRequestChecks() {
+      return [{ name: 'unit', status: 'COMPLETED', conclusion: 'SUCCESS' }];
+    },
+  };
+}
+
+interface EndToEndDelegateInput {
+  approvalService: import('../workers/coding-worker/approvals/approval-service.js').CodingApprovalService;
+  fakeClient: GitHubClient;
+  project: TempWorkspaceProject;
+  sandbox: import('../workers/coding-worker/tools/sandbox-runtime.js').CodingSandboxRuntime;
+}
+
+function createEndToEndDelegate(input: EndToEndDelegateInput): (
+  subagent: CodingSubagentKind,
+  request: CodingTaskSubagentRequest,
+) => Promise<CodingSubagentRunResult> {
+  const base = createFakeDelegate({
+    triage: { recommendedExecutionPath: 'implementer' },
+    implementer: {
+      fileEdits: [
+        {
+          path: 'index.js',
+          oldText: 'return 41;',
+          newText: 'return 42;',
+          expectedOccurrences: 1,
+        },
+      ],
+      verificationCommands: [
+        {
+          name: 'unit',
+          command: 'node test.js',
+          required: true,
+          reason: 'Unit test must pass after the off-by-one fix.',
+        },
+      ],
+    },
+    testDebug: { debugEdits: [], verificationCommands: [] },
+    codeReview: { approved: true, findings: [] },
+  });
+
+  return async (subagent, request) => {
+    if (subagent !== 'github') {
+      return base(subagent, request);
+    }
+
+    const branch = 'feature/fix-off-by-one';
+    const message = 'Fix off-by-one bug in index.js';
+
+    // Approval-gated branch creation.
+    const workflowTools = createCodingRepoWorkflowTools({
+      workspaceRoot: input.project.workspaceRoot,
+      targetKind: 'project',
+      projectRelativePath: input.project.projectRelativePath,
+      approvalService: input.approvalService,
+      sandbox: input.sandbox,
+    });
+    const branchTool = getTool(workflowTools, 'coding_repo_branch_create');
+    const branchResult = JSON.parse(
+      await branchTool.execute({
+        taskId: request.task.taskId,
+        branch,
+        checkout: true,
+      }),
+    ) as { status?: string };
+    assert.equal(branchResult.status, 'created');
+
+    // Approval-gated commit.
+    const gitTools = createCodingGitTools({
+      workspaceRoot: input.project.workspaceRoot,
+      targetKind: 'project',
+      projectRelativePath: input.project.projectRelativePath,
+      approvalService: input.approvalService,
+      sandbox: input.sandbox,
+    });
+    const commitTool = getTool(gitTools, 'coding_git_commit');
+    const commitResult = JSON.parse(
+      await commitTool.execute({
+        taskId: request.task.taskId,
+        message,
+        paths: ['index.js'],
+      }),
+    ) as { status?: string };
+    assert.equal(commitResult.status, 'committed');
+    assert.equal(
+      execFileSync('git', ['branch', '--show-current'], { cwd: input.project.repoPath, encoding: 'utf8' }).trim(),
+      branch,
+    );
+
+    // Approval-gated push to the local bare remote.
+    const pushTool = getTool(gitTools, 'coding_git_push');
+    const pushResult = JSON.parse(
+      await pushTool.execute({
+        taskId: request.task.taskId,
+        remote: 'origin',
+        branch,
+      }),
+    ) as { status?: string };
+    assert.equal(pushResult.status, 'pushed');
+
+    // Approval-gated PR preparation through the GitHub tools surface.
+    const githubTools = createCodingGitHubTools({
+      client: input.fakeClient,
+      approvalService: input.approvalService,
+    });
+    const requestApproval = getTool(githubTools, 'coding_github_request_approval');
+    const approvalResult = JSON.parse(
+      await requestApproval.execute({
+        taskId: request.task.taskId,
+        actionType: 'github.pr.create',
+        summary: 'Create PR for off-by-one fix',
+        reason: 'Publish the fix for review.',
+        risk: 'This opens remote PR state on GitHub.',
+      }),
+    ) as {
+      actions: Array<{
+        payload: {
+          request: { id: string };
+          evaluation: { allowed: boolean };
+        };
+      }>;
+    };
+    assert.equal(approvalResult.actions[0]?.payload.evaluation.allowed, true);
+
+    return {
+      subagent: 'github',
+      summary: 'Created branch, committed, pushed, and prepared PR.',
+      evidence: [branch, message, `approval:${approvalResult.actions[0]?.payload.request.id}`],
+      structuredOutput: {
+        type: 'github',
+        result: {
+          actions: [
+            {
+              action: 'create_pr',
+              payload: {
+                owner: 'dansasser',
+                repo: 'astro-flue-agent',
+                title: message,
+                body: 'Fixes the off-by-one bug in index.js.',
+                head: branch,
+                base: 'main',
+                status: 'prepared',
+              },
+            },
+          ],
+        },
+      },
+    };
+  };
+}
+
+function createMinimalLoopState(
+  taskId: string,
+  plan: import('../workers/coding-worker/types.js').CodingPlanItem[],
+): import('../workers/coding-worker/types.js').CodingWorkerLoopState {
+  return {
+    task: { taskId, text: 'test task' },
+    sessionPlan: {
+      taskId,
+      leadSessionName: 'test-session',
+      childSessions: {
+        triage: 'test-session:triage',
+        implementer: 'test-session:implementer',
+        'test-debug': 'test-session:test-debug',
+        'code-review': 'test-session:code-review',
+        github: 'test-session:github',
+      },
+    },
+    preflight: {
+      repoPath: '',
+      packageManager: 'pnpm',
+      scripts: {},
+      verificationPlan: [],
+    },
+    currentStep: 'triage',
+    turn: 1,
+    maxTurns: 10,
+    plan,
+    approvalQueue: [],
+    pendingEdits: {
+      fileEdits: [],
+      writeFiles: [],
+    },
+    verificationResults: {
+      requiredCommands: [],
+      evidence: [],
+    },
+    subagentHistory: [],
+    replanCount: 0,
+  };
+}
+
 function getTool(tools: ToolDefinition[], name: string) {
   const tool = tools.find((item) => item.name === name);
   assert.ok(tool);
@@ -1521,4 +2990,96 @@ function createModelEnv(): Record<string, string> {
     CODEX_BRAIN_LOCAL_API_URL: 'https://dt1.example.test/v1',
     GOROMBO_WORKSPACE_ROOT: process.cwd(),
   };
+}
+
+interface FakeDelegateOptions {
+  triage?: Partial<import('../workers/coding-worker/types.js').CodingTriageResult>;
+  implementer?: Partial<import('../workers/coding-worker/types.js').CodingImplementerResult>;
+  testDebug?: Partial<import('../workers/coding-worker/types.js').CodingTestDebugResult>;
+  codeReview?: Partial<import('../workers/coding-worker/types.js').CodingCodeReviewResult>;
+  github?: Partial<import('../workers/coding-worker/types.js').CodingGithubResult>;
+}
+
+function createFakeDelegate(options: FakeDelegateOptions = {}): (
+  subagent: CodingSubagentKind,
+  request: CodingTaskSubagentRequest,
+) => Promise<CodingSubagentRunResult> {
+  return async (subagent, request) => {
+    const base = {
+      summary: `${subagent} result`,
+      evidence: [subagent],
+    };
+
+    switch (subagent) {
+      case 'triage': {
+        const plan = options.triage?.plan ?? createInitialCodingPlan(request.task);
+        const filesToInspect = options.triage?.filesToInspect ?? [];
+        const recommendedExecutionPath = options.triage?.recommendedExecutionPath ?? 'implementer';
+        return {
+          subagent,
+          ...base,
+          structuredOutput: { type: 'triage', result: { plan, filesToInspect, recommendedExecutionPath } },
+        };
+      }
+      case 'implementer': {
+        const fileEdits = options.implementer?.fileEdits ?? request.task.fileEdits ?? [];
+        const writeFiles = options.implementer?.writeFiles ?? request.task.writeFiles ?? [];
+        const verificationCommands = options.implementer?.verificationCommands ?? request.task.verificationCommands ?? [];
+        return {
+          subagent,
+          ...base,
+          structuredOutput: { type: 'implementer', result: { fileEdits, writeFiles, verificationCommands } },
+        };
+      }
+      case 'test-debug': {
+        const debugEdits = options.testDebug?.debugEdits ?? request.task.debugEdits ?? [];
+        const verificationCommands = options.testDebug?.verificationCommands ?? [];
+        const analysis = options.testDebug?.analysis ?? '';
+        return {
+          subagent,
+          ...base,
+          structuredOutput: { type: 'test-debug', result: { debugEdits, verificationCommands, analysis } },
+        };
+      }
+      case 'code-review': {
+        const findings = options.codeReview?.findings ?? [];
+        const approved = options.codeReview?.approved ?? true;
+        return {
+          subagent,
+          ...base,
+          structuredOutput: { type: 'code-review', result: { findings, approved } },
+        };
+      }
+      case 'github': {
+        const actions = options.github?.actions ?? [];
+        return {
+          subagent,
+          ...base,
+          structuredOutput: { type: 'github', result: { actions } },
+        };
+      }
+    }
+  };
+}
+
+function createAutoApprovingApprovalService(actionTypes: string[]): import('../workers/coding-worker/approvals/approval-service.js').CodingApprovalService {
+  const inner = createInMemoryCodingApprovalService();
+  return new Proxy(inner, {
+    get(target, prop) {
+      if (prop === 'evaluateRequest') {
+        return async (request: import('../workers/coding-worker/approvals/approval-types.js').CodingApprovalRequest) => {
+          if (actionTypes.includes(request.actionType)) {
+            return {
+              allowed: true,
+              requiresApproval: true,
+              reason: 'Auto-approved by test harness.',
+              status: 'approved',
+            };
+          }
+          return target.evaluateRequest(request);
+        };
+      }
+      return (target as unknown as Record<string, unknown>)[prop as string];
+    },
+  });
 }

@@ -23,7 +23,7 @@
     "research:local": "node scripts/research.mjs",
     "start": "node --env-file=.env dist/server.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "corepack pnpm run test:unit && corepack pnpm run build && corepack pnpm run test:http"
+    "test": "pnpm run test:unit && pnpm run build && pnpm run test:http"
   },
   "engines": {
     "node": ">=22.18.0",
@@ -32,13 +32,13 @@
   "dependencies": {
     "@flue/runtime": "0.11.0",
     "hono": "^4.12.23",
-    "proper-lockfile": "^4.1.2"
+    "proper-lockfile": "^4.1.2",
+    "typescript": "^6.0.3"
   },
   "devDependencies": {
     "@flue/cli": "0.11.0",
     "@types/node": "^25.9.2",
     "@types/proper-lockfile": "^4.1.4",
-    "typescript": "^6.0.3",
     "valibot": "^1.4.1"
   }
 }

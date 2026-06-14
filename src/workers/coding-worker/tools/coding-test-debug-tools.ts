@@ -1,27 +1,20 @@
 import { defineTool, Type, type ToolDefinition } from '@flue/runtime';
-import * as v from 'valibot';
-import { CodingImplementerResultSchema } from '../../../schemas/coding-worker.js';
+import type { CodingTestDebugResult } from '../../../schemas/coding-worker.js';
 
-export function createCodingImplementerTools(): ToolDefinition[] {
+export function createCodingTestDebugTools(): ToolDefinition[] {
   return [
     defineTool({
-      name: 'coding_implementer_submit_result',
+      name: 'coding_test_debug_submit_result',
       description:
-        'Submit the final structured implementation result containing file edits, files written, and commands needed to verify them. The result must match the CodingImplementerResult schema exactly; invalid submissions will be rejected.',
+        'Submit the final structured CodingTestDebugResult containing debug edits, verification commands, and failure analysis.',
       parameters: Type.Object({
-        fileEdits: Type.Array(
+        debugEdits: Type.Array(
           Type.Object({
             path: Type.String(),
             oldText: Type.String(),
             newText: Type.String(),
             expectedOccurrences: Type.Optional(Type.Number()),
-          })
-        ),
-        writeFiles: Type.Array(
-          Type.Object({
-            path: Type.String(),
-            content: Type.String(),
-          })
+          }),
         ),
         verificationCommands: Type.Array(
           Type.Object({
@@ -31,11 +24,16 @@ export function createCodingImplementerTools(): ToolDefinition[] {
             reason: Type.Optional(Type.String()),
             cwd: Type.Optional(Type.String()),
             timeoutSeconds: Type.Optional(Type.Number()),
-          })
+          }),
         ),
+        analysis: Type.String(),
       }),
       execute: async (args) => {
-        const result = v.parse(CodingImplementerResultSchema, args);
+        const result: CodingTestDebugResult = {
+          debugEdits: args.debugEdits || [],
+          verificationCommands: args.verificationCommands || [],
+          analysis: args.analysis || '',
+        };
         return JSON.stringify({ status: 'submitted', result }, null, 2);
       },
     }),

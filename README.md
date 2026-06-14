@@ -366,31 +366,31 @@ cd <repository-name>
 Install dependencies using the package manager used by the repo:
 
 ```sh
-corepack pnpm install
+pnpm install
 ```
 
 Run the development server or local workflow command defined in `package.json`:
 
 ```sh
-corepack pnpm run dev
+pnpm run dev
 ```
 
 Run tests:
 
 ```sh
-corepack pnpm test
+pnpm test
 ```
 
 Run type checks:
 
 ```sh
-corepack pnpm run typecheck
+pnpm run typecheck
 ```
 
 Build the project:
 
 ```sh
-corepack pnpm run build
+pnpm run build
 ```
 
 Use the actual scripts defined in `package.json`.
@@ -467,20 +467,20 @@ Then select it by card key in `gorombo.config.json`.
 Run a one-shot research workflow:
 
 ```sh
-corepack pnpm run research:local -- "Find the official Ollama web search API docs URL."
+pnpm run research:local -- "Find the official Ollama web search API docs URL."
 ```
 
 Open an interactive Flue agent session:
 
 ```sh
-corepack pnpm run connect
+pnpm run connect
 ```
 
 Start the built Node HTTP runtime:
 
 ```sh
-corepack pnpm run build
-corepack pnpm start
+pnpm run build
+pnpm start
 ```
 
 The HTTP runtime uses the Flue routing model:
@@ -662,7 +662,7 @@ Use the boundaries this way:
 - low-level provider errors: the research workflow records failures in `providerFailures`
 - research strategy: researcher decides which searches to run, when to fetch pages, when to stop, and how to compare sources
 
-The researcher subagent lives in `src/workers/researcher/researcher.ts` and owns the `web_research` tool. The standalone `research` workflow in `src/workflows/research.ts` initializes the researcher directly for CLI or API research runs. Use `corepack pnpm run research:local -- "..."` for local one-shot research testing.
+The researcher subagent lives in `src/workers/researcher/researcher.ts` and owns the `web_research` tool. The standalone `research` workflow in `src/workflows/research.ts` initializes the researcher directly for CLI or API research runs. Use `pnpm run research:local -- "..."` for local one-shot research testing.
 
 Main-agent workspace persona files live in `src/workspace/`. Subagent workspace persona files live beside their subagent implementation, for example `src/workers/researcher/workspace/`. Persona names belong inside workspace file contents, not in architecture paths.
 
@@ -702,7 +702,7 @@ It starts with model selection and is intended to grow into the deployment-level
 
 Change model choices in the shipped runtime JSON file, then restart the runtime/gateway. Keep API keys and service credentials in `.env` or the deployment secret manager.
 
-For Node distribution, `.env` lives beside `package.json` at the runtime root. `corepack pnpm start` runs:
+For Node distribution, `.env` lives beside `package.json` at the runtime root. `pnpm start` runs:
 
 ```sh
 node --env-file=.env dist/server.mjs
@@ -767,19 +767,19 @@ Run relevant verification before calling work complete.
 Common commands:
 
 ```sh
-corepack pnpm test
-corepack pnpm run typecheck
-corepack pnpm run build
-corepack pnpm run test:http
-corepack pnpm run smoke:http
+pnpm test
+pnpm run typecheck
+pnpm run build
+pnpm run test:http
+pnpm run smoke:http
 ```
 
-`corepack pnpm test` runs the TypeScript unit suite, builds `dist/server.mjs`, then runs `corepack pnpm run test:http` against the built server over real localhost HTTP. The root `.env` file remains the runtime environment source; it is not copied into `dist`.
+`pnpm test` runs the TypeScript unit suite, builds `dist/server.mjs`, then runs `pnpm run test:http` against the built server over real localhost HTTP. The root `.env` file remains the runtime environment source; it is not copied into `dist`.
 
 For a live built-server chat smoke through `/api/chat/events`, run:
 
 ```sh
-corepack pnpm run smoke:http -- --live-chat
+pnpm run smoke:http -- --live-chat
 ```
 
 If the project defines other scripts in `package.json`, use those exact scripts.

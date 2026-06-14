@@ -14,7 +14,11 @@ export type CodingApprovalActionType =
   | 'github.pr.update'
   | 'github.pr.ready'
   | 'github.issue.update'
-  | 'github.review-thread.update';
+  | 'github.review-thread.update'
+  | 'github.branch_from_pr'
+  | 'github.review_comment'
+  | 'github.check.rerun'
+  | 'github.fork_repo';
 
 export type CodingApprovalStatus = 'pending' | 'approved' | 'denied' | 'expired' | 'cancelled';
 

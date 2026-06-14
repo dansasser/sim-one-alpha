@@ -6,7 +6,18 @@ import {
   codingTestDebugSubagentName,
   codingTriageSubagentName,
 } from '../subagents/index.js';
-import { CodingImplementerResultSchema, type CodingSubagentKind, type CodingSubagentRunResult, type CodingWorkerTaskRequest } from '../types.js';
+import {
+  CodingImplementerResultSchema,
+  CodingTriageResultSchema,
+  CodingTestDebugResultSchema,
+  CodingCodeReviewResultSchema,
+  CodingGithubResultSchema,
+} from '../../../schemas/coding-worker.js';
+import type {
+  CodingSubagentKind,
+  CodingSubagentRunResult,
+  CodingWorkerTaskRequest,
+} from '../types.js';
 import type { CodingTaskSubagentRequest } from './coding-task.js';
 
 export function shouldUseGithubSubagent(task: CodingWorkerTaskRequest): boolean {
@@ -42,38 +53,80 @@ export function createFlueCodingSubagentDelegate(session: Pick<FlueSession, 'tas
     request: CodingTaskSubagentRequest,
   ): Promise<CodingSubagentRunResult> => {
     const agent = codingSubagentFlueNames[subagent];
-
-    if (subagent === 'implementer') {
-      const response = await session.task(createSubagentTaskPrompt(subagent, request), {
-        agent,
-        result: CodingImplementerResultSchema,
-      });
-      const result = response.data;
-      const summary = `Implementer submitted ${result.fileEdits.length} edit(s), ${result.writeFiles.length} file write(s), and ${result.verificationCommands.length} verification command(s).`;
-      const evidence = [agent, request.sessionPlan.childSessions[subagent]];
-      return {
-        subagent,
-        summary,
-        evidence,
-        structuredOutput: { type: 'implementer', result },
-      };
-    }
-
-    const response = await session.task(createSubagentTaskPrompt(subagent, request), {
-      agent,
-    });
-    const summary = response.text;
+    const prompt = createSubagentTaskPrompt(subagent, request);
     const evidence = [agent, request.sessionPlan.childSessions[subagent]];
 
     switch (subagent) {
-      case 'triage':
-        return { subagent, summary, evidence };
-      case 'test-debug':
-        return { subagent, summary, evidence };
-      case 'code-review':
-        return { subagent, summary, evidence };
-      case 'github':
-        return { subagent, summary, evidence };
+      case 'triage': {
+        const response = await session.task(prompt, {
+          agent,
+          result: CodingTriageResultSchema,
+        });
+        const result = response.data;
+        const summary = `Triage selected execution path: ${result.recommendedExecutionPath} with explicit plan (${result.plan.length} item(s)).`;
+        return {
+          subagent,
+          summary,
+          evidence,
+          structuredOutput: { type: 'triage', result },
+        };
+      }
+      case 'implementer': {
+        const response = await session.task(prompt, {
+          agent,
+          result: CodingImplementerResultSchema,
+        });
+        const result = response.data;
+        const summary = `Implementer submitted ${result.fileEdits.length} edit(s), ${result.writeFiles.length} file write(s), and ${result.verificationCommands.length} verification command(s).`;
+        return {
+          subagent,
+          summary,
+          evidence,
+          structuredOutput: { type: 'implementer', result },
+        };
+      }
+      case 'test-debug': {
+        const response = await session.task(prompt, {
+          agent,
+          result: CodingTestDebugResultSchema,
+        });
+        const result = response.data;
+        const summary = `Test-debug produced ${result.debugEdits.length} debug edit(s) and ${result.verificationCommands.length} verification command(s).`;
+        return {
+          subagent,
+          summary,
+          evidence,
+          structuredOutput: { type: 'test-debug', result },
+        };
+      }
+      case 'code-review': {
+        const response = await session.task(prompt, {
+          agent,
+          result: CodingCodeReviewResultSchema,
+        });
+        const result = response.data;
+        const summary = `Code review returned ${result.findings.length} finding(s); approved=${result.approved}.`;
+        return {
+          subagent,
+          summary,
+          evidence,
+          structuredOutput: { type: 'code-review', result },
+        };
+      }
+      case 'github': {
+        const response = await session.task(prompt, {
+          agent,
+          result: CodingGithubResultSchema,
+        });
+        const result = response.data;
+        const summary = `GitHub subagent prepared ${result.actions.length} action(s).`;
+        return {
+          subagent,
+          summary,
+          evidence,
+          structuredOutput: { type: 'github', result },
+        };
+      }
     }
   };
 }

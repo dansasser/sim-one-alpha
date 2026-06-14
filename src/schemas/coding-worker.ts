@@ -29,7 +29,7 @@ export const CodingVerificationCommandRequestSchema = v.object({
   required: v.optional(v.boolean()),
   reason: v.optional(v.string()),
   cwd: v.optional(v.string()),
-  timeoutSeconds: v.optional(v.number()),
+  timeoutSeconds: v.optional(v.pipe(v.number(), v.minValue(1), v.maxValue(3600))),
 });
 
 export type CodingVerificationCommandRequest = v.InferOutput<typeof CodingVerificationCommandRequestSchema>;
@@ -48,3 +48,142 @@ export const CodingImplementerResultSchema = v.object({
 });
 
 export type CodingImplementerResult = v.InferOutput<typeof CodingImplementerResultSchema>;
+
+export const CodingPlanItemSchema = v.object({
+  id: v.string(),
+  description: v.string(),
+  owner: v.union([
+    v.literal('triage'),
+    v.literal('implementer'),
+    v.literal('test-debug'),
+    v.literal('code-review'),
+    v.literal('github'),
+    v.literal('coding-worker'),
+  ]),
+  status: v.union([v.literal('pending'), v.literal('in_progress'), v.literal('completed'), v.literal('blocked')]),
+});
+
+export type CodingPlanItem = v.InferOutput<typeof CodingPlanItemSchema>;
+
+export const CodingTriageResultSchema = v.object({
+  plan: v.array(CodingPlanItemSchema),
+  filesToInspect: v.array(v.string()),
+  recommendedExecutionPath: v.union([
+    v.literal('implementer'),
+    v.literal('github'),
+    v.literal('test-debug'),
+    v.literal('code-review'),
+    v.literal('manual'),
+  ]),
+});
+
+export type CodingTriageResult = v.InferOutput<typeof CodingTriageResultSchema>;
+
+export const CodingTestFailureSchema = v.object({
+  file: v.string(),
+  line: v.optional(v.number()),
+  column: v.optional(v.number()),
+  message: v.string(),
+  code: v.optional(v.string()),
+  context: v.optional(v.string()),
+  testName: v.optional(v.string()),
+  functionName: v.optional(v.string()),
+  severity: v.optional(v.union([v.literal('error'), v.literal('warning'), v.literal('info')])),
+});
+
+export type CodingTestFailure = v.InferOutput<typeof CodingTestFailureSchema>;
+
+export const CodingTestDebugResultSchema = v.object({
+  debugEdits: v.array(CodingFileEditSchema),
+  verificationCommands: v.array(CodingVerificationCommandRequestSchema),
+  analysis: v.string(),
+  failures: v.optional(v.array(CodingTestFailureSchema)),
+});
+
+export type CodingTestDebugResult = v.InferOutput<typeof CodingTestDebugResultSchema>;
+
+export const CodingCodeReviewFindingSchema = v.object({
+  file: v.optional(v.string()),
+  lineStart: v.optional(v.number()),
+  lineEnd: v.optional(v.number()),
+  severity: v.union([v.literal('info'), v.literal('warning'), v.literal('blocker')]),
+  message: v.string(),
+});
+
+export type CodingCodeReviewFinding = v.InferOutput<typeof CodingCodeReviewFindingSchema>;
+
+export const CodingCodeReviewResultSchema = v.object({
+  findings: v.array(CodingCodeReviewFindingSchema),
+  approved: v.boolean(),
+});
+
+export type CodingCodeReviewResult = v.InferOutput<typeof CodingCodeReviewResultSchema>;
+
+export const CodingGithubActionSchema = v.object({
+  action: v.union([
+    v.literal('comment'),
+    v.literal('create_pr'),
+    v.literal('update_pr'),
+    v.literal('merge_pr'),
+    v.literal('close_pr'),
+    v.literal('list_prs'),
+    v.literal('list_issues'),
+    v.literal('branch_from_pr'),
+    v.literal('review_comment'),
+    v.literal('rerun_check'),
+    v.literal('fork_repo'),
+    v.literal('ready_pr'),
+    v.literal('update_issue'),
+    v.literal('update_review_thread'),
+    v.literal('read_context'),
+    v.literal('verify_pr'),
+    v.literal('approve_request'),
+  ]),
+  payload: v.record(v.string(), v.unknown()),
+});
+
+export type CodingGithubAction = v.InferOutput<typeof CodingGithubActionSchema>;
+
+export const CodingGithubResultSchema = v.object({
+  actions: v.array(CodingGithubActionSchema),
+});
+
+export type CodingGithubResult = v.InferOutput<typeof CodingGithubResultSchema>;
+
+export const CodingEditOperationResultSchema = v.object({
+  path: v.string(),
+  operation: v.union([v.literal('write'), v.literal('patch')]),
+  status: v.union([v.literal('applied'), v.literal('rolled_back'), v.literal('failed')]),
+  replacements: v.optional(v.number()),
+  reason: v.optional(v.string()),
+});
+
+export type CodingEditOperationResult = v.InferOutput<typeof CodingEditOperationResultSchema>;
+
+export const CodingEditTransactionFailureSchema = v.object({
+  path: v.string(),
+  operation: v.union([v.literal('write'), v.literal('patch')]),
+  reason: v.string(),
+});
+
+export type CodingEditTransactionFailure = v.InferOutput<typeof CodingEditTransactionFailureSchema>;
+
+/**
+ * Atomic multi-file edit transaction.
+ *
+ * A transaction groups file writes and exact-text patches. All operations are
+ * validated before any mutation is applied. On the first failure every change
+ * made so far is rolled back and the transaction ends with status `failed`.
+ */
+export const CodingEditTransactionSchema = v.object({
+  id: v.string(),
+  status: v.union([v.literal('pending'), v.literal('applied'), v.literal('rolled_back'), v.literal('failed')]),
+  edits: v.array(CodingFileEditSchema),
+  writes: v.array(CodingFileWriteSchema),
+  results: v.array(CodingEditOperationResultSchema),
+  failure: v.optional(CodingEditTransactionFailureSchema),
+  createdAt: v.string(),
+  updatedAt: v.string(),
+});
+
+export type CodingEditTransaction = v.InferOutput<typeof CodingEditTransactionSchema>;

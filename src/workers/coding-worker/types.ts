@@ -5,6 +5,16 @@ import {
   CodingFileWriteSchema,
   CodingVerificationCommandRequestSchema,
   CodingImplementerResultSchema,
+  CodingPlanItemSchema,
+  CodingTriageResultSchema,
+  CodingTestDebugResultSchema,
+  CodingCodeReviewFindingSchema,
+  CodingCodeReviewResultSchema,
+  CodingGithubResultSchema,
+  CodingEditTransactionSchema,
+  CodingEditOperationResultSchema,
+  CodingEditTransactionFailureSchema,
+  CodingTestFailureSchema,
 } from '../../schemas/coding-worker.js';
 
 export { CodingImplementerResultSchema };
@@ -12,9 +22,33 @@ export type CodingFileEdit = import('../../schemas/coding-worker.js').CodingFile
 export type CodingFileWrite = import('../../schemas/coding-worker.js').CodingFileWrite;
 export type CodingVerificationCommandRequest = import('../../schemas/coding-worker.js').CodingVerificationCommandRequest;
 export type CodingImplementerResult = import('../../schemas/coding-worker.js').CodingImplementerResult;
+export type CodingPlanItem = import('../../schemas/coding-worker.js').CodingPlanItem;
+export type CodingTriageResult = import('../../schemas/coding-worker.js').CodingTriageResult;
+export type CodingTestDebugResult = import('../../schemas/coding-worker.js').CodingTestDebugResult;
+export type CodingCodeReviewFinding = import('../../schemas/coding-worker.js').CodingCodeReviewFinding;
+export type CodingCodeReviewResult = import('../../schemas/coding-worker.js').CodingCodeReviewResult;
+export type CodingGithubResult = import('../../schemas/coding-worker.js').CodingGithubResult;
+export type CodingEditTransaction = import('../../schemas/coding-worker.js').CodingEditTransaction;
+export type CodingEditOperationResult = import('../../schemas/coding-worker.js').CodingEditOperationResult;
+export type CodingEditTransactionFailure = import('../../schemas/coding-worker.js').CodingEditTransactionFailure;
+export type CodingTestFailure = import('../../schemas/coding-worker.js').CodingTestFailure;
 
 // Re-export schemas as type-only references so isolatedModules remains happy
-export type { CodingFileEditSchema, CodingFileWriteSchema, CodingVerificationCommandRequestSchema };
+export type {
+  CodingFileEditSchema,
+  CodingFileWriteSchema,
+  CodingVerificationCommandRequestSchema,
+  CodingPlanItemSchema,
+  CodingTriageResultSchema,
+  CodingTestDebugResultSchema,
+  CodingCodeReviewFindingSchema,
+  CodingCodeReviewResultSchema,
+  CodingGithubResultSchema,
+  CodingEditTransactionSchema,
+  CodingEditOperationResultSchema,
+  CodingEditTransactionFailureSchema,
+  CodingTestFailureSchema,
+};
 export type CodingSubagentKind =
   | 'triage'
   | 'implementer'
@@ -49,6 +83,11 @@ export interface CodingWorkerTaskRequest {
   debugEdits?: CodingFileEdit[];
   writeFiles?: CodingFileWrite[];
   verificationCommands?: CodingVerificationCommandRequest[];
+  /**
+   * Maximum number of lead-loop turns before the worker returns blocked.
+   * Defaults to 10.
+   */
+  maxTurns?: number;
 }
 
 export interface CodingGitWorkspaceContext {
@@ -65,13 +104,6 @@ export interface CodingGithubContextRequest {
   url?: string;
 }
 
-export interface CodingPlanItem {
-  id: string;
-  description: string;
-  owner: CodingSubagentKind | 'coding-worker';
-  status: 'pending' | 'in_progress' | 'completed' | 'blocked';
-}
-
 export interface CodingVerificationCommand {
   name: string;
   command: string;
@@ -85,30 +117,8 @@ export interface CodingVerificationEvidence {
   status: Exclude<VerificationStatus, 'pending' | 'running'>;
   exitCode?: number;
   summary: string;
-}
-
-export interface CodingTriageResult {
-  plan: CodingPlanItem[];
-  filesToInspect: string[];
-  recommendedExecutionPath: 'implementer' | 'github' | 'test-debug' | 'code-review' | 'manual';
-}
-
-
-export interface CodingTestDebugResult {
-  debugEdits: CodingFileEdit[];
-  verificationCommands: CodingVerificationCommandRequest[];
-}
-
-export interface CodingCodeReviewResult {
-  findings: string[];
-  approved: boolean;
-}
-
-export interface CodingGithubResult {
-  actions: Array<{
-    action: 'comment' | 'create_pr' | 'update_pr' | 'merge_pr' | 'close_pr';
-    payload: Record<string, unknown>;
-  }>;
+  failures?: CodingTestFailure[];
+  parser?: string;
 }
 
 export type CodingSubagentStructuredOutput =
@@ -122,7 +132,7 @@ type CodingSubagentRunResultBase<K extends CodingSubagentKind, R> = {
   subagent: K;
   summary: string;
   evidence: string[];
-  structuredOutput?: { type: K; result: R };
+  structuredOutput: { type: K; result: R };
   nextAction?: string;
 };
 
@@ -132,6 +142,62 @@ export type CodingSubagentRunResult =
   | CodingSubagentRunResultBase<'test-debug', CodingTestDebugResult>
   | CodingSubagentRunResultBase<'code-review', CodingCodeReviewResult>
   | CodingSubagentRunResultBase<'github', CodingGithubResult>;
+
+export type CodingWorkerLoopStep =
+  | 'triage'
+  | 'implement'
+  | 'test-debug'
+  | 'code-review'
+  | 'github'
+  | 'commit'
+  | 'push'
+  | 'pr'
+  | 'replanned'
+  | 'completed'
+  | 'blocked'
+  | 'error';
+
+export interface CodingWorkerLoopState {
+  task: CodingWorkerTaskRequest;
+  sessionPlan: import('./session/child-session-names.js').CodingWorkerSessionPlan;
+  preflight: import('./repo/preflight.js').CodingRepoPreflight;
+  currentStep: CodingWorkerLoopStep;
+  turn: number;
+  maxTurns: number;
+  plan: CodingPlanItem[];
+  approvalQueue: Array<{
+    requestId: string;
+    actionType: string;
+    summary: string;
+    status: 'pending' | 'approved' | 'denied';
+  }>;
+  pendingEdits: {
+    fileEdits: CodingFileEdit[];
+    writeFiles: CodingFileWrite[];
+  };
+  verificationResults: {
+    requiredCommands: CodingVerificationCommand[];
+    evidence: CodingVerificationEvidence[];
+  };
+  subagentHistory: CodingSubagentRunResult[];
+  replanCount: number;
+  lastFailureSummary?: string;
+}
+
+export interface CodingWorkerLoopCheckpoint {
+  taskId: string;
+  status: CodingWorkerRunStatus;
+  currentStep: CodingWorkerLoopStep;
+  turn: number;
+  maxTurns: number;
+  plan: CodingPlanItem[];
+  approvalQueue: CodingWorkerLoopState['approvalQueue'];
+  pendingEdits: CodingWorkerLoopState['pendingEdits'];
+  verificationResults: CodingWorkerLoopState['verificationResults'];
+  subagentHistory: CodingSubagentRunResult[];
+  replanCount: number;
+  lastFailureSummary?: string;
+}
 
 export interface CodingWorkerRunResult {
   taskId: string;
@@ -148,4 +214,5 @@ export interface CodingWorkerRunResult {
     name: string;
     uri: string;
   }>;
+  checkpoint?: CodingWorkerLoopCheckpoint;
 }
