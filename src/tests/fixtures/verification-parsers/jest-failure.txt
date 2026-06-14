@@ -1,0 +1,20 @@
+FAIL src/sum.test.js
+  sum
+    ✕ adds 1 + 2 to equal 3 (5 ms)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 3
+    Received: 2
+
+      1 | function sum(a, b) { return a + b; }
+      2 | test('adds', () => { expect(sum(1,2)).toBe(3); });
+    > 3 |     expect(sum(1, 2)).toBe(3);
+        |     ^
+      4 |
+      5 |
+
+      at Object.<anonymous> (src/sum.test.js:3:5)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 1 total
