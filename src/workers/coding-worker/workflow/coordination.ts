@@ -45,12 +45,21 @@ export function createFlueCodingSubagentDelegate(session: Pick<FlueSession, 'tas
     const response = await session.task(createSubagentTaskPrompt(subagent, request), {
       agent,
     });
+    const summary = response.text;
+    const evidence = [agent, request.sessionPlan.childSessions[subagent]];
 
-    return {
-      subagent,
-      summary: response.text,
-      evidence: [agent, request.sessionPlan.childSessions[subagent]],
-    };
+    switch (subagent) {
+      case 'triage':
+        return { subagent, summary, evidence };
+      case 'implementer':
+        return { subagent, summary, evidence };
+      case 'test-debug':
+        return { subagent, summary, evidence };
+      case 'code-review':
+        return { subagent, summary, evidence };
+      case 'github':
+        return { subagent, summary, evidence };
+    }
   };
 }
 

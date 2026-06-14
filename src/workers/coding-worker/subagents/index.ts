@@ -1,4 +1,4 @@
-﻿import type { AgentProfile, ToolDefinition } from '@flue/runtime';
+import type { AgentProfile, ToolDefinition } from '@flue/runtime';
 import type { CodingApprovalService } from '../approvals/approval-service.js';
 import type { GitHubClient } from '../github/github-client.js';
 import { createCodingGitHubTools } from '../github/github-tools.js';
@@ -52,7 +52,7 @@ function createInternalToolsets(options: CodingWorkerInternalSubagentsOptions): 
   if (!options.workspaceRoot && !options.repoPath) {
     return {
       triage: [],
-      implementer: [],
+      implementer: createCodingImplementerTools(),
       testDebug: [],
       codeReview: [],
       github: [],

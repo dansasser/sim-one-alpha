@@ -139,13 +139,20 @@ export type CodingSubagentStructuredOutput =
   | { type: 'code-review'; result: CodingCodeReviewResult }
   | { type: 'github'; result: CodingGithubResult };
 
-export interface CodingSubagentRunResult {
-  subagent: CodingSubagentKind;
+type CodingSubagentRunResultBase<K extends CodingSubagentKind, R> = {
+  subagent: K;
   summary: string;
   evidence: string[];
-  structuredOutput?: CodingSubagentStructuredOutput;
+  structuredOutput?: { type: K; result: R };
   nextAction?: string;
-}
+};
+
+export type CodingSubagentRunResult =
+  | CodingSubagentRunResultBase<'triage', CodingTriageResult>
+  | CodingSubagentRunResultBase<'implementer', CodingImplementerResult>
+  | CodingSubagentRunResultBase<'test-debug', CodingTestDebugResult>
+  | CodingSubagentRunResultBase<'code-review', CodingCodeReviewResult>
+  | CodingSubagentRunResultBase<'github', CodingGithubResult>;
 
 export interface CodingWorkerRunResult {
   taskId: string;
