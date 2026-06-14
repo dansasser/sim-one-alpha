@@ -5,6 +5,7 @@ import { createCodingGitHubTools } from '../github/github-tools.js';
 import type { CodingWorkspaceTargetInput } from '../repo/workspace-target.js';
 import { createCodingGitTools } from '../tools/coding-git-tools.js';
 import { createCodingImplementerTools } from '../tools/coding-implementer-tools.js';
+import { createCodingCodeIntelligenceTools } from '../tools/code-intelligence/index.js';
 import { createCodingRepoTools } from '../tools/coding-repo-tools.js';
 import { createCodingRepoWorkflowTools } from '../tools/coding-repo-workflow-tools.js';
 import { createCodingTestDebugTools } from '../tools/coding-test-debug-tools.js';
@@ -74,6 +75,10 @@ function createInternalToolsets(options: CodingWorkerInternalSubagentsOptions): 
     ...commonTarget,
     sessionId: 'coding-worker-internal-repo-tools',
   });
+  const codeIntelligenceTools = createCodingCodeIntelligenceTools({
+    ...commonTarget,
+    sessionId: 'coding-worker-internal-code-intelligence-tools',
+  });
   const gitTools = createCodingGitTools({
     ...commonTarget,
     sessionId: 'coding-worker-internal-git-tools',
@@ -94,7 +99,7 @@ function createInternalToolsets(options: CodingWorkerInternalSubagentsOptions): 
 
   return {
     triage: selectTools(
-      [...repoTools, ...repoWorkflowTools, ...githubTools, ...triageOutputTools],
+      [...repoTools, ...codeIntelligenceTools, ...repoWorkflowTools, ...githubTools, ...triageOutputTools],
       'coding_repo_list_files',
       'coding_repo_read_file',
       'coding_repo_search',
@@ -102,9 +107,12 @@ function createInternalToolsets(options: CodingWorkerInternalSubagentsOptions): 
       'coding_repo_git_state',
       'coding_github_read_context',
       'coding_triage_submit_result',
+      'coding_ast_parse_file',
+      'coding_symbol_navigate',
+      'coding_import_graph',
     ),
     implementer: selectTools(
-      [...repoTools, ...implementerOutputTools],
+      [...repoTools, ...codeIntelligenceTools, ...implementerOutputTools],
       'coding_repo_list_files',
       'coding_repo_read_file',
       'coding_repo_search',
@@ -113,18 +121,25 @@ function createInternalToolsets(options: CodingWorkerInternalSubagentsOptions): 
       'coding_shell_run',
       'coding_progress_emit',
       'coding_implementer_submit_result',
+      'coding_ast_parse_file',
+      'coding_symbol_navigate',
+      'coding_find_symbol_declarations',
+      'coding_find_symbol_references',
     ),
     testDebug: selectTools(
-      [...repoTools, ...repoWorkflowTools, ...testDebugTools],
+      [...repoTools, ...codeIntelligenceTools, ...repoWorkflowTools, ...testDebugTools],
       'coding_repo_read_file',
       'coding_repo_search',
       'coding_shell_run',
       'coding_repo_git_state',
       'coding_progress_emit',
       'coding_test_debug_submit_result',
+      'coding_ast_parse_file',
+      'coding_symbol_navigate',
+      'coding_import_graph',
     ),
     codeReview: selectTools(
-      [...repoTools, ...gitTools, ...repoWorkflowTools],
+      [...repoTools, ...codeIntelligenceTools, ...gitTools, ...repoWorkflowTools],
       'coding_repo_read_file',
       'coding_repo_search',
       'coding_shell_run',

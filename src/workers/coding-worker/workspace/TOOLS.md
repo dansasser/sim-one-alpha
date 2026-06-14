@@ -14,6 +14,7 @@ Wired worker-local capability groups:
 - Durable task-run store: task status, child session names, public events, and verification evidence are persisted under the runtime workspace root.
 - Repo support modules: preflight, package-manager detection, verification planning, git-state parsing, and diff summaries.
 - Planning tools: `coding_plan_create` builds an explicit initial plan; `coding_plan_replan` updates the plan after verification failure, code-review rejection, or newly discovered context.
+- Code intelligence tools: AST parsing (TypeScript, JavaScript, Python), symbol navigation, find declarations, find references, and import-graph analysis across the scoped source files.
 - Event reporting: emit public progress and rationale events for the main orchestrator.
 
 The runtime workspace root is the coding worker's access root. Do not treat the agent source checkout or `process.cwd()` as the default user project. Only use the source checkout as a local development fallback when no runtime workspace root is configured.

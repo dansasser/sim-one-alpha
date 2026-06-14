@@ -19,6 +19,7 @@ import type { GitHubClient } from './github/github-client.js';
 import { createCodingWorkerRuntimeCapabilityBlock } from './runtime-capabilities.js';
 import { codingWorkerSkills, createCodingWorkerSkillCapabilityBlock } from './skills.js';
 import { createCodingWorkerInternalSubagents } from './subagents/index.js';
+import { createCodingCodeIntelligenceTools } from './tools/code-intelligence/index.js';
 import { createCodingGitTools } from './tools/coding-git-tools.js';
 import { createCodingPlanningTools } from './tools/coding-planning-tools.js';
 import { createCodingRepoTools } from './tools/coding-repo-tools.js';
@@ -98,6 +99,16 @@ export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOp
         repoPath: resolvedOptions.repoPath,
         env: resolvedOptions.env,
         sessionId: 'coding-worker-profile-tools',
+      }),
+      ...createCodingCodeIntelligenceTools({
+        workspaceRoot,
+        targetKind: resolvedOptions.targetKind,
+        projectId: resolvedOptions.projectId,
+        projectSlug: resolvedOptions.projectSlug,
+        projectRelativePath: resolvedOptions.projectRelativePath,
+        repoPath: resolvedOptions.repoPath,
+        env: resolvedOptions.env,
+        sessionId: 'coding-worker-code-intelligence-tools',
       }),
       ...createCodingGitTools({
         workspaceRoot,
