@@ -1,6 +1,20 @@
-import * as v from 'valibot';
 import type { NormalizedMessageEvent } from '../../types/index.js';
 
+import {
+  CodingFileEditSchema,
+  CodingFileWriteSchema,
+  CodingVerificationCommandRequestSchema,
+  CodingImplementerResultSchema,
+} from '../../schemas/coding-worker.js';
+
+export { CodingImplementerResultSchema };
+export type CodingFileEdit = import('../../schemas/coding-worker.js').CodingFileEdit;
+export type CodingFileWrite = import('../../schemas/coding-worker.js').CodingFileWrite;
+export type CodingVerificationCommandRequest = import('../../schemas/coding-worker.js').CodingVerificationCommandRequest;
+export type CodingImplementerResult = import('../../schemas/coding-worker.js').CodingImplementerResult;
+
+// Re-export schemas as type-only references so isolatedModules remains happy
+export type { CodingFileEditSchema, CodingFileWriteSchema, CodingVerificationCommandRequestSchema };
 export type CodingSubagentKind =
   | 'triage'
   | 'implementer'
@@ -58,37 +72,6 @@ export interface CodingPlanItem {
   status: 'pending' | 'in_progress' | 'completed' | 'blocked';
 }
 
-/**
- * Exact text edit applied by the coding worker.
- *
- * When `expectedOccurrences` is omitted, every occurrence of `oldText` is
- * replaced. Set `expectedOccurrences` when callers need a strict occurrence
- * count guard before replacement.
- */
-export interface CodingFileEdit {
-  path: string;
-  oldText: string;
-  newText: string;
-  /**
-   * Optional strict count guard for `oldText` before applying the edit.
-   */
-  expectedOccurrences?: number;
-}
-
-export interface CodingFileWrite {
-  path: string;
-  content: string;
-}
-
-export interface CodingVerificationCommandRequest {
-  name: string;
-  command: string;
-  required?: boolean;
-  reason?: string;
-  cwd?: string;
-  timeoutSeconds?: number;
-}
-
 export interface CodingVerificationCommand {
   name: string;
   command: string;
@@ -110,34 +93,6 @@ export interface CodingTriageResult {
   recommendedExecutionPath: 'implementer' | 'github' | 'test-debug' | 'code-review' | 'manual';
 }
 
-export const CodingImplementerResultSchema = v.object({
-  fileEdits: v.array(
-    v.object({
-      path: v.string(),
-      oldText: v.string(),
-      newText: v.string(),
-      expectedOccurrences: v.optional(v.number()),
-    })
-  ),
-  writeFiles: v.array(
-    v.object({
-      path: v.string(),
-      content: v.string(),
-    })
-  ),
-  verificationCommands: v.array(
-    v.object({
-      name: v.string(),
-      command: v.string(),
-      required: v.optional(v.boolean()),
-      reason: v.optional(v.string()),
-      cwd: v.optional(v.string()),
-      timeoutSeconds: v.optional(v.number()),
-    })
-  ),
-});
-
-export type CodingImplementerResult = v.InferOutput<typeof CodingImplementerResultSchema>;
 
 export interface CodingTestDebugResult {
   debugEdits: CodingFileEdit[];

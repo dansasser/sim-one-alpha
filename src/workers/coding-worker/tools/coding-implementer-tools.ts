@@ -1,5 +1,5 @@
 import { defineTool, Type, type ToolDefinition } from '@flue/runtime';
-import type { CodingImplementerResult } from '../types.js';
+import type { CodingImplementerResult } from '../../../schemas/coding-worker.js';
 
 export function createCodingImplementerTools(): ToolDefinition[] {
   return [
