@@ -32,28 +32,9 @@ TELEGRAM_MENTION_PATTERNS=gorombo,bot
 TELEGRAM_INBOX_DIR=/var/gorombo/telegram-inbox
 ```
 
-### Runtime config
+### Runtime config (future)
 
-Add a `connectors.telegram` block to `src/config/gorombo.config.json`:
-
-```json
-{
-  "version": 1,
-  "models": { ... },
-  "connectors": {
-    "telegram": {
-      "enabled": true,
-      "dmPolicy": "pairing",
-      "approvedUserIds": ["6653274440"],
-      "groups": {
-        "-1003884375753": { "requireMention": true }
-      }
-    }
-  }
-}
-```
-
-`enabled` is true only when `TELEGRAM_BOT_TOKEN` is set. `dmPolicy` can be `pairing`, `allowlist`, or `disabled`.
+A `connectors.telegram` block in `src/config/gorombo.config.json` is planned for a later iteration. For now, configure the connector through environment variables and the admin HTTP API. When the JSON block is implemented, env vars will take precedence for the bot token; config values will supplement or override env values for policy, approved IDs, and groups.
 
 ## DM policies
 
@@ -134,9 +115,11 @@ Photos, documents, voice, audio, video, video notes, and stickers are downloaded
 
 - **One poller per token.** Running two GOROMBO Agent processes with the same token will cause `409 Conflict` from Telegram.
 - **IPv4-first DNS.** Telegram's API can silently hang on IPv6 in some environments. Start the process with:
+
   ```bash
   NODE_OPTIONS=--dns-result-order=ipv4first node dist/server.mjs
   ```
+
 - **Graceful shutdown.** `SIGTERM`/`SIGINT` aborts the in-flight `getUpdates` request and waits for any in-progress orchestrator delivery to finish.
 
 ## Observability

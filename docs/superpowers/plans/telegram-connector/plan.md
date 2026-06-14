@@ -38,7 +38,7 @@ Telegram Bot API (long-poll or webhook)
               -> Telegram Bot API sendMessage
 ```
 
-The entire flow runs inside the single Node process produced by `flue build --target node` and started with `corepack pnpm start`. No separate gateway process.
+The entire flow runs inside the single Node process produced by `flue build --target node` and started with `pnpm start`. No separate gateway process.
 
 ## Phase 0 — Shared types and runtime config
 
@@ -268,8 +268,6 @@ This matches the existing pattern of reminding the orchestrator which tool owns 
 ### New / updated tests
 
 - `src/tests/telegram-connector.test.ts`
-- `src/tests/telegram-access.test.ts`
-- Extend `src/tests/architecture-contract.test.ts` to assert `telegram_reply` is not exposed to the orchestrator before this work, and assert it is exposed after.
 
 ### What to test
 
@@ -288,13 +286,10 @@ This matches the existing pattern of reminding the orchestrator which tool owns 
 ### New files
 
 - `src/connectors/telegram-ingress.ts`
-- `src/connectors/telegram-api.ts` (thin fetch wrapper around Telegram Bot API, if not using `grammy` for outbound)
-- `src/connectors/telegram-access.ts` (gate logic + pairing store helpers)
+- `src/connectors/telegram-api.ts` (thin fetch wrapper around Telegram Bot API)
 - `src/routes/telegram-admin.ts`
 - `src/tools/telegram-reply-tool.ts`
-- `src/schemas/telegram-connector.ts` (Valibot schemas for config, admin request bodies, pairing records)
 - `src/tests/telegram-connector.test.ts`
-- `src/tests/telegram-access.test.ts`
 
 ### Modified files
 
@@ -321,7 +316,7 @@ Recommendation: start with raw `fetch` because GOROMBO Agent's dependency rule s
 
 ## Operational notes
 
-- Telegram only allows one active `getUpdates` consumer per bot token. Running two GOROMBO Agent processes with the same token will cause `409 Conflict`. The deployment model is one running `corepack pnpm start` process per bot token.
+- Telegram only allows one active `getUpdates` consumer per bot token. Running two GOROMBO Agent processes with the same token will cause `409 Conflict`. The deployment model is one running `pnpm start` process per bot token.
 - Set `NODE_OPTIONS=--dns-result-order=ipv4first` on the deployment environment to avoid silent IPv6 hangs to Telegram's API servers.
 - BotFather group privacy must be disabled for group delivery, and the bot must be re-added after the change.
 
@@ -343,9 +338,9 @@ Pairing, groups, admin routes, and attachment handling follow in subsequent PRs.
 Run the standard project checks:
 
 ```bash
-corepack pnpm run test:unit
-corepack pnpm run build
-corepack pnpm run test:http
+pnpm run test:unit
+pnpm run build
+pnpm run test:http
 ```
 
 For TypeScript-only connector code, add focused connector tests under `src/tests/` and run them as part of `test:unit`.

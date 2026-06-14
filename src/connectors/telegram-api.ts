@@ -247,12 +247,16 @@ export function isMentioned(message: TelegramMessage, botUsername: string, menti
   }
 
   for (const pattern of mentionPatterns ?? []) {
-    try {
-      if (new RegExp(pattern, 'i').test(text)) {
-        return true;
-      }
-    } catch {
-      // skip invalid user-supplied regex
+    const normalizedPattern = pattern.trim().toLowerCase();
+    if (!normalizedPattern) {
+      continue;
+    }
+
+    const normalizedText = ` ${text.toLowerCase()} `;
+    const wordBoundaryBefore = normalizedText.includes(` ${normalizedPattern}`);
+    const wordBoundaryAfter = normalizedText.includes(`${normalizedPattern} `);
+    if (wordBoundaryBefore || wordBoundaryAfter || normalizedText.trim() === normalizedPattern) {
+      return true;
     }
   }
 
