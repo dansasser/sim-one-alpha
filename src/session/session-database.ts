@@ -388,6 +388,215 @@ export class GoromboSessionDatabase {
       );
   }
 
+  addTelegramAllowedUser(input: { userId: string; chatId: string }): void {
+    this.database
+      .prepare(
+        `INSERT OR REPLACE INTO telegram_allowed_users (user_id, chat_id, added_at)
+         VALUES (?, ?, ?)`,
+      )
+      .run(input.userId, input.chatId, new Date().toISOString());
+  }
+
+  removeTelegramAllowedUser(userId: string): void {
+    this.database.prepare(`DELETE FROM telegram_allowed_users WHERE user_id = ?`).run(userId);
+  }
+
+  isTelegramUserAllowed(userId: string): boolean {
+    const row = this.database
+      .prepare(`SELECT 1 FROM telegram_allowed_users WHERE user_id = ?`)
+      .get(userId) as { '1': number } | undefined;
+    return row != null;
+  }
+
+  listTelegramAllowedUsers(): { userId: string; chatId: string; addedAt: string }[] {
+    const rows = this.database
+      .prepare(`SELECT user_id, chat_id, added_at FROM telegram_allowed_users ORDER BY added_at DESC`)
+      .all() as unknown as TelegramAllowedUserRow[];
+    return rows.map((row) => ({
+      userId: row.user_id,
+      chatId: row.chat_id,
+      addedAt: row.added_at,
+    }));
+  }
+
+  createTelegramPendingPairing(input: {
+    code: string;
+    senderId: string;
+    chatId: string;
+    expiresAt: string;
+  }): void {
+    this.database
+      .prepare(
+        `INSERT INTO telegram_pending_pairings (code, sender_id, chat_id, created_at, expires_at, replies)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(code) DO UPDATE SET
+           sender_id = excluded.sender_id,
+           chat_id = excluded.chat_id,
+           created_at = excluded.created_at,
+           expires_at = excluded.expires_at,
+           replies = excluded.replies`,
+      )
+      .run(input.code, input.senderId, input.chatId, new Date().toISOString(), input.expiresAt, 1);
+  }
+
+  incrementTelegramPendingPairingReplies(code: string): number {
+    const result = this.database
+      .prepare(
+        `UPDATE telegram_pending_pairings
+         SET replies = replies + 1
+         WHERE code = ?`,
+      )
+      .run(code);
+    if (result.changes === 0) return 0;
+    const updated = this.getTelegramPendingPairing(code);
+    return updated?.replies ?? 0;
+  }
+
+  getTelegramPendingPairing(code: string): {
+    code: string;
+    senderId: string;
+    chatId: string;
+    createdAt: string;
+    expiresAt: string;
+    replies: number;
+  } | null {
+    const row = this.database
+      .prepare(`SELECT code, sender_id, chat_id, created_at, expires_at, replies
+                 FROM telegram_pending_pairings WHERE code = ?`)
+      .get(code) as TelegramPendingPairingRow | undefined;
+    if (!row) return null;
+    return {
+      code: row.code,
+      senderId: row.sender_id,
+      chatId: row.chat_id,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at,
+      replies: row.replies,
+    };
+  }
+
+  approveTelegramPendingPairing(code: string): { userId: string; chatId: string } | null {
+    this.pruneExpiredTelegramPendingPairings();
+    const pending = this.getTelegramPendingPairing(code);
+    if (!pending) return null;
+    if (pending.expiresAt < new Date().toISOString()) {
+      this.database.prepare(`DELETE FROM telegram_pending_pairings WHERE code = ?`).run(code);
+      return null;
+    }
+
+    this.database
+      .prepare(`DELETE FROM telegram_pending_pairings WHERE code = ?`)
+      .run(code);
+
+    this.addTelegramAllowedUser({ userId: pending.senderId, chatId: pending.chatId });
+    return { userId: pending.senderId, chatId: pending.chatId };
+  }
+
+  deleteTelegramPendingPairing(code: string): boolean {
+    const result = this.database
+      .prepare(`DELETE FROM telegram_pending_pairings WHERE code = ?`)
+      .run(code);
+    return result.changes > 0;
+  }
+
+  pruneExpiredTelegramPendingPairings(): void {
+    this.database
+      .prepare(`DELETE FROM telegram_pending_pairings WHERE expires_at < ?`)
+      .run(new Date().toISOString());
+  }
+
+  listTelegramPendingPairings(): {
+    code: string;
+    senderId: string;
+    chatId: string;
+    createdAt: string;
+    expiresAt: string;
+    replies: number;
+  }[] {
+    this.pruneExpiredTelegramPendingPairings();
+    const rows = this.database
+      .prepare(`SELECT code, sender_id, chat_id, created_at, expires_at, replies
+                 FROM telegram_pending_pairings ORDER BY created_at DESC`)
+      .all() as unknown as TelegramPendingPairingRow[];
+    return rows.map((row) => ({
+      code: row.code,
+      senderId: row.sender_id,
+      chatId: row.chat_id,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at,
+      replies: row.replies,
+    }));
+  }
+
+  setTelegramGroup(input: {
+    groupId: string;
+    requireMention: boolean;
+    allowFrom?: string[];
+  }): void {
+    this.database
+      .prepare(
+        `INSERT OR REPLACE INTO telegram_groups (group_id, require_mention, allow_from, updated_at)
+         VALUES (?, ?, ?, ?)`,
+      )
+      .run(
+        input.groupId,
+        input.requireMention ? 1 : 0,
+        input.allowFrom != null ? JSON.stringify(input.allowFrom) : null,
+        new Date().toISOString(),
+      );
+  }
+
+  getTelegramGroup(groupId: string): {
+    groupId: string;
+    requireMention: boolean;
+    allowFrom: string[];
+  } | null {
+    const row = this.database
+      .prepare(`SELECT group_id, require_mention, allow_from FROM telegram_groups WHERE group_id = ?`)
+      .get(groupId) as TelegramGroupRow | undefined;
+    if (!row) return null;
+    return {
+      groupId: row.group_id,
+      requireMention: Boolean(row.require_mention),
+      allowFrom: parseJsonStringArray(row.allow_from),
+    };
+  }
+
+  removeTelegramGroup(groupId: string): boolean {
+    const result = this.database.prepare(`DELETE FROM telegram_groups WHERE group_id = ?`).run(groupId);
+    return result.changes > 0;
+  }
+
+  listTelegramGroups(): {
+    groupId: string;
+    requireMention: boolean;
+    allowFrom: string[];
+  }[] {
+    const rows = this.database
+      .prepare(`SELECT group_id, require_mention, allow_from FROM telegram_groups ORDER BY group_id`)
+      .all() as unknown as TelegramGroupRow[];
+    return rows.map((row) => ({
+      groupId: row.group_id,
+      requireMention: Boolean(row.require_mention),
+      allowFrom: parseJsonStringArray(row.allow_from),
+    }));
+  }
+
+  setTelegramSetting(key: string, value: string): void {
+    this.database
+      .prepare(
+        `INSERT OR REPLACE INTO telegram_settings (key, value, updated_at) VALUES (?, ?, ?)`,
+      )
+      .run(key, value, new Date().toISOString());
+  }
+
+  getTelegramSetting(key: string): string | null {
+    const row = this.database
+      .prepare(`SELECT value FROM telegram_settings WHERE key = ?`)
+      .get(key) as { value: string } | undefined;
+    return row?.value ?? null;
+  }
+
   searchSessionMemory(input: SessionMemorySearchInput): SessionMemoryRecord[] {
     const query = createFtsQuery(input.text);
     if (!query) {
@@ -538,6 +747,37 @@ export class GoromboSessionDatabase {
 
       CREATE VIRTUAL TABLE IF NOT EXISTS session_memory_fts
         USING fts5(chunk_key UNINDEXED, title, content);
+
+      CREATE TABLE IF NOT EXISTS telegram_allowed_users (
+        user_id TEXT PRIMARY KEY,
+        chat_id TEXT NOT NULL,
+        added_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS telegram_pending_pairings (
+        code TEXT PRIMARY KEY,
+        sender_id TEXT NOT NULL,
+        chat_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        replies INTEGER NOT NULL DEFAULT 1
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_telegram_pending_expires
+        ON telegram_pending_pairings(expires_at);
+
+      CREATE TABLE IF NOT EXISTS telegram_groups (
+        group_id TEXT PRIMARY KEY,
+        require_mention INTEGER NOT NULL DEFAULT 1,
+        allow_from TEXT,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS telegram_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
     `);
 
     this.ensureSessionMemoryScopeColumns();
@@ -1053,4 +1293,40 @@ interface SessionMemoryChunkRow {
   created_at: string;
   updated_at: string;
   rank: number;
+}
+
+interface TelegramAllowedUserRow {
+  user_id: string;
+  chat_id: string;
+  added_at: string;
+}
+
+interface TelegramPendingPairingRow {
+  code: string;
+  sender_id: string;
+  chat_id: string;
+  created_at: string;
+  expires_at: string;
+  replies: number;
+}
+
+interface TelegramGroupRow {
+  group_id: string;
+  require_mention: number;
+  allow_from: string | null;
+}
+
+function parseJsonStringArray(value: string | null | undefined): string[] {
+  if (typeof value !== 'string' || !value.trim()) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.filter((item): item is string => typeof item === 'string');
+    }
+  } catch {
+    // fall through
+  }
+  return [];
 }
