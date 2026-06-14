@@ -11,8 +11,9 @@ import {
   type CodingTaskRunStore,
 } from '../session/task-run-store.js';
 import {
-  applyExactTextEdits,
-  type CodingTextEdit,
+  applyCodingEditTransaction,
+  createCodingEditTransaction,
+  type CodingEditTransaction,
 } from '../tools/coding-repo-tools.js';
 import { evaluateCodingShellCommand } from '../tools/command-policy.js';
 import {
@@ -627,25 +628,23 @@ async function applyPendingEditsWithApproval(
   return true;
 }
 
-async function applyPendingEdits(state: CodingWorkerLoopState, sandbox: CodingSandboxRuntime): Promise<void> {
-  for (const write of state.pendingEdits.writeFiles) {
-    await sandbox.writeFile(write.path, write.content);
+async function applyPendingEdits(state: CodingWorkerLoopState, sandbox: CodingSandboxRuntime): Promise<CodingEditTransaction> {
+  const transaction = createCodingEditTransaction(
+    `pending:${state.task.taskId}:${Date.now()}`,
+    state.pendingEdits.fileEdits,
+    state.pendingEdits.writeFiles,
+  );
+  const result = await applyCodingEditTransaction(sandbox, transaction);
+
+  if (result.status === 'applied') {
+    state.pendingEdits.fileEdits = [];
+    state.pendingEdits.writeFiles = [];
+    return result;
   }
 
-  const editsByPath = groupEditsByPath(state.pendingEdits.fileEdits);
-  for (const [path, edits] of editsByPath.entries()) {
-    const original = await sandbox.readFile(path);
-    const textEdits: CodingTextEdit[] = edits.map((edit) => ({
-      oldText: edit.oldText,
-      newText: edit.newText,
-      expectedOccurrences: edit.expectedOccurrences,
-    }));
-    const { content } = applyExactTextEdits(original, textEdits);
-    await sandbox.writeFile(path, content);
-  }
-
-  state.pendingEdits.fileEdits = [];
-  state.pendingEdits.writeFiles = [];
+  const failurePath = result.failure?.path ?? 'unknown';
+  const failureReason = result.failure?.reason ?? 'unknown';
+  throw new Error(`Edit transaction failed on ${failurePath}: ${failureReason}`);
 }
 
 async function runVerification(
