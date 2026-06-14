@@ -7,10 +7,10 @@ export function createCodingTriageSubagent(model?: string, tools?: ToolDefinitio
   return createCodingInternalSubagent({
     kind: 'triage',
     name: codingTriageSubagentName,
-    description: 'Worker-local coding triage subagent for task classification, scope, and delegation planning.',
+    description: 'Worker-local coding triage subagent that returns a CodingTriageResult with an explicit plan.',
     workspacePath: 'workers/coding-worker/subagents/triage/workspace',
     runtimeRole:
-      'Classify the coding request, identify required context, choose needed internal coding subagents, and produce a public triage summary.',
+      'Classify the coding request, identify required context, choose needed internal coding subagents, and emit a CodingTriageResult containing an explicit plan, files to inspect, and the recommended execution path. Use the coding_triage_submit_result tool to return the structured result.',
     model,
     tools,
   });
