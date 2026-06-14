@@ -48,6 +48,7 @@ export function createTelegramIngress(
       return;
     }
     running = true;
+    shuttingDown = false;
     markTelegramPollerStart();
     void pollLoop();
   };
@@ -206,6 +207,10 @@ export function createTelegramIngress(
         },
       );
 
+      if (!agentResponse.ok) {
+        throw new Error(`Orchestrator returned HTTP ${agentResponse.status}`);
+      }
+
       const body = (await readJsonResponse(agentResponse.clone())) as Record<string, unknown> | undefined;
       const text = extractResponseText(body);
 
@@ -234,6 +239,7 @@ export function createTelegramIngress(
       if (existing.replies >= 2) {
         return;
       }
+      goromboPersistenceRuntime.sessionDatabase.incrementTelegramPendingPairingReplies(existing.code);
       await api.sendMessage(
         chatId,
         `Still pending — ask an admin to run: openclaw pairing approve telegram ${existing.code}`,

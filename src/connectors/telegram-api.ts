@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org/bot';
 const MAX_CHUNK_LIMIT = 4096;
+const MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024; // 50 MiB
 
 export interface TelegramFile {
   file_id: string;
@@ -32,6 +33,11 @@ export interface TelegramMessage {
     length: number;
   }>;
   caption?: string;
+  caption_entities?: Array<{
+    type: string;
+    offset: number;
+    length: number;
+  }>;
   photo?: Array<{ file_id: string; file_unique_id: string; width: number; height: number }>;
   document?: { file_id: string; file_unique_id: string; file_name?: string; mime_type?: string; file_size?: number };
   voice?: { file_id: string; file_unique_id: string; mime_type?: string; file_size?: number };
@@ -74,8 +80,8 @@ export class TelegramApiClient {
     return `${TELEGRAM_API_BASE}${this.token}/${method}`;
   }
 
-  async getMe(): Promise<TelegramUser> {
-    const response = await fetch(this.url('getMe'));
+  async getMe(signal?: AbortSignal): Promise<TelegramUser> {
+    const response = await fetch(this.url('getMe'), { signal });
     const body = (await response.json()) as TelegramApiResponse<TelegramUser>;
     if (!body.ok) {
       throw new Error(`Telegram getMe failed: ${body.error_code} ${body.description}`);
@@ -100,7 +106,7 @@ export class TelegramApiClient {
   async sendMessage(chatId: string | number, text: string, options: {
     replyTo?: number;
     parseMode?: 'MarkdownV2';
-  } = {}): Promise<{ message_id: number }> {
+  } = {}, signal?: AbortSignal): Promise<{ message_id: number }> {
     const chunks = chunkTelegramText(text);
     let lastMessageId = 0;
 
@@ -122,6 +128,7 @@ export class TelegramApiClient {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
+        signal,
       });
 
       const body = (await response.json()) as TelegramApiResponse<{ message_id: number }>;
@@ -134,11 +141,12 @@ export class TelegramApiClient {
     return { message_id: lastMessageId };
   }
 
-  async getFile(fileId: string): Promise<TelegramFile> {
+  async getFile(fileId: string, signal?: AbortSignal): Promise<TelegramFile> {
     const response = await fetch(this.url('getFile'), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ file_id: fileId }),
+      signal,
     });
     const body = (await response.json()) as TelegramApiResponse<TelegramFile>;
     if (!body.ok) {
@@ -147,18 +155,31 @@ export class TelegramApiClient {
     return body.result;
   }
 
-  async downloadFile(file: TelegramFile, inboxDir: string): Promise<string | undefined> {
+  async downloadFile(file: TelegramFile, inboxDir: string, signal?: AbortSignal, maxBytes = MAX_DOWNLOAD_BYTES): Promise<string | undefined> {
     if (!file.file_path) {
       return undefined;
     }
 
     const url = `https://api.telegram.org/file/bot${this.token}/${file.file_path}`;
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`Telegram file download failed: HTTP ${response.status}`);
     }
 
-    const buffer = Buffer.from(await response.arrayBuffer());
+    const contentLength = response.headers.get('content-length');
+    if (contentLength) {
+      const length = Number(contentLength);
+      if (Number.isFinite(length) && length > maxBytes) {
+        throw new Error(`Telegram file too large: ${length} bytes exceeds ${maxBytes} bytes`);
+      }
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    if (arrayBuffer.byteLength > maxBytes) {
+      throw new Error(`Telegram file body too large: ${arrayBuffer.byteLength} bytes exceeds ${maxBytes} bytes`);
+    }
+
+    const buffer = Buffer.from(arrayBuffer);
     const rawExt = file.file_path.includes('.') ? file.file_path.split('.').pop()! : 'bin';
     const ext = rawExt.replace(/[^a-zA-Z0-9]/g, '') || 'bin';
     const uniqueId = (file.file_unique_id ?? '').replace(/[^a-zA-Z0-9_-]/g, '') || 'dl';
@@ -207,7 +228,7 @@ export function generatePairingCode(): string {
 
 export function isMentioned(message: TelegramMessage, botUsername: string, mentionPatterns?: string[]): boolean {
   const text = message.text ?? message.caption ?? '';
-  const entities = message.entities ?? [];
+  const entities = message.caption_entities ?? message.entities ?? [];
 
   for (const entity of entities) {
     if (entity.type === 'mention') {

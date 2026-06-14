@@ -89,13 +89,18 @@ export function registerTelegramAdminRoutes(app: Hono): void {
       return c.json({ error: 'Missing userId.' }, 400);
     }
 
-    goromboPersistenceRuntime.sessionDatabase.addTelegramAllowedUser({ userId, chatId: chatId ?? userId });
+    const resolvedChatId = chatId ?? userId;
+    if (!isTelegramChatId(resolvedChatId)) {
+      return c.json({ error: 'Invalid chatId. Must be a numeric ID or @username.' }, 400);
+    }
+
+    goromboPersistenceRuntime.sessionDatabase.addTelegramAllowedUser({ userId, chatId: resolvedChatId });
     await notifier.notify(
-      chatId ?? userId,
+      resolvedChatId,
       'You have been added to the approved users list. Send me a message to begin.',
     );
 
-    return c.json({ allowed: true, userId, chatId: chatId ?? userId });
+    return c.json({ allowed: true, userId, chatId: resolvedChatId });
   });
 
   app.post('/api/connectors/telegram/remove', requireApiSecret, async (c) => {
@@ -204,6 +209,12 @@ function readDmPolicy(): DmPolicy | null {
 
 function isDmPolicy(value: string): value is DmPolicy {
   return DM_POLICIES.includes(value as DmPolicy);
+}
+
+function isTelegramChatId(value: string): boolean {
+  if (/^\d+$/.test(value)) return true;
+  if (/^@[a-zA-Z0-9_]{5,32}$/.test(value)) return true;
+  return false;
 }
 
 async function parseJsonBody(c: Parameters<typeof requireApiSecret>[0]): Promise<Record<string, unknown> | undefined> {

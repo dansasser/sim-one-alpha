@@ -439,6 +439,19 @@ export class GoromboSessionDatabase {
       .run(input.code, input.senderId, input.chatId, new Date().toISOString(), input.expiresAt, 1);
   }
 
+  incrementTelegramPendingPairingReplies(code: string): number {
+    const result = this.database
+      .prepare(
+        `UPDATE telegram_pending_pairings
+         SET replies = replies + 1
+         WHERE code = ?`,
+      )
+      .run(code);
+    if (result.changes === 0) return 0;
+    const updated = this.getTelegramPendingPairing(code);
+    return updated?.replies ?? 0;
+  }
+
   getTelegramPendingPairing(code: string): {
     code: string;
     senderId: string;
@@ -463,8 +476,13 @@ export class GoromboSessionDatabase {
   }
 
   approveTelegramPendingPairing(code: string): { userId: string; chatId: string } | null {
+    this.pruneExpiredTelegramPendingPairings();
     const pending = this.getTelegramPendingPairing(code);
     if (!pending) return null;
+    if (pending.expiresAt < new Date().toISOString()) {
+      this.database.prepare(`DELETE FROM telegram_pending_pairings WHERE code = ?`).run(code);
+      return null;
+    }
 
     this.database
       .prepare(`DELETE FROM telegram_pending_pairings WHERE code = ?`)
