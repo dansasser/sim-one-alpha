@@ -66,6 +66,7 @@ test('Kimi K2.7 Code card tracks advertised and Ollama-reported context limits',
   assert.equal(kimik27codeCard.guaranteedContextWindow, 256_000);
   assert.equal(kimik27codeCard.providerReportedContextWindow, 262_144);
   assert.equal(kimik27codeCard.maxOutputTokens, 32_768);
+  assert.equal(kimik27codeCard.maxTokens, 32_768);
 });
 
 test('Qwen 3.5 card tracks cloud context limits', () => {
