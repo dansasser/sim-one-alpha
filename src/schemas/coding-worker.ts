@@ -79,10 +79,25 @@ export const CodingTriageResultSchema = v.object({
 
 export type CodingTriageResult = v.InferOutput<typeof CodingTriageResultSchema>;
 
+export const CodingTestFailureSchema = v.object({
+  file: v.string(),
+  line: v.optional(v.number()),
+  column: v.optional(v.number()),
+  message: v.string(),
+  code: v.optional(v.string()),
+  context: v.optional(v.string()),
+  testName: v.optional(v.string()),
+  functionName: v.optional(v.string()),
+  severity: v.optional(v.union([v.literal('error'), v.literal('warning'), v.literal('info')])),
+});
+
+export type CodingTestFailure = v.InferOutput<typeof CodingTestFailureSchema>;
+
 export const CodingTestDebugResultSchema = v.object({
   debugEdits: v.array(CodingFileEditSchema),
   verificationCommands: v.array(CodingVerificationCommandRequestSchema),
   analysis: v.string(),
+  failures: v.optional(v.array(CodingTestFailureSchema)),
 });
 
 export type CodingTestDebugResult = v.InferOutput<typeof CodingTestDebugResultSchema>;

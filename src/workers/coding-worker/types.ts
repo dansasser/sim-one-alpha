@@ -14,6 +14,7 @@ import {
   CodingEditTransactionSchema,
   CodingEditOperationResultSchema,
   CodingEditTransactionFailureSchema,
+  CodingTestFailureSchema,
 } from '../../schemas/coding-worker.js';
 
 export { CodingImplementerResultSchema };
@@ -30,6 +31,7 @@ export type CodingGithubResult = import('../../schemas/coding-worker.js').Coding
 export type CodingEditTransaction = import('../../schemas/coding-worker.js').CodingEditTransaction;
 export type CodingEditOperationResult = import('../../schemas/coding-worker.js').CodingEditOperationResult;
 export type CodingEditTransactionFailure = import('../../schemas/coding-worker.js').CodingEditTransactionFailure;
+export type CodingTestFailure = import('../../schemas/coding-worker.js').CodingTestFailure;
 
 // Re-export schemas as type-only references so isolatedModules remains happy
 export type {
@@ -45,6 +47,7 @@ export type {
   CodingEditTransactionSchema,
   CodingEditOperationResultSchema,
   CodingEditTransactionFailureSchema,
+  CodingTestFailureSchema,
 };
 export type CodingSubagentKind =
   | 'triage'
@@ -114,6 +117,8 @@ export interface CodingVerificationEvidence {
   status: Exclude<VerificationStatus, 'pending' | 'running'>;
   exitCode?: number;
   summary: string;
+  failures?: CodingTestFailure[];
+  parser?: string;
 }
 
 export type CodingSubagentStructuredOutput =

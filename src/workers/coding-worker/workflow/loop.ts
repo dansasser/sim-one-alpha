@@ -4,6 +4,7 @@ import { InMemoryCodingProgressReporter, type CodingProgressReporter } from '../
 import { createOrchestratorProgressUpdate } from '../events/orchestrator-bridge.js';
 import type { GitHubClient } from '../github/github-client.js';
 import { runCodingRepoPreflight, type CodingRepoPreflight } from '../repo/preflight.js';
+import { parseVerificationCommandFailures } from '../repo/verification.js';
 import { resolveCodingWorkspaceTarget, type ResolvedCodingWorkspaceTarget } from '../repo/workspace-target.js';
 import { createCodingWorkerSessionPlan, type CodingWorkerSessionPlan } from '../session/child-session-names.js';
 import {
@@ -679,11 +680,23 @@ async function runVerification(
         cwd: loopCommand.cwd,
         timeoutSeconds: loopCommand.timeoutSeconds ?? 120,
       });
+      const status = shellResult.exitCode === 0 ? 'passed' : 'failed';
+      const summary = summarizeShellResult(shellResult.stdout, shellResult.stderr);
+      const parsed =
+        status === 'failed'
+          ? parseVerificationCommandFailures(command, shellResult.stdout, shellResult.stderr)
+          : undefined;
       evidence = {
         command: command.command,
-        status: shellResult.exitCode === 0 ? 'passed' : 'failed',
+        status,
         exitCode: shellResult.exitCode,
-        summary: summarizeShellResult(shellResult.stdout, shellResult.stderr),
+        summary,
+        ...(parsed
+          ? {
+              failures: parsed.failures,
+              parser: parsed.parser,
+            }
+          : {}),
       };
     }
 
@@ -712,6 +725,7 @@ function buildSubagentRequest(state: CodingWorkerLoopState): CodingTaskSubagentR
     sessionPlan: state.sessionPlan,
     preflight: state.preflight,
     plan: state.plan,
+    verificationEvidence: state.verificationResults.evidence,
   };
 }
 

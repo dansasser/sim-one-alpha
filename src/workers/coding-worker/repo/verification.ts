@@ -4,6 +4,12 @@ import {
   packageManagerTestCommand,
   type RepoPackageManager,
 } from './package-manager.js';
+export {
+  detectVerificationParser,
+  parseVerificationCommandFailures,
+  type VerificationParserName,
+  type VerificationParserResult,
+} from './verification-parsers/index.js';
 
 export interface VerificationPlanInput {
   packageManager: RepoPackageManager;

@@ -38,6 +38,7 @@ export interface CodingTaskSubagentRequest {
   sessionPlan: CodingWorkerSessionPlan;
   preflight: CodingRepoPreflight;
   plan: CodingPlanItem[];
+  verificationEvidence?: CodingVerificationEvidence[];
 }
 
 interface WorkflowVerificationCommand extends CodingVerificationCommand {
