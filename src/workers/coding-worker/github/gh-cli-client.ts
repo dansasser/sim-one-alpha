@@ -323,12 +323,14 @@ export class GhCliGitHubClient implements GitHubClient {
       args.push('--fork-name', input.forkName);
     }
     const stdout = await runGh(args, this.env, input.cwd ?? this.cwd);
-    const forkName = input.forkName ?? `${input.owner}/${input.repo}`;
-    return {
+    const result: { status: 'forked'; stdout: string; forkName?: string } = {
       status: 'forked',
-      forkName,
       stdout,
     };
+    if (input.forkName) {
+      result.forkName = input.forkName;
+    }
+    return result;
   }
 
   async updatePullRequest(input: {

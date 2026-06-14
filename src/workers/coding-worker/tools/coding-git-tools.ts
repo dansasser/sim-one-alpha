@@ -166,7 +166,7 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
       }),
       execute: async (args) => {
         const taskId = requireString(args.taskId, 'taskId');
-        const base = readString(args.base) ?? 'main';
+        const base = readString(args.base);
         const head = readString(args.head);
         const prPayload = {
           title: requireString(args.title, 'title'),
@@ -182,10 +182,10 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
           summary: `Create GitHub PR: ${prPayload.title} (${hashApprovalPayload(prPayload)})`,
           reason: 'Opening a PR publishes work to GitHub for review.',
           risk: 'This mutates remote GitHub state.',
-          target: head ?? base,
+          target: head ?? base ?? 'repository default branch',
           metadata: {
             draft: prPayload.draft,
-            base,
+            ...(base ? { base } : {}),
             ...(head ? { head } : {}),
             payloadHash: hashApprovalPayload(prPayload),
           },
@@ -209,7 +209,7 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
           requireString(args.title, 'title'),
           '--body',
           requireString(args.body, 'body'),
-          ['--base', base],
+          base ? ['--base', base] : undefined,
           head ? ['--head', head] : undefined,
         ].filter(Boolean);
         const sandbox = await getSandbox();
@@ -218,7 +218,7 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
           action: 'create_pr',
           payload: {
             status: pr.exitCode === 0 ? 'created' : 'failed',
-            base,
+            ...(base ? { base } : {}),
             ...(head ? { head } : {}),
             draft: prPayload.draft,
             pr,

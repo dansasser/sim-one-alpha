@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createCodingApprovalRequest } from '../approvals/approval-policy.js';
 import type { CodingApprovalService } from '../approvals/approval-service.js';
 import { InMemoryCodingProgressReporter, type CodingProgressReporter } from '../events/progress-reporter.js';
@@ -586,12 +587,28 @@ async function applyPendingEditsWithApproval(
     ...state.pendingEdits.fileEdits.map((edit) => edit.path),
     ...state.pendingEdits.writeFiles.map((write) => write.path),
   ];
-  const dedupeKey = createEditApprovalDedupeKey(state.task.taskId, targetPaths);
+  const contentHash = await hashTargetFileContents(sandbox, targetPaths);
+  const dedupeKey = createEditApprovalDedupeKey(state.task.taskId, targetPaths, contentHash);
+  const reporter = dependencies.reporter ?? new InMemoryCodingProgressReporter();
   const existing = (await approvalService.listRecords(state.task.taskId)).find(
     (record) => record.request.dedupeKey === dedupeKey,
   );
   if (existing?.status === 'approved') {
+    reporter.emit({
+      type: 'coding.action.started',
+      taskId: state.task.taskId,
+      action: 'apply-edits',
+      summary: `Applying ${state.pendingEdits.fileEdits.length} edit(s) and ${state.pendingEdits.writeFiles.length} write(s) using existing approval.`,
+      evidence: targetPaths,
+    });
     await applyPendingEdits(state, sandbox);
+    reporter.emit({
+      type: 'coding.action.completed',
+      taskId: state.task.taskId,
+      action: 'apply-edits',
+      summary: 'Edits applied successfully using existing approval.',
+      evidence: targetPaths,
+    });
     return true;
   }
 
@@ -621,7 +638,29 @@ async function applyPendingEditsWithApproval(
     return false;
   }
 
+  reporter.emit({
+    type: 'coding.approval.completed',
+    taskId: state.task.taskId,
+    action: 'file.edit',
+    summary: 'Edit approval granted; applying pending edits.',
+    evidence: [request.id, ...targetPaths],
+  });
+  reporter.emit({
+    type: 'coding.action.started',
+    taskId: state.task.taskId,
+    action: 'apply-edits',
+    summary: `Applying ${state.pendingEdits.fileEdits.length} edit(s) and ${state.pendingEdits.writeFiles.length} write(s).`,
+    evidence: targetPaths,
+  });
+
   await applyPendingEdits(state, sandbox);
+  reporter.emit({
+    type: 'coding.action.completed',
+    taskId: state.task.taskId,
+    action: 'apply-edits',
+    summary: 'Edits applied successfully.',
+    evidence: targetPaths,
+  });
   const queueItem = state.approvalQueue.find((item) => item.requestId === request.id);
   if (queueItem) {
     queueItem.status = 'approved';
@@ -729,8 +768,21 @@ function buildSubagentRequest(state: CodingWorkerLoopState): CodingTaskSubagentR
   };
 }
 
-function createEditApprovalDedupeKey(taskId: string, paths: string[]): string {
-  return `${taskId}:file.edit:${paths.sort().join('|')}`;
+function createEditApprovalDedupeKey(taskId: string, paths: string[], contentHash: string): string {
+  return `${taskId}:file.edit:${contentHash}:${paths.sort().join('|')}`;
+}
+
+async function hashTargetFileContents(sandbox: CodingSandboxRuntime, paths: string[]): Promise<string> {
+  const hash = createHash('sha256');
+  for (const path of [...paths].sort()) {
+    try {
+      const content = await sandbox.readFile(path);
+      hash.update(`${path}:${content}\n`);
+    } catch {
+      hash.update(`${path}:\n`);
+    }
+  }
+  return hash.digest('hex').slice(0, 16);
 }
 
 function groupEditsByPath(edits: CodingFileEdit[]): Map<string, CodingFileEdit[]> {

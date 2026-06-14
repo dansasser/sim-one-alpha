@@ -15,6 +15,7 @@ export interface ImportGraphEdge {
 
 export interface ImportGraph {
   nodes: Map<string, ImportGraphNode>;
+  internalPaths: Set<string>;
 }
 
 export interface ImportGraphInput {
@@ -24,13 +25,18 @@ export interface ImportGraphInput {
 }
 
 export function createImportGraph(): ImportGraph {
-  return { nodes: new Map() };
+  return { nodes: new Map(), internalPaths: new Set() };
 }
 
 export function addToImportGraph(graph: ImportGraph, input: ImportGraphInput): void {
   const node = getOrCreateNode(graph, input.path);
+  graph.internalPaths.add(input.path);
   for (const importItem of input.imports) {
     const resolved = resolveImportSource(input.path, importItem.source);
+    if (isInternalImportSource(importItem.source)) {
+      graph.internalPaths.add(input.path);
+      graph.internalPaths.add(resolved);
+    }
     const edge: ImportGraphEdge = {
       source: input.path,
       target: resolved,
@@ -44,6 +50,10 @@ export function addToImportGraph(graph: ImportGraph, input: ImportGraphInput): v
   for (const exportItem of input.exports) {
     if (exportItem.source) {
       const resolved = resolveImportSource(input.path, exportItem.source);
+      if (isInternalImportSource(exportItem.source)) {
+        graph.internalPaths.add(input.path);
+        graph.internalPaths.add(resolved);
+      }
       const edge: ImportGraphEdge = {
         source: input.path,
         target: resolved,
@@ -110,46 +120,41 @@ function getOrCreateNode(graph: ImportGraph, path: string): ImportGraphNode {
   return node;
 }
 
-const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
+function isInternalImportSource(source: string): boolean {
+  return source.startsWith('.');
+}
 
 function resolveImportSource(fromPath: string, source: string): string {
-  if (!source.startsWith('.')) {
+  if (!isInternalImportSource(source)) {
     return source;
   }
   const dir = fromPath.includes('/') ? fromPath.slice(0, fromPath.lastIndexOf('/')) : '';
-  let base = join(dir, source);
+  const base = join(dir, source);
   const ext = extname(base).toLowerCase();
-  if (sourceExtensions.has(ext)) {
-    base = base.slice(0, base.length - ext.length);
+  if (ext) {
+    return base;
   }
-  if (!extname(base)) {
-    base = `${base}.ts`;
+  const isTypeScript = /\.(ts|tsx|mts|cts)$/i.test(fromPath);
+  if (isTypeScript) {
+    return `${base}.ts`;
   }
   return base;
 }
 
 export function collapseExternalImports(graph: ImportGraph): ImportGraph {
-  const externalEdges: ImportGraphEdge[] = [];
-  for (const node of graph.nodes.values()) {
-    for (const edge of [...node.outgoing]) {
-      if (!edge.target.startsWith('.')) {
-        externalEdges.push(edge);
-      }
-    }
-  }
-
   const collapsed = createImportGraph();
   for (const [path, node] of graph.nodes.entries()) {
-    if (!path.startsWith('.')) {
+    if (!graph.internalPaths.has(path)) {
       continue;
     }
-    const filteredOutgoing = node.outgoing.filter((edge) => edge.target.startsWith('.'));
-    const filteredIncoming = node.incoming.filter((edge) => edge.source.startsWith('.'));
+    const filteredOutgoing = node.outgoing.filter((edge) => graph.internalPaths.has(edge.target));
+    const filteredIncoming = node.incoming.filter((edge) => graph.internalPaths.has(edge.source));
     collapsed.nodes.set(path, {
       path,
       outgoing: filteredOutgoing,
       incoming: filteredIncoming,
     });
+    collapsed.internalPaths.add(path);
   }
 
   return collapsed;

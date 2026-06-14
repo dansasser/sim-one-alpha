@@ -71,7 +71,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         issueNumber: Type.Optional(Type.Number()),
         pullRequestNumber: Type.Optional(Type.Number()),
       }),
-      execute: async (args) => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'read_context', 'Read GitHub context', async () => {
         const client = options.client;
         if (!client) {
           return toGithubResult({
@@ -109,7 +109,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
           });
         }
         return toGithubResult({ action: 'read_context', payload });
-      },
+      }),
     }),
     defineTool({
       name: 'coding_github_verify_pr',
@@ -124,7 +124,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         expectedDraft: Type.Optional(Type.Boolean()),
         requireChecksPassed: Type.Optional(Type.Boolean()),
       }),
-      execute: async (args) => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'verify_pr', 'Verify GitHub PR', async () => {
         const client = options.client;
         if (!client) {
           return toGithubResult({
@@ -174,7 +174,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
             },
           });
         }
-      },
+      }),
     }),
     defineTool({
       name: 'coding_github_list_issues',
@@ -184,7 +184,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         repo: Type.String(),
         state: Type.Optional(Type.String()),
       }),
-      execute: async (args) => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'list_issues', 'List GitHub issues', async () => {
         const client = options.client;
         if (!client?.listIssues) {
           return toGithubResult({
@@ -216,7 +216,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
             },
           });
         }
-      },
+      }),
     }),
     defineTool({
       name: 'coding_github_list_prs',
@@ -226,7 +226,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         repo: Type.String(),
         state: Type.Optional(Type.String()),
       }),
-      execute: async (args) => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'list_prs', 'List GitHub PRs', async () => {
         const client = options.client;
         if (!client?.listPullRequests) {
           return toGithubResult({
@@ -258,7 +258,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
             },
           });
         }
-      },
+      }),
     }),
     defineTool({
       name: 'coding_github_branch_from_pr',
@@ -271,7 +271,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         pullRequestNumber: Type.Number(),
         branchName: Type.String(),
       }),
-      execute: async (args) => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'branch_from_pr', 'Create branch from PR', async () => {
         if (!options.client?.createBranchFromPullRequest) {
           return toGithubResult({
             action: 'branch_from_pr',
@@ -294,6 +294,14 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
           target: `${args.owner}/${args.repo}#${args.pullRequestNumber}`,
         });
         if (!approval.evaluation.allowed) {
+          emitGithubToolApprovalRequested(
+            options,
+            taskId,
+            'branch_from_pr',
+            'Create branch from PR requires approval.',
+            approval.request,
+            approval.evaluation.reason,
+          );
           return toGithubResult({
             action: 'branch_from_pr',
             payload: { blocked: true, ...approval },
@@ -309,7 +317,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
             result,
           },
         });
-      },
+      }),
     }),
     defineTool({
       name: 'coding_github_review_comment',
@@ -327,7 +335,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         commitId: Type.Optional(Type.String()),
         inReplyTo: Type.Optional(Type.String()),
       }),
-      execute: async (args) => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'review_comment', 'Create review comment', async () => {
         if (!options.client?.createReviewComment) {
           return toGithubResult({
             action: 'review_comment',
@@ -361,6 +369,14 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
           },
         });
         if (!approval.evaluation.allowed) {
+          emitGithubToolApprovalRequested(
+            options,
+            taskId,
+            'review_comment',
+            'Create review comment requires approval.',
+            approval.request,
+            approval.evaluation.reason,
+          );
           return toGithubResult({
             action: 'review_comment',
             payload: { blocked: true, ...approval },
@@ -375,7 +391,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
             result,
           },
         });
-      },
+      }),
     }),
     defineTool({
       name: 'coding_github_rerun_check',
@@ -388,7 +404,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         runId: Type.String(),
         rerunFailedJobs: Type.Optional(Type.Boolean()),
       }),
-      execute: async (args) => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'rerun_check', 'Rerun GitHub check', async () => {
         if (!options.client?.rerunCheck) {
           return toGithubResult({
             action: 'rerun_check',
@@ -417,6 +433,14 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
           },
         });
         if (!approval.evaluation.allowed) {
+          emitGithubToolApprovalRequested(
+            options,
+            taskId,
+            'rerun_check',
+            'Rerun GitHub check requires approval.',
+            approval.request,
+            approval.evaluation.reason,
+          );
           return toGithubResult({
             action: 'rerun_check',
             payload: { blocked: true, ...approval },
@@ -432,7 +456,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
             result,
           },
         });
-      },
+      }),
     }),
     defineTool({
       name: 'coding_github_fork_repo',
@@ -446,7 +470,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         clone: Type.Optional(Type.Boolean()),
         forkName: Type.Optional(Type.String()),
       }),
-      execute: async (args) => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'fork_repo', 'Fork GitHub repository', async () => {
         if (!options.client?.forkRepository) {
           return toGithubResult({
             action: 'fork_repo',
@@ -476,6 +500,14 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
           },
         });
         if (!approval.evaluation.allowed) {
+          emitGithubToolApprovalRequested(
+            options,
+            taskId,
+            'fork_repo',
+            'Fork GitHub repository requires approval.',
+            approval.request,
+            approval.evaluation.reason,
+          );
           return toGithubResult({
             action: 'fork_repo',
             payload: { blocked: true, ...approval },
@@ -491,7 +523,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
             result,
           },
         });
-      },
+      }),
     }),
     defineTool({
       name: 'coding_github_request_approval',
@@ -524,7 +556,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         risk: Type.String(),
         target: Type.Optional(Type.String()),
       }),
-      execute: async (args) => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'approve_request', 'Request approval', async () => {
         const request = await approvalService.createRequest({
           taskId: args.taskId,
           actionType: args.actionType,
@@ -538,13 +570,13 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
           emitApprovalRequested(options, request, evaluation.reason);
         }
         return toGithubResult({
-          action: 'verify_pr',
+          action: 'approve_request',
           payload: {
             request,
             evaluation,
           },
         });
-      },
+      }),
     }),
     defineTool({
       name: 'coding_github_update_pr',
@@ -558,7 +590,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         body: Type.Optional(Type.String()),
         base: Type.Optional(Type.String()),
       }),
-      execute: async (args) => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'update_pr', 'Update GitHub PR', async () => {
         if (!options.client?.updatePullRequest) {
           return toGithubResult({
             action: 'update_pr',
@@ -588,29 +620,36 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
           },
         });
         if (!approval.evaluation.allowed) {
+          emitGithubToolApprovalRequested(
+            options,
+            taskId,
+            'update_pr',
+            'Update GitHub PR requires approval.',
+            approval.request,
+            approval.evaluation.reason,
+          );
           return toGithubResult({
             action: 'update_pr',
             payload: { blocked: true, ...approval },
           });
         }
-        const resolvedBase = base ?? (await resolveDefaultBase(options.client, args.owner, args.repo));
         const result = await options.client.updatePullRequest({
           owner: args.owner,
           repo: args.repo,
           pullRequestNumber: args.pullRequestNumber,
           title: readString(args.title),
           body: readString(args.body),
-          base: resolvedBase,
+          ...(base ? { base } : {}),
         });
         return toGithubResult({
           action: 'update_pr',
           payload: {
             status: result.status,
-            base: resolvedBase,
+            ...(base ? { base } : {}),
             result,
           },
         });
-      },
+      }),
     }),
     defineTool({
       name: 'coding_github_set_pr_ready',
@@ -622,7 +661,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         pullRequestNumber: Type.Number(),
         ready: Type.Boolean(),
       }),
-      execute: async (args) => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'ready_pr', 'Set PR ready/draft status', async () => {
         if (!options.client?.setPullRequestReady) {
           return toGithubResult({
             action: 'ready_pr',
@@ -645,6 +684,14 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
           },
         });
         if (!approval.evaluation.allowed) {
+          emitGithubToolApprovalRequested(
+            options,
+            taskId,
+            'ready_pr',
+            'Set PR ready/draft status requires approval.',
+            approval.request,
+            approval.evaluation.reason,
+          );
           return toGithubResult({
             action: 'ready_pr',
             payload: { blocked: true, ...approval },
@@ -664,7 +711,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
             result,
           },
         });
-      },
+      }),
     }),
     defineTool({
       name: 'coding_github_comment_pr',
@@ -676,7 +723,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         pullRequestNumber: Type.Number(),
         body: Type.String(),
       }),
-      execute: async (args) => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'comment', 'Comment on GitHub PR', async () => {
         if (!options.client?.commentOnPullRequest) {
           return toGithubResult({
             action: 'comment',
@@ -698,6 +745,14 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
           },
         });
         if (!approval.evaluation.allowed) {
+          emitGithubToolApprovalRequested(
+            options,
+            taskId,
+            'comment',
+            'Comment on GitHub PR requires approval.',
+            approval.request,
+            approval.evaluation.reason,
+          );
           return toGithubResult({
             action: 'comment',
             payload: { blocked: true, ...approval },
@@ -716,7 +771,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
             result,
           },
         });
-      },
+      }),
     }),
     defineTool({
       name: 'coding_github_update_issue',
@@ -729,7 +784,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         title: Type.Optional(Type.String()),
         body: Type.Optional(Type.String()),
       }),
-      execute: async (args) => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'update_issue', 'Update GitHub issue', async () => {
         if (!options.client?.updateIssue) {
           return toGithubResult({
             action: 'update_issue',
@@ -756,6 +811,14 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
           },
         });
         if (!approval.evaluation.allowed) {
+          emitGithubToolApprovalRequested(
+            options,
+            taskId,
+            'update_issue',
+            'Update GitHub issue requires approval.',
+            approval.request,
+            approval.evaluation.reason,
+          );
           return toGithubResult({
             action: 'update_issue',
             payload: { blocked: true, ...approval },
@@ -775,7 +838,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
             result,
           },
         });
-      },
+      }),
     }),
     defineTool({
       name: 'coding_github_update_review_thread',
@@ -786,7 +849,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         replyBody: Type.Optional(Type.String()),
         resolve: Type.Optional(Type.Boolean()),
       }),
-      execute: async (args) => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'update_review_thread', 'Update GitHub review thread', async () => {
         if (!options.client?.updateReviewThread) {
           return toGithubResult({
             action: 'update_review_thread',
@@ -813,6 +876,14 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
           },
         });
         if (!approval.evaluation.allowed) {
+          emitGithubToolApprovalRequested(
+            options,
+            taskId,
+            'update_review_thread',
+            'Update GitHub review thread requires approval.',
+            approval.request,
+            approval.evaluation.reason,
+          );
           return toGithubResult({
             action: 'update_review_thread',
             payload: { blocked: true, ...approval },
@@ -831,7 +902,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
             result,
           },
         });
-      },
+      }),
     }),
   ];
 }
@@ -841,17 +912,6 @@ function normalizeGitHubToolOptions(input?: GitHubClient | CodingGitHubToolsOpti
     return {};
   }
   return 'getIssue' in input ? { client: input } : input;
-}
-
-async function resolveDefaultBase(client: GitHubClient, owner: string, repo: string): Promise<string> {
-  if (client.getDefaultBranch) {
-    try {
-      return await client.getDefaultBranch(owner, repo);
-    } catch {
-      return 'main';
-    }
-  }
-  return 'main';
 }
 
 function emitApprovalRequested(
@@ -870,6 +930,114 @@ function emitApprovalRequested(
     decision: reason,
     evidence: [request.id],
   });
+}
+
+function emitGithubToolStarted(
+  options: CodingGitHubToolsOptions,
+  taskId: string | undefined,
+  action: CodingGithubAction['action'],
+  summary: string,
+): void {
+  if (!taskId || !options.reporter) {
+    return;
+  }
+  options.reporter.emit({
+    type: 'coding.github.started',
+    taskId,
+    action,
+    summary,
+  });
+}
+
+function emitGithubToolApprovalRequested(
+  options: CodingGitHubToolsOptions,
+  taskId: string | undefined,
+  action: CodingGithubAction['action'],
+  summary: string,
+  request: CodingApprovalRequest,
+  reason: string,
+): void {
+  if (!taskId || !options.reporter) {
+    return;
+  }
+  options.reporter.emit({
+    type: 'coding.github.approval_requested',
+    taskId,
+    action,
+    summary,
+    decision: reason,
+    evidence: [request.id],
+  });
+}
+
+function emitGithubToolCompleted(
+  options: CodingGitHubToolsOptions,
+  taskId: string | undefined,
+  action: CodingGithubAction['action'],
+  summary: string,
+): void {
+  if (!taskId || !options.reporter) {
+    return;
+  }
+  options.reporter.emit({
+    type: 'coding.github.completed',
+    taskId,
+    action,
+    summary,
+  });
+}
+
+function emitGithubToolFailed(
+  options: CodingGitHubToolsOptions,
+  taskId: string | undefined,
+  action: CodingGithubAction['action'],
+  error: unknown,
+): void {
+  if (!taskId || !options.reporter) {
+    return;
+  }
+  options.reporter.emit({
+    type: 'coding.github.action_completed',
+    taskId,
+    action,
+    summary: error instanceof Error ? error.message : String(error),
+    status: 'failed',
+  });
+}
+
+async function withGithubToolProgress<T extends string>(
+  options: CodingGitHubToolsOptions,
+  taskId: string | undefined,
+  action: CodingGithubAction['action'],
+  summary: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  emitGithubToolStarted(options, taskId, action, summary);
+  try {
+    const result = await operation();
+    if (!isBlockedGithubResult(result)) {
+      emitGithubToolCompleted(options, taskId, action, `${summary} completed.`);
+    }
+    return result;
+  } catch (error) {
+    emitGithubToolFailed(options, taskId, action, error);
+    throw error;
+  }
+}
+
+function isBlockedGithubResult(result: string): boolean {
+  try {
+    const parsed = JSON.parse(result) as CodingGithubResult;
+    return parsed.actions.some(
+      (action) =>
+        action.payload != null &&
+        typeof action.payload === 'object' &&
+        'blocked' in action.payload &&
+        action.payload.blocked === true,
+    );
+  } catch {
+    return false;
+  }
 }
 
 function hashApprovalPayload(payload: Record<string, unknown>): string {

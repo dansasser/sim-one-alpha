@@ -6,6 +6,7 @@ import test from 'node:test';
 import {
   addToImportGraph,
   addToSymbolIndex,
+  collapseExternalImports,
   createImportGraph,
   createSymbolIndex,
   findDeclarations,
@@ -21,7 +22,7 @@ import { createCodingCodeIntelligenceTools } from '../workers/coding-worker/tool
 import { createFlueLocalCodingSandbox } from '../workers/coding-worker/tools/sandbox-runtime.js';
 
 const tsSource = `
-import { helper } from './helper.js';
+import { helper } from './helper.ts';
 import * as fs from 'node:fs';
 import defaultExport from './default-module';
 
@@ -114,7 +115,7 @@ test('parseTypeScript extracts symbols, imports, and exports', () => {
   assert.equal(addMethod?.container, 'Calculator');
 
   assert.equal(result.imports.length, 3);
-  const namedImport = result.imports.find((i) => i.source === './helper.js');
+  const namedImport = result.imports.find((i) => i.source === './helper.ts');
   assert.ok(namedImport);
   assert.equal(namedImport?.specifiers[0]?.name, 'helper');
 
@@ -181,6 +182,7 @@ test('symbol index finds declarations and references', () => {
   const calcRefs = findReferences(index, 'Calculator');
   assert.ok(calcRefs.length >= 1);
   assert.ok(calcRefs.some((ref) => ref.path === 'src/calc.ts'));
+  assert.ok(!calcRefs.some((ref) => ref.kind === 'class' && ref.path === 'src/calc.ts'));
 });
 
 test('import graph tracks dependencies and dependents', () => {
@@ -209,6 +211,28 @@ test('import graph finds path between files', () => {
   assert.equal(path?.[path.length - 1], 'src/helper.ts');
 });
 
+test('import graph collapseExternalImports preserves internal nodes and edges', () => {
+  const graph = createImportGraph();
+  const calcParsed = parseTypeScript('src/calc.ts', tsSource);
+  const helperParsed = parseTypeScript('src/helper.ts', helperSource);
+  addToImportGraph(graph, calcParsed);
+  addToImportGraph(graph, helperParsed);
+
+  const collapsed = collapseExternalImports(graph);
+  assert.ok(collapsed.nodes.has('src/calc.ts'));
+  assert.ok(collapsed.nodes.has('src/helper.ts'));
+  assert.ok(collapsed.nodes.has('src/default-module.ts'));
+  assert.ok(!collapsed.nodes.has('node:fs'));
+
+  const calcNode = collapsed.nodes.get('src/calc.ts')!;
+  assert.ok(calcNode.outgoing.some((edge) => edge.target === 'src/helper.ts'));
+  assert.ok(calcNode.outgoing.some((edge) => edge.target === 'src/default-module.ts'));
+  assert.ok(!calcNode.outgoing.some((edge) => edge.target === 'node:fs'));
+
+  const helperNode = collapsed.nodes.get('src/helper.ts')!;
+  assert.ok(helperNode.incoming.some((edge) => edge.source === 'src/calc.ts'));
+});
+
 test('Flue code-intelligence tools parse a file through the sandbox', async () => {
   const workspaceRoot = createTempWorkspace();
   try {
@@ -231,7 +255,7 @@ test('Flue code-intelligence tools parse a file through the sandbox', async () =
 
     assert.equal(output.language, 'typescript');
     assert.ok(output.symbols.some((s) => s.name === 'Calculator' && s.kind === 'class'));
-    assert.ok(output.imports.some((i) => i.source === './helper.js'));
+    assert.ok(output.imports.some((i) => i.source === './helper.ts'));
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
   }

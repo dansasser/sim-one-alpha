@@ -1,8 +1,36 @@
 import { defineTool, Type, type ToolDefinition } from '@flue/runtime';
-import type { CodingPlanItem, CodingWorkerLoopState } from '../types.js';
+import type { CodingProgressReporter } from '../events/progress-reporter.js';
+import type { CodingWorkerEventType } from '../events/coding-worker-events.js';
+import type {
+  CodingCodeReviewFinding,
+  CodingPlanItem,
+  CodingVerificationEvidence,
+  CodingWorkerLoopState,
+  CodingWorkerLoopStep,
+} from '../types.js';
 import { createInitialPlan, replan, type PlanningContext, type ReplanFailureContext } from '../workflow/planning.js';
 
-export function createCodingPlanningTools(): ToolDefinition[] {
+const CodingWorkerLoopStepSchema = Type.Union([
+  Type.Literal('triage'),
+  Type.Literal('implement'),
+  Type.Literal('test-debug'),
+  Type.Literal('code-review'),
+  Type.Literal('github'),
+  Type.Literal('commit'),
+  Type.Literal('push'),
+  Type.Literal('pr'),
+  Type.Literal('replanned'),
+  Type.Literal('completed'),
+  Type.Literal('blocked'),
+  Type.Literal('error'),
+]);
+
+export interface CodingPlanningToolsOptions {
+  reporter?: CodingProgressReporter;
+  taskId?: string;
+}
+
+export function createCodingPlanningTools(options: CodingPlanningToolsOptions = {}): ToolDefinition[] {
   return [
     defineTool({
       name: 'coding_plan_create',
@@ -33,6 +61,11 @@ export function createCodingPlanningTools(): ToolDefinition[] {
           context.github = {};
         }
         const plan = createInitialPlan(task, context);
+        emitToolProgress(options, {
+          type: 'coding.plan.updated',
+          summary: `Created initial plan with ${plan.length} item(s).`,
+          plan,
+        });
         return JSON.stringify({ plan }, null, 2);
       },
     }),
@@ -42,7 +75,7 @@ export function createCodingPlanningTools(): ToolDefinition[] {
         'Replan the worker-local loop after a failure or when new context is discovered. Returns an updated CodingPlanItem[].',
       parameters: Type.Object({
         taskId: Type.String(),
-        currentStep: Type.String(),
+        currentStep: CodingWorkerLoopStepSchema,
         turn: Type.Number(),
         maxTurns: Type.Number(),
         replanCount: Type.Number(),
@@ -66,7 +99,7 @@ export function createCodingPlanningTools(): ToolDefinition[] {
             ]),
           })
         ),
-        failureStep: Type.String(),
+        failureStep: CodingWorkerLoopStepSchema,
         failureSummary: Type.String(),
         reviewFindings: Type.Optional(
           Type.Array(
@@ -91,30 +124,67 @@ export function createCodingPlanningTools(): ToolDefinition[] {
         ),
       }),
       execute: async (args) => {
-        const state = buildLoopStateFromToolArgs(args);
+        const replanArgs = args as ReplanToolArgs;
+        const state = buildLoopStateFromToolArgs(replanArgs);
         const failureContext: ReplanFailureContext = {
-          step: args.failureStep as ReplanFailureContext['step'],
-          summary: args.failureSummary,
-          reviewFindings: args.reviewFindings,
-          verificationEvidence: args.verificationEvidence,
+          step: replanArgs.failureStep,
+          summary: replanArgs.failureSummary,
+          reviewFindings: replanArgs.reviewFindings,
+          verificationEvidence: replanArgs.verificationEvidence,
         };
         const plan = replan(state, failureContext);
+        emitToolProgress(options, {
+          type: 'coding.plan.updated',
+          summary: `Replanned after ${failureContext.step} failure; plan now has ${plan.length} item(s).`,
+          plan,
+        });
         return JSON.stringify({ plan }, null, 2);
       },
     }),
   ];
 }
 
-function buildLoopStateFromToolArgs(
-  args: Record<string, unknown>,
-): CodingWorkerLoopState {
+interface ReplanToolArgs {
+  taskId: string;
+  currentStep: CodingWorkerLoopStep;
+  turn: number;
+  maxTurns: number;
+  replanCount: number;
+  plan: CodingPlanItem[];
+  failureStep: CodingWorkerLoopStep;
+  failureSummary: string;
+  reviewFindings?: CodingCodeReviewFinding[];
+  verificationEvidence?: CodingVerificationEvidence[];
+}
+
+function emitToolProgress(
+  options: CodingPlanningToolsOptions,
+  event: {
+    type: CodingWorkerEventType;
+    summary: string;
+    plan?: CodingPlanItem[];
+  },
+): void {
+  if (!options.reporter || !options.taskId) {
+    return;
+  }
+
+  options.reporter.emit({
+    type: event.type,
+    taskId: options.taskId,
+    summary: event.summary,
+    plan: event.plan,
+  });
+}
+
+function buildLoopStateFromToolArgs(args: ReplanToolArgs): CodingWorkerLoopState {
   return {
     task: {
-      taskId: String(args.taskId),
+      taskId: args.taskId,
       text: '',
     },
     sessionPlan: {
-      taskId: args.taskId as string,
+      taskId: args.taskId,
       leadSessionName: 'planning-tool',
       childSessions: {
         triage: 'planning-tool:triage',
@@ -130,10 +200,10 @@ function buildLoopStateFromToolArgs(
       scripts: {},
       verificationPlan: [],
     },
-    currentStep: args.currentStep as CodingWorkerLoopState['currentStep'],
-    turn: Number(args.turn),
-    maxTurns: Number(args.maxTurns),
-    plan: (args.plan as CodingPlanItem[]) ?? [],
+    currentStep: args.currentStep,
+    turn: args.turn,
+    maxTurns: args.maxTurns,
+    plan: args.plan,
     approvalQueue: [],
     pendingEdits: {
       fileEdits: [],
@@ -144,6 +214,6 @@ function buildLoopStateFromToolArgs(
       evidence: [],
     },
     subagentHistory: [],
-    replanCount: Number(args.replanCount),
-  } as unknown as CodingWorkerLoopState;
+    replanCount: args.replanCount,
+  };
 }

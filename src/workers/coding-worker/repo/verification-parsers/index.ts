@@ -15,11 +15,11 @@ export function detectVerificationParser(command: CodingVerificationCommand): Ve
   if (command.name === 'typecheck' || /tsc\s+(?:-p\s+[^\s]+\s+)?--noemit/.test(commandString) || /tsc\b/.test(commandString)) {
     return tscParserName;
   }
-  if (command.name === 'test:unit' || command.name === 'test' || /jest\b/.test(commandString) || /vitest\b/.test(commandString)) {
-    return jestVitestParserName;
-  }
   if (/pytest\b/.test(commandString) || /py\.test\b/.test(commandString)) {
     return pytestParserName;
+  }
+  if (command.name === 'test:unit' || command.name === 'test' || /jest\b/.test(commandString) || /vitest\b/.test(commandString)) {
+    return jestVitestParserName;
   }
   return undefined;
 }

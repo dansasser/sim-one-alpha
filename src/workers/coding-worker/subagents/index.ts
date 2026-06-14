@@ -107,6 +107,7 @@ function createInternalToolsets(options: CodingWorkerInternalSubagentsOptions): 
       'coding_repo_git_state',
       'coding_github_read_context',
       'coding_triage_submit_result',
+      'coding_progress_emit',
       'coding_ast_parse_file',
       'coding_symbol_navigate',
       'coding_import_graph',
@@ -146,6 +147,7 @@ function createInternalToolsets(options: CodingWorkerInternalSubagentsOptions): 
       'coding_git_status',
       'coding_git_diff',
       'coding_repo_git_state',
+      'coding_progress_emit',
     ),
     github: githubTools,
   };

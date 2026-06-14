@@ -27,6 +27,7 @@ export interface CodeSymbol {
   kind: CodeSymbolKind;
   path: string;
   range: CodeSymbolRange;
+  nameRange?: CodeSymbolRange;
   container?: string;
   signature?: string;
 }
@@ -104,17 +105,19 @@ function parseSourceFile(
   const imports: ImportInfo[] = [];
   const exports: ExportInfo[] = [];
   const addSymbol = (name: string, kind: CodeSymbolKind, node: ts.Node, container?: string) => {
+    const nameNode = (node as { name?: ts.Node }).name;
     symbols.push({
       name,
       kind,
       path,
       range: nodeRange(sourceFile, node),
+      nameRange: nameNode ? nodeRange(sourceFile, nameNode) : undefined,
       container,
       signature: extractSignature(content, node),
     });
   };
 
-  function visit(node: ts.Node, container?: string) {
+  function visit(node: ts.Node, container?: string, parent?: ts.Node) {
     if (ts.isImportDeclaration(node)) {
       const moduleSpecifier = node.moduleSpecifier;
       if (ts.isStringLiteral(moduleSpecifier)) {
@@ -268,14 +271,16 @@ function parseSourceFile(
     }
 
     if (ts.isExportSpecifier(node)) {
-      exports.push({
-        name: node.name.text,
-        kind: 'named',
-        range: nodeRange(sourceFile, node),
-      });
+      if (!parent || !ts.isExportDeclaration(parent)) {
+        exports.push({
+          name: node.name.text,
+          kind: 'named',
+          range: nodeRange(sourceFile, node),
+        });
+      }
     }
 
-    ts.forEachChild(node, (child) => visit(child, container));
+    ts.forEachChild(node, (child) => visit(child, container, node));
   }
 
   visit(sourceFile, undefined);

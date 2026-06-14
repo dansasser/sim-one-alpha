@@ -29,7 +29,7 @@ export const CodingVerificationCommandRequestSchema = v.object({
   required: v.optional(v.boolean()),
   reason: v.optional(v.string()),
   cwd: v.optional(v.string()),
-  timeoutSeconds: v.optional(v.number()),
+  timeoutSeconds: v.optional(v.pipe(v.number(), v.minValue(1), v.maxValue(3600))),
 });
 
 export type CodingVerificationCommandRequest = v.InferOutput<typeof CodingVerificationCommandRequestSchema>;
@@ -137,6 +137,7 @@ export const CodingGithubActionSchema = v.object({
     v.literal('update_review_thread'),
     v.literal('read_context'),
     v.literal('verify_pr'),
+    v.literal('approve_request'),
   ]),
   payload: v.record(v.string(), v.unknown()),
 });

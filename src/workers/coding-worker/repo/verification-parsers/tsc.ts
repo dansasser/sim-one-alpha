@@ -14,7 +14,7 @@ export function parseTscFailures(output: string): CodingTestFailure[] {
     // Match TypeScript error lines like:
     // src/index.ts(10,5): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
     // src/index.ts:10:5 - error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
-    const match = line.match(/^\s*([^:\(\s]+)(?:\((\d+),(\d+)\)|:(\d+):(\d+))?\s*[-:]\s*(error|warning)\s+(TS\d+):\s*(.+)\s*$/);
+    const match = line.match(/^\s*([^:\(\s]*(?::(?!\d)[^:\(\s]*)*)(?:\((\d+),(\d+)\)|:(\d+):(\d+))?\s*[-:]\s*(error|warning)\s+(TS\d+):\s*(.+)\s*$/);
     if (!match) {
       continue;
     }

@@ -85,7 +85,7 @@ export function createCodingCodeIntelligenceTools(
       parameters: Type.Object({
         path: Type.String(),
       }),
-      execute: async (args) => {
+      execute: async (args) => withToolProgress(options, 'ast-parse', async () => {
         const sandbox = await getSandbox();
         const path = requireString(args.path, 'path');
         const content = await sandbox.readFile(path);
@@ -96,7 +96,7 @@ export function createCodingCodeIntelligenceTools(
           evidence: [normalizeRepoRelativePath(sandbox.repoPath, path)],
         });
         return toToolJson(parsed);
-      },
+      }),
     }),
     defineTool({
       name: 'coding_symbol_navigate',
@@ -107,7 +107,7 @@ export function createCodingCodeIntelligenceTools(
         root: Type.Optional(Type.String()),
         maxFiles: Type.Optional(Type.Number()),
       }),
-      execute: async (args) => {
+      execute: async (args) => withToolProgress(options, 'symbol-navigate', async () => {
         const sandbox = await getSandbox();
         const symbol = requireString(args.symbol, 'symbol');
         const root = readString(args.root) ?? '.';
@@ -126,7 +126,7 @@ export function createCodingCodeIntelligenceTools(
           references: references.map(stripCircular),
           parsedFiles,
         });
-      },
+      }),
     }),
     defineTool({
       name: 'coding_find_symbol_declarations',
@@ -137,7 +137,7 @@ export function createCodingCodeIntelligenceTools(
         root: Type.Optional(Type.String()),
         maxFiles: Type.Optional(Type.Number()),
       }),
-      execute: async (args) => {
+      execute: async (args) => withToolProgress(options, 'find-declarations', async () => {
         const sandbox = await getSandbox();
         const symbol = requireString(args.symbol, 'symbol');
         const root = readString(args.root) ?? '.';
@@ -154,7 +154,7 @@ export function createCodingCodeIntelligenceTools(
           declarations: declarations.map(stripCircular),
           parsedFiles,
         });
-      },
+      }),
     }),
     defineTool({
       name: 'coding_find_symbol_references',
@@ -165,7 +165,7 @@ export function createCodingCodeIntelligenceTools(
         root: Type.Optional(Type.String()),
         maxFiles: Type.Optional(Type.Number()),
       }),
-      execute: async (args) => {
+      execute: async (args) => withToolProgress(options, 'find-references', async () => {
         const sandbox = await getSandbox();
         const symbol = requireString(args.symbol, 'symbol');
         const root = readString(args.root) ?? '.';
@@ -182,7 +182,7 @@ export function createCodingCodeIntelligenceTools(
           references: references.map(stripCircular),
           parsedFiles,
         });
-      },
+      }),
     }),
     defineTool({
       name: 'coding_import_graph',
@@ -193,7 +193,7 @@ export function createCodingCodeIntelligenceTools(
         maxFiles: Type.Optional(Type.Number()),
         path: Type.Optional(Type.String()),
       }),
-      execute: async (args) => {
+      execute: async (args) => withToolProgress(options, 'import-graph', async () => {
         const sandbox = await getSandbox();
         const root = readString(args.root) ?? '.';
         const maxFiles = readPositiveInteger(args.maxFiles) ?? 200;
@@ -220,7 +220,7 @@ export function createCodingCodeIntelligenceTools(
           parsedFiles,
           ...(focusPath ? { focusPath, dependencies, dependents } : {}),
         });
-      },
+      }),
     }),
   ];
 }
@@ -348,6 +348,20 @@ function emitToolProgress(
     action: event.action,
     summary: event.summary,
     evidence: event.evidence,
+  });
+}
+
+function withToolProgress<T>(
+  options: CodingCodeIntelligenceToolsOptions,
+  action: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  return operation().catch((error: unknown) => {
+    emitToolProgress(options, {
+      action: `${action}.failed`,
+      summary: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   });
 }
 

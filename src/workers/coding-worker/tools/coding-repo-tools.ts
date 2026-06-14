@@ -569,6 +569,7 @@ export async function applyCodingEditTransaction(
 
   const snapshots = new Map<string, string | null>();
   const touchedPaths = new Set<string>();
+  const writePaths = new Set<string>();
 
   try {
     // Pre-flight validation: read originals and validate every edit.
@@ -578,6 +579,7 @@ export async function applyCodingEditTransaction(
         throw new CodingEditTransactionError(write.path, 'write', `Duplicate write target: ${write.path}`);
       }
       touchedPaths.add(normalizedPath);
+      writePaths.add(normalizedPath);
 
       const fileExists = await sandbox.exists(write.path);
       if (fileExists) {
@@ -593,7 +595,7 @@ export async function applyCodingEditTransaction(
 
     for (const edit of tx.edits) {
       const normalizedPath = normalizeRepoRelativePath(sandbox.repoPath, edit.path);
-      if (touchedPaths.has(normalizedPath)) {
+      if (writePaths.has(normalizedPath)) {
         throw new CodingEditTransactionError(edit.path, 'patch', `Path already targeted by a write: ${edit.path}`);
       }
       touchedPaths.add(normalizedPath);
@@ -640,14 +642,16 @@ export async function applyCodingEditTransaction(
           newText: edit.newText,
           expectedOccurrences: edit.expectedOccurrences,
         }));
-        const { content, replacements } = applyExactTextEdits(original, textEdits);
+        const { content, appliedEdits } = applyExactTextEdits(original, textEdits);
         await sandbox.writeFile(path, content);
-        tx.results.push({
-          path,
-          operation: 'patch',
-          status: 'applied',
-          replacements,
-        });
+        for (const appliedEdit of appliedEdits) {
+          tx.results.push({
+            path,
+            operation: 'patch',
+            status: 'applied',
+            replacements: appliedEdit.replacements,
+          });
+        }
       } catch (patchError) {
         if (patchError instanceof CodingEditTransactionError) {
           throw patchError;

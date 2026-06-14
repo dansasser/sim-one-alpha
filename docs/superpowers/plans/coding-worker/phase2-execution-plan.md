@@ -61,7 +61,7 @@ Deliverables:
   - Strict return types for each subagent tool wrapper.
 - [ ] Update `src/workers/coding-worker/events/coding-worker-events.ts` to emit typed events at every loop checkpoint.
 - [ ] Update `src/workers/coding-worker/session/task-run-store.ts` to persist loop checkpoints.
-- [ ] Implement the lead loop in `src/workers/coding-worker/coding-worker.ts`:
+- [ ] Implement the lead loop in `src/workers/coding-worker/workflow/loop.ts`:
   - Accepts natural-language task.
   - Bounded iteration guard (max N turns, configurable).
   - Calls triage to produce an initial plan.

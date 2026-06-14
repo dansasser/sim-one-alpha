@@ -1242,8 +1242,8 @@ test('GitHub tools list issues and pull requests through the configured client',
   assert.equal(prsOutput.actions[0]?.payload.pullRequests?.[0]?.baseRef, 'main');
 });
 
-test('GitHub tools default PR base to main when omitted', async () => {
-  let updatedBase: string | undefined;
+test('GitHub tools do not default PR base when omitted', async () => {
+  let updatedBase: string | undefined = 'initial';
   const approvalService = createInMemoryCodingApprovalService();
   const tools = createCodingGitHubTools({
     approvalService,
@@ -1294,7 +1294,7 @@ test('GitHub tools default PR base to main when omitted', async () => {
     body: 'Update',
   });
 
-  assert.equal(updatedBase, 'main');
+  assert.equal(updatedBase, undefined);
 });
 
 
@@ -1374,6 +1374,32 @@ test('coding worker edit transaction applies multi-file writes and patches atomi
     assert.equal(readFileSync(join(workspaceRoot, 'a.js'), 'utf8'), 'const a = 2;\n');
     assert.equal(readFileSync(join(workspaceRoot, 'b.js'), 'utf8'), 'const b = 3;\n');
     assert.equal(readFileSync(join(workspaceRoot, 'c.js'), 'utf8'), 'const c = 4;\n');
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker edit transaction allows multiple edits targeting the same file', async () => {
+  const workspaceRoot = createTempWorkspace();
+
+  try {
+    const sandbox = await createFlueLocalCodingSandbox({
+      workspaceRoot,
+      targetKind: 'workspace',
+    });
+    writeFileSync(join(workspaceRoot, 'a.js'), 'const a = 1;\nconst b = 2;\n');
+
+    const transaction = createCodingEditTransaction('tx-same-file', [
+      { path: 'a.js', oldText: 'const a = 1;', newText: 'const a = 10;', expectedOccurrences: 1 },
+      { path: 'a.js', oldText: 'const b = 2;', newText: 'const b = 20;', expectedOccurrences: 1 },
+    ], []);
+
+    const result = await applyCodingEditTransaction(sandbox, transaction);
+
+    assert.equal(result.status, 'applied');
+    assert.equal(result.results.length, 2);
+    assert.equal(result.results.every((r) => r.status === 'applied'), true);
+    assert.equal(readFileSync(join(workspaceRoot, 'a.js'), 'utf8'), 'const a = 10;\nconst b = 20;\n');
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
   }

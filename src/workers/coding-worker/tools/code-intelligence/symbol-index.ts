@@ -52,8 +52,9 @@ export function addToSymbolIndex(
     const name = symbol.name;
     const referenceRanges = findOccurrences(lines, name, symbol.path);
     const refList = index.references.get(name) ?? [];
+    const declarationRange = symbol.nameRange ?? symbol.range;
     for (const range of referenceRanges) {
-      if (rangeMatches(range, symbol.range)) {
+      if (rangeMatches(range, declarationRange)) {
         continue;
       }
       refList.push({

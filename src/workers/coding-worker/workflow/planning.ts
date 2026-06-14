@@ -48,7 +48,12 @@ export function createInitialPlan(
   context: PlanningContext = {},
 ): CodingPlanItem[] {
   const hasGithub = Boolean(
-    context.github?.issueNumber || context.github?.pullRequestNumber || context.github?.url || task.github,
+    context.github?.issueNumber ||
+      context.github?.pullRequestNumber ||
+      context.github?.url ||
+      task.github?.issueNumber ||
+      task.github?.pullRequestNumber ||
+      task.github?.url,
   );
   const filesToInspect = context.filesToInspect ?? task.filesToInspect ?? [];
   const packageManager = context.preflight?.packageManager;
