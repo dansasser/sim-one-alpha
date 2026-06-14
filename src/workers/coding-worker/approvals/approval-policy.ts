@@ -24,6 +24,10 @@ const defaultApprovalRequiredActions = new Set<CodingApprovalActionType>([
   'github.pr.ready',
   'github.issue.update',
   'github.review-thread.update',
+  'github.branch_from_pr',
+  'github.review_comment',
+  'github.check.rerun',
+  'github.fork_repo',
 ]);
 
 export function requiresCodingApproval(actionType: CodingApprovalActionType): boolean {

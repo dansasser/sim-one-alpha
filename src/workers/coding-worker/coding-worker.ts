@@ -79,7 +79,7 @@ export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOp
   }
   await assertApprovalRootOutsideWorkspace(approvalRoot, workspaceRoot);
   const approvalService = createFileCodingApprovalService(approvalRoot);
-  const githubClient = resolvedOptions.githubClient ?? createDefaultGitHubClient(resolvedOptions.env);
+  const githubClient = resolvedOptions.githubClient ?? createDefaultGitHubClient(resolvedOptions.env, resolvedOptions.repoPath ?? resolvedOptions.workspaceRoot);
 
   return defineAgentProfile({
     name: codingWorkerAgentName,
@@ -121,6 +121,12 @@ export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOp
         approvalService,
       }),
       ...createCodingGitHubTools({
+        workspaceRoot,
+        targetKind: resolvedOptions.targetKind,
+        projectId: resolvedOptions.projectId,
+        projectSlug: resolvedOptions.projectSlug,
+        projectRelativePath: resolvedOptions.projectRelativePath,
+        repoPath: resolvedOptions.repoPath,
         client: githubClient,
         approvalService,
       }),

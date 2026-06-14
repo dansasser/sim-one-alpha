@@ -15,6 +15,7 @@ import {
 } from './sandbox-runtime.js';
 import type { CodingProgressReporter } from '../events/progress-reporter.js';
 import type { CodingWorkspaceTargetInput } from '../repo/workspace-target.js';
+import type { CodingGithubAction } from '../../../schemas/coding-worker.js';
 
 export interface CodingGitToolsOptions extends CodingWorkspaceTargetInput {
   env?: Record<string, string | undefined>;
@@ -165,7 +166,7 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
       }),
       execute: async (args) => {
         const taskId = requireString(args.taskId, 'taskId');
-        const base = readString(args.base);
+        const base = readString(args.base) ?? 'main';
         const head = readString(args.head);
         const prPayload = {
           title: requireString(args.title, 'title'),
@@ -181,19 +182,22 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
           summary: `Create GitHub PR: ${prPayload.title} (${hashApprovalPayload(prPayload)})`,
           reason: 'Opening a PR publishes work to GitHub for review.',
           risk: 'This mutates remote GitHub state.',
-          target: head ?? base ?? prPayload.title,
+          target: head ?? base,
           metadata: {
             draft: prPayload.draft,
-            ...(base ? { base } : {}),
+            base,
             ...(head ? { head } : {}),
             payloadHash: hashApprovalPayload(prPayload),
           },
         });
         if (!approval.evaluation.allowed) {
-          return toToolJson({
-            blocked: true,
-            request: approval.request,
-            evaluation: approval.evaluation,
+          return toGithubResult({
+            action: 'create_pr',
+            payload: {
+              blocked: true,
+              request: approval.request,
+              evaluation: approval.evaluation,
+            },
           });
         }
 
@@ -205,12 +209,21 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
           requireString(args.title, 'title'),
           '--body',
           requireString(args.body, 'body'),
-          base ? ['--base', base] : undefined,
+          ['--base', base],
           head ? ['--head', head] : undefined,
         ].filter(Boolean);
         const sandbox = await getSandbox();
         const pr = await sandbox.execFile('gh', flags.flat() as string[], { timeoutSeconds: 120 });
-        return toToolJson({ status: pr.exitCode === 0 ? 'created' : 'failed', pr });
+        return toGithubResult({
+          action: 'create_pr',
+          payload: {
+            status: pr.exitCode === 0 ? 'created' : 'failed',
+            base,
+            ...(head ? { head } : {}),
+            draft: prPayload.draft,
+            pr,
+          },
+        });
       },
     }),
   ];
@@ -224,8 +237,8 @@ function hashApprovalPayload(payload: Record<string, unknown>): string {
   return digest;
 }
 
-async function evaluateGitApproval(
-  options: CodingGitToolsOptions,
+export async function evaluateGitApproval(
+  options: { reporter?: CodingProgressReporter },
   input: {
   approvalService: CodingApprovalService;
   taskId: string;
@@ -312,4 +325,8 @@ function readStringArray(value: unknown): string[] {
 
 function toToolJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
+}
+
+function toGithubResult(action: CodingGithubAction): string {
+  return toToolJson({ actions: [action] });
 }
