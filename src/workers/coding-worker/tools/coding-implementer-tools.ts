@@ -1,11 +1,13 @@
 import { defineTool, Type, type ToolDefinition } from '@flue/runtime';
-import type { CodingImplementerResult } from '../../../schemas/coding-worker.js';
+import * as v from 'valibot';
+import { CodingImplementerResultSchema } from '../../../schemas/coding-worker.js';
 
 export function createCodingImplementerTools(): ToolDefinition[] {
   return [
     defineTool({
       name: 'coding_implementer_submit_result',
-      description: 'Submit the final structured implementation result containing file edits, files written, and commands needed to verify them.',
+      description:
+        'Submit the final structured implementation result containing file edits, files written, and commands needed to verify them. The result must match the CodingImplementerResult schema exactly; invalid submissions will be rejected.',
       parameters: Type.Object({
         fileEdits: Type.Array(
           Type.Object({
@@ -33,12 +35,7 @@ export function createCodingImplementerTools(): ToolDefinition[] {
         ),
       }),
       execute: async (args) => {
-        // Validation could be added here
-        const result: CodingImplementerResult = {
-          fileEdits: args.fileEdits || [],
-          writeFiles: args.writeFiles || [],
-          verificationCommands: args.verificationCommands || [],
-        };
+        const result = v.parse(CodingImplementerResultSchema, args);
         return JSON.stringify({ status: 'submitted', result }, null, 2);
       },
     }),

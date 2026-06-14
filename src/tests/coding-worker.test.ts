@@ -4,7 +4,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import * as v from 'valibot';
 import orchestratorAgent from '../agents/orchestrator.js';
+import { CodingFileEditSchema, CodingImplementerResultSchema } from '../schemas/coding-worker.js';
 import { evaluateCodingApproval, createCodingApprovalRequest } from '../workers/coding-worker/approvals/approval-policy.js';
 import {
   createFileCodingApprovalService,
@@ -30,6 +32,7 @@ import {
 } from '../workers/coding-worker/repo/package-manager.js';
 import { createCodingVerificationPlan } from '../workers/coding-worker/repo/verification.js';
 import { createCodingGitTools } from '../workers/coding-worker/tools/coding-git-tools.js';
+import { createCodingImplementerTools } from '../workers/coding-worker/tools/coding-implementer-tools.js';
 import { createCodingRepoTools } from '../workers/coding-worker/tools/coding-repo-tools.js';
 import { createCodingRepoWorkflowTools } from '../workers/coding-worker/tools/coding-repo-workflow-tools.js';
 import { evaluateCodingShellCommand } from '../workers/coding-worker/tools/command-policy.js';
@@ -1467,6 +1470,162 @@ test('coding worker loop can complete with passing required verification evidenc
   }
 });
 
+test('coding implementer submit result validates and emits a CodingImplementerResult', async () => {
+  const tools = createCodingImplementerTools();
+  const submit = getTool(tools, 'coding_implementer_submit_result');
+
+  const result = JSON.parse(
+    await submit.execute({
+      fileEdits: [{ path: 'index.js', oldText: 'return 41;', newText: 'return 42;', expectedOccurrences: 1 }],
+      writeFiles: [{ path: 'new.js', content: 'console.log("ok");\n' }],
+      verificationCommands: [{ name: 'unit', command: 'node test.js', required: true, reason: 'verify' }],
+    }),
+  ) as { status?: string; result?: unknown };
+
+  assert.equal(result.status, 'submitted');
+  const parsedResult = v.parse(CodingImplementerResultSchema, result.result);
+  assert.equal(parsedResult.fileEdits.length, 1);
+  assert.equal(parsedResult.fileEdits[0].path, 'index.js');
+  assert.equal(parsedResult.fileEdits[0].oldText, 'return 41;');
+  assert.equal(parsedResult.fileEdits[0].newText, 'return 42;');
+  assert.equal(parsedResult.fileEdits[0].expectedOccurrences, 1);
+  assert.equal(parsedResult.writeFiles.length, 1);
+  assert.equal(parsedResult.writeFiles[0].path, 'new.js');
+  assert.equal(parsedResult.verificationCommands.length, 1);
+  assert.equal(parsedResult.verificationCommands[0].name, 'unit');
+
+  await assert.rejects(
+    () =>
+      submit.execute({
+        fileEdits: [{ path: 123, oldText: 'a', newText: 'b' }],
+        writeFiles: [],
+        verificationCommands: [],
+      } as never),
+    /Invalid/,
+  );
+});
+
+test('coding repo apply patch produces valid CodingFileEdit objects', async () => {
+  const project = createExecutableWorkspaceProject();
+
+  try {
+    const tools = createCodingRepoTools({
+      workspaceRoot: project.workspaceRoot,
+      targetKind: 'project',
+      projectRelativePath: project.projectRelativePath,
+    });
+    const patch = getTool(tools, 'coding_repo_apply_patch');
+
+    const result = JSON.parse(
+      await patch.execute({
+        path: 'index.js',
+        edits: [{ oldText: 'return 41;', newText: 'return 42;', expectedOccurrences: 1 }],
+      }),
+    ) as { status?: string; replacements?: number; edits?: unknown[] };
+
+    assert.equal(result.status, 'patched');
+    assert.equal(result.replacements, 1);
+    assert.equal(Array.isArray(result.edits), true);
+    assert.equal(result.edits?.length, 1);
+
+    const edit = v.parse(CodingFileEditSchema, result.edits?.[0]);
+    assert.equal(edit.path, 'index.js');
+    assert.equal(edit.oldText, 'return 41;');
+    assert.equal(edit.newText, 'return 42;');
+    assert.equal(edit.expectedOccurrences, 1);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding repo apply exact edit works and returns a valid CodingFileEdit', async () => {
+  const project = createExecutableWorkspaceProject();
+
+  try {
+    const tools = createCodingRepoTools({
+      workspaceRoot: project.workspaceRoot,
+      targetKind: 'project',
+      projectRelativePath: project.projectRelativePath,
+    });
+    const exactEdit = getTool(tools, 'coding_repo_apply_exact_edit');
+
+    const result = JSON.parse(
+      await exactEdit.execute({
+        path: 'index.js',
+        oldText: 'return 41;',
+        newText: 'return 42;',
+        expectedOccurrences: 1,
+      }),
+    ) as { status?: string; replacements?: number; edit?: unknown };
+
+    assert.equal(result.status, 'patched');
+    assert.equal(result.replacements, 1);
+
+    const edit = v.parse(CodingFileEditSchema, result.edit);
+    assert.equal(edit.path, 'index.js');
+    assert.equal(edit.oldText, 'return 41;');
+    assert.equal(edit.newText, 'return 42;');
+    assert.equal(edit.expectedOccurrences, 1);
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('coding worker lead loop applies implementer structured edits and completes', async () => {
+  const project = createExecutableWorkspaceProject();
+  const approvalService = createAutoApprovingApprovalService(['file.edit']);
+
+  try {
+    const result = await runCodingWorkerLoop(
+      {
+        taskId: 'task-implementer-structured',
+        text: 'Fix answer implementation.',
+        workspaceRoot: project.workspaceRoot,
+        targetKind: 'project',
+        projectRelativePath: project.projectRelativePath,
+        verificationCommands: [
+          {
+            name: 'unit',
+            command: 'node test.js',
+            required: true,
+            reason: 'Temp repo unit verification must pass.',
+          },
+        ],
+      },
+      {
+        approvalService,
+        delegate: createFakeDelegate({
+          implementer: {
+            fileEdits: [
+              {
+                path: 'index.js',
+                oldText: 'return 41;',
+                newText: 'return 42;',
+                expectedOccurrences: 1,
+              },
+            ],
+            verificationCommands: [
+              {
+                name: 'unit',
+                command: 'node test.js',
+                required: true,
+                reason: 'Temp repo unit verification must pass.',
+              },
+            ],
+          },
+        }),
+      },
+    );
+
+    assert.equal(result.status, 'completed');
+    assert.match(readFileSync(join(project.repoPath, 'index.js'), 'utf8'), /return 42/);
+    assert.equal(result.subagentResults.some((item) => item.subagent === 'implementer'), true);
+    assert.doesNotThrow(() => assertCodingWorkerCanComplete(result));
+  } finally {
+    rmSync(project.workspaceRoot, { recursive: true, force: true });
+  }
+});
+
 interface TempWorkspaceProject {
   workspaceRoot: string;
   projectRelativePath: string;
@@ -1583,7 +1742,7 @@ test('coding worker loop state initializes with bounded turn guard and checkpoin
 test('coding worker loop persists a checkpoint after each turn', async () => {
   const project = createExecutableWorkspaceProject();
   const reporter = new InMemoryCodingProgressReporter();
-  const taskRunStore = new JsonFileCodingTaskRunStore(':memory:');
+  const taskRunStore = new JsonFileCodingTaskRunStore(join(project.workspaceRoot, 'task-runs.json'));
   const approvalService = createAutoApprovingApprovalService(['file.edit']);
 
   try {

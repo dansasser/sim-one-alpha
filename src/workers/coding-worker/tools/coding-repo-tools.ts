@@ -15,6 +15,7 @@ import {
   type CodingProjectDirectoryKind,
   type CodingWorkspaceTargetInput,
 } from '../repo/workspace-target.js';
+import type { CodingFileEdit } from '../../../schemas/coding-worker.js';
 
 export interface CodingRepoToolsOptions extends CodingWorkspaceTargetInput {
   env?: Record<string, string | undefined>;
@@ -128,7 +129,7 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
     defineTool({
       name: 'coding_repo_apply_patch',
       description:
-        'Apply exact text replacements to one UTF-8 file inside the selected coding-worker workspace/project scope. Each edit must include oldText and newText. You can use this to apply and verify your code edits before building your final submit_result.',
+        'Apply exact text replacements to one UTF-8 file inside the selected coding-worker workspace/project scope. Each edit must include oldText and newText. Returns the applied CodingFileEdit objects so you can verify them before building your final submit_result.',
       parameters: Type.Object({
         path: Type.String(),
         edits: Type.Array(
@@ -143,18 +144,63 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
         const sandbox = await getSandbox();
         const path = requireString(args.path, 'path');
         const edits = readPatchEdits(args.edits);
+        const normalizedPath = normalizeRepoRelativePath(sandbox.repoPath, path);
         const original = await sandbox.readFile(path);
-        const { content, replacements } = applyExactTextEdits(original, edits);
+        const { content, replacements, appliedEdits } = applyExactTextEdits(original, edits);
         await sandbox.writeFile(path, content);
         emitToolProgress(options, {
           action: 'apply-patch',
-          summary: `Applied ${replacements} replacement(s) to ${normalizeRepoRelativePath(sandbox.repoPath, path)}.`,
-          evidence: [normalizeRepoRelativePath(sandbox.repoPath, path)],
+          summary: `Applied ${replacements} replacement(s) to ${normalizedPath}.`,
+          evidence: [normalizedPath],
         });
+        const codingFileEdits: CodingFileEdit[] = appliedEdits.map((edit) => ({
+          path: normalizedPath,
+          oldText: edit.oldText,
+          newText: edit.newText,
+          expectedOccurrences: edit.expectedOccurrences,
+        }));
         return toToolJson({
-          path: normalizeRepoRelativePath(sandbox.repoPath, path),
+          path: normalizedPath,
           status: 'patched',
           replacements,
+          edits: codingFileEdits,
+        });
+      },
+    }),
+    defineTool({
+      name: 'coding_repo_apply_exact_edit',
+      description:
+        'Apply a single exact text replacement to one UTF-8 file inside the selected coding-worker workspace/project scope. Accepts one CodingFileEdit (path, oldText, newText, optional expectedOccurrences) and returns the applied edit object. Use this when you have one focused change to apply and verify.',
+      parameters: Type.Object({
+        path: Type.String(),
+        oldText: Type.String(),
+        newText: Type.String(),
+        expectedOccurrences: Type.Optional(Type.Number()),
+      }),
+      execute: async (args) => {
+        const sandbox = await getSandbox();
+        const path = requireString(args.path, 'path');
+        const normalizedPath = normalizeRepoRelativePath(sandbox.repoPath, path);
+        const edit = readExactEdit(args);
+        const original = await sandbox.readFile(path);
+        const { content, replacements, appliedEdits } = applyExactTextEdits(original, [edit]);
+        await sandbox.writeFile(path, content);
+        emitToolProgress(options, {
+          action: 'apply-exact-edit',
+          summary: `Applied ${replacements} replacement(s) to ${normalizedPath}.`,
+          evidence: [normalizedPath],
+        });
+        const appliedEdit: CodingFileEdit = {
+          path: normalizedPath,
+          oldText: edit.oldText,
+          newText: edit.newText,
+          expectedOccurrences: edit.expectedOccurrences,
+        };
+        return toToolJson({
+          path: normalizedPath,
+          status: 'patched',
+          replacements,
+          edit: appliedEdit,
         });
       },
     }),
@@ -346,12 +392,17 @@ export interface CodingTextEdit {
   expectedOccurrences?: number;
 }
 
+export interface CodingTextEditResult extends CodingTextEdit {
+  replacements: number;
+}
+
 export function applyExactTextEdits(
   original: string,
   edits: CodingTextEdit[],
-): { content: string; replacements: number } {
+): { content: string; replacements: number; appliedEdits: CodingTextEditResult[] } {
   let content = original;
-  let replacements = 0;
+  let totalReplacements = 0;
+  const appliedEdits: CodingTextEditResult[] = [];
 
   for (const edit of edits) {
     if (!edit.oldText) {
@@ -367,10 +418,16 @@ export function applyExactTextEdits(
     }
 
     content = content.split(edit.oldText).join(edit.newText);
-    replacements += occurrences;
+    totalReplacements += occurrences;
+    appliedEdits.push({
+      oldText: edit.oldText,
+      newText: edit.newText,
+      expectedOccurrences: edit.expectedOccurrences,
+      replacements: occurrences,
+    });
   }
 
-  return { content, replacements };
+  return { content, replacements: totalReplacements, appliedEdits };
 }
 
 async function collectFiles(
@@ -447,6 +504,14 @@ function readPatchEdits(value: unknown): CodingTextEdit[] {
       expectedOccurrences: readPositiveInteger(entry.expectedOccurrences),
     };
   });
+}
+
+function readExactEdit(args: Record<string, unknown>): CodingTextEdit {
+  return {
+    oldText: requireString(args.oldText, 'oldText'),
+    newText: requireString(args.newText, 'newText'),
+    expectedOccurrences: readPositiveInteger(args.expectedOccurrences),
+  };
 }
 
 function requireString(value: unknown, name: string): string {
