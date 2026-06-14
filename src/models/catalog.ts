@@ -2,6 +2,7 @@ export { providerContextWindow } from './card-limits.js';
 export { codexBrainCard, codexBrainCards } from './providers/codex-brain/index.js';
 export {
   deepseekV4ProCard,
+  kimik27codeCard,
   minimaxM3Card,
   ollamaCloudCards,
   qwen35Card,

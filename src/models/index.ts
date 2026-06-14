@@ -2,6 +2,7 @@ export {
   allModelCards,
   codexBrainCard,
   deepseekV4ProCard,
+  kimik27codeCard,
   minimaxM3Card,
   modelSpecifierFromParts,
   ollamaCloudCards,
