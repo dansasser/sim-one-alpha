@@ -9,6 +9,7 @@ import {
 } from '../workspace-loader.js';
 import { calculateContextBudget } from '../session/context-budget.js';
 import { loadProtocolsTool, retrieveMemoryTool } from '../tools/index.js';
+import { createTelegramReplyTool, readTelegramBotToken } from '../tools/telegram-reply-tool.js';
 import type { AgentModelCard } from '../models/types.js';
 import { createCodingWorkerSubagent } from '../workers/coding-worker/coding-worker.js';
 import { createResearcherSubagent } from '../workers/researcher/researcher.js';
@@ -31,12 +32,15 @@ export default createAgent(async ({ env }) => {
     env: createCodingWorkerToolEnv(env),
   });
   const researcher = createResearcherSubagent();
+  const telegramReplyTool = createTelegramReplyToolIfConfigured(env);
 
   return {
     model: selectedModelCard.specifier,
     instructions: orchestratorInstructions,
     compaction: createFlueCompactionConfig(selectedModelCard),
-    tools: [loadProtocolsTool, retrieveMemoryTool],
+    tools: telegramReplyTool
+      ? [loadProtocolsTool, retrieveMemoryTool, telegramReplyTool]
+      : [loadProtocolsTool, retrieveMemoryTool],
     subagents: [codingWorker, researcher],
   };
 });
@@ -89,6 +93,14 @@ function readOptionalEnv(env: Record<string, unknown>, key: string): string | un
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function createTelegramReplyToolIfConfigured(env: Record<string, unknown> | undefined) {
+  const token = readTelegramBotToken(env);
+  if (!token) {
+    return undefined;
+  }
+  return createTelegramReplyTool(token);
+}
+
 /**
  * Describes the orchestrator capabilities that are actually wired at runtime.
  */
@@ -99,6 +111,7 @@ The following capabilities are actually attached to this main agent at runtime:
 
 - Tool: \`load_protocols\`
 - Tool: \`retrieve_memory\`
+- Tool: \`telegram_reply\` (when TELEGRAM_BOT_TOKEN is configured)
 - Subagent: \`researcher\`
 - Subagent: \`coding-worker\`
 
