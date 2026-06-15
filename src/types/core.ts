@@ -137,6 +137,7 @@ export interface RagQuery {
   text: string;
   actorId: string;
   conversationId: string;
+  sessionId?: string;
   providers?: RagProviderKind[];
   caller?: RetrievalCaller;
   limit?: number;

@@ -454,6 +454,15 @@ test('retrieval workflow rejects web search outside the researcher boundary', as
   );
 });
 
+test('retrieval workflow default document-index provider is vector-backed', async () => {
+  const module = await import(`../workflows/retrieval.js?doc-index=${Date.now()}`) as typeof import("../workflows/retrieval.js");
+  const providers = module.createDefaultRetrievalProviders({});
+  const documentIndexProvider = providers.find((provider) => provider.id === 'document-index');
+
+  assert.ok(documentIndexProvider);
+  assert.equal(documentIndexProvider?.name, 'lancedb-document-index');
+});
+
 function restoreEnv(env: Record<string, string | undefined>): void {
   for (const [key, value] of Object.entries(env)) {
     if (value === undefined) {

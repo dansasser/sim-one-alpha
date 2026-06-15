@@ -2,8 +2,9 @@ import type { FlueContext } from '@flue/runtime';
 import type { MemoryProvider } from '../memory/memory-provider.js';
 import { SessionMemoryProvider } from '../memory/memory-provider.js';
 import { MemoryRouter } from '../memory/memory-router.js';
+import { goromboPersistenceRuntime } from '../db.js';
+import { DocumentIndexProvider } from '../rag/document-index-provider.js';
 import {
-  DocumentIndexProviderPlaceholder,
   createDefaultWebSearchProvider,
   type RagProvider,
   type WebFetchResult,
@@ -111,7 +112,13 @@ export function createRetrievalRouter(
 }
 
 export function createDefaultRetrievalProviders(env: Record<string, unknown> = process.env): RagProvider[] {
-  return [createDefaultWebSearchProvider(env), new DocumentIndexProviderPlaceholder()];
+  return [
+    createDefaultWebSearchProvider(env),
+    new DocumentIndexProvider({
+      vectorStore: goromboPersistenceRuntime.vectorStore,
+      embeddingClient: goromboPersistenceRuntime.embeddingClient,
+    }),
+  ];
 }
 
 export function selectProvidersForPrompt(text: string): RagProviderKind[] {

@@ -1,11 +1,14 @@
-export {
+﻿export {
   allModelCards,
   codexBrainCard,
   deepseekV4ProCard,
   kimik27codeCard,
   minimaxM3Card,
   modelSpecifierFromParts,
+  nomicEmbedTextCloudCard,
+  nomicEmbedTextLocalCard,
   ollamaCloudCards,
+  ollamaLocalCards,
   qwen35Card,
   resolveModelCard,
 } from './catalog.js';

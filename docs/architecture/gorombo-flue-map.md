@@ -73,11 +73,16 @@ src/routes/chat-events.ts
   Verifies API-secret middleware, exposes /api/chat/sessions for HTTP chat lists, normalizes the HTTP boundary, persists trusted event context, resolves the product session, and prompts the durable /agents/orchestrator/:sessionId route.
   Does not call c.executionCtx, a workflow route for normal chat execution, or a non-Flue orchestrator.
 
+src/routes/knowledge.ts
+  App-owned /api/knowledge and /api/knowledge/reindex routes.
+  Accepts API-secret-authenticated knowledge entries, persists them to the vector knowledge base, and triggers background re-indexing of project files and knowledge docs.
+
 src/db.ts
   Flue persistence adapter entrypoint.
   Uses Flue's Node sqlite() adapter for canonical agent sessions, durable direct/dispatch submissions, and event streams.
   Supplies SQLite workflow run and run registry records through GOROMBO's persistence wrapper.
   Wraps the Flue session store to maintain logical session indexes, direct agent instance indexes, persisted normalized event context, and extracted session-memory FTS records.
+  Exposes a shared LanceDB vector store and embedding client used by session memory, document index, and knowledge base retrieval.
 
 src/routes/telemetry.ts
   Protected app-owned telemetry inspection routes.
@@ -173,7 +178,12 @@ src/tools/protocol-tool.ts
 
 src/tools/memory-tool.ts
   Orchestrator-safe memory lookup tool.
-  Uses persisted session-memory FTS records extracted from Flue SessionData.
+  Uses persisted session-memory FTS records and LanceDB vector embeddings extracted from Flue SessionData.
+  Combines keyword and semantic search for hybrid retrieval.
+
+src/tools/knowledge-tool.ts
+  Orchestrator-safe knowledge writing tool.
+  Embeds and stores agent-captured knowledge in the vector knowledge base.
 
 src/tools/web-research-tool.ts
   Researcher-owned web research tool.

@@ -1,8 +1,10 @@
-import { randomUUID, createHash } from 'node:crypto';
+﻿import { randomUUID, createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { SessionData } from '@flue/runtime/adapter';
+import type { EmbeddingClient } from '../rag/embeddings.js';
+import type { VectorStore, VectorRecord } from '../rag/vector/index.js';
 import type { NormalizedMessageEvent } from '../types/index.js';
 import { estimateTextTokens } from './context-budget.js';
 import { directAgentHarnessName, directAgentSessionName } from './direct-agent-session.js';
@@ -81,9 +83,16 @@ export interface RecordNormalizedMessageEventInput {
 
 export class GoromboSessionDatabase {
   private readonly database: DatabaseSync;
+  private readonly vectorStore?: VectorStore;
+  private readonly embeddingClient?: EmbeddingClient;
 
-  constructor(readonly filePath = defaultSessionDatabasePath) {
+  constructor(
+    readonly filePath = defaultSessionDatabasePath,
+    options: { vectorStore?: VectorStore; embeddingClient?: EmbeddingClient } = {},
+  ) {
     const resolved = resolveRuntimePath(filePath);
+    this.vectorStore = options.vectorStore;
+    this.embeddingClient = options.embeddingClient;
     mkdirSync(dirname(resolved), { recursive: true });
     this.database = new DatabaseSync(resolved, { timeout: 5_000 });
     this.database.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL;');
@@ -94,7 +103,7 @@ export class GoromboSessionDatabase {
     this.database.close();
   }
 
-  recordFlueSession(storageKey: string, data: SessionData): void {
+  async recordFlueSession(storageKey: string, data: SessionData): Promise<void> {
     const parts = parseFlueSessionStorageKey(storageKey);
     if (!parts) {
       return;
@@ -135,7 +144,7 @@ export class GoromboSessionDatabase {
         .run(parts.harnessName, parts.sessionName, storageKey, updatedAt);
     }
 
-    this.indexSessionMemory(storageKey, parts.harnessName, parts.sessionName, data);
+    await this.indexSessionMemory(storageKey, parts.harnessName, parts.sessionName, data);
   }
 
   deleteFlueSession(storageKey: string): void {
@@ -810,12 +819,12 @@ export class GoromboSessionDatabase {
     }
   }
 
-  private indexSessionMemory(
+  private async indexSessionMemory(
     storageKey: string,
     harnessName: string,
     sessionName: string,
     data: SessionData,
-  ): void {
+  ): Promise<void> {
     this.deleteSessionMemoryByStorageKey(storageKey);
     const parts = parseFlueSessionStorageKey(storageKey);
     const chatSession =
@@ -861,6 +870,62 @@ export class GoromboSessionDatabase {
         .prepare(`INSERT OR REPLACE INTO session_memory_fts (chunk_key, title, content) VALUES (?, ?, ?)`)
         .run(chunk.id, chunk.title, chunk.content);
     }
+
+    const chunks = extractSessionMemoryChunks({
+      storageKey,
+      harnessName,
+      sessionName,
+      actorId: chatSession?.actorId,
+      conversationId: chatSession?.conversationId,
+      threadId: chatSession?.threadId,
+      data,
+    });
+    await this.indexSessionMemoryVectors(storageKey, harnessName, sessionName, chunks);
+  }
+
+  private async indexSessionMemoryVectors(
+    storageKey: string,
+    harnessName: string,
+    sessionName: string,
+    chunks: ExtractedSessionMemoryChunk[],
+  ): Promise<void> {
+    if (!this.vectorStore || !this.embeddingClient || chunks.length === 0) {
+      return;
+    }
+
+    try {
+      const contents = chunks.map((chunk) => chunk.content);
+      const vectors = await this.embeddingClient.embedBatch(contents);
+      const records = chunks.map((chunk, index): VectorRecord => ({
+        id: chunk.id,
+        chunk_key: chunk.id,
+        source: 'session_memory',
+        title: chunk.title,
+        content: chunk.content,
+        vector: vectors[index] ?? [],
+        actor_id: chunk.actorId,
+        conversation_id: chunk.conversationId,
+        session_name: sessionName,
+        thread_id: chunk.threadId,
+        metadata: {
+          ...chunk.metadata,
+          storageKey,
+          harnessName,
+          sessionName,
+          entryId: chunk.entryId,
+          kind: chunk.kind,
+          role: chunk.role,
+        },
+        updated_at: chunk.updatedAt,
+      }));
+
+      await this.vectorStore.upsert('session_memory', records);
+    } catch (error) {
+      console.error(
+        `[WARN] Failed to index session memory vectors for ${storageKey}:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
 
   private deleteSessionMemoryByStorageKey(storageKey: string): void {
@@ -868,10 +933,26 @@ export class GoromboSessionDatabase {
       .prepare(`SELECT chunk_key FROM session_memory_chunks WHERE source_storage_key = ?`)
       .all(storageKey) as unknown as Array<{ chunk_key: string }>;
 
-    for (const row of rows) {
-      this.database.prepare(`DELETE FROM session_memory_fts WHERE chunk_key = ?`).run(row.chunk_key);
+    const chunkKeys = rows.map((row) => row.chunk_key);
+    for (const chunkKey of chunkKeys) {
+      this.database.prepare(`DELETE FROM session_memory_fts WHERE chunk_key = ?`).run(chunkKey);
     }
     this.database.prepare(`DELETE FROM session_memory_chunks WHERE source_storage_key = ?`).run(storageKey);
+
+    this.deleteSessionMemoryVectors(chunkKeys);
+  }
+
+  private deleteSessionMemoryVectors(chunkKeys: string[]): void {
+    if (!this.vectorStore || chunkKeys.length === 0) {
+      return;
+    }
+
+    this.vectorStore.delete('session_memory', chunkKeys).catch((error) => {
+      console.error(
+        '[WARN] Failed to delete session memory vectors:',
+        error instanceof Error ? error.message : String(error),
+      );
+    });
   }
 
   private deleteInstanceSessionIndex(
@@ -1330,3 +1411,10 @@ function parseJsonStringArray(value: string | null | undefined): string[] {
   }
   return [];
 }
+
+
+
+
+
+
+
