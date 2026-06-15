@@ -30,6 +30,35 @@ function makeEvent(partial: Partial<NormalizedMessageEvent> = {}): NormalizedMes
   };
 }
 
+test('SqliteProtocolProvider preserves user overrides across seed restarts', async () => {
+  const dbPath = createTempDbPath();
+  const provider1 = new SqliteProtocolProvider(dbPath);
+  try {
+    provider1.addProtocol({
+      id: 'global.protocols-first',
+      name: 'Overridden',
+      description: 'User override.',
+      rules: ['Override rule.'],
+    });
+  } finally {
+    provider1.close();
+  }
+
+  const provider2 = new SqliteProtocolProvider(dbPath);
+  try {
+    const protocols = provider2.listProtocols();
+    assert.equal(protocols.length, baseProtocolSeeds.length);
+    const overridden = provider2.getProtocol('global.protocols-first');
+    assert.ok(overridden);
+    assert.equal(overridden?.scope, 'user');
+    assert.equal(overridden?.source, 'sqlite');
+    assert.deepEqual(overridden?.rules, ['Override rule.']);
+  } finally {
+    provider2.close();
+    cleanup(dbPath);
+  }
+});
+
 test('SqliteProtocolProvider seeds base protocols on first use', async () => {
   const dbPath = createTempDbPath();
   const provider = new SqliteProtocolProvider(dbPath);
@@ -125,6 +154,19 @@ test('SqliteProtocolProvider supports user protocol CRUD', async () => {
     const removed = provider.removeProtocol('user.custom-rule');
     assert.equal(removed, true);
     assert.equal(provider.getProtocol('user.custom-rule'), undefined);
+  } finally {
+    provider.close();
+    cleanup(dbPath);
+  }
+});
+
+test('SqliteProtocolProvider forbids base protocol enable/disable', async () => {
+  const dbPath = createTempDbPath();
+  const provider = new SqliteProtocolProvider(dbPath);
+
+  try {
+    assert.throws(() => provider.setEnabled('global.protocols-first', false), /Cannot enable or disable base/);
+    assert.throws(() => provider.setEnabled('global.protocols-first', true), /Cannot enable or disable base/);
   } finally {
     provider.close();
     cleanup(dbPath);

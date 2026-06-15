@@ -47,25 +47,14 @@ export class SqliteProtocolProvider implements ProtocolProvider {
 
   seedBaseProtocols(): void {
     const existing = this.database
-      .prepare(`SELECT id FROM protocols WHERE source = 'seed'`)
-      .all() as { id: string }[];
+      .prepare(`SELECT id, scope FROM protocols WHERE source = 'seed'`)
+      .all() as { id: string; scope: string }[];
     const existingIds = new Set(existing.map((row) => row.id));
 
     const insert = this.database.prepare(
-      `INSERT INTO protocols
+      `INSERT OR IGNORE INTO protocols
        (id, name, description, scope, enabled, priority, selector_json, rules_json, source, tags, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         name = excluded.name,
-         description = excluded.description,
-         scope = excluded.scope,
-         enabled = excluded.enabled,
-         priority = excluded.priority,
-         selector_json = excluded.selector_json,
-         rules_json = excluded.rules_json,
-         source = excluded.source,
-         tags = excluded.tags,
-         updated_at = excluded.updated_at`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
 
     for (const protocol of baseProtocolSeeds) {
@@ -196,9 +185,12 @@ export class SqliteProtocolProvider implements ProtocolProvider {
     if (!existing) {
       return false;
     }
+    if (existing.scope === 'base') {
+      throw new Error(`Cannot enable or disable base protocol ${id}.`);
+    }
 
     const result = this.database
-      .prepare(`UPDATE protocols SET enabled = ?, updated_at = ? WHERE id = ?`)
+      .prepare(`UPDATE protocols SET enabled = ?, updated_at = ? WHERE id = ? AND scope = 'user'`)
       .run(enabled ? 1 : 0, new Date().toISOString(), id);
     return result.changes > 0;
   }
