@@ -50,23 +50,19 @@ Until the integration test in step 12 passes with a real model and live approval
 **Worktree:** `../astro-flue-agent-phase2-finish-protocols`
 **Base:** `codex/coding-worker-finish` parent
 
-The protocol layer is currently a placeholder (`SqliteProtocolProviderPlaceholder` seeded with hardcoded rules). Make it real and wire it into the coding worker.
+The protocol layer is now a real SQLite-backed provider. Phase 1 is implemented in PR #23 (`codex/coding-worker-finish-protocols`).
 
 Deliverables:
 
-- [ ] Replace `src/protocols/sqlite-protocol-provider-placeholder.ts` with a real SQLite-backed provider using the existing schema in `src/protocols/schema.ts`.
-- [ ] Add protocol CRUD management:
-  - CLI script under `scripts/` or admin tool to seed/list/add/remove protocols.
-  - Seed the existing base protocols into the database on first run.
-- [ ] Update `loadProtocolsTool` in `src/tools/protocol-tool.ts` to use the real provider.
-- [ ] Pass the loaded `ProtocolBundle` from the orchestrator into the coding worker request context.
-- [ ] Update `src/workers/coding-worker/coding-worker.ts` and workspace instructions to read and apply protocols:
-  - Coding style rules.
-  - Approval policy overrides (which actions require approval, auto-approve below risk thresholds).
-  - Required verification commands.
-  - Output format rules.
-- [ ] Extend `ProtocolSelector` and seed protocols to target coding tasks (`workflow: 'coding'`, `task: 'code-change'`).
-- [ ] Unit tests for provider CRUD, selector matching, and coding-worker instruction injection.
+- [x] Replace `src/protocols/sqlite-protocol-provider-placeholder.ts` with a real SQLite-backed provider using the existing schema in `src/protocols/schema.ts`.
+- [x] Add protocol CRUD management:
+  - CLI script under `scripts/protocol-admin.mjs` to seed/list/add/remove/enable/disable protocols.
+  - Seed the base protocols into the database on first run and backfill missing ones on subsequent runs.
+- [x] Update `loadProtocolsTool` in `src/tools/protocol-tool.ts` to use the real provider.
+- [x] Pass the loaded `ProtocolBundle` from the orchestrator into the coding worker request context (`CodingWorkerTaskRequest.protocolBundle`).
+- [x] Update `src/workers/coding-worker/coding-worker.ts` runtime capabilities and workspace instructions to read and apply protocol directives.
+- [x] Extend `ProtocolSelector` and seed protocols to target coding tasks (`workflow: 'coding'`, `task: 'code-change'`).
+- [x] Unit tests for provider CRUD, selector matching, backfill behavior, and coding-worker instruction injection.
 
 Verification:
 
