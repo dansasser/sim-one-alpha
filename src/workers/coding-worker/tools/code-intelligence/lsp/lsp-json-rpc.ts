@@ -24,8 +24,10 @@ export class JsonRpcClient {
   >();
   private buffer = '';
 
+  private rawBuffer = Buffer.alloc(0);
+
   constructor(private readonly process: ChildProcess) {
-    this.process.stdout?.on('data', (chunk: Buffer) => this.onData(chunk.toString('utf8')));
+    this.process.stdout?.on('data', (chunk: Buffer) => this.onData(chunk));
     this.process.stderr?.on('data', (chunk: Buffer) => {
       const text = chunk.toString('utf8').trim();
       if (text.length > 0) {
@@ -70,33 +72,37 @@ export class JsonRpcClient {
     this.process.stdin.write(headers + payload);
   }
 
-  private onData(chunk: string): void {
-    this.buffer += chunk;
+  private onData(chunk: Buffer): void {
+    this.rawBuffer = Buffer.concat([this.rawBuffer, chunk]);
 
     while (true) {
-      const headerEnd = this.buffer.indexOf('\r\n\r\n');
+      // Find the header boundary in the byte buffer by scanning for \r\n\r\n.
+      const headerEnd = this.rawBuffer.indexOf(Buffer.from('\r\n\r\n'));
       if (headerEnd === -1) {
         return;
       }
 
-      const headers = this.buffer.slice(0, headerEnd);
+      const headers = this.rawBuffer.toString('utf8', 0, headerEnd);
       const contentLengthMatch = /Content-Length:\s*(\d+)/i.exec(headers);
       if (!contentLengthMatch) {
-        this.buffer = this.buffer.slice(headerEnd + 4);
+        this.rawBuffer = this.rawBuffer.subarray(headerEnd + 4);
         continue;
       }
 
       const contentLength = Number(contentLengthMatch[1]);
       const messageStart = headerEnd + 4;
-      if (this.buffer.length < messageStart + contentLength) {
+      if (this.rawBuffer.length < messageStart + contentLength) {
         return;
       }
 
-      const raw = this.buffer.slice(messageStart, messageStart + contentLength);
-      this.buffer = this.buffer.slice(messageStart + contentLength);
+      const raw = this.rawBuffer.subarray(messageStart, messageStart + contentLength);
+      this.rawBuffer = this.rawBuffer.subarray(messageStart + contentLength);
+      if (this.rawBuffer.length === 0) {
+        this.rawBuffer = Buffer.alloc(0);
+      }
 
       try {
-        const message = JSON.parse(raw) as JsonRpcMessage;
+        const message = JSON.parse(raw.toString('utf8')) as JsonRpcMessage;
         this.handleMessage(message);
       } catch {
         // Ignore malformed messages.

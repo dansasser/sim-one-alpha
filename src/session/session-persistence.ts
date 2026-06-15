@@ -111,7 +111,7 @@ class GoromboLogicalSessionStore implements SessionStore {
 
   async save(id: string, data: SessionData): Promise<void> {
     await this.flueSessions.save(id, data);
-    await this.sessionDatabase.recordFlueSession(id, data);
+    this.sessionDatabase.enqueueSessionMemoryUpsert(id, () => this.sessionDatabase.recordFlueSession(id, data));
   }
 
   async load(id: string): Promise<SessionData | null> {
@@ -155,7 +155,7 @@ class GoromboLogicalSessionStore implements SessionStore {
 
     const exact = await this.flueSessions.load(id);
     await this.flueSessions.delete(id);
-    this.sessionDatabase.deleteFlueSession(id);
+    await this.sessionDatabase.deleteFlueSession(id);
 
     if (exact) {
       return;
@@ -168,7 +168,7 @@ class GoromboLogicalSessionStore implements SessionStore {
     );
     if (latestInstanceStorageKey && latestInstanceStorageKey !== id) {
       await this.flueSessions.delete(latestInstanceStorageKey);
-      this.sessionDatabase.deleteFlueSession(latestInstanceStorageKey);
+      await this.sessionDatabase.deleteFlueSession(latestInstanceStorageKey);
       return;
     }
 
@@ -179,7 +179,7 @@ class GoromboLogicalSessionStore implements SessionStore {
     const latestStorageKey = this.sessionDatabase.getLatestStorageKey(parts.harnessName, parts.sessionName);
     if (latestStorageKey && latestStorageKey !== id) {
       await this.flueSessions.delete(latestStorageKey);
-      this.sessionDatabase.deleteFlueSession(latestStorageKey);
+      await this.sessionDatabase.deleteFlueSession(latestStorageKey);
     }
   }
 }

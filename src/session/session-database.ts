@@ -1,4 +1,4 @@
-﻿import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -85,6 +85,7 @@ export class GoromboSessionDatabase {
   private readonly database: DatabaseSync;
   private readonly vectorStore?: VectorStore;
   private readonly embeddingClient?: EmbeddingClient;
+  private pendingStorageOps = new Map<string, Promise<unknown>>();
 
   constructor(
     readonly filePath = defaultSessionDatabasePath,
@@ -147,7 +148,7 @@ export class GoromboSessionDatabase {
     await this.indexSessionMemory(storageKey, parts.harnessName, parts.sessionName, data);
   }
 
-  deleteFlueSession(storageKey: string): void {
+  async deleteFlueSession(storageKey: string): Promise<void> {
     const parts = parseFlueSessionStorageKey(storageKey);
     if (!parts) {
       return;
@@ -156,6 +157,9 @@ export class GoromboSessionDatabase {
     this.database.prepare(`DELETE FROM flue_session_index WHERE storage_key = ?`).run(storageKey);
     this.deleteSessionMemoryByStorageKey(storageKey);
     this.deleteInstanceSessionIndex(parts.instanceId, parts.harnessName, parts.sessionName, storageKey);
+
+    await this.deleteSessionMemoryVectorsFinished(storageKey);
+
 
     if (!this.isDirectAgentChatSession(parts.instanceId, parts.harnessName, parts.sessionName)) {
       const latest = this.getLatestStorageKey(parts.harnessName, parts.sessionName);
@@ -939,20 +943,52 @@ export class GoromboSessionDatabase {
     }
     this.database.prepare(`DELETE FROM session_memory_chunks WHERE source_storage_key = ?`).run(storageKey);
 
-    this.deleteSessionMemoryVectors(chunkKeys);
+    this.deleteSessionMemoryVectors(storageKey, chunkKeys);
   }
 
-  private deleteSessionMemoryVectors(chunkKeys: string[]): void {
+  private deleteSessionMemoryVectors(storageKey: string, chunkKeys: string[]): void {
     if (!this.vectorStore || chunkKeys.length === 0) {
       return;
     }
 
-    this.vectorStore.delete('session_memory', chunkKeys).catch((error) => {
+    this.enqueueStorageOp(storageKey, () => this.vectorStore!.delete('session_memory', chunkKeys));
+  }
+
+  private enqueueStorageOp(storageKey: string, operation: () => Promise<unknown>): void {
+    const currentPromise = this.pendingStorageOps.get(storageKey) ?? Promise.resolve();
+    const nextPromise = currentPromise.then(operation).catch((error) => {
       console.error(
-        '[WARN] Failed to delete session memory vectors:',
+        '[WARN] Session storage operation failed:',
         error instanceof Error ? error.message : String(error),
       );
     });
+    this.pendingStorageOps.set(storageKey, nextPromise);
+  }
+
+  private async deleteSessionMemoryVectorsFinished(storageKey: string): Promise<void> {
+    await this.awaitPendingStorageOps(storageKey);
+  }
+
+  async awaitPendingVectorDeletes(): Promise<void> {
+    await Promise.all(this.pendingStorageOps.values());
+  }
+
+  async awaitPendingVectorDeletesForSession(storageKey: string): Promise<void> {
+    await this.awaitPendingStorageOps(storageKey);
+  }
+
+  private async awaitPendingStorageOps(storageKey: string): Promise<void> {
+    const promise = this.pendingStorageOps.get(storageKey);
+    if (promise) {
+      await promise;
+      if (this.pendingStorageOps.get(storageKey) === promise) {
+        this.pendingStorageOps.delete(storageKey);
+      }
+    }
+  }
+
+  enqueueSessionMemoryUpsert(storageKey: string, operation: () => Promise<unknown>): void {
+    this.enqueueStorageOp(storageKey, operation);
   }
 
   private deleteInstanceSessionIndex(

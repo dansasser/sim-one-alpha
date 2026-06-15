@@ -26,6 +26,10 @@ import type {
 
 export interface LspToolsOptions {
   workspaceRoot: string;
+  /**
+   * Optional sandbox. When omitted, file paths are resolved against the
+   * current working directory and read directly from the file system.
+   */
   sandbox?: CodingSandboxRuntime;
   reporter?: CodingProgressReporter;
   taskId?: string;
@@ -66,11 +70,12 @@ export function createLspTools(options: LspToolsOptions): ToolDefinition[] {
     },
   });
 
-  const getSandbox = () => {
-    if (!options.sandbox) {
-      throw new Error('LSP tools require a sandbox to read files.');
+  const readFileForDidOpen = async (filePath: string): Promise<string> => {
+    if (options.sandbox) {
+      return options.sandbox.readFile(filePath);
     }
-    return options.sandbox;
+    const { readFile } = await import('node:fs/promises');
+    return readFile(filePath, 'utf8');
   };
 
   const withDocument = async (filePath: string, languageIdHint?: string) => {
@@ -79,9 +84,10 @@ export function createLspTools(options: LspToolsOptions): ToolDefinition[] {
       return { ok: false, languageId: 'unknown', reason: `Unsupported file extension for ${filePath}.` } as const;
     }
 
-    const sandbox = getSandbox();
-    const absolutePath = sandbox.resolveScopePath(filePath);
-    const content = await sandbox.readFile(filePath);
+    const absolutePath = options.sandbox
+      ? options.sandbox.resolveScopePath(filePath)
+      : resolve(options.workspaceRoot, filePath);
+    const content = await readFileForDidOpen(absolutePath);
     const projectConfig = detectProjectConfig({
       workspaceRoot: options.workspaceRoot,
       filePath: absolutePath,
@@ -579,9 +585,10 @@ function guessPrimaryLanguageId(workspaceRoot: string): string | undefined {
   return 'typescript';
 }
 
+import { pathToFileURL } from 'node:url';
+
 function pathToUri(filePath: string): string {
-  const absolute = filePath.startsWith('/') ? filePath : `/${filePath}`;
-  return `file://${absolute}`;
+  return pathToFileURL(filePath).href;
 }
 
 function emitProgress(

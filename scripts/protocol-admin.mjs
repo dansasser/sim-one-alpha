@@ -200,20 +200,9 @@ function seed(database) {
   ];
 
   const insert = database.prepare(
-    `INSERT INTO protocols
+    `INSERT OR IGNORE INTO protocols
      (id, name, description, scope, enabled, priority, selector_json, rules_json, source, tags, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET
-       name = excluded.name,
-       description = excluded.description,
-       scope = excluded.scope,
-       enabled = excluded.enabled,
-       priority = excluded.priority,
-       selector_json = excluded.selector_json,
-       rules_json = excluded.rules_json,
-       source = excluded.source,
-       tags = excluded.tags,
-       updated_at = excluded.updated_at`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
 
   for (const protocol of seeds) {
@@ -298,8 +287,14 @@ function setEnabled(database, argv, enabled) {
     process.exit(1);
   }
 
+  const existing = database.prepare(`SELECT scope FROM protocols WHERE id = ?`).get(id);
+  if (existing && existing.scope === 'base') {
+    console.error(`Cannot ${enabled ? 'enable' : 'disable'} base protocol ${id}.`);
+    process.exit(1);
+  }
+
   const result = database
-    .prepare(`UPDATE protocols SET enabled = ?, updated_at = ? WHERE id = ?`)
+    .prepare(`UPDATE protocols SET enabled = ?, updated_at = ? WHERE id = ? AND scope = 'user'`)
     .run(enabled ? 1 : 0, new Date().toISOString(), id);
 
   if (result.changes > 0) {

@@ -80,13 +80,24 @@ export function createCodingCodeIntelligenceTools(
     return sandboxPromise;
   };
 
-  const lspTools = createLspTools({
-    workspaceRoot: options.workspaceRoot ?? process.cwd(),
-    sandbox: options.sandbox,
-    reporter: options.reporter,
-    taskId: options.taskId,
-    sessionId: options.sessionId,
-  });
+  const lspToolsCache = new Map<string, Promise<ToolDefinition[]>>();
+  const getLspToolsForRoot = async (root: string) => {
+    let lspToolsPromise = lspToolsCache.get(root);
+    if (!lspToolsPromise) {
+      lspToolsPromise = (async () => {
+        const sandbox = await getSandbox();
+        return createLspTools({
+          workspaceRoot: options.workspaceRoot ?? process.cwd(),
+          sandbox,
+          reporter: options.reporter,
+          taskId: options.taskId,
+          sessionId: options.sessionId,
+        });
+      })();
+      lspToolsCache.set(root, lspToolsPromise);
+    }
+    return lspToolsPromise;
+  };
 
   return [
     defineTool({
@@ -129,7 +140,7 @@ export function createCodingCodeIntelligenceTools(
           symbol,
           root,
           maxFiles,
-          lspTools,
+          getLspToolsForRoot(root),
         );
         if (lspResult) {
           emitToolProgress(options, {
@@ -185,7 +196,7 @@ export function createCodingCodeIntelligenceTools(
           symbol,
           root,
           maxFiles,
-          lspTools,
+          getLspToolsForRoot(root),
         );
         if (lspResult) {
           emitToolProgress(options, {
@@ -238,7 +249,7 @@ export function createCodingCodeIntelligenceTools(
           symbol,
           root,
           maxFiles,
-          lspTools,
+          getLspToolsForRoot(root),
         );
         if (lspResult) {
           emitToolProgress(options, {
@@ -406,12 +417,13 @@ async function collectFiles(
   }
 }
 
+
 async function tryLspSymbolLookup(
   sandbox: CodingSandboxRuntime,
   symbolName: string,
   root: string,
   maxFiles: number,
-  lspTools: ToolDefinition[],
+  lspTools: Promise<ToolDefinition[]>,
 ): Promise<{
   declarations: Record<string, unknown>[];
   references: Record<string, unknown>[];
@@ -428,9 +440,14 @@ async function tryLspSymbolLookup(
     return null;
   }
 
-  const definitionTool = getTool(lspTools, 'lsp_go_to_definition');
-  const referencesTool = getTool(lspTools, 'lsp_find_references');
-  const documentSymbolsTool = getTool(lspTools, 'lsp_document_symbols');
+  const tools = await lspTools;
+  const definitionTool = getTool(tools, 'lsp_go_to_definition');
+  const referencesTool = getTool(tools, 'lsp_find_references');
+  const documentSymbolsTool = getTool(tools, 'lsp_document_symbols');
+
+  const allDeclarations: Record<string, unknown>[] = [];
+  const allReferences: Record<string, unknown>[] = [];
+  const allParsedFiles = new Set<string>();
 
   for (const file of candidates) {
     try {
@@ -440,29 +457,33 @@ async function tryLspSymbolLookup(
         continue;
       }
 
-      const matchingSymbol = symbolsResult.result.symbols.find((symbol) => symbol.name === symbolName);
-      if (!matchingSymbol || !matchingSymbol.range) {
+      const matchingSymbols = symbolsResult.result.symbols.filter((symbol) => symbol.name === symbolName);
+      if (matchingSymbols.length === 0) {
         continue;
       }
 
-      const range = matchingSymbol.range as {
-        start: { line: number; character: number };
-        end: { line: number; character: number };
-      };
+      for (const matchingSymbol of matchingSymbols) {
+        const range = matchingSymbol.range as {
+          start: { line: number; character: number };
+          end: { line: number; character: number };
+        } | undefined;
+        if (!range) {
+          continue;
+        }
 
-      const [definitionsRaw, referencesRaw] = await Promise.all([
-        definitionTool.execute({
-          path: file,
-          line: range.start.line,
-          character: range.start.character,
-        }),
-        referencesTool.execute({
-          path: file,
-          line: range.start.line,
-          character: range.start.character,
-          includeDeclaration: false,
-        }),
-      ]);
+        const [definitionsRaw, referencesRaw] = await Promise.all([
+          definitionTool.execute({
+            path: file,
+            line: range.start.line,
+            character: range.start.character,
+          }),
+          referencesTool.execute({
+            path: file,
+            line: range.start.line,
+            character: range.start.character,
+            includeDeclaration: false,
+          }),
+        ]);
 
       const definitionsResult = JSON.parse(definitionsRaw) as LspToolResult<{
         definitions: Array<Record<string, unknown>>;
@@ -483,27 +504,41 @@ async function tryLspSymbolLookup(
         ]),
       ].filter(Boolean);
 
-      return {
-        declarations: definitionsResult.result.definitions.map((loc) => ({
+      for (const parsedFile of parsedFiles) {
+        allParsedFiles.add(parsedFile);
+      }
+
+      allDeclarations.push(
+        ...definitionsResult.result.definitions.map((loc) => ({
           path: uriToRepoRelativePath(String(loc.uri ?? ''), sandbox.repoPath),
           name: symbolName,
           kind: loc.kind ? lspSymbolKindToString(Number(loc.kind)) : 'unknown',
           range: loc.range as Record<string, unknown>,
         })),
-        references: referencesResult.result.references.map((loc) => ({
+      );
+      allReferences.push(
+        ...referencesResult.result.references.map((loc) => ({
           path: uriToRepoRelativePath(String(loc.uri ?? ''), sandbox.repoPath),
           name: symbolName,
           kind: 'reference',
           range: loc.range as Record<string, unknown>,
         })),
-        parsedFiles,
-      };
-    } catch {
-      continue;
+      );
     }
+  } catch {
+    continue;
+  }
+}
+
+  if (allDeclarations.length === 0 && allReferences.length === 0 && allParsedFiles.size === 0) {
+    return null;
   }
 
-  return null;
+  return {
+    declarations: allDeclarations,
+    references: allReferences,
+    parsedFiles: [...allParsedFiles],
+  };
 }
 
 function uriToRepoRelativePath(uri: string, repoPath: string): string {

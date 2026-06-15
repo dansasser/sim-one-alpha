@@ -109,17 +109,12 @@ function createVectorFilters(query: RagQuery): Record<string, unknown> {
     filters.session_name = query.sessionId;
   }
 
-  const accessFilters: string[] = [];
   if (query.actorId) {
-    accessFilters.push(query.actorId);
-  }
-  if (query.conversationId) {
-    accessFilters.push(query.conversationId);
+    filters.actor_id = query.actorId;
   }
 
-  if (accessFilters.length) {
-    // LanceDB IN filter for actor_id OR conversation_id semantics.
-    filters.actor_id = accessFilters;
+  if (query.conversationId) {
+    filters.conversation_id = query.conversationId;
   }
 
   return filters;

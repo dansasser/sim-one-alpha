@@ -1,4 +1,4 @@
-﻿import { allModelCards } from '../models/catalog.js';
+import { allModelCards } from '../models/catalog.js';
 import { resolveModelCardEnv } from '../models/env.js';
 import type { AgentModelCard } from '../models/types.js';
 import { estimateTextTokens } from '../session/context-budget.js';
@@ -25,11 +25,11 @@ export function createEmbeddingClient(options: CreateEmbeddingClientOptions = {}
 
   return {
     async embed(text: string): Promise<number[]> {
-      const results = await embedBatchInternal([text], cards, fetchImpl, timeoutMs);
+      const results = await embedBatchInternal([text], cards, fetchImpl, timeoutMs, env);
       return results[0] ?? [];
     },
     async embedBatch(texts: string[]): Promise<number[][]> {
-      return embedBatchInternal(texts, cards, fetchImpl, timeoutMs);
+      return embedBatchInternal(texts, cards, fetchImpl, timeoutMs, env);
     },
   };
 }
@@ -48,6 +48,7 @@ async function embedBatchInternal(
   cards: AgentModelCard[],
   fetchImpl: typeof fetch,
   timeoutMs: number,
+  env?: Record<string, unknown>,
 ): Promise<number[][]> {
   if (!cards.length) {
     throw new Error('No embedding model card is configured. Add an embedding role card such as nomic-embed-text.');
@@ -57,11 +58,12 @@ async function embedBatchInternal(
   const errors: string[] = [];
 
   for (const card of cards) {
-    const resolved = resolveModelCardEnv(card, process.env);
+    const resolved = resolveModelCardEnv(card, env ?? process.env);
     const apiKey = resolved.apiKey;
     const baseUrl = resolved.baseUrl ?? defaultBaseUrlForProvider(card.providerId);
 
-    if (!apiKey) {
+    const effectiveApiKey = apiKey ?? (card.providerId === 'ollama-local' ? 'ollama' : undefined);
+    if (!effectiveApiKey) {
       errors.push(`${card.specifier}: missing API key`);
       continue;
     }
@@ -69,7 +71,7 @@ async function embedBatchInternal(
     try {
       return await callEmbeddingsEndpoint({
         baseUrl,
-        apiKey,
+        apiKey: effectiveApiKey,
         modelId: card.modelId,
         texts: truncated,
         fetchImpl,

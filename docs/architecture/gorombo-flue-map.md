@@ -23,6 +23,7 @@ Every top-level `src/` directory should fit one of these categories. If a new di
 | `src/routes/` | HTTP route modules | Concrete app-owned Hono route registration modules. |
 | `src/schemas/` | Shared runtime schemas | Valibot schemas for structured-output contracts and cross-subsystem data shapes. Each domain owns a file here when its schemas are reused outside a single file. Imported by `src/types/` and worker type contracts; kept separate so type-only consumers do not pull in schema runtime code. |
 | `src/session/` | Session/context subsystem | Flue session persistence, compaction policy, context budget, and usage tracking. |
+| `src/services/` | Shared service modules | Non-tool persistence helpers used by both routes and tools, such as `knowledge-service.ts`. Kept separate from `src/tools/` so routes do not import tool modules and tools do not import route modules. |
 | `src/telemetry/` | Observability subsystem | Sanitized Flue event capture and run summaries. |
 | `src/tests/` | Test suite | Node test files compiled to `.tmp/tsc/tests`. |
 | `src/tools/` | Model-callable tools | `defineTool(...)` capabilities attached only to owning agents. |

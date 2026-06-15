@@ -50,7 +50,7 @@ export function chunkText(
     const lineInfo = calculateLineRange(text, start, end);
 
     chunks.push({
-      id: hashChunk(source, `${chunkIndex}:${content}`),
+      id: hashChunk(source, `${start}:${content}`),
       source,
       title: `${source} (chunk ${chunkIndex + 1})`,
       content,
@@ -73,16 +73,15 @@ export function chunkText(
 }
 
 function calculateLineRange(text: string, start: number, end: number): { startLine: number; endLine: number } {
-  let startLine = 1;
-  let endLine = 1;
-
+  let newlinesBeforeStart = 0;
   for (let index = 0; index < text.length && index < start; index += 1) {
     if (text[index] === '\n') {
-      startLine += 1;
+      newlinesBeforeStart += 1;
     }
   }
 
-  endLine = startLine;
+  const startLine = newlinesBeforeStart + 1;
+  let endLine = startLine;
   for (let index = start; index < text.length && index < end; index += 1) {
     if (text[index] === '\n') {
       endLine += 1;

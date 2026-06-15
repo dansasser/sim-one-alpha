@@ -39,6 +39,7 @@ export class LspClientManager {
   private readonly onInitializing?: (languageId: string, projectRoot: string) => void;
   private readonly createJsonRpcClient?: (context: LspRequestContext) => JsonRpcClient;
   private shutdownTimer: NodeJS.Timeout | undefined;
+  private readonly openDocuments = new Set<string>();
 
   constructor(private readonly options: LspClientManagerOptions) {
     this.registry = options.registry ?? new LspLanguageServerRegistry();
@@ -119,9 +120,15 @@ export class LspClientManager {
       await this.initializeClient(client);
     }
 
+    const uri = pathToUri(filePath);
+    if (this.openDocuments.has(uri)) {
+      return;
+    }
+    this.openDocuments.add(uri);
+
     client.client.notify('textDocument/didOpen', {
       textDocument: {
-        uri: pathToUri(filePath),
+        uri,
         languageId: client.languageId,
         version: 1,
         text: content,
@@ -131,16 +138,10 @@ export class LspClientManager {
 
   async close(): Promise<void> {
     for (const client of this.clients.values()) {
-      if (client.initialized) {
-        try {
-          client.client.notify('shutdown', {});
-        } catch {
-          // Ignore shutdown errors.
-        }
-      }
-      client.client.dispose();
+      await this.disposeClient(client);
     }
     this.clients.clear();
+    this.openDocuments.clear();
     if (this.shutdownTimer) {
       clearTimeout(this.shutdownTimer);
       this.shutdownTimer = undefined;
@@ -207,19 +208,46 @@ export class LspClientManager {
     }
 
     this.shutdownTimer = setTimeout(() => {
-      const now = Date.now();
-      for (const [key, client] of this.clients.entries()) {
-        if (now - client.lastUsedAt > this.idleShutdownMs) {
-          client.client.dispose();
-          this.clients.delete(key);
-        }
-      }
+      this.evictIdleClients();
     }, this.idleShutdownMs);
     this.shutdownTimer.unref();
   }
+
+  private async evictIdleClients(): Promise<void> {
+    const now = Date.now();
+    const disposals: Promise<void>[] = [];
+    for (const [key, client] of this.clients.entries()) {
+      if (now - client.lastUsedAt > this.idleShutdownMs) {
+        this.clients.delete(key);
+        disposals.push(
+          this.disposeClient(client).catch(() => {
+            // Ignore shutdown errors during idle eviction.
+          }),
+        );
+      }
+    }
+    await Promise.all(disposals);
+  }
+
+  private async disposeClient(client: LspClient): Promise<void> {
+    if (client.initialized) {
+      try {
+        await client.client.request('shutdown', {});
+      } catch {
+        // Ignore shutdown errors.
+      }
+    }
+    try {
+      client.client.notify('exit', {});
+    } catch {
+      // Ignore exit errors.
+    }
+    client.client.dispose();
+  }
 }
 
+import { pathToFileURL } from 'node:url';
+
 function pathToUri(filePath: string): string {
-  const absolute = filePath.startsWith('/') ? filePath : `/${filePath}`;
-  return `file://${absolute}`;
+  return pathToFileURL(filePath).href;
 }

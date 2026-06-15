@@ -100,14 +100,16 @@ export async function runCodingWorkerLoop(
     ],
   });
 
-  if (task.protocolBundle?.protocols.length) {
+  const applicableDirectives = compileApplicableDirectives(task.protocolBundle);
+
+  if (applicableDirectives.length) {
     reporter.emit({
       type: 'coding.protocols.loaded',
       taskId: task.taskId,
       purpose: 'Record applicable protocol directives received from the orchestrator.',
-      summary: `Loaded ${task.protocolBundle.protocols.length} applicable protocol(s).`,
-      evidence: task.protocolBundle.protocols.map(
-        (protocol) => `${protocol.id} (priority=${protocol.priority}, ${protocol.rules.length} rule${protocol.rules.length === 1 ? '' : 's'})`,
+      summary: `Loaded ${applicableDirectives.length} applicable protocol directive(s).`,
+      evidence: applicableDirectives.map(
+        (directive) => `${directive.protocolId} (priority=${directive.priority}, ${directive.rules.length} rule${directive.rules.length === 1 ? '' : 's'})`,
       ),
     });
   }
@@ -362,6 +364,25 @@ async function runTestDebugStep(
     subagent: 'test-debug',
     purpose: 'Run focused and required verification through the local sandbox.',
   });
+
+  const verificationRequired = hasDirectiveRule(state, (rule) =>
+    /(verification|verify|tests?|tested|testing|required checks|checks required|tests required|must be verified|verification required)/i.test(rule),
+  );
+
+  if (verificationRequired && state.verificationResults.requiredCommands.length === 0) {
+    const message = 'Verification directive is active but no verification commands were registered.';
+    reporter.emit({
+      type: 'coding.protocols.enforced',
+      taskId: state.task.taskId,
+      purpose: message,
+      summary: 'Blocking step: protocol directive requires verification before completion.',
+      evidence: ['Add verification commands or confirm no verification is applicable.'],
+    });
+    setPlanStatus(state.plan, 'test-debug', 'blocked');
+    state.lastFailureSummary = message;
+    state.currentStep = 'blocked';
+    return;
+  }
 
   const sandbox = await getSandbox(state, dependencies);
   let passing = await runVerification(state, sandbox, reporter);
@@ -781,6 +802,31 @@ async function runVerification(
   }
 
   return allPassing;
+}
+
+interface CompiledDirective {
+  protocolId: string;
+  priority: number;
+  rules: string[];
+}
+
+function compileApplicableDirectives(protocolBundle?: CodingWorkerTaskRequest['protocolBundle']): CompiledDirective[] {
+  if (!protocolBundle?.protocols.length) {
+    return [];
+  }
+  return protocolBundle.protocols.map((protocol) => ({
+    protocolId: protocol.id,
+    priority: protocol.priority,
+    rules: protocol.rules,
+  }));
+}
+
+function getActiveDirectives(state: CodingWorkerLoopState): CompiledDirective[] {
+  return compileApplicableDirectives(state.task.protocolBundle);
+}
+
+function hasDirectiveRule(state: CodingWorkerLoopState, predicate: (rule: string) => boolean): boolean {
+  return getActiveDirectives(state).some((directive) => directive.rules.some(predicate));
 }
 
 function buildSubagentRequest(state: CodingWorkerLoopState): CodingTaskSubagentRequest {

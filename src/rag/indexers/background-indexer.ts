@@ -1,4 +1,4 @@
-﻿import { resolve } from 'node:path';
+import { resolve } from 'node:path';
 import type { EmbeddingClient } from '../embeddings.js';
 import type { VectorStore } from '../vector/index.js';
 import { indexKnowledgeDocs } from './knowledge-doc-indexer.js';
@@ -36,6 +36,14 @@ export async function runBackgroundIndexing(options: BackgroundIndexerOptions): 
   }>>): Promise<void> {
     try {
       const records = await loadRecords();
+      const idsToKeep = new Set(records.map((record) => record.id).filter(Boolean));
+
+      const existingIds = await options.vectorStore.listIds(collection);
+      const staleIds = existingIds.filter((id) => !idsToKeep.has(id));
+      if (staleIds.length > 0) {
+        await options.vectorStore.delete(collection, staleIds);
+      }
+
       if (records.length === 0) {
         return;
       }
