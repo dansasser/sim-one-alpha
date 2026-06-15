@@ -27,7 +27,7 @@ export async function runpodGenerateImage(options: RunpodGenerateOptions): Promi
   };
 
   return generateImage({
-    model: provider.image(options.modelId),
+    model: provider.image(options.model.id),
     prompt: options.prompt,
     ...(options.aspectRatio ? { aspectRatio: options.aspectRatio as `${number}:${number}` } : {}),
     providerOptions: { runpod: runpodOptions } as Record<string, JSONObject>,

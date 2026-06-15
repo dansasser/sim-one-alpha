@@ -9,7 +9,7 @@ export const RunpodImageModelSchema = v.object({
   description: v.optional(v.string()),
   supportedAspectRatios: v.optional(v.array(v.string())),
   defaultProviderOptions: v.optional(v.record(v.string(), v.unknown())),
-  maxReferenceImages: v.optional(v.number()),
+  maxReferenceImages: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
   enabled: v.optional(v.boolean(), true),
 });
 
