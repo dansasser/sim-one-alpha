@@ -62,12 +62,15 @@ export function persistImageArtifact(input: PersistImageArtifactInput): ImageArt
     referenceImageUrls: record.referenceImageUrls,
   });
 
-  indexArtifactInSessionMemory(record);
+  indexArtifactInSessionMemory(record, input.event);
 
   return record;
 }
 
-function indexArtifactInSessionMemory(record: ImageArtifactRecord): void {
+function indexArtifactInSessionMemory(
+  record: ImageArtifactRecord,
+  event: NormalizedMessageEvent,
+): void {
   const db = goromboPersistenceRuntime.sessionDatabase;
   db.recordSessionMemoryChunk({
     storageKey: `image:${record.artifactId}`,
@@ -75,8 +78,8 @@ function indexArtifactInSessionMemory(record: ImageArtifactRecord): void {
     sessionName: record.eventId,
     entryId: record.artifactId,
     kind: 'image.artifact',
-    actorId: record.eventId,
-    conversationId: record.eventId,
+    actorId: event.actor.id,
+    conversationId: event.conversation.id,
     title: `Generated image: ${record.modelName}`,
     content: `Prompt: ${record.prompt}\nModel: ${record.modelId}\nFile: ${record.filePath}`,
     tokenEstimate: 50,
