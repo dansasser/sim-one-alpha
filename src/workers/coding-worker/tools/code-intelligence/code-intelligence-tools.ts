@@ -416,20 +416,6 @@ async function collectFiles(
   }
 }
 
-const lspToolsCache = new Map<string, Promise<ToolDefinition[]>>();
-
-function memoizedLspTools(root: string, factory: () => Promise<ToolDefinition[]>): Promise<ToolDefinition[]> {
-  const key = root;
-  let promise = lspToolsCache.get(key);
-  if (!promise) {
-    promise = factory().catch((error) => {
-      lspToolsCache.delete(key);
-      throw error;
-    });
-    lspToolsCache.set(key, promise);
-  }
-  return promise;
-}
 
 async function tryLspSymbolLookup(
   sandbox: CodingSandboxRuntime,
@@ -453,9 +439,7 @@ async function tryLspSymbolLookup(
     return null;
   }
 
-  const tools = Array.isArray(lspTools)
-    ? lspTools
-    : await memoizedLspTools(root, lspTools);
+  const tools = Array.isArray(lspTools) ? lspTools : await lspTools();
   const definitionTool = getTool(tools, 'lsp_go_to_definition');
   const referencesTool = getTool(tools, 'lsp_find_references');
   const documentSymbolsTool = getTool(tools, 'lsp_document_symbols');

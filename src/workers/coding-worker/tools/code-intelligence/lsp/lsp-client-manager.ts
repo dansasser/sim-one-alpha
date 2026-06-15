@@ -213,16 +213,20 @@ export class LspClientManager {
     this.shutdownTimer.unref();
   }
 
-  private evictIdleClients(): void {
+  private async evictIdleClients(): Promise<void> {
     const now = Date.now();
+    const disposals: Promise<void>[] = [];
     for (const [key, client] of this.clients.entries()) {
       if (now - client.lastUsedAt > this.idleShutdownMs) {
-        this.disposeClient(client).catch(() => {
-          // Ignore shutdown errors during idle eviction.
-        });
         this.clients.delete(key);
+        disposals.push(
+          this.disposeClient(client).catch(() => {
+            // Ignore shutdown errors during idle eviction.
+          }),
+        );
       }
     }
+    await Promise.all(disposals);
   }
 
   private async disposeClient(client: LspClient): Promise<void> {

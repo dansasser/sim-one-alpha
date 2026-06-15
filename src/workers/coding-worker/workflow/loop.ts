@@ -366,7 +366,7 @@ async function runTestDebugStep(
   });
 
   const verificationRequired = hasDirectiveRule(state, (rule) =>
-    /verification|verify|test|required checks/i.test(rule),
+    /\b(verification|verify|test|required checks)\b/i.test(rule),
   );
 
   if (verificationRequired && state.verificationResults.requiredCommands.length === 0) {

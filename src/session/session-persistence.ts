@@ -111,9 +111,7 @@ class GoromboLogicalSessionStore implements SessionStore {
 
   async save(id: string, data: SessionData): Promise<void> {
     await this.flueSessions.save(id, data);
-    // Wait for any in-flight vector deletes targeting this session so the
-    // fire-and-forget index does not reintroduce stale memory after deletion.
-    await this.sessionDatabase.awaitPendingVectorDeletes();
+    await this.sessionDatabase.awaitPendingVectorDeletesForSession(id);
     this.sessionDatabase.recordFlueSession(id, data).catch((error) => {
       console.error(
         '[WARN] Failed to index session memory vectors after save:',

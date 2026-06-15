@@ -86,7 +86,7 @@ export function createLspTools(options: LspToolsOptions): ToolDefinition[] {
 
     const absolutePath = options.sandbox
       ? options.sandbox.resolveScopePath(filePath)
-      : resolve(filePath);
+      : resolve(options.workspaceRoot, filePath);
     const content = await readFileForDidOpen(absolutePath);
     const projectConfig = detectProjectConfig({
       workspaceRoot: options.workspaceRoot,

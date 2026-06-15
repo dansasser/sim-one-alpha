@@ -195,7 +195,7 @@ Source reviews: Code Rabbit + cubic-dev-ai on `codex/cubic-fixes-pr-23-25-26` (P
 
 ## Deduplicated Work Items
 
-The 16 unique concerns to verify/fix:
+The 17 unique concerns to verify/fix:
 
 1. `src/rag/document-index-provider.ts` — enforce `knowledge_base` scoping (Code Rabbit #1, cubic #20)
 2. `src/rag/indexers/background-indexer.ts` + `VectorStore` — proper stale purge with `listIds()` (Code Rabbit #2, cubic #17, #18)
