@@ -111,13 +111,7 @@ class GoromboLogicalSessionStore implements SessionStore {
 
   async save(id: string, data: SessionData): Promise<void> {
     await this.flueSessions.save(id, data);
-    await this.sessionDatabase.awaitPendingVectorDeletesForSession(id);
-    this.sessionDatabase.recordFlueSession(id, data).catch((error) => {
-      console.error(
-        '[WARN] Failed to index session memory vectors after save:',
-        error instanceof Error ? error.message : String(error),
-      );
-    });
+    this.sessionDatabase.enqueueSessionMemoryUpsert(id, () => this.sessionDatabase.recordFlueSession(id, data));
   }
 
   async load(id: string): Promise<SessionData | null> {

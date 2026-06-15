@@ -85,7 +85,7 @@ export class GoromboSessionDatabase {
   private readonly database: DatabaseSync;
   private readonly vectorStore?: VectorStore;
   private readonly embeddingClient?: EmbeddingClient;
-  private pendingVectorDeletes = new Map<string, Promise<unknown>>();
+  private pendingStorageOps = new Map<string, Promise<unknown>>();
 
   constructor(
     readonly filePath = defaultSessionDatabasePath,
@@ -951,37 +951,44 @@ export class GoromboSessionDatabase {
       return;
     }
 
-    const currentPromise = this.pendingVectorDeletes.get(storageKey) ?? Promise.resolve();
-    const nextPromise = currentPromise.then(() =>
-      this.vectorStore!.delete('session_memory', chunkKeys).catch((error) => {
-        console.error(
-          '[WARN] Failed to delete session memory vectors:',
-          error instanceof Error ? error.message : String(error),
-        );
-      }),
-    );
-    this.pendingVectorDeletes.set(storageKey, nextPromise);
+    this.enqueueStorageOp(storageKey, () => this.vectorStore!.delete('session_memory', chunkKeys));
+  }
+
+  private enqueueStorageOp(storageKey: string, operation: () => Promise<unknown>): void {
+    const currentPromise = this.pendingStorageOps.get(storageKey) ?? Promise.resolve();
+    const nextPromise = currentPromise.then(operation).catch((error) => {
+      console.error(
+        '[WARN] Session storage operation failed:',
+        error instanceof Error ? error.message : String(error),
+      );
+    });
+    this.pendingStorageOps.set(storageKey, nextPromise);
   }
 
   private async deleteSessionMemoryVectorsFinished(storageKey: string): Promise<void> {
-    const promise = this.pendingVectorDeletes.get(storageKey);
+    await this.awaitPendingStorageOps(storageKey);
+  }
+
+  async awaitPendingVectorDeletes(): Promise<void> {
+    await Promise.all(this.pendingStorageOps.values());
+  }
+
+  async awaitPendingVectorDeletesForSession(storageKey: string): Promise<void> {
+    await this.awaitPendingStorageOps(storageKey);
+  }
+
+  private async awaitPendingStorageOps(storageKey: string): Promise<void> {
+    const promise = this.pendingStorageOps.get(storageKey);
     if (promise) {
       await promise;
-      if (this.pendingVectorDeletes.get(storageKey) === promise) {
-        this.pendingVectorDeletes.delete(storageKey);
+      if (this.pendingStorageOps.get(storageKey) === promise) {
+        this.pendingStorageOps.delete(storageKey);
       }
     }
   }
 
-  async awaitPendingVectorDeletes(): Promise<void> {
-    await Promise.all(this.pendingVectorDeletes.values());
-  }
-
-  async awaitPendingVectorDeletesForSession(storageKey: string): Promise<void> {
-    const promise = this.pendingVectorDeletes.get(storageKey);
-    if (promise) {
-      await promise;
-    }
+  enqueueSessionMemoryUpsert(storageKey: string, operation: () => Promise<unknown>): void {
+    this.enqueueStorageOp(storageKey, operation);
   }
 
   private deleteInstanceSessionIndex(

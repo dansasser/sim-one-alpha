@@ -505,9 +505,7 @@ async function tryLspSymbolLookup(
       ].filter(Boolean);
 
       for (const parsedFile of parsedFiles) {
-        if (parsedFile) {
-          allParsedFiles.add(parsedFile);
-        }
+        allParsedFiles.add(parsedFile);
       }
 
       allDeclarations.push(
