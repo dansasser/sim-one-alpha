@@ -129,7 +129,13 @@ export function createCodingCodeIntelligenceTools(
           symbol,
           root,
           maxFiles,
-          lspTools,
+          async () => createLspTools({
+            workspaceRoot: options.workspaceRoot ?? process.cwd(),
+            sandbox,
+            reporter: options.reporter,
+            taskId: options.taskId,
+            sessionId: options.sessionId,
+          }),
         );
         if (lspResult) {
           emitToolProgress(options, {
@@ -185,7 +191,13 @@ export function createCodingCodeIntelligenceTools(
           symbol,
           root,
           maxFiles,
-          lspTools,
+          async () => createLspTools({
+            workspaceRoot: options.workspaceRoot ?? process.cwd(),
+            sandbox,
+            reporter: options.reporter,
+            taskId: options.taskId,
+            sessionId: options.sessionId,
+          }),
         );
         if (lspResult) {
           emitToolProgress(options, {
@@ -238,7 +250,13 @@ export function createCodingCodeIntelligenceTools(
           symbol,
           root,
           maxFiles,
-          lspTools,
+          async () => createLspTools({
+            workspaceRoot: options.workspaceRoot ?? process.cwd(),
+            sandbox,
+            reporter: options.reporter,
+            taskId: options.taskId,
+            sessionId: options.sessionId,
+          }),
         );
         if (lspResult) {
           emitToolProgress(options, {
@@ -411,7 +429,7 @@ async function tryLspSymbolLookup(
   symbolName: string,
   root: string,
   maxFiles: number,
-  lspTools: ToolDefinition[],
+  lspTools: ToolDefinition[] | (() => Promise<ToolDefinition[]>),
 ): Promise<{
   declarations: Record<string, unknown>[];
   references: Record<string, unknown>[];
@@ -428,9 +446,10 @@ async function tryLspSymbolLookup(
     return null;
   }
 
-  const definitionTool = getTool(lspTools, 'lsp_go_to_definition');
-  const referencesTool = getTool(lspTools, 'lsp_find_references');
-  const documentSymbolsTool = getTool(lspTools, 'lsp_document_symbols');
+  const tools = Array.isArray(lspTools) ? lspTools : await lspTools();
+  const definitionTool = getTool(tools, 'lsp_go_to_definition');
+  const referencesTool = getTool(tools, 'lsp_find_references');
+  const documentSymbolsTool = getTool(tools, 'lsp_document_symbols');
 
   for (const file of candidates) {
     try {
@@ -440,29 +459,33 @@ async function tryLspSymbolLookup(
         continue;
       }
 
-      const matchingSymbol = symbolsResult.result.symbols.find((symbol) => symbol.name === symbolName);
-      if (!matchingSymbol || !matchingSymbol.range) {
+      const matchingSymbols = symbolsResult.result.symbols.filter((symbol) => symbol.name === symbolName);
+      if (matchingSymbols.length === 0) {
         continue;
       }
 
-      const range = matchingSymbol.range as {
-        start: { line: number; character: number };
-        end: { line: number; character: number };
-      };
+      for (const matchingSymbol of matchingSymbols) {
+        const range = matchingSymbol.range as {
+          start: { line: number; character: number };
+          end: { line: number; character: number };
+        } | undefined;
+        if (!range) {
+          continue;
+        }
 
-      const [definitionsRaw, referencesRaw] = await Promise.all([
-        definitionTool.execute({
-          path: file,
-          line: range.start.line,
-          character: range.start.character,
-        }),
-        referencesTool.execute({
-          path: file,
-          line: range.start.line,
-          character: range.start.character,
-          includeDeclaration: false,
-        }),
-      ]);
+        const [definitionsRaw, referencesRaw] = await Promise.all([
+          definitionTool.execute({
+            path: file,
+            line: range.start.line,
+            character: range.start.character,
+          }),
+          referencesTool.execute({
+            path: file,
+            line: range.start.line,
+            character: range.start.character,
+            includeDeclaration: false,
+          }),
+        ]);
 
       const definitionsResult = JSON.parse(definitionsRaw) as LspToolResult<{
         definitions: Array<Record<string, unknown>>;
@@ -483,21 +506,22 @@ async function tryLspSymbolLookup(
         ]),
       ].filter(Boolean);
 
-      return {
-        declarations: definitionsResult.result.definitions.map((loc) => ({
-          path: uriToRepoRelativePath(String(loc.uri ?? ''), sandbox.repoPath),
-          name: symbolName,
-          kind: loc.kind ? lspSymbolKindToString(Number(loc.kind)) : 'unknown',
-          range: loc.range as Record<string, unknown>,
-        })),
-        references: referencesResult.result.references.map((loc) => ({
-          path: uriToRepoRelativePath(String(loc.uri ?? ''), sandbox.repoPath),
-          name: symbolName,
-          kind: 'reference',
-          range: loc.range as Record<string, unknown>,
-        })),
-        parsedFiles,
-      };
+        return {
+          declarations: definitionsResult.result.definitions.map((loc) => ({
+            path: uriToRepoRelativePath(String(loc.uri ?? ''), sandbox.repoPath),
+            name: symbolName,
+            kind: loc.kind ? lspSymbolKindToString(Number(loc.kind)) : 'unknown',
+            range: loc.range as Record<string, unknown>,
+          })),
+          references: referencesResult.result.references.map((loc) => ({
+            path: uriToRepoRelativePath(String(loc.uri ?? ''), sandbox.repoPath),
+            name: symbolName,
+            kind: 'reference',
+            range: loc.range as Record<string, unknown>,
+          })),
+          parsedFiles,
+        };
+      }
     } catch {
       continue;
     }

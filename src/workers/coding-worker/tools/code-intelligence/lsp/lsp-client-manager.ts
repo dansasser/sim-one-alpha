@@ -39,6 +39,7 @@ export class LspClientManager {
   private readonly onInitializing?: (languageId: string, projectRoot: string) => void;
   private readonly createJsonRpcClient?: (context: LspRequestContext) => JsonRpcClient;
   private shutdownTimer: NodeJS.Timeout | undefined;
+  private readonly openDocuments = new Set<string>();
 
   constructor(private readonly options: LspClientManagerOptions) {
     this.registry = options.registry ?? new LspLanguageServerRegistry();
@@ -119,9 +120,15 @@ export class LspClientManager {
       await this.initializeClient(client);
     }
 
+    const uri = pathToUri(filePath);
+    if (this.openDocuments.has(uri)) {
+      return;
+    }
+    this.openDocuments.add(uri);
+
     client.client.notify('textDocument/didOpen', {
       textDocument: {
-        uri: pathToUri(filePath),
+        uri,
         languageId: client.languageId,
         version: 1,
         text: content,
@@ -133,10 +140,15 @@ export class LspClientManager {
     for (const client of this.clients.values()) {
       if (client.initialized) {
         try {
-          client.client.notify('shutdown', {});
+          await client.client.request('shutdown', {});
         } catch {
           // Ignore shutdown errors.
         }
+      }
+      try {
+        client.client.notify('exit', {});
+      } catch {
+        // Ignore exit errors.
       }
       client.client.dispose();
     }
@@ -219,7 +231,8 @@ export class LspClientManager {
   }
 }
 
+import { pathToFileURL } from 'node:url';
+
 function pathToUri(filePath: string): string {
-  const absolute = filePath.startsWith('/') ? filePath : `/${filePath}`;
-  return `file://${absolute}`;
+  return pathToFileURL(filePath).href;
 }

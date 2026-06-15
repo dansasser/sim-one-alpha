@@ -4,12 +4,12 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 
 async function which(command: string): Promise<string | undefined> {
-  const shells =
-    process.platform === 'win32'
-      ? ['cmd', '/c', 'where']
-      : ['sh', '-c', 'command -v'];
   try {
-    const result = await execFileAsync(shells[0], [...shells.slice(1), command]);
+    if (process.platform === 'win32') {
+      const result = await execFileAsync('cmd', ['/c', 'where', command]);
+      return result.stdout.trim().split(/\r?\n/)[0] || undefined;
+    }
+    const result = await execFileAsync('command', ['-v', command]);
     return result.stdout.trim().split(/\r?\n/)[0] || undefined;
   } catch {
     return undefined;

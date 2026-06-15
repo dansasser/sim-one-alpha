@@ -26,6 +26,11 @@ import type {
 
 export interface LspToolsOptions {
   workspaceRoot: string;
+  /**
+   * Optional sandbox. When omitted, the manager can still operate if a test
+   * factory or file-system-backed reader is supplied, but file reads for
+   * didOpen must be provided by the caller.
+   */
   sandbox?: CodingSandboxRuntime;
   reporter?: CodingProgressReporter;
   taskId?: string;
@@ -67,10 +72,18 @@ export function createLspTools(options: LspToolsOptions): ToolDefinition[] {
   });
 
   const getSandbox = () => {
-    if (!options.sandbox) {
-      throw new Error('LSP tools require a sandbox to read files.');
+    if (options.sandbox) {
+      return options.sandbox;
     }
-    return options.sandbox;
+    throw new Error('LSP tools require a sandbox to read files.');
+  };
+
+  const readFileForDidOpen = async (filePath: string): Promise<string> => {
+    if (options.sandbox) {
+      return options.sandbox.readFile(filePath);
+    }
+    const { readFile } = await import('node:fs/promises');
+    return readFile(filePath, 'utf8');
   };
 
   const withDocument = async (filePath: string, languageIdHint?: string) => {
@@ -81,7 +94,7 @@ export function createLspTools(options: LspToolsOptions): ToolDefinition[] {
 
     const sandbox = getSandbox();
     const absolutePath = sandbox.resolveScopePath(filePath);
-    const content = await sandbox.readFile(filePath);
+    const content = await readFileForDidOpen(filePath);
     const projectConfig = detectProjectConfig({
       workspaceRoot: options.workspaceRoot,
       filePath: absolutePath,
@@ -579,9 +592,10 @@ function guessPrimaryLanguageId(workspaceRoot: string): string | undefined {
   return 'typescript';
 }
 
+import { pathToFileURL } from 'node:url';
+
 function pathToUri(filePath: string): string {
-  const absolute = filePath.startsWith('/') ? filePath : `/${filePath}`;
-  return `file://${absolute}`;
+  return pathToFileURL(filePath).href;
 }
 
 function emitProgress(
