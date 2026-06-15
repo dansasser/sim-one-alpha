@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { createCodingApprovalRequest } from '../approvals/approval-policy.js';
 import type { CodingApprovalService } from '../approvals/approval-service.js';
+import type { ApprovalEventBridge } from '../../../ingress/approval-event-bridge.js';
+import { BridgeCodingProgressReporter } from '../../../ingress/approval-event-bridge.js';
 import { InMemoryCodingProgressReporter, type CodingProgressReporter } from '../events/progress-reporter.js';
 import { createOrchestratorProgressUpdate } from '../events/orchestrator-bridge.js';
 import type { GitHubClient } from '../github/github-client.js';
@@ -58,6 +60,7 @@ export interface CodingWorkerLoopDependencies {
     target: ResolvedCodingWorkspaceTarget,
     sessionPlan: CodingWorkerSessionPlan,
   ) => Promise<CodingSandboxRuntime>;
+  approvalEventBridge?: ApprovalEventBridge;
 }
 
 interface LoopVerificationCommand extends CodingVerificationCommand {
@@ -72,7 +75,11 @@ export async function runCodingWorkerLoop(
   task: CodingWorkerTaskRequest,
   dependencies: CodingWorkerLoopDependencies = {},
 ): Promise<CodingWorkerRunResult> {
-  const reporter = dependencies.reporter ?? new InMemoryCodingProgressReporter();
+  const baseReporter = dependencies.reporter ?? new InMemoryCodingProgressReporter();
+  const bridgeReporter = dependencies.approvalEventBridge
+    ? new BridgeCodingProgressReporter(dependencies.approvalEventBridge, baseReporter)
+    : undefined;
+  const reporter = bridgeReporter ?? baseReporter;
   dependencies.reporter = reporter;
   const workspaceTarget = resolveCodingWorkspaceTarget(task);
   const sessionPlan = createCodingWorkerSessionPlan(task.taskId, task.sessionId);
@@ -155,6 +162,7 @@ export async function runCodingWorkerLoop(
     }
 
     const result = createLoopResult(state, reporter);
+    await bridgeReporter?.flush();
     await persistLoopCheckpoint(taskRunStore, state, reporter, createdAt);
     return result;
   } catch (error) {
@@ -168,6 +176,7 @@ export async function runCodingWorkerLoop(
       summary: `Coding worker loop failed: ${errorSummary}`,
       evidence: [errorSummary],
     });
+    await bridgeReporter?.flush();
     await persistLoopCheckpoint(taskRunStore, state, reporter, createdAt);
     throw error;
   }
@@ -315,12 +324,14 @@ async function runImplementStep(
   const applied = await applyPendingEditsWithApproval(state, sandbox, dependencies);
   if (!applied) {
     setPlanStatus(state.plan, 'implementer', 'blocked');
+    const pendingApproval = findLatestPendingApprovalRequest(state);
     reporter.emit({
       type: 'coding.approval.requested',
       taskId: state.task.taskId,
       action: 'file.edit',
       summary: 'Pending file edits require approval before application.',
       risk: 'Applying edits mutates workspace files.',
+      evidence: pendingApproval ? [pendingApproval.requestId] : undefined,
     });
     state.currentStep = 'blocked';
     return;
@@ -376,12 +387,14 @@ async function runTestDebugStep(
         const applied = await applyPendingEditsWithApproval(state, sandbox, dependencies);
         if (!applied) {
           setPlanStatus(state.plan, 'test-debug', 'blocked');
+          const pendingApproval = findLatestPendingApprovalRequest(state);
           reporter.emit({
             type: 'coding.approval.requested',
             taskId: state.task.taskId,
             action: 'file.edit',
             summary: 'Debug edits require approval before application.',
             risk: 'Applying debug edits mutates workspace files.',
+            evidence: pendingApproval ? [pendingApproval.requestId] : undefined,
           });
           state.currentStep = 'blocked';
           return;
@@ -782,6 +795,18 @@ function buildSubagentRequest(state: CodingWorkerLoopState): CodingTaskSubagentR
 
 function createEditApprovalDedupeKey(taskId: string, paths: string[], contentHash: string): string {
   return `${taskId}:file.edit:${contentHash}:${paths.sort().join('|')}`;
+}
+
+function findLatestPendingApprovalRequest(
+  state: CodingWorkerLoopState,
+): CodingWorkerLoopState['approvalQueue'][number] | undefined {
+  for (let i = state.approvalQueue.length - 1; i >= 0; i--) {
+    const item = state.approvalQueue[i];
+    if (item.status === 'pending') {
+      return item;
+    }
+  }
+  return undefined;
 }
 
 async function hashTargetFileContents(sandbox: CodingSandboxRuntime, paths: string[]): Promise<string> {
