@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, statSync } from 'node:fs';
 import { resolve, isAbsolute, sep } from 'node:path';
 
 function readStringEnv(key: string): string | undefined {
@@ -13,7 +13,11 @@ export function resolveImageOutputDir(): string {
     readStringEnv('GOROMBO_CODING_WORKSPACE_ROOT') ??
     process.cwd();
   const dir = configuredDir ? resolve(configuredDir) : resolve(workspaceRoot, 'workspace', 'images');
-  if (!existsSync(dir)) {
+  if (existsSync(dir)) {
+    if (!statSync(dir).isDirectory()) {
+      throw new Error(`Image output path ${dir} exists but is not a directory.`);
+    }
+  } else {
     mkdirSync(dir, { recursive: true });
   }
   return dir;
