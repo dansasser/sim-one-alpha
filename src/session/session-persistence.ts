@@ -6,6 +6,9 @@ import type {
   SessionStore,
 } from '@flue/runtime/adapter';
 import type { GoromboConfig } from '../config/gorombo-config.js';
+import { createEmbeddingClient } from '../rag/embeddings.js';
+import { runBackgroundIndexing } from '../rag/indexers/background-indexer.js';
+import { LanceDbVectorStore } from '../rag/vector/index.js';
 import {
   defaultSessionDatabasePath,
   GoromboSessionDatabase,
@@ -21,6 +24,8 @@ export const defaultFlueDatabasePath = '.gorombo/db/flue.sqlite';
 export interface GoromboPersistenceRuntime {
   adapter: PersistenceAdapter;
   sessionDatabase: GoromboSessionDatabase;
+  vectorStore: LanceDbVectorStore;
+  embeddingClient: ReturnType<typeof createEmbeddingClient>;
   getLatestSessionData(harnessName: string, sessionName: string): Promise<SessionData | null>;
   getLatestSessionDataForInstance(
     instanceId: string,
@@ -32,8 +37,16 @@ export interface GoromboPersistenceRuntime {
 export function createGoromboPersistenceRuntime(config: GoromboConfig): GoromboPersistenceRuntime {
   const flueDatabasePath = config.storage?.flueDatabasePath ?? defaultFlueDatabasePath;
   const sessionDatabasePath = config.storage?.sessionDatabasePath ?? defaultSessionDatabasePath;
+  const vectorStorePath = config.storage?.vectorStorePath;
   const flueAdapter = sqlite(flueDatabasePath);
-  const sessionDatabase = new GoromboSessionDatabase(sessionDatabasePath);
+  const vectorStore = new LanceDbVectorStore({ path: vectorStorePath });
+  const embeddingClient = createEmbeddingClient();
+  const sessionDatabase = new GoromboSessionDatabase(sessionDatabasePath, { vectorStore, embeddingClient });
+
+  // Index project files and knowledge docs in the background so startup is not blocked.
+  runBackgroundIndexing({ vectorStore, embeddingClient }).catch((error) =>
+    console.error('[WARN] Background vector indexing failed:', error instanceof Error ? error.message : String(error)),
+  );
   let latestExecutionStore: AgentExecutionStore | undefined;
 
   const adapter: PersistenceAdapter = {
@@ -67,6 +80,8 @@ export function createGoromboPersistenceRuntime(config: GoromboConfig): GoromboP
   return {
     adapter,
     sessionDatabase,
+    vectorStore,
+    embeddingClient,
     async getLatestSessionData(harnessName, sessionName) {
       const storageKey = sessionDatabase.getLatestStorageKey(harnessName, sessionName);
       if (!storageKey) {
@@ -96,7 +111,7 @@ class GoromboLogicalSessionStore implements SessionStore {
 
   async save(id: string, data: SessionData): Promise<void> {
     await this.flueSessions.save(id, data);
-    this.sessionDatabase.recordFlueSession(id, data);
+    await this.sessionDatabase.recordFlueSession(id, data);
   }
 
   async load(id: string): Promise<SessionData | null> {

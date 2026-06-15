@@ -4,7 +4,12 @@ import { SessionMemoryProvider } from '../memory/memory-provider.js';
 import { MemoryRouter } from '../memory/memory-router.js';
 import type { NormalizedMessageEvent } from '../types/index.js';
 
-const router = new MemoryRouter(new SessionMemoryProvider());
+const router = new MemoryRouter(
+  new SessionMemoryProvider({
+    vectorStore: goromboPersistenceRuntime.vectorStore,
+    embeddingClient: goromboPersistenceRuntime.embeddingClient,
+  }),
+);
 
 export const retrieveMemoryTool = defineTool({
   name: 'retrieve_memory',

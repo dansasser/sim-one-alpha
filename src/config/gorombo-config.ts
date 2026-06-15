@@ -33,6 +33,7 @@ export interface GoromboModelConfig {
 export interface GoromboStorageConfig {
   flueDatabasePath?: string;
   sessionDatabasePath?: string;
+  vectorStorePath?: string;
 }
 
 export interface LoadGoromboConfigOptions {
@@ -105,10 +106,12 @@ function validateStorageConfig(value: unknown, source: string): GoromboStorageCo
 
   const flueDatabasePath = readOptionalStoragePath(value, 'flueDatabasePath', source);
   const sessionDatabasePath = readOptionalStoragePath(value, 'sessionDatabasePath', source);
+  const vectorStorePath = readOptionalStoragePath(value, 'vectorStorePath', source);
 
   return {
     ...(flueDatabasePath ? { flueDatabasePath } : {}),
     ...(sessionDatabasePath ? { sessionDatabasePath } : {}),
+    ...(vectorStorePath ? { vectorStorePath } : {}),
   };
 }
 
