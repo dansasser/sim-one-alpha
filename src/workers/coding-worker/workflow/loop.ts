@@ -370,13 +370,18 @@ async function runTestDebugStep(
   );
 
   if (verificationRequired && state.verificationResults.requiredCommands.length === 0) {
+    const message = 'Verification directive is active but no verification commands were registered.';
     reporter.emit({
       type: 'coding.protocols.enforced',
       taskId: state.task.taskId,
-      purpose: 'Verification directive is active but no verification commands were registered.',
+      purpose: message,
       summary: 'Blocking step: protocol directive requires verification before completion.',
       evidence: ['Add verification commands or confirm no verification is applicable.'],
     });
+    setPlanStatus(state.plan, 'test-debug', 'blocked');
+    state.lastFailureSummary = message;
+    state.currentStep = 'blocked';
+    return;
   }
 
   const sandbox = await getSandbox(state, dependencies);

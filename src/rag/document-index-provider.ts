@@ -41,6 +41,15 @@ export class DocumentIndexProvider implements RagProvider {
       try {
         const filters: Record<string, unknown> = {};
         if (collection === 'knowledge_base') {
+          const hasActorScope = typeof query.actorId === 'string' && query.actorId.length > 0;
+          const hasConversationScope = typeof query.conversationId === 'string' && query.conversationId.length > 0;
+          if (!hasActorScope && !hasConversationScope) {
+            console.error(
+              `[WARN] Skipping unscoped knowledge_base search (collection=${collection}). ` +
+                'knowledge_base retrieval requires actor_id or conversation_id scope.',
+            );
+            continue;
+          }
           if (query.actorId) {
             filters.actor_id = query.actorId;
           }

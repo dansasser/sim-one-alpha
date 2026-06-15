@@ -51,6 +51,12 @@ export class SqliteProtocolProvider implements ProtocolProvider {
       .all() as { id: string; scope: string }[];
     const existingIds = new Set(existing.map((row) => row.id));
 
+    const update = this.database.prepare(
+      `UPDATE protocols
+       SET name = ?, description = ?, scope = ?, enabled = ?, priority = ?, selector_json = ?, rules_json = ?, source = ?, tags = ?, updated_at = ?
+       WHERE id = ? AND scope = 'base' AND source = 'seed'`,
+    );
+
     const insert = this.database.prepare(
       `INSERT OR IGNORE INTO protocols
        (id, name, description, scope, enabled, priority, selector_json, rules_json, source, tags, created_at, updated_at)
@@ -58,20 +64,36 @@ export class SqliteProtocolProvider implements ProtocolProvider {
     );
 
     for (const protocol of baseProtocolSeeds) {
-      insert.run(
-        protocol.id,
-        protocol.name,
-        protocol.description,
-        protocol.scope,
-        protocol.enabled ? 1 : 0,
-        protocol.priority,
-        JSON.stringify(protocol.appliesTo),
-        JSON.stringify(protocol.rules),
-        protocol.source,
-        protocol.tags ? JSON.stringify(protocol.tags) : null,
-        new Date().toISOString(),
-        new Date().toISOString(),
-      );
+      if (existingIds.has(protocol.id)) {
+        update.run(
+          protocol.name,
+          protocol.description,
+          protocol.scope,
+          protocol.enabled ? 1 : 0,
+          protocol.priority,
+          JSON.stringify(protocol.appliesTo),
+          JSON.stringify(protocol.rules),
+          protocol.source,
+          protocol.tags ? JSON.stringify(protocol.tags) : null,
+          new Date().toISOString(),
+          protocol.id,
+        );
+      } else {
+        insert.run(
+          protocol.id,
+          protocol.name,
+          protocol.description,
+          protocol.scope,
+          protocol.enabled ? 1 : 0,
+          protocol.priority,
+          JSON.stringify(protocol.appliesTo),
+          JSON.stringify(protocol.rules),
+          protocol.source,
+          protocol.tags ? JSON.stringify(protocol.tags) : null,
+          new Date().toISOString(),
+          new Date().toISOString(),
+        );
+      }
     }
 
     const staleIds = [...existingIds].filter((id) => !baseProtocolSeeds.some((seed) => seed.id === id));

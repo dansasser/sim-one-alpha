@@ -1,4 +1,4 @@
-﻿import type { EmbeddingClient } from './embeddings.js';
+import type { EmbeddingClient } from './embeddings.js';
 import type { VectorStore, VectorRecord } from './vector/index.js';
 
 export interface AddKnowledgeInput {
@@ -89,7 +89,7 @@ export class LanceDbKnowledgeStore implements KnowledgeStore {
       queryFilters.conversation_id = filters.conversationId;
     }
     if (filters.source) {
-      queryFilters.source = filters.source;
+      queryFilters['metadata.source'] = filters.source;
     }
 
     const dummyVector = new Array(768).fill(0);

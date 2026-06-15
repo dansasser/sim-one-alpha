@@ -302,7 +302,7 @@
 - Modify: `src/memory/memory-provider.ts:122`
 
 - [x] **Step 1:** Locate the filter mapping `conversationId` to `actor_id`.
-- ] **Step 2:** Correct the field mapping so conversationId filters the conversation field and actorId filters the actor field.
+- [x] **Step 2:** Correct the field mapping so conversationId filters the conversation field and actorId filters the actor field.
 - [x] **Step 3:** Add a test for each filter.
 - [x] **Step 4:** Commit with message: `fix(memory): correct vector scope filter field mapping (PR #26)`.
 

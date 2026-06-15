@@ -1,4 +1,4 @@
-﻿import { allModelCards } from '../models/catalog.js';
+import { allModelCards } from '../models/catalog.js';
 import { resolveModelCardEnv } from '../models/env.js';
 import type { AgentModelCard } from '../models/types.js';
 import { estimateTextTokens } from '../session/context-budget.js';
@@ -25,7 +25,7 @@ export function createEmbeddingClient(options: CreateEmbeddingClientOptions = {}
 
   return {
     async embed(text: string): Promise<number[]> {
-      const results = await embedBatchInternal([text], cards, fetchImpl, timeoutMs);
+      const results = await embedBatchInternal([text], cards, fetchImpl, timeoutMs, env);
       return results[0] ?? [];
     },
     async embedBatch(texts: string[]): Promise<number[][]> {

@@ -1,4 +1,4 @@
-﻿import { connect, makeArrowTable } from '@lancedb/lancedb';
+import { connect, makeArrowTable } from '@lancedb/lancedb';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
@@ -37,6 +37,7 @@ export interface VectorStore {
   upsert(collection: string, records: VectorRecord[]): Promise<void>;
   search(collection: string, query: number[], options?: VectorSearchOptions): Promise<VectorSearchResult[]>;
   delete(collection: string, ids: string[]): Promise<void>;
+  listIds(collection: string): Promise<string[]>;
 }
 
 export interface LanceDbVectorStoreOptions {
@@ -143,6 +144,16 @@ export class LanceDbVectorStore implements VectorStore {
       }
       throw error;
     }
+  }
+
+  async listIds(collection: string): Promise<string[]> {
+    const table = await this.openTable(collection);
+    if (!table) {
+      return [];
+    }
+
+    const rows = (await table.query().select(['id']).toArray()) as unknown as Array<{ id: string }>;
+    return rows.map((row) => String(row.id));
   }
 }
 

@@ -1,0 +1,73 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { DocumentIndexProvider } from '../rag/document-index-provider.js';
+
+test('document-index provider skips unscoped knowledge_base queries', async () => {
+  const searches: Array<{ collection: string; query: number[]; options: unknown }> = [];
+  const vectorStore = {
+    upsert: async () => {},
+    search: async (collection: string, query: number[], options: unknown) => {
+      searches.push({ collection, query, options });
+      return [];
+    },
+    delete: async () => {},
+    listIds: async () => [],
+  };
+  const embeddingClient = {
+    embed: async () => [1, 2, 3],
+    embedBatch: async () => [],
+  };
+  const provider = new DocumentIndexProvider({ vectorStore, embeddingClient });
+
+  const results = await provider.retrieve({
+    eventId: 'event-1',
+    text: 'query',
+    actorId: '',
+    conversationId: '',
+    limit: 5,
+    caller: 'orchestrator',
+  });
+
+  assert.equal(results.length, 0);
+  assert.equal(
+    searches.find((s) => s.collection === 'knowledge_base'),
+    undefined,
+    'knowledge_base search should be skipped without scope',
+  );
+  assert.ok(searches.some((s) => s.collection === 'project_files'), 'other collections should still be searched');
+});
+
+test('document-index provider allows scoped knowledge_base queries', async () => {
+  const searches: Array<{ collection: string; query: number[]; options: unknown }> = [];
+  const vectorStore = {
+    upsert: async () => {},
+    search: async (collection: string, query: number[], options: unknown) => {
+      searches.push({ collection, query, options });
+      return [];
+    },
+    delete: async () => {},
+    listIds: async () => [],
+  };
+  const embeddingClient = {
+    embed: async () => [1, 2, 3],
+    embedBatch: async () => [],
+  };
+  const provider = new DocumentIndexProvider({ vectorStore, embeddingClient });
+
+  const results = await provider.retrieve({
+    eventId: 'event-1',
+    text: 'query',
+    actorId: 'user-1',
+    conversationId: 'thread-1',
+    limit: 5,
+    caller: 'orchestrator',
+  });
+
+  assert.equal(results.length, 0);
+  const knowledgeSearch = searches.find((s) => s.collection === 'knowledge_base');
+  assert.ok(knowledgeSearch, 'knowledge_base collection should be searched');
+  assert.deepEqual((knowledgeSearch.options as { filters?: Record<string, unknown> }).filters, {
+    actor_id: 'user-1',
+    conversation_id: 'thread-1',
+  });
+});

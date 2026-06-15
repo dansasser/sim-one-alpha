@@ -1,4 +1,4 @@
-﻿import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -963,8 +963,17 @@ export class GoromboSessionDatabase {
 
   private async deleteSessionMemoryVectorsFinished(): Promise<void> {
     if (this.pendingVectorDeletes) {
+      const promise = this.pendingVectorDeletes;
+      await promise;
+      if (this.pendingVectorDeletes === promise) {
+        this.pendingVectorDeletes = undefined;
+      }
+    }
+  }
+
+  async awaitPendingVectorDeletes(): Promise<void> {
+    if (this.pendingVectorDeletes) {
       await this.pendingVectorDeletes;
-      this.pendingVectorDeletes = undefined;
     }
   }
 

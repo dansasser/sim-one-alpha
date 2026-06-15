@@ -80,14 +80,6 @@ export function createCodingCodeIntelligenceTools(
     return sandboxPromise;
   };
 
-  const lspTools = createLspTools({
-    workspaceRoot: options.workspaceRoot ?? process.cwd(),
-    sandbox: options.sandbox,
-    reporter: options.reporter,
-    taskId: options.taskId,
-    sessionId: options.sessionId,
-  });
-
   return [
     defineTool({
       name: 'coding_ast_parse_file',
@@ -424,6 +416,21 @@ async function collectFiles(
   }
 }
 
+const lspToolsCache = new Map<string, Promise<ToolDefinition[]>>();
+
+function memoizedLspTools(root: string, factory: () => Promise<ToolDefinition[]>): Promise<ToolDefinition[]> {
+  const key = root;
+  let promise = lspToolsCache.get(key);
+  if (!promise) {
+    promise = factory().catch((error) => {
+      lspToolsCache.delete(key);
+      throw error;
+    });
+    lspToolsCache.set(key, promise);
+  }
+  return promise;
+}
+
 async function tryLspSymbolLookup(
   sandbox: CodingSandboxRuntime,
   symbolName: string,
@@ -446,10 +453,16 @@ async function tryLspSymbolLookup(
     return null;
   }
 
-  const tools = Array.isArray(lspTools) ? lspTools : await lspTools();
+  const tools = Array.isArray(lspTools)
+    ? lspTools
+    : await memoizedLspTools(root, lspTools);
   const definitionTool = getTool(tools, 'lsp_go_to_definition');
   const referencesTool = getTool(tools, 'lsp_find_references');
   const documentSymbolsTool = getTool(tools, 'lsp_document_symbols');
+
+  const allDeclarations: Record<string, unknown>[] = [];
+  const allReferences: Record<string, unknown>[] = [];
+  const allParsedFiles = new Set<string>();
 
   for (const file of candidates) {
     try {
@@ -506,28 +519,43 @@ async function tryLspSymbolLookup(
         ]),
       ].filter(Boolean);
 
-        return {
-          declarations: definitionsResult.result.definitions.map((loc) => ({
-            path: uriToRepoRelativePath(String(loc.uri ?? ''), sandbox.repoPath),
-            name: symbolName,
-            kind: loc.kind ? lspSymbolKindToString(Number(loc.kind)) : 'unknown',
-            range: loc.range as Record<string, unknown>,
-          })),
-          references: referencesResult.result.references.map((loc) => ({
-            path: uriToRepoRelativePath(String(loc.uri ?? ''), sandbox.repoPath),
-            name: symbolName,
-            kind: 'reference',
-            range: loc.range as Record<string, unknown>,
-          })),
-          parsedFiles,
-        };
+      for (const parsedFile of parsedFiles) {
+        if (parsedFile) {
+          allParsedFiles.add(parsedFile);
+        }
       }
-    } catch {
-      continue;
+
+      allDeclarations.push(
+        ...definitionsResult.result.definitions.map((loc) => ({
+          path: uriToRepoRelativePath(String(loc.uri ?? ''), sandbox.repoPath),
+          name: symbolName,
+          kind: loc.kind ? lspSymbolKindToString(Number(loc.kind)) : 'unknown',
+          range: loc.range as Record<string, unknown>,
+        })),
+      );
+      allReferences.push(
+        ...referencesResult.result.references.map((loc) => ({
+          path: uriToRepoRelativePath(String(loc.uri ?? ''), sandbox.repoPath),
+          name: symbolName,
+          kind: 'reference',
+          range: loc.range as Record<string, unknown>,
+        })),
+      );
     }
+  } catch {
+    continue;
+  }
+}
+
+  if (allDeclarations.length === 0 && allReferences.length === 0 && allParsedFiles.size === 0) {
+    return null;
   }
 
-  return null;
+  return {
+    declarations: allDeclarations,
+    references: allReferences,
+    parsedFiles: [...allParsedFiles],
+  };
 }
 
 function uriToRepoRelativePath(uri: string, repoPath: string): string {

@@ -138,21 +138,10 @@ export class LspClientManager {
 
   async close(): Promise<void> {
     for (const client of this.clients.values()) {
-      if (client.initialized) {
-        try {
-          await client.client.request('shutdown', {});
-        } catch {
-          // Ignore shutdown errors.
-        }
-      }
-      try {
-        client.client.notify('exit', {});
-      } catch {
-        // Ignore exit errors.
-      }
-      client.client.dispose();
+      await this.disposeClient(client);
     }
     this.clients.clear();
+    this.openDocuments.clear();
     if (this.shutdownTimer) {
       clearTimeout(this.shutdownTimer);
       this.shutdownTimer = undefined;
@@ -219,15 +208,37 @@ export class LspClientManager {
     }
 
     this.shutdownTimer = setTimeout(() => {
-      const now = Date.now();
-      for (const [key, client] of this.clients.entries()) {
-        if (now - client.lastUsedAt > this.idleShutdownMs) {
-          client.client.dispose();
-          this.clients.delete(key);
-        }
-      }
+      this.evictIdleClients();
     }, this.idleShutdownMs);
     this.shutdownTimer.unref();
+  }
+
+  private evictIdleClients(): void {
+    const now = Date.now();
+    for (const [key, client] of this.clients.entries()) {
+      if (now - client.lastUsedAt > this.idleShutdownMs) {
+        this.disposeClient(client).catch(() => {
+          // Ignore shutdown errors during idle eviction.
+        });
+        this.clients.delete(key);
+      }
+    }
+  }
+
+  private async disposeClient(client: LspClient): Promise<void> {
+    if (client.initialized) {
+      try {
+        await client.client.request('shutdown', {});
+      } catch {
+        // Ignore shutdown errors.
+      }
+    }
+    try {
+      client.client.notify('exit', {});
+    } catch {
+      // Ignore exit errors.
+    }
+    client.client.dispose();
   }
 }
 

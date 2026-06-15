@@ -27,9 +27,8 @@ import type {
 export interface LspToolsOptions {
   workspaceRoot: string;
   /**
-   * Optional sandbox. When omitted, the manager can still operate if a test
-   * factory or file-system-backed reader is supplied, but file reads for
-   * didOpen must be provided by the caller.
+   * Optional sandbox. When omitted, file paths are resolved against the
+   * current working directory and read directly from the file system.
    */
   sandbox?: CodingSandboxRuntime;
   reporter?: CodingProgressReporter;
@@ -71,13 +70,6 @@ export function createLspTools(options: LspToolsOptions): ToolDefinition[] {
     },
   });
 
-  const getSandbox = () => {
-    if (options.sandbox) {
-      return options.sandbox;
-    }
-    throw new Error('LSP tools require a sandbox to read files.');
-  };
-
   const readFileForDidOpen = async (filePath: string): Promise<string> => {
     if (options.sandbox) {
       return options.sandbox.readFile(filePath);
@@ -92,9 +84,10 @@ export function createLspTools(options: LspToolsOptions): ToolDefinition[] {
       return { ok: false, languageId: 'unknown', reason: `Unsupported file extension for ${filePath}.` } as const;
     }
 
-    const sandbox = getSandbox();
-    const absolutePath = sandbox.resolveScopePath(filePath);
-    const content = await readFileForDidOpen(filePath);
+    const absolutePath = options.sandbox
+      ? options.sandbox.resolveScopePath(filePath)
+      : resolve(filePath);
+    const content = await readFileForDidOpen(absolutePath);
     const projectConfig = detectProjectConfig({
       workspaceRoot: options.workspaceRoot,
       filePath: absolutePath,

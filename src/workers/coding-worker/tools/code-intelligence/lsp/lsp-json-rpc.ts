@@ -97,6 +97,9 @@ export class JsonRpcClient {
 
       const raw = this.rawBuffer.subarray(messageStart, messageStart + contentLength);
       this.rawBuffer = this.rawBuffer.subarray(messageStart + contentLength);
+      if (this.rawBuffer.length === 0) {
+        this.rawBuffer = Buffer.alloc(0);
+      }
 
       try {
         const message = JSON.parse(raw.toString('utf8')) as JsonRpcMessage;

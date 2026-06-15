@@ -9,7 +9,7 @@ async function which(command: string): Promise<string | undefined> {
       const result = await execFileAsync('cmd', ['/c', 'where', command]);
       return result.stdout.trim().split(/\r?\n/)[0] || undefined;
     }
-    const result = await execFileAsync('command', ['-v', command]);
+    const result = await execFileAsync('which', [command]);
     return result.stdout.trim().split(/\r?\n/)[0] || undefined;
   } catch {
     return undefined;
