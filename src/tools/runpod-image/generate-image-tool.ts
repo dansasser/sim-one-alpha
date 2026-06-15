@@ -128,7 +128,7 @@ function buildProviderOptions(
   set('num_inference_steps', input.numInferenceSteps);
   set('guidance', input.guidance);
   set('seed', input.seed);
-  set('image_format', input.outputFormat);
+  set('output_format', input.outputFormat);
   set('enable_safety_checker', input.enableSafetyChecker);
   set('maxPollAttempts', input.maxPollAttempts);
   set('pollIntervalMillis', input.pollIntervalMillis);
