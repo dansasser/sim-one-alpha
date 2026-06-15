@@ -1,5 +1,5 @@
-import type { NormalizedMessageEvent } from '../types/index.js';
-import { createEventId } from './base.js';
+import type { NormalizedMessageEvent } from '../../types/index.js';
+import { createEventId } from '../base.js';
 
 export interface TelegramUpdateLike {
   update_id?: number;

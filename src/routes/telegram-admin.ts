@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
-import { TelegramApiClient } from '../connectors/telegram-api.js';
-import { telegramConnectorState } from '../connectors/telegram-state.js';
+import { TelegramApiClient } from '../connectors/telegram/telegram-api.js';
+import { telegramConnectorState } from '../connectors/telegram/telegram-state.js';
 import { requireApiSecret } from '../middleware/api-secret.js';
 import { goromboPersistenceRuntime } from '../db.js';
 

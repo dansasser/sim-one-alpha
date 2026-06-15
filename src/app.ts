@@ -6,7 +6,7 @@ import { registerChatEventRoutes } from './routes/chat-events.js';
 import { registerTelemetryRoutes } from './routes/telemetry.js';
 import { registerTelegramAdminRoutes } from './routes/telegram-admin.js';
 import { registerFlueTelemetryObserver } from './telemetry/flue-telemetry.js';
-import { createTelegramIngress, runtimeEnvForIngress } from './connectors/telegram-ingress.js';
+import { createTelegramIngress, runtimeEnvForIngress } from './connectors/telegram/telegram-ingress.js';
 
 registerFlueTelemetryObserver();
 
