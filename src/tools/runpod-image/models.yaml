@@ -1,0 +1,42 @@
+version: 1
+defaultModel: black-forest-labs-flux-1-dev
+models:
+  - id: black-forest-labs-flux-1-dev
+    name: FLUX.1 [dev]
+    kind: text-to-image
+    description: High-quality image generation with exceptional prompt adherence.
+    supportedAspectRatios:
+      - "1:1"
+      - "16:9"
+      - "9:16"
+      - "4:3"
+      - "3:4"
+    defaultProviderOptions:
+      num_inference_steps: 28
+      guidance: 7.5
+      image_format: png
+
+  - id: black-forest-labs-flux-1-schnell
+    name: FLUX.1 [schnell]
+    kind: text-to-image
+    description: Fast, lightweight generation for prototyping.
+    supportedAspectRatios:
+      - "1:1"
+      - "16:9"
+      - "9:16"
+    defaultProviderOptions:
+      num_inference_steps: 4
+      guidance: 3.5
+      image_format: png
+
+  - id: google-nano-banana-2-edit
+    name: Nano Banana 2 Edit
+    kind: image-to-image
+    description: Google's multi-image editing model.
+    supportedAspectRatios:
+      - "1:1"
+      - "16:9"
+      - "9:16"
+    maxReferenceImages: 4
+    defaultProviderOptions:
+      image_format: png

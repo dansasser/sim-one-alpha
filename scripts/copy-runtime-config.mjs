@@ -16,7 +16,18 @@ for (const target of targets) {
   copyFileSync(source, target);
 }
 
+copyRunpodImageModels(includeTscOutput ? resolve('.tmp/tsc') : resolve('dist'));
 copyWorkspaceDirectories(includeTscOutput ? resolve('.tmp/tsc') : resolve('dist'));
+
+function copyRunpodImageModels(outputRoot) {
+  const runpodImageModelSource = resolve('src/tools/runpod-image/models.yaml');
+  if (!existsSync(runpodImageModelSource)) {
+    return;
+  }
+  const target = join(outputRoot, 'tools/runpod-image/models.yaml');
+  mkdirSync(dirname(target), { recursive: true });
+  copyFileSync(runpodImageModelSource, target);
+}
 
 function copyWorkspaceDirectories(outputRoot) {
   copyDirectoryIfExists(resolve('src/workspace'), join(outputRoot, 'workspace'));

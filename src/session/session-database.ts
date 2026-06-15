@@ -81,6 +81,49 @@ export interface RecordNormalizedMessageEventInput {
   acceptedAt?: string;
 }
 
+
+export interface CreateImageArtifactInput {
+  artifactId: string;
+  eventId: string;
+  prompt: string;
+  modelId: string;
+  modelName: string;
+  aspectRatio?: string;
+  seed?: number;
+  negativePrompt?: string;
+  providerOptions: Record<string, unknown>;
+  sourceUrl?: string;
+  filePath: string;
+  fileName: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  referenceImageUrls?: string[];
+}
+
+export interface ListImageArtifactsInput {
+  eventId?: string;
+  limit?: number;
+  after?: string;
+}
+
+export interface RecordSessionMemoryChunkInput {
+  storageKey: string;
+  harnessName: string;
+  sessionName: string;
+  entryId: string;
+  kind: string;
+  role?: string;
+  actorId?: string;
+  conversationId?: string;
+  threadId?: string;
+  title: string;
+  content: string;
+  tokenEstimate: number;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export class GoromboSessionDatabase {
   private readonly database: DatabaseSync;
   private readonly vectorStore?: VectorStore;
@@ -364,6 +407,85 @@ export class GoromboSessionDatabase {
       .get(eventId) as NormalizedMessageEventRow | undefined;
 
     return row ? toNormalizedMessageEvent(row) : null;
+  }
+
+
+  createImageArtifact(input: CreateImageArtifactInput): void {
+    const now = new Date().toISOString();
+    this.database
+      .prepare(
+        `INSERT INTO image_artifacts
+         (artifact_id, event_id, prompt, model_id, model_name, aspect_ratio, seed, negative_prompt,
+          provider_options_json, source_url, file_path, file_name, mime_type, file_size_bytes,
+          reference_image_urls_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        input.artifactId,
+        input.eventId,
+        input.prompt,
+        input.modelId,
+        input.modelName,
+        input.aspectRatio ?? null,
+        input.seed ?? null,
+        input.negativePrompt ?? null,
+        JSON.stringify(input.providerOptions),
+        input.sourceUrl ?? null,
+        input.filePath,
+        input.fileName,
+        input.mimeType,
+        input.fileSizeBytes,
+        input.referenceImageUrls ? JSON.stringify(input.referenceImageUrls) : null,
+        now,
+        now,
+      );
+  }
+
+  listImageArtifacts(input: ListImageArtifactsInput = {}): ImageArtifactRow[] {
+    const limit = Math.max(1, Math.min(200, Math.floor(input.limit ?? 50)));
+    const rows = this.database
+      .prepare(
+        `SELECT artifact_id, event_id, prompt, model_id, model_name, aspect_ratio, seed, negative_prompt,
+                provider_options_json, source_url, file_path, file_name, mime_type, file_size_bytes,
+                reference_image_urls_json, created_at, updated_at
+         FROM image_artifacts
+         WHERE (?1 IS NULL OR event_id = ?1)
+           AND (?2 IS NULL OR created_at > ?2)
+         ORDER BY created_at DESC
+         LIMIT ?3`
+      )
+      .all(input.eventId ?? null, input.after ?? null, limit) as unknown as Array<ImageArtifactRow>;
+    return rows;
+  }
+
+  recordSessionMemoryChunk(input: RecordSessionMemoryChunkInput): void {
+    this.database
+      .prepare(
+        `INSERT OR REPLACE INTO session_memory_chunks
+         (chunk_key, source_storage_key, harness_name, session_name, entry_id, kind, role, actor_id, conversation_id, thread_id, title, content, token_estimate, metadata_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        input.storageKey,
+        input.storageKey,
+        input.harnessName,
+        input.sessionName,
+        input.entryId,
+        input.kind,
+        input.role ?? null,
+        input.actorId ?? null,
+        input.conversationId ?? null,
+        input.threadId ?? null,
+        input.title,
+        input.content,
+        input.tokenEstimate,
+        JSON.stringify(input.metadata),
+        input.createdAt,
+        input.updatedAt,
+      );
+    this.database
+      .prepare(`INSERT OR REPLACE INTO session_memory_fts (chunk_key, title, content) VALUES (?, ?, ?)`)
+      .run(input.storageKey, input.title, input.content);
   }
 
   deleteNormalizedMessageEvent(eventId: string): void {
@@ -785,6 +907,33 @@ export class GoromboSessionDatabase {
         allow_from TEXT,
         updated_at TEXT NOT NULL
       );
+
+
+      CREATE TABLE IF NOT EXISTS image_artifacts (
+        artifact_id TEXT PRIMARY KEY,
+        event_id TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        model_name TEXT NOT NULL,
+        aspect_ratio TEXT,
+        seed INTEGER,
+        negative_prompt TEXT,
+        provider_options_json TEXT NOT NULL,
+        source_url TEXT,
+        file_path TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        file_size_bytes INTEGER NOT NULL,
+        reference_image_urls_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_image_artifacts_event
+        ON image_artifacts(event_id);
+
+      CREATE INDEX IF NOT EXISTS idx_image_artifacts_created
+        ON image_artifacts(created_at DESC);
 
       CREATE TABLE IF NOT EXISTS telegram_settings (
         key TEXT PRIMARY KEY,
@@ -1371,6 +1520,27 @@ interface ChatSessionRow {
 
 interface ActiveSessionRow {
   session_id: string;
+}
+
+
+interface ImageArtifactRow {
+  artifact_id: string;
+  event_id: string;
+  prompt: string;
+  model_id: string;
+  model_name: string;
+  aspect_ratio: string | null;
+  seed: number | null;
+  negative_prompt: string | null;
+  provider_options_json: string;
+  source_url: string | null;
+  file_path: string;
+  file_name: string;
+  mime_type: string;
+  file_size_bytes: number;
+  reference_image_urls_json: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 interface NormalizedMessageEventRow {

@@ -24,6 +24,7 @@ The goal is simple:
 - Runtime-extensible capability model
 - Placeholder structure for future coding-worker workflows
 - Business-focused AI Employee architecture
+- Runpod Public Endpoints image generation tool (`generate_image`) attached directly to the main orchestrator
 
 ## Why Flue
 
@@ -156,6 +157,9 @@ Examples:
 - retrieve project context
 - create a draft
 - run validation
+- generate an image with Runpod Public Endpoints (`generate_image`)
+- record image metadata (`record_image_artifact`)
+- list prior image artifacts (`list_image_artifacts`)
 
 Tools are discovered through the Tool Registry.
 
@@ -428,6 +432,7 @@ OLLAMA_API_KEY=your_ollama_cloud_key_here
 CODEX_BRAIN_LOCAL_API_URL=http://192.168.0.131:4180/v1
 CODEX_BRAIN_LOCAL_API_KEY=your_codex_brain_key_here
 API_SECRET=local_testing_secret
+RUNPOD_API_KEY=your_runpod_key_here
 ```
 
 The default primary and backup model cards use Ollama's direct cloud API:

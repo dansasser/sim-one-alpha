@@ -107,6 +107,13 @@ src/agents/orchestrator.ts
   Coordinates protocols, memory lookup, subagent delegation, and final synthesis.
   Composes its instructions from main workspace files plus a small runtime capability block.
   Does not own web search.
+  Directly owns `generate_image`, `record_image_artifact`, and `list_image_artifacts` for Runpod Public Endpoints image generation.
+
+  Image generation tools backed by Runpod Public Endpoints.
+  - `generate_image` calls Runpod, downloads the image, and saves it to `workspace/images/`.
+  - `record_image_artifact` persists metadata to SQLite and indexes a memory summary.
+  - `list_image_artifacts` queries prior artifacts from SQLite.
+  - `models.yaml` is the human-editable model catalog copied into `dist/` and `.tmp/tsc/` at build time.
 
 src/workspace/
   Main agent user-editable workspace persona files.

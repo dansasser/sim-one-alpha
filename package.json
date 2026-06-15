@@ -36,14 +36,19 @@
     "pnpm": ">=11.6.0"
   },
   "dependencies": {
+    "@ai-sdk/provider": "^3.0.10",
     "@flue/runtime": "0.11.0",
     "@lancedb/lancedb": "^0.30.0",
+    "@runpod/ai-sdk-provider": "^1.4.0",
+    "ai": "^6.0.205",
     "hono": "^4.12.23",
+    "js-yaml": "^4.2.0",
     "proper-lockfile": "^4.1.2",
     "typescript": "^6.0.3"
   },
   "devDependencies": {
     "@flue/cli": "0.11.0",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.9.2",
     "@types/proper-lockfile": "^4.1.4",
     "valibot": "^1.4.1"
