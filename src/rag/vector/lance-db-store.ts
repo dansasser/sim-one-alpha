@@ -58,9 +58,13 @@ export class LanceDbVectorStore implements VectorStore {
       return;
     }
 
-    const table = await this.openOrCreateTable(collection, records);
     const ids = records.map((record) => record.id).filter(Boolean);
+    const table = await this.openOrCreateTable(collection, records);
+
     if (ids.length > 0) {
+      // LanceDB does not enforce unique primary keys. Delete existing rows
+      // with the same ids before inserting replacements so upsert behaves
+      // as a true replacement and duplicate vectors do not accumulate.
       await table.delete(createIdFilter(ids));
     }
 
@@ -127,7 +131,18 @@ export class LanceDbVectorStore implements VectorStore {
       return db.openTable(collection);
     }
 
-    return db.createTable(collection, makeArrowTable(sampleRecords as unknown as Record<string, unknown>[]));
+    try {
+      return await db.createTable(
+        collection,
+        makeArrowTable(sampleRecords as unknown as Record<string, unknown>[]),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/already exists/i.test(message)) {
+        return db.openTable(collection);
+      }
+      throw error;
+    }
   }
 }
 

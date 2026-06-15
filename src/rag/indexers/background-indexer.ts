@@ -37,7 +37,18 @@ export async function runBackgroundIndexing(options: BackgroundIndexerOptions): 
     try {
       const records = await loadRecords();
       if (records.length === 0) {
+        await options.vectorStore.delete(collection, []);
         return;
+      }
+
+      const idsToKeep = new Set(records.map((record) => record.id).filter(Boolean));
+
+      const existing = await options.vectorStore.search(collection, new Array(1).fill(0), { limit: 100_000 });
+      const staleIds = existing
+        .filter((row) => !idsToKeep.has(row.id))
+        .map((row) => row.id);
+      if (staleIds.length > 0) {
+        await options.vectorStore.delete(collection, staleIds);
       }
 
       const contents = records.map((record) => record.content);

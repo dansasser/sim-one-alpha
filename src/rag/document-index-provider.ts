@@ -28,14 +28,31 @@ export class DocumentIndexProvider implements RagProvider {
       return [];
     }
 
-    const vector = await this.embeddingClient.embed(query.text);
     const limit = readLimit(query.limit);
+    if (limit === 0) {
+      return [];
+    }
+
+    const vector = await this.embeddingClient.embed(query.text);
     const perCollection = Math.max(1, Math.ceil(limit / this.collections.length));
     const allResults: VectorSearchResult[] = [];
 
     for (const collection of this.collections) {
       try {
-        const results = await this.vectorStore.search(collection, vector, { limit: perCollection });
+        const filters: Record<string, unknown> = {};
+        if (collection === 'knowledge_base') {
+          if (query.actorId) {
+            filters.actor_id = query.actorId;
+          }
+          if (query.conversationId) {
+            filters.conversation_id = query.conversationId;
+          }
+        }
+
+        const results = await this.vectorStore.search(collection, vector, {
+          limit: perCollection,
+          ...(Object.keys(filters).length > 0 ? { filters } : {}),
+        });
         allResults.push(...results);
       } catch (error) {
         // Collection may not exist yet. Log and continue.

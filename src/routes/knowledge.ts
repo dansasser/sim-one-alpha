@@ -1,17 +1,13 @@
+import { goromboPersistenceRuntime } from '../db.js';
 ﻿import type { Hono } from 'hono';
 import { normalizeWebApiMessage, type WebApiMessageInput } from '../connectors/web-api.js';
-import { goromboPersistenceRuntime } from '../db.js';
 import { requireApiSecret, runtimeEnvForRequest } from '../middleware/api-secret.js';
 import { runBackgroundIndexing } from '../rag/indexers/background-indexer.js';
 import { LanceDbKnowledgeStore } from '../rag/knowledge-store.js';
+import { addKnowledge } from '../services/knowledge-service.js';
 import { rememberKnowledgeEvent } from '../tools/knowledge-tool.js';
 
 export function registerKnowledgeRoutes(app: Hono): void {
-  const store = new LanceDbKnowledgeStore({
-    vectorStore: goromboPersistenceRuntime.vectorStore,
-    embeddingClient: goromboPersistenceRuntime.embeddingClient,
-  });
-
   app.post('/api/knowledge', requireApiSecret, async (c) => {
     let payload: unknown;
     try {
@@ -44,13 +40,11 @@ export function registerKnowledgeRoutes(app: Hono): void {
       conversationId,
     } as WebApiMessageInput);
 
-    rememberKnowledgeEvent(event);
-
     const tags = Array.isArray(input.tags)
       ? input.tags.filter((tag): tag is string => typeof tag === 'string')
       : undefined;
 
-    const record = await store.add({
+    const record = await addKnowledge({
       title,
       content,
       source: 'api',
@@ -59,6 +53,8 @@ export function registerKnowledgeRoutes(app: Hono): void {
       tags,
       createdBy: actorId,
     });
+
+    rememberKnowledgeEvent(event);
 
     return c.json({ record }, 201);
   });

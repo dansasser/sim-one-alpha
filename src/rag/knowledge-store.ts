@@ -88,11 +88,16 @@ export class LanceDbKnowledgeStore implements KnowledgeStore {
     if (filters.conversationId) {
       queryFilters.conversation_id = filters.conversationId;
     }
+    if (filters.source) {
+      queryFilters.source = filters.source;
+    }
 
-    // LanceDB does not support efficient metadata tag filtering without a
-    // dedicated column. For now, fetch the top 100 records and filter in JS.
     const dummyVector = new Array(768).fill(0);
-    const results = await this.vectorStore.search(knowledgeCollection, dummyVector, { limit: 100 });
+    const vectorLimit = filters.tags && filters.tags.length > 0 ? 10_000 : 1_000;
+    const results = await this.vectorStore.search(knowledgeCollection, dummyVector, {
+      limit: vectorLimit,
+      filters: queryFilters,
+    });
 
     return results
       .map((result) => toKnowledgeRecord(result))

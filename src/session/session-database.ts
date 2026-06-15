@@ -85,6 +85,7 @@ export class GoromboSessionDatabase {
   private readonly database: DatabaseSync;
   private readonly vectorStore?: VectorStore;
   private readonly embeddingClient?: EmbeddingClient;
+  private pendingVectorDeletes?: Promise<unknown>;
 
   constructor(
     readonly filePath = defaultSessionDatabasePath,
@@ -147,7 +148,7 @@ export class GoromboSessionDatabase {
     await this.indexSessionMemory(storageKey, parts.harnessName, parts.sessionName, data);
   }
 
-  deleteFlueSession(storageKey: string): void {
+  async deleteFlueSession(storageKey: string): Promise<void> {
     const parts = parseFlueSessionStorageKey(storageKey);
     if (!parts) {
       return;
@@ -156,6 +157,9 @@ export class GoromboSessionDatabase {
     this.database.prepare(`DELETE FROM flue_session_index WHERE storage_key = ?`).run(storageKey);
     this.deleteSessionMemoryByStorageKey(storageKey);
     this.deleteInstanceSessionIndex(parts.instanceId, parts.harnessName, parts.sessionName, storageKey);
+
+    await this.deleteSessionMemoryVectorsFinished();
+
 
     if (!this.isDirectAgentChatSession(parts.instanceId, parts.harnessName, parts.sessionName)) {
       const latest = this.getLatestStorageKey(parts.harnessName, parts.sessionName);
@@ -947,12 +951,21 @@ export class GoromboSessionDatabase {
       return;
     }
 
-    this.vectorStore.delete('session_memory', chunkKeys).catch((error) => {
-      console.error(
-        '[WARN] Failed to delete session memory vectors:',
-        error instanceof Error ? error.message : String(error),
-      );
-    });
+    this.pendingVectorDeletes = (this.pendingVectorDeletes ?? Promise.resolve()).then(() =>
+      this.vectorStore!.delete('session_memory', chunkKeys).catch((error) => {
+        console.error(
+          '[WARN] Failed to delete session memory vectors:',
+          error instanceof Error ? error.message : String(error),
+        );
+      }),
+    );
+  }
+
+  private async deleteSessionMemoryVectorsFinished(): Promise<void> {
+    if (this.pendingVectorDeletes) {
+      await this.pendingVectorDeletes;
+      this.pendingVectorDeletes = undefined;
+    }
   }
 
   private deleteInstanceSessionIndex(

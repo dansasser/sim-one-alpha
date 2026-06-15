@@ -1,12 +1,9 @@
 ﻿import { Type, defineTool } from '@flue/runtime';
 import { goromboPersistenceRuntime } from '../db.js';
-import { LanceDbKnowledgeStore } from '../rag/knowledge-store.js';
+import { sharedKnowledgeStore } from '../services/knowledge-service.js';
 import type { NormalizedMessageEvent } from '../types/index.js';
 
-const store = new LanceDbKnowledgeStore({
-  vectorStore: goromboPersistenceRuntime.vectorStore,
-  embeddingClient: goromboPersistenceRuntime.embeddingClient,
-});
+const store = sharedKnowledgeStore;
 
 export const addKnowledgeTool = defineTool({
   name: 'add_knowledge',
@@ -20,14 +17,18 @@ export const addKnowledgeTool = defineTool({
   }),
   execute: async ({ eventId, title, content, tags }) => {
     const event = getTrustedKnowledgeEvent(eventId);
+
+    const actorId = event.actor.id;
+    const conversationId = event.conversation.id;
+
     const record = await store.add({
       title: String(title),
       content: String(content),
-      actorId: event.actor.id,
-      conversationId: event.conversation.id,
+      actorId,
+      conversationId,
       tags: Array.isArray(tags) ? tags.filter((tag): tag is string => typeof tag === 'string') : undefined,
       source: 'agent_tool',
-      createdBy: event.actor.id,
+      createdBy: actorId,
     });
 
     return JSON.stringify({ record });

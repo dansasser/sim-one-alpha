@@ -102,15 +102,22 @@ function resolveConfiguredModelCard(
   byKey: Map<string, AgentModelCard>,
 ): AgentModelCard {
   const card = byKey.get(modelKey);
-  if (card) {
-    return card;
+  if (!card) {
+    throw new Error(
+      `No model card named "${modelKey}" is configured for ${configField}. Use one of: ${[
+        ...byKey.keys(),
+      ].join(', ')}`,
+    );
   }
 
-  throw new Error(
-    `No model card named "${modelKey}" is configured for ${configField}. Use one of: ${[
-      ...byKey.keys(),
-    ].join(', ')}`,
-  );
+  if (!card.roles.includes('agentic-chat')) {
+    throw new Error(
+      `Model card "${modelKey}" configured for ${configField} is not suitable for agentic chat. ` +
+        `Its roles are: ${card.roles.join(', ')}.`,
+    );
+  }
+
+  return card;
 }
 
 function assertNoModelChoiceEnv(env: Record<string, unknown>): void {
