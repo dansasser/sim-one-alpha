@@ -9,7 +9,14 @@ import {
   resolveWorkspaceDirectory,
 } from '../workspace-loader.js';
 import { calculateContextBudget } from '../session/context-budget.js';
-import { addKnowledgeTool, loadProtocolsTool, retrieveMemoryTool } from '../tools/index.js';
+import {
+  addKnowledgeTool,
+  loadProtocolsTool,
+  retrieveMemoryTool,
+  generateImageTool,
+  recordImageArtifactTool,
+  listImageArtifactsTool,
+} from '../tools/index.js';
 import { createTelegramReplyTool, readTelegramBotToken } from '../tools/telegram-reply-tool.js';
 import type { AgentModelCard } from '../models/types.js';
 import { createCodingWorkerSubagent } from '../workers/coding-worker/coding-worker.js';
@@ -40,8 +47,8 @@ export default createAgent(async ({ env }) => {
     instructions: orchestratorInstructions,
     compaction: createFlueCompactionConfig(selectedModelCard),
     tools: telegramReplyTool
-      ? [loadProtocolsTool, retrieveMemoryTool, addKnowledgeTool, telegramReplyTool]
-      : [loadProtocolsTool, retrieveMemoryTool, addKnowledgeTool],
+      ? [loadProtocolsTool, retrieveMemoryTool, addKnowledgeTool, generateImageTool, recordImageArtifactTool, listImageArtifactsTool, telegramReplyTool]
+      : [loadProtocolsTool, retrieveMemoryTool, addKnowledgeTool, generateImageTool, recordImageArtifactTool, listImageArtifactsTool],
     subagents: [codingWorker, researcher],
   };
 });
@@ -107,6 +114,9 @@ The following capabilities are actually attached to this main agent at runtime:
 - Tool: \`load_protocols\`
 - Tool: \`retrieve_memory\`
 - Tool: \`add_knowledge\`
+- Tool: \`generate_image\`
+- Tool: \`record_image_artifact\`
+- Tool: \`list_image_artifacts\`
 - Tool: \`telegram_reply\` (when TELEGRAM_BOT_TOKEN is configured)
 - Subagent: \`researcher\`
 - Subagent: \`coding-worker\`
