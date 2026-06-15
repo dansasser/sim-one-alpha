@@ -1,5 +1,6 @@
 import { statSync } from 'node:fs';
 import { goromboPersistenceRuntime } from '../../db.js';
+import { estimateTextTokens } from '../../session/context-budget.js';
 import type {
   ImageArtifactRecord,
   GenerateImageSuccess,
@@ -72,6 +73,7 @@ function indexArtifactInSessionMemory(
   event: NormalizedMessageEvent,
 ): void {
   const db = goromboPersistenceRuntime.sessionDatabase;
+  const content = `Prompt: ${record.prompt}\nModel: ${record.modelId}\nFile: ${record.filePath}`;
   db.recordSessionMemoryChunk({
     storageKey: `image:${record.artifactId}`,
     harnessName: 'image-tool',
@@ -81,8 +83,8 @@ function indexArtifactInSessionMemory(
     actorId: event.actor.id,
     conversationId: event.conversation.id,
     title: `Generated image: ${record.modelName}`,
-    content: `Prompt: ${record.prompt}\nModel: ${record.modelId}\nFile: ${record.filePath}`,
-    tokenEstimate: 50,
+    content,
+    tokenEstimate: estimateTextTokens(content),
     metadata: {
       artifactId: record.artifactId,
       modelId: record.modelId,

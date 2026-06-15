@@ -1,6 +1,7 @@
 import { defineTool, Type } from '@flue/runtime';
 import { loadRunpodImageCatalog, getRunpodImageModel } from './catalog.js';
 import { persistImageArtifact } from './artifact-store.js';
+import { resolveImageArtifactFilePath } from './paths.js';
 import { goromboPersistenceRuntime } from '../../db.js';
 
 export const recordImageArtifactTool = defineTool({
@@ -34,12 +35,14 @@ export const recordImageArtifactTool = defineTool({
       const model = getRunpodImageModel(catalog, input.modelId);
       const modelName = input.modelName ?? model?.name ?? input.modelId;
 
+      const safeFilePath = resolveImageArtifactFilePath(input.filePath);
+
       const record = persistImageArtifact({
         event,
         generationResult: {
           ok: true,
           artifactId: input.artifactId,
-          filePath: input.filePath,
+          filePath: safeFilePath,
           fileName: input.fileName,
           mimeType: input.mimeType,
           modelId: input.modelId,

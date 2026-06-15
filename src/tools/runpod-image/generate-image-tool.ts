@@ -1,9 +1,10 @@
 import { defineTool, Type } from '@flue/runtime';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { loadRunpodImageCatalog, getRunpodImageModel, getDefaultRunpodImageModel } from './catalog.js';
 import { runpodGenerateImage } from './runpod-client.js';
+import { resolveImageOutputDir } from './paths.js';
 import type { RunpodImageModel } from '../../schemas/runpod-image.js';
 
 export const generateImageTool = defineTool({
@@ -35,8 +36,9 @@ export const generateImageTool = defineTool({
     try {
       const baseURL = readStringEnv('RUNPOD_API_BASE_URL');
       const catalog = loadRunpodImageCatalog({ modelsPath: readStringEnv('RUNPOD_IMAGE_MODELS_PATH') });
-      const modelId = input.model ?? catalog.defaultModel;
+      let modelId = input.model ?? catalog.defaultModel;
       const model = getRunpodImageModel(catalog, modelId) ?? getDefaultRunpodImageModel(catalog);
+      modelId = model.id;
 
       const providerOptions = buildProviderOptions(model, input);
       const prompt = buildPrompt(model, input.prompt, input.referenceImageUrls);
@@ -93,19 +95,6 @@ export const generateImageTool = defineTool({
 function readStringEnv(key: string): string | undefined {
   const value = process.env[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function resolveImageOutputDir(): string {
-  const configuredDir = readStringEnv('GOROMBO_IMAGE_OUTPUT_DIR');
-  const workspaceRoot =
-    readStringEnv('GOROMBO_WORKSPACE_ROOT') ??
-    readStringEnv('GOROMBO_CODING_WORKSPACE_ROOT') ??
-    process.cwd();
-  const dir = configuredDir ? resolve(configuredDir) : resolve(workspaceRoot, 'workspace', 'images');
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-  return dir;
 }
 
 function buildPrompt(

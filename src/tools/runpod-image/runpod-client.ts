@@ -13,14 +13,24 @@ export interface RunpodGenerateOptions {
   providerOptions: Record<string, unknown>;
 }
 
+const DEFAULT_POLL_OPTIONS: JSONObject = {
+  maxPollAttempts: 60,
+  pollIntervalMillis: 5000,
+};
+
 export async function runpodGenerateImage(options: RunpodGenerateOptions): Promise<GenerateImageResult> {
   const provider = createRunpodProvider(options);
+
+  const runpodOptions: JSONObject = {
+    ...DEFAULT_POLL_OPTIONS,
+    ...(options.providerOptions as JSONObject),
+  };
 
   return generateImage({
     model: provider.image(options.modelId),
     prompt: options.prompt,
     ...(options.aspectRatio ? { aspectRatio: options.aspectRatio as `${number}:${number}` } : {}),
-    providerOptions: { runpod: options.providerOptions as JSONObject } as Record<string, JSONObject>,
+    providerOptions: { runpod: runpodOptions } as Record<string, JSONObject>,
   });
 }
 

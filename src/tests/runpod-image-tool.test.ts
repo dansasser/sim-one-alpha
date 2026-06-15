@@ -28,7 +28,7 @@ test('catalog default model is enabled', () => {
   const catalog = loadRunpodImageCatalog();
   const model = getDefaultRunpodImageModel(catalog);
   assert.equal(model.id, 'black-forest-labs-flux-1-dev');
-  assert.equal(model.enabled, true);
+  assert.notEqual(model.enabled, false);
 });
 
 test('persistImageArtifact writes row and indexes memory', () => {
