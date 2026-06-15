@@ -80,6 +80,25 @@ export function createCodingCodeIntelligenceTools(
     return sandboxPromise;
   };
 
+  const lspToolsCache = new Map<string, Promise<ToolDefinition[]>>();
+  const getLspToolsForRoot = async (root: string) => {
+    let lspToolsPromise = lspToolsCache.get(root);
+    if (!lspToolsPromise) {
+      lspToolsPromise = (async () => {
+        const sandbox = await getSandbox();
+        return createLspTools({
+          workspaceRoot: options.workspaceRoot ?? process.cwd(),
+          sandbox,
+          reporter: options.reporter,
+          taskId: options.taskId,
+          sessionId: options.sessionId,
+        });
+      })();
+      lspToolsCache.set(root, lspToolsPromise);
+    }
+    return lspToolsPromise;
+  };
+
   return [
     defineTool({
       name: 'coding_ast_parse_file',
@@ -121,13 +140,7 @@ export function createCodingCodeIntelligenceTools(
           symbol,
           root,
           maxFiles,
-          async () => createLspTools({
-            workspaceRoot: options.workspaceRoot ?? process.cwd(),
-            sandbox,
-            reporter: options.reporter,
-            taskId: options.taskId,
-            sessionId: options.sessionId,
-          }),
+          getLspToolsForRoot(root),
         );
         if (lspResult) {
           emitToolProgress(options, {
@@ -183,13 +196,7 @@ export function createCodingCodeIntelligenceTools(
           symbol,
           root,
           maxFiles,
-          async () => createLspTools({
-            workspaceRoot: options.workspaceRoot ?? process.cwd(),
-            sandbox,
-            reporter: options.reporter,
-            taskId: options.taskId,
-            sessionId: options.sessionId,
-          }),
+          getLspToolsForRoot(root),
         );
         if (lspResult) {
           emitToolProgress(options, {
@@ -242,13 +249,7 @@ export function createCodingCodeIntelligenceTools(
           symbol,
           root,
           maxFiles,
-          async () => createLspTools({
-            workspaceRoot: options.workspaceRoot ?? process.cwd(),
-            sandbox,
-            reporter: options.reporter,
-            taskId: options.taskId,
-            sessionId: options.sessionId,
-          }),
+          getLspToolsForRoot(root),
         );
         if (lspResult) {
           emitToolProgress(options, {
@@ -422,7 +423,7 @@ async function tryLspSymbolLookup(
   symbolName: string,
   root: string,
   maxFiles: number,
-  lspTools: ToolDefinition[] | (() => Promise<ToolDefinition[]>),
+  lspTools: Promise<ToolDefinition[]>,
 ): Promise<{
   declarations: Record<string, unknown>[];
   references: Record<string, unknown>[];
@@ -439,7 +440,7 @@ async function tryLspSymbolLookup(
     return null;
   }
 
-  const tools = Array.isArray(lspTools) ? lspTools : await lspTools();
+  const tools = await lspTools;
   const definitionTool = getTool(tools, 'lsp_go_to_definition');
   const referencesTool = getTool(tools, 'lsp_find_references');
   const documentSymbolsTool = getTool(tools, 'lsp_document_symbols');
