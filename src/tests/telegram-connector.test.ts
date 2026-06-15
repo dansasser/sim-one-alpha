@@ -5,11 +5,11 @@ import {
   chunkTelegramText,
   generatePairingCode,
   isMentioned,
-} from '../connectors/telegram-api.js';
+} from '../connectors/telegram/telegram-api.js';
 import {
   resolveTelegramIngressConfig,
   runtimeEnvForIngress,
-} from '../connectors/telegram-ingress.js';
+} from '../connectors/telegram/telegram-ingress.js';
 import { createTelegramReplyTool } from '../tools/telegram-reply-tool.js';
 import { goromboPersistenceRuntime } from '../db.js';
 import app from '../app.js';

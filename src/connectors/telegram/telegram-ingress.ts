@@ -1,9 +1,9 @@
 import type { Hono } from 'hono';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { goromboPersistenceRuntime } from '../db.js';
-import { createChatPrompt } from '../routes/chat-prompt.js';
-import { resolveChatSession } from '../session/session-routing.js';
+import { goromboPersistenceRuntime } from '../../db.js';
+import { createChatPrompt } from '../../routes/chat-prompt.js';
+import { resolveChatSession } from '../../session/session-routing.js';
 import {
   markTelegramPollerError,
   markTelegramPollerStart,

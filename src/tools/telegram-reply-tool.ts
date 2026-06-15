@@ -1,5 +1,5 @@
 import { Type, defineTool } from '@flue/runtime';
-import { TelegramApiClient } from '../connectors/telegram-api.js';
+import { TelegramApiClient } from '../connectors/telegram/telegram-api.js';
 import { goromboPersistenceRuntime } from '../db.js';
 import type { NormalizedMessageEvent } from '../types/index.js';
 
