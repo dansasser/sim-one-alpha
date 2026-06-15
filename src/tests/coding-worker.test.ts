@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import test from 'node:test';
 import * as v from 'valibot';
 import orchestratorAgent from '../agents/orchestrator.js';
@@ -15,7 +15,10 @@ import {
 import { createCodingGitHubTools } from '../workers/coding-worker/github/github-tools.js';
 import { GhCliGitHubClient } from '../workers/coding-worker/github/gh-cli-client.js';
 import type { GitHubClient } from '../workers/coding-worker/github/github-client.js';
-import { createCodingWorkerSubagent } from '../workers/coding-worker/coding-worker.js';
+import {
+  createCodingWorkerSubagent,
+  resolveCodingWorkerWorkspaceRoot,
+} from '../workers/coding-worker/coding-worker.js';
 import { InMemoryCodingProgressReporter } from '../workers/coding-worker/events/progress-reporter.js';
 import { createCodingWorkerEvent } from '../workers/coding-worker/events/coding-worker-events.js';
 import { createOrchestratorProgressUpdate } from '../workers/coding-worker/events/orchestrator-bridge.js';
@@ -288,6 +291,55 @@ test('coding workspace resolver stores projects and repos under the runtime work
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
   }
+});
+
+test('coding worker workspace root defaults to src/workspace/ when no env var is set', () => {
+  const root = resolveCodingWorkerWorkspaceRoot({});
+  assert.equal(root, resolve('src/workspace'));
+});
+
+test('coding worker workspace root env overrides are respected in order', () => {
+  const defaultRoot = resolveCodingWorkerWorkspaceRoot({});
+  assert.equal(defaultRoot, resolve('src/workspace'));
+
+  assert.equal(
+    resolveCodingWorkerWorkspaceRoot({ GOROMBO_WORKSPACE_ROOT: '/custom/a' }),
+    '/custom/a',
+  );
+  assert.equal(
+    resolveCodingWorkerWorkspaceRoot({
+      GOROMBO_CODING_WORKSPACE_ROOT: '/custom/b',
+    }),
+    '/custom/b',
+  );
+  assert.equal(
+    resolveCodingWorkerWorkspaceRoot({
+      GOROMBO_CODING_REPO_PATH: '/custom/c',
+    }),
+    '/custom/c',
+  );
+  assert.equal(
+    resolveCodingWorkerWorkspaceRoot({
+      GOROMBO_WORKSPACE_ROOT: '/override/a',
+      GOROMBO_CODING_WORKSPACE_ROOT: '/override/b',
+      GOROMBO_CODING_REPO_PATH: '/override/c',
+    }),
+    '/override/a',
+  );
+});
+
+test('coding workspace resolver recognizes src/workspace/repos/ as a valid repo scope', () => {
+  const workspaceRoot = resolveCodingWorkerWorkspaceRoot({});
+  const repoTarget = resolveCodingWorkspaceTarget({
+    workspaceRoot,
+    targetKind: 'repo',
+    projectSlug: 'example',
+  });
+
+  assert.equal(repoTarget.projectRelativePath, 'repos/example');
+  assert.equal(repoTarget.scopePath, join(workspaceRoot, 'repos', 'example'));
+  assert.equal(repoTarget.targetKind, 'repo');
+  assert.equal(repoTarget.usedLegacyRepoPath, false);
 });
 
 test('coding shell command policy blocks nested git and GitHub write bypasses', () => {

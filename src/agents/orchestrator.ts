@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import {
   createAgent,
   type AgentRouteHandler,
@@ -62,7 +63,7 @@ export function createFlueCompactionConfig(modelCard: AgentModelCard): {
   };
 }
 
-function resolveCodingWorkerWorkspaceRoot(env: Record<string, unknown>): string {
+export function resolveCodingWorkerWorkspaceRoot(env: Record<string, unknown>): string {
   const configuredRoot =
     readOptionalEnv(env, 'GOROMBO_WORKSPACE_ROOT') ??
     readOptionalEnv(env, 'GOROMBO_CODING_WORKSPACE_ROOT') ??
@@ -72,13 +73,7 @@ function resolveCodingWorkerWorkspaceRoot(env: Record<string, unknown>): string 
     return configuredRoot;
   }
 
-  if (readOptionalEnv(env, 'GOROMBO_ALLOW_CWD_WORKSPACE_FALLBACK') === 'true') {
-    return process.cwd();
-  }
-
-  throw new Error(
-    'Missing coding-worker workspace root configuration. Set GOROMBO_WORKSPACE_ROOT, GOROMBO_CODING_WORKSPACE_ROOT, or GOROMBO_CODING_REPO_PATH.',
-  );
+  return resolve('src/workspace');
 }
 
 function createCodingWorkerToolEnv(env: Record<string, unknown>): Record<string, string | undefined> {
