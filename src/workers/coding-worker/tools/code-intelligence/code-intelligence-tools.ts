@@ -13,6 +13,7 @@ import {
   resolveCodingWorkspaceTarget,
   type CodingWorkspaceTargetInput,
 } from '../../repo/workspace-target.js';
+import { fileExtensionToLanguageId } from './lsp/lsp-server-registry.js';
 import { parseFile, type ParseResult } from './ast-parser.js';
 import {
   addToImportGraph,
@@ -29,6 +30,8 @@ import {
   type SymbolIndex,
   type SymbolLocation,
 } from './symbol-index.js';
+import { createLspTools } from './lsp/lsp-tools.js';
+import type { LspToolResult } from './lsp/lsp-types.js';
 
 export interface CodingCodeIntelligenceToolsOptions extends CodingWorkspaceTargetInput {
   env?: Record<string, string | undefined>;
@@ -77,6 +80,14 @@ export function createCodingCodeIntelligenceTools(
     return sandboxPromise;
   };
 
+  const lspTools = createLspTools({
+    workspaceRoot: options.workspaceRoot ?? process.cwd(),
+    sandbox: options.sandbox,
+    reporter: options.reporter,
+    taskId: options.taskId,
+    sessionId: options.sessionId,
+  });
+
   return [
     defineTool({
       name: 'coding_ast_parse_file',
@@ -101,7 +112,7 @@ export function createCodingCodeIntelligenceTools(
     defineTool({
       name: 'coding_symbol_navigate',
       description:
-        'Find declarations and references for a symbol by name across the scoped source files. Supports TypeScript, JavaScript, and Python.',
+        'Find declarations and references for a symbol by name across the scoped source files. Prefers LSP where available, falls back to custom AST parsers. Supports TypeScript, JavaScript, and Python.',
       parameters: Type.Object({
         symbol: Type.String(),
         root: Type.Optional(Type.String()),
@@ -112,16 +123,42 @@ export function createCodingCodeIntelligenceTools(
         const symbol = requireString(args.symbol, 'symbol');
         const root = readString(args.root) ?? '.';
         const maxFiles = readPositiveInteger(args.maxFiles) ?? 200;
+
+        const lspResult = await tryLspSymbolLookup(
+          sandbox,
+          symbol,
+          root,
+          maxFiles,
+          lspTools,
+        );
+        if (lspResult) {
+          emitToolProgress(options, {
+            action: 'symbol-navigate',
+            summary: `LSP found ${lspResult.declarations.length} declaration(s) and ${lspResult.references.length} reference(s) for "${symbol}".`,
+            evidence: lspResult.parsedFiles,
+          });
+          return toToolJson({
+            symbol,
+            provider: 'lsp',
+            lspAvailable: true,
+            declarations: lspResult.declarations,
+            references: lspResult.references,
+            parsedFiles: lspResult.parsedFiles,
+          });
+        }
+
         const { index, parsedFiles } = await buildIndexForScope(sandbox, root, maxFiles);
         const declarations = findDeclarations(index, symbol);
         const references = findReferences(index, symbol);
         emitToolProgress(options, {
           action: 'symbol-navigate',
-          summary: `Found ${declarations.length} declaration(s) and ${references.length} reference(s) for "${symbol}".`,
+          summary: `Found ${declarations.length} declaration(s) and ${references.length} reference(s) for "${symbol}" via AST fallback.`,
           evidence: parsedFiles,
         });
         return toToolJson({
           symbol,
+          provider: 'ast',
+          lspAvailable: false,
           declarations: declarations.map(stripCircular),
           references: references.map(stripCircular),
           parsedFiles,
@@ -131,7 +168,7 @@ export function createCodingCodeIntelligenceTools(
     defineTool({
       name: 'coding_find_symbol_declarations',
       description:
-        'Find all declarations of a symbol by name across the scoped source files.',
+        'Find all declarations of a symbol by name across the scoped source files. Prefers LSP where available, falls back to custom AST parsers.',
       parameters: Type.Object({
         symbol: Type.String(),
         root: Type.Optional(Type.String()),
@@ -142,15 +179,40 @@ export function createCodingCodeIntelligenceTools(
         const symbol = requireString(args.symbol, 'symbol');
         const root = readString(args.root) ?? '.';
         const maxFiles = readPositiveInteger(args.maxFiles) ?? 200;
+
+        const lspResult = await tryLspSymbolLookup(
+          sandbox,
+          symbol,
+          root,
+          maxFiles,
+          lspTools,
+        );
+        if (lspResult) {
+          emitToolProgress(options, {
+            action: 'find-declarations',
+            summary: `LSP found ${lspResult.declarations.length} declaration(s) for "${symbol}".`,
+            evidence: lspResult.parsedFiles,
+          });
+          return toToolJson({
+            symbol,
+            provider: 'lsp',
+            lspAvailable: true,
+            declarations: lspResult.declarations,
+            parsedFiles: lspResult.parsedFiles,
+          });
+        }
+
         const { index, parsedFiles } = await buildIndexForScope(sandbox, root, maxFiles);
         const declarations = findDeclarations(index, symbol);
         emitToolProgress(options, {
           action: 'find-declarations',
-          summary: `Found ${declarations.length} declaration(s) for "${symbol}".`,
+          summary: `Found ${declarations.length} declaration(s) for "${symbol}" via AST fallback.`,
           evidence: parsedFiles,
         });
         return toToolJson({
           symbol,
+          provider: 'ast',
+          lspAvailable: false,
           declarations: declarations.map(stripCircular),
           parsedFiles,
         });
@@ -159,7 +221,7 @@ export function createCodingCodeIntelligenceTools(
     defineTool({
       name: 'coding_find_symbol_references',
       description:
-        'Find all references to a symbol by name across the scoped source files.',
+        'Find all references to a symbol by name across the scoped source files. Prefers LSP where available, falls back to custom AST parsers.',
       parameters: Type.Object({
         symbol: Type.String(),
         root: Type.Optional(Type.String()),
@@ -170,15 +232,40 @@ export function createCodingCodeIntelligenceTools(
         const symbol = requireString(args.symbol, 'symbol');
         const root = readString(args.root) ?? '.';
         const maxFiles = readPositiveInteger(args.maxFiles) ?? 200;
+
+        const lspResult = await tryLspSymbolLookup(
+          sandbox,
+          symbol,
+          root,
+          maxFiles,
+          lspTools,
+        );
+        if (lspResult) {
+          emitToolProgress(options, {
+            action: 'find-references',
+            summary: `LSP found ${lspResult.references.length} reference(s) for "${symbol}".`,
+            evidence: lspResult.parsedFiles,
+          });
+          return toToolJson({
+            symbol,
+            provider: 'lsp',
+            lspAvailable: true,
+            references: lspResult.references,
+            parsedFiles: lspResult.parsedFiles,
+          });
+        }
+
         const { index, parsedFiles } = await buildIndexForScope(sandbox, root, maxFiles);
         const references = findReferences(index, symbol);
         emitToolProgress(options, {
           action: 'find-references',
-          summary: `Found ${references.length} reference(s) for "${symbol}".`,
+          summary: `Found ${references.length} reference(s) for "${symbol}" via AST fallback.`,
           evidence: parsedFiles,
         });
         return toToolJson({
           symbol,
+          provider: 'ast',
+          lspAvailable: false,
           references: references.map(stripCircular),
           parsedFiles,
         });
@@ -317,6 +404,158 @@ async function collectFiles(
     }
     await collectFiles(sandbox, join(path, name), files, maxFiles);
   }
+}
+
+async function tryLspSymbolLookup(
+  sandbox: CodingSandboxRuntime,
+  symbolName: string,
+  root: string,
+  maxFiles: number,
+  lspTools: ToolDefinition[],
+): Promise<{
+  declarations: Record<string, unknown>[];
+  references: Record<string, unknown>[];
+  parsedFiles: string[];
+} | null> {
+  const files = await collectSourceFiles(sandbox, root, maxFiles);
+  const candidates = files.filter((file) => {
+    const lower = file.toLowerCase();
+    const languageId = fileExtensionToLanguageId(lower.slice(lower.lastIndexOf('.')));
+    return Boolean(languageId);
+  });
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const definitionTool = getTool(lspTools, 'lsp_go_to_definition');
+  const referencesTool = getTool(lspTools, 'lsp_find_references');
+  const documentSymbolsTool = getTool(lspTools, 'lsp_document_symbols');
+
+  for (const file of candidates) {
+    try {
+      const symbolsRaw = await documentSymbolsTool.execute({ path: file });
+      const symbolsResult = JSON.parse(symbolsRaw) as LspToolResult<{ symbols: Array<Record<string, unknown>> }>;
+      if (!symbolsResult.lspAvailable) {
+        continue;
+      }
+
+      const matchingSymbol = symbolsResult.result.symbols.find((symbol) => symbol.name === symbolName);
+      if (!matchingSymbol || !matchingSymbol.range) {
+        continue;
+      }
+
+      const range = matchingSymbol.range as {
+        start: { line: number; character: number };
+        end: { line: number; character: number };
+      };
+
+      const [definitionsRaw, referencesRaw] = await Promise.all([
+        definitionTool.execute({
+          path: file,
+          line: range.start.line,
+          character: range.start.character,
+        }),
+        referencesTool.execute({
+          path: file,
+          line: range.start.line,
+          character: range.start.character,
+          includeDeclaration: false,
+        }),
+      ]);
+
+      const definitionsResult = JSON.parse(definitionsRaw) as LspToolResult<{
+        definitions: Array<Record<string, unknown>>;
+      }>;
+      const referencesResult = JSON.parse(referencesRaw) as LspToolResult<{
+        references: Array<Record<string, unknown>>;
+      }>;
+
+      if (!definitionsResult.lspAvailable && !referencesResult.lspAvailable) {
+        continue;
+      }
+
+      const parsedFiles = [
+        ...new Set([
+          file,
+          ...definitionsResult.result.definitions.map((loc) => uriToRepoRelativePath(String(loc.uri ?? ''), sandbox.repoPath)),
+          ...referencesResult.result.references.map((loc) => uriToRepoRelativePath(String(loc.uri ?? ''), sandbox.repoPath)),
+        ]),
+      ].filter(Boolean);
+
+      return {
+        declarations: definitionsResult.result.definitions.map((loc) => ({
+          path: uriToRepoRelativePath(String(loc.uri ?? ''), sandbox.repoPath),
+          name: symbolName,
+          kind: loc.kind ? lspSymbolKindToString(Number(loc.kind)) : 'unknown',
+          range: loc.range as Record<string, unknown>,
+        })),
+        references: referencesResult.result.references.map((loc) => ({
+          path: uriToRepoRelativePath(String(loc.uri ?? ''), sandbox.repoPath),
+          name: symbolName,
+          kind: 'reference',
+          range: loc.range as Record<string, unknown>,
+        })),
+        parsedFiles,
+      };
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+function uriToRepoRelativePath(uri: string, repoPath: string): string {
+  if (!uri.startsWith('file://')) {
+    return uri;
+  }
+  const absolute = uri.slice('file://'.length);
+  const prefix = repoPath.endsWith('/') ? repoPath : `${repoPath}/`;
+  if (absolute.startsWith(prefix)) {
+    return absolute.slice(prefix.length);
+  }
+  return absolute;
+}
+
+function getTool(tools: ToolDefinition[], name: string) {
+  const tool = tools.find((item) => item.name === name);
+  if (!tool) {
+    throw new Error(`expected tool ${name}`);
+  }
+  return tool;
+}
+
+function lspSymbolKindToString(kind: number): string {
+  const kinds = [
+    'file',
+    'module',
+    'namespace',
+    'package',
+    'class',
+    'method',
+    'property',
+    'field',
+    'constructor',
+    'enum',
+    'interface',
+    'function',
+    'variable',
+    'constant',
+    'string',
+    'number',
+    'boolean',
+    'array',
+    'object',
+    'key',
+    'null',
+    'enumMember',
+    'struct',
+    'event',
+    'operator',
+    'typeParameter',
+  ];
+  return kinds[kind] ?? 'unknown';
 }
 
 function stripCircular(location: SymbolLocation): Record<string, unknown> {
