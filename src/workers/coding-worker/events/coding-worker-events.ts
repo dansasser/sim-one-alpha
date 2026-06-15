@@ -2,6 +2,7 @@ import type { CodingPlanItem, CodingSubagentKind, CodingWorkerLoopStep } from '.
 
 export type CodingWorkerEventType =
   | 'coding.task.accepted'
+  | 'coding.protocols.loaded'
   | 'coding.triage.started'
   | 'coding.triage.completed'
   | 'coding.implementer.started'

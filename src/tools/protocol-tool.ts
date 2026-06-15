@@ -1,9 +1,13 @@
 import { Type, defineTool } from '@flue/runtime';
 import { goromboPersistenceRuntime } from '../db.js';
-import { SqliteProtocolProviderPlaceholder } from '../protocols/sqlite-protocol-provider-placeholder.js';
+import {
+  SqliteProtocolProvider,
+  defaultProtocolDatabasePath,
+} from '../protocols/sqlite-protocol-provider.js';
 import type { NormalizedMessageEvent } from '../types/index.js';
 
-const provider = new SqliteProtocolProviderPlaceholder('protocols.sqlite');
+const dbPath = process.env.GOROMBO_PROTOCOL_DB_PATH ?? defaultProtocolDatabasePath;
+const provider = new SqliteProtocolProvider(dbPath);
 
 export interface ProtocolToolInput {
   eventId: unknown;
@@ -20,7 +24,7 @@ export interface ProtocolToolInput {
 
 export const loadProtocolsTool = defineTool({
   name: 'load_protocols',
-  description: 'Load applicable protocol directives from the protocol store placeholder.',
+  description: 'Load applicable protocol directives from the SQLite protocol store.',
   parameters: Type.Object({
     eventId: Type.String(),
     connector: Type.Optional(Type.String()),

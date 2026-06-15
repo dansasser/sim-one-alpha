@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS protocols (
   selector_json TEXT NOT NULL,
   rules_json TEXT NOT NULL,
   source TEXT NOT NULL DEFAULT 'sqlite',
+  tags TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

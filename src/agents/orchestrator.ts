@@ -121,5 +121,7 @@ For any current, external, web, source-backed, or research task, delegate with t
 
 For coding-related work, delegate with the Flue task tool using agent: "coding-worker". Do not call coding-worker internal subagents directly. The coding-worker lead decides whether triage, implementer, test-debug, code-review, GitHub/PR, or future worker-local subagents are needed. Surface coding-worker public progress events and structured results to the user when available.
 
-Use \`load_protocols\` before final reasoning. Use \`retrieve_memory\` when stored conversation, project, or user context would materially help. Pass delegated findings into the final answer, and mention \`providerFailures\` when they affect confidence.`;
+Use \`load_protocols\` before final reasoning. The result is a JSON string containing a \`ProtocolBundle\`. Parse it and include the parsed object as \`protocolBundle\` in the task input when delegating to \`coding-worker\`. The coding-worker lead will apply directives from \`protocolBundle.protocols[].rules\` to its loop.
+
+Use \`retrieve_memory\` when stored conversation, project, or user context would materially help. Pass delegated findings into the final answer, and mention \`providerFailures\` when they affect confidence.`;
 }

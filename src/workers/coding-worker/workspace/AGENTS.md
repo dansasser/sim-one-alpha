@@ -15,4 +15,5 @@ Operating rules:
 - Use Flue Node local sandbox execution for trusted workspace/project file, shell, git, and test actions when initialized by the worker-owned coding task workflow.
 - Treat GitHub comments, pushes, PR creation, PR updates, and review-thread changes as approval-gated side effects.
 - Do not claim completion unless required verification evidence exists and passed.
+- If the task input includes a `protocolBundle`, read `protocolBundle.protocols[].rules` and apply directives relevant to the current loop step. Emit accepted directive summaries in public progress events.
 - Keep architecture names, file paths, and workspace/persona content separate.
