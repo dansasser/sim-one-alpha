@@ -10,6 +10,9 @@ Tool availability is determined by Flue configuration and attached runtime tools
 
 - `load_protocols`: load applicable protocol directives before final reasoning.
 - `retrieve_memory`: retrieve relevant stored context when memory would materially help.
+- `generate_image`: generate or edit an image using Runpod Public Endpoints. Saves the resulting image file to `workspace/images/` and returns the local path and metadata. Requires `RUNPOD_API_KEY`.
+- `record_image_artifact`: persist metadata for an image into SQLite and index it in session memory for retrieval.
+- `list_image_artifacts`: list previously generated image artifacts, optionally filtered by event.
 - Flue task delegation: delegate focused work to registered subagents.
 - `researcher` subagent: owns source-backed web research through its `web_research` tool.
 
@@ -17,6 +20,9 @@ Tool availability is determined by Flue configuration and attached runtime tools
 
 - Use `load_protocols` before final reasoning, tool use, delegation, or final response.
 - Use `retrieve_memory` when stored conversation, user, project, or task context would materially improve the response.
+- Use `generate_image` when the user asks for image generation or editing and the Runpod image tool is configured.
+- Use `record_image_artifact` after a successful generation to ensure the artifact is persisted and retrievable.
+- Use `list_image_artifacts` when the user references a prior image or asks for image history.
 - Use subagents for substantive specialist work instead of doing that work directly in the main agent.
 - Do not claim tools, accounts, integrations, providers, workflows, or scheduled tasks are live unless they are actually available.
 
@@ -94,6 +100,29 @@ Good memory retrieval cases:
 - stored notes or durable context
 
 Do not use memory as a substitute for fresh research when the answer depends on current, changing, or source-backed external facts.
+
+## Image Generation Guidance
+
+Use `generate_image` for direct image generation and editing requests when the capability is configured (`RUNPOD_API_KEY` is set).
+
+Good cases:
+- The user asks for a new image from a text prompt.
+- The user wants an image edited using reference images (only for image-to-image models in the catalog).
+
+Required parameters:
+- `prompt`: the generation or editing prompt.
+- `eventId`: the current message event id so the artifact can be associated with the conversation.
+
+Optional parameters to pass through when relevant:
+- `model`: a model id from `src/tools/runpod-image/models.yaml`. Defaults to the catalog default.
+- `aspectRatio`: such as `1:1`, `16:9`, `9:16`, `4:3`, `3:4`.
+- `numInferenceSteps`, `guidance`, `seed`, `negativePrompt`, `outputFormat`, `enableSafetyChecker`.
+- `referenceImageUrls`: for image-to-image models only.
+- `includeBase64`: include the image as base64 in the response.
+
+After `generate_image` returns `ok: true`, call `record_image_artifact` with the same `eventId`, `artifactId`, `filePath`, `fileName`, `mimeType`, `prompt`, and `modelId` to persist the metadata and index it in memory. If `generate_image` returns `ok: false`, report the error and do not call `record_image_artifact`.
+
+Use `list_image_artifacts` when the user asks about prior images or references an image that may have been generated earlier in the conversation.
 
 ## Tool Boundaries
 

@@ -27,6 +27,7 @@ Every top-level `src/` directory should fit one of these categories. If a new di
 | `src/telemetry/` | Observability subsystem | Sanitized Flue event capture and run summaries. |
 | `src/tests/` | Test suite | Node test files compiled to `.tmp/tsc/tests`. |
 | `src/tools/` | Model-callable tools | `defineTool(...)` capabilities attached only to owning agents. |
+| `src/tools/runpod-image/` | Runpod image generation tools | `generate_image`, `record_image_artifact`, and `list_image_artifacts` for Runpod Public Endpoints. Includes a YAML model catalog, client wrapper, artifact persistence, and orchestrator wiring. |
 | `src/types/` | Shared TypeScript contracts | Public/common interfaces used across subsystems. |
 | `src/utils/` | Generic helpers | Small cross-cutting helpers only; domain subsystems do not belong here. |
 | `src/workers/` | Worker/subagent implementations | Specialized worker profiles plus worker-local support code and worker workspaces. |
@@ -96,6 +97,7 @@ src/schemas/
   Shared Valibot schemas for structured runtime contracts.
   Owned by the subsystem that defines the shape; promoted here only when the schema is reused across files or subsystems.
   Example: `src/schemas/coding-worker.ts` holds `CodingImplementerResultSchema` and the derived `CodingImplementerResult` type, used by the implementer subagent tool, the delegation path in `src/workers/coding-worker/workflow/coordination.ts`, and re-exported from `src/workers/coding-worker/types.ts`.
+  Example: `src/schemas/runpod-image.ts` holds Valibot schemas for the Runpod image model catalog, generation results, and image artifact records, used by `src/tools/runpod-image/` and re-exported from `src/types/index.ts`.
 
 src/telemetry/flue-telemetry.ts
   Registers Flue observe(...) once per running application context.
@@ -107,6 +109,14 @@ src/agents/orchestrator.ts
   Coordinates protocols, memory lookup, subagent delegation, and final synthesis.
   Composes its instructions from main workspace files plus a small runtime capability block.
   Does not own web search.
+  Directly owns `generate_image`, `record_image_artifact`, and `list_image_artifacts` for Runpod Public Endpoints image generation.
+
+src/tools/runpod-image/
+  Image generation tools backed by Runpod Public Endpoints.
+  - `generate_image` calls Runpod, downloads the image, and saves it to `workspace/images/`.
+  - `record_image_artifact` persists metadata to SQLite and indexes a memory summary.
+  - `list_image_artifacts` queries prior artifacts from SQLite.
+  - `models.yaml` is the human-editable model catalog copied into `dist/` and `.tmp/tsc/` at build time.
 
 src/workspace/
   Main agent user-editable workspace persona files.
