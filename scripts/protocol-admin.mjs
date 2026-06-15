@@ -37,8 +37,10 @@ function openDatabase() {
   database.exec(schemaSql);
   try {
     database.exec('ALTER TABLE protocols ADD COLUMN tags TEXT');
-  } catch {
-    // Column already exists.
+  } catch (error) {
+    if (!isDuplicateColumnError(error)) {
+      throw error;
+    }
   }
   return database;
 }
@@ -246,12 +248,6 @@ function add(database, argv) {
     process.exit(1);
   }
 
-  const existing = database.prepare(`SELECT scope FROM protocols WHERE id = ?`).get(id);
-  if (existing && existing.scope === 'base') {
-    console.error(`Cannot override base protocol ${id}. Use a different id.`);
-    process.exit(1);
-  }
-
   database
     .prepare(
       `INSERT INTO protocols
@@ -343,6 +339,11 @@ function parseJsonStringArray(value) {
   } catch {
     return [];
   }
+}
+
+function isDuplicateColumnError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\bduplicate column\b/i.test(message);
 }
 
 function showHelp() {

@@ -163,3 +163,48 @@ test('SqliteProtocolProvider user protocols can override base ids', async () => 
     cleanup(dbPath);
   }
 });
+
+test('SqliteProtocolProvider backfills missing seed protocols and preserves tags', async () => {
+  const dbPath = createTempDbPath();
+
+  const seedOne = baseProtocolSeeds[0];
+
+  // Manually pre-load only one seed row, bypassing the provider's backfill logic.
+  const provider1 = new SqliteProtocolProvider(dbPath);
+  try {
+    provider1.addProtocol({
+      id: seedOne.id,
+      name: seedOne.name,
+      description: seedOne.description,
+      priority: seedOne.priority,
+      appliesTo: seedOne.appliesTo,
+      rules: [...seedOne.rules],
+      tags: seedOne.tags ? [...seedOne.tags] : undefined,
+    });
+
+    // Override the source/scope to mimic an older seed database row.
+    // @ts-expect-error accessing private member for test setup
+    provider1.database
+      .prepare(`UPDATE protocols SET scope = 'base', source = 'seed' WHERE id = ?`)
+      .run(seedOne.id);
+  } finally {
+    provider1.close();
+  }
+
+  // Reopening the provider should backfill the rest of baseProtocolSeeds.
+  const provider2 = new SqliteProtocolProvider(dbPath);
+  try {
+    const protocols = provider2.listProtocols();
+    assert.equal(protocols.length, baseProtocolSeeds.length);
+
+    for (const seed of baseProtocolSeeds) {
+      const found = protocols.find((p) => p.id === seed.id);
+      assert.ok(found, `Expected seed protocol ${seed.id} to be backfilled`);
+      assert.deepEqual(found.rules, seed.rules);
+      assert.deepEqual(found.tags, seed.tags);
+    }
+  } finally {
+    provider2.close();
+    cleanup(dbPath);
+  }
+});

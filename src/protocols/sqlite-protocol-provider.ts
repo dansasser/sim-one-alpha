@@ -38,21 +38,34 @@ export class SqliteProtocolProvider implements ProtocolProvider {
     this.database.exec(protocolSchemaSql);
     try {
       this.database.exec(`ALTER TABLE protocols ADD COLUMN tags TEXT`);
-    } catch {
-      // Column already exists; ignore.
+    } catch (error) {
+      if (!isDuplicateColumnError(error)) {
+        throw error;
+      }
     }
   }
 
   seedBaseProtocols(): void {
-    const row = this.database.prepare(`SELECT COUNT(*) AS c FROM protocols WHERE source = 'seed'`).get() as { c: number } | undefined;
-    if ((row?.c ?? 0) > 0) {
-      return;
-    }
+    const existing = this.database
+      .prepare(`SELECT id FROM protocols WHERE source = 'seed'`)
+      .all() as { id: string }[];
+    const existingIds = new Set(existing.map((row) => row.id));
 
     const insert = this.database.prepare(
       `INSERT INTO protocols
-       (id, name, description, scope, enabled, priority, selector_json, rules_json, source, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, name, description, scope, enabled, priority, selector_json, rules_json, source, tags, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         description = excluded.description,
+         scope = excluded.scope,
+         enabled = excluded.enabled,
+         priority = excluded.priority,
+         selector_json = excluded.selector_json,
+         rules_json = excluded.rules_json,
+         source = excluded.source,
+         tags = excluded.tags,
+         updated_at = excluded.updated_at`,
     );
 
     for (const protocol of baseProtocolSeeds) {
@@ -66,9 +79,16 @@ export class SqliteProtocolProvider implements ProtocolProvider {
         JSON.stringify(protocol.appliesTo),
         JSON.stringify(protocol.rules),
         protocol.source,
+        protocol.tags ? JSON.stringify(protocol.tags) : null,
         new Date().toISOString(),
         new Date().toISOString(),
       );
+    }
+
+    const staleIds = [...existingIds].filter((id) => !baseProtocolSeeds.some((seed) => seed.id === id));
+    if (staleIds.length > 0) {
+      const placeholders = staleIds.map(() => '?').join(',');
+      this.database.prepare(`DELETE FROM protocols WHERE source = 'seed' AND id IN (${placeholders})`).run(...staleIds);
     }
   }
 
@@ -270,6 +290,11 @@ function parseJsonStringArray(value: string): string[] {
   } catch {
     return [];
   }
+}
+
+function isDuplicateColumnError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\bduplicate column\b/i.test(message);
 }
 
 function resolveRuntimePath(filePath: string): string {

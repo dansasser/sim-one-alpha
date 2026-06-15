@@ -100,7 +100,7 @@ export async function runCodingWorkerLoop(
       purpose: 'Record applicable protocol directives received from the orchestrator.',
       summary: `Loaded ${task.protocolBundle.protocols.length} applicable protocol(s).`,
       evidence: task.protocolBundle.protocols.map(
-        (protocol) => `${protocol.id} (priority=${protocol.priority}): ${protocol.rules.join(' ')}`,
+        (protocol) => `${protocol.id} (priority=${protocol.priority}, ${protocol.rules.length} rule${protocol.rules.length === 1 ? '' : 's'})`,
       ),
     });
   }
