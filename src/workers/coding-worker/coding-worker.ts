@@ -12,12 +12,12 @@ import {
   composeWorkspaceInstructions,
   resolveWorkspaceDirectory,
 } from '../../workspace-loader.js';
-import { createFileCodingApprovalService } from './approvals/approval-service.js';
 import { createDefaultGitHubClient } from './github/gh-cli-client.js';
 import { createCodingGitHubTools } from './github/github-tools.js';
 import type { GitHubClient } from './github/github-client.js';
 import { createCodingWorkerRuntimeCapabilityBlock } from './runtime-capabilities.js';
 import { codingWorkerSkills, createCodingWorkerSkillCapabilityBlock } from './skills.js';
+import { createSharedCodingApprovalService } from '../../approvals/shared-approval-service.js';
 import { createCodingWorkerInternalSubagents } from './subagents/index.js';
 import { createCodingCodeIntelligenceTools } from './tools/code-intelligence/index.js';
 import { createCodingGitTools } from './tools/coding-git-tools.js';
@@ -80,7 +80,7 @@ export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOp
     throw new Error('Missing coding-worker approval storage root configuration.');
   }
   await assertApprovalRootOutsideWorkspace(approvalRoot, workspaceRoot);
-  const approvalService = createFileCodingApprovalService(approvalRoot);
+  const approvalService = createSharedCodingApprovalService({ GOROMBO_APPROVAL_ROOT: approvalRoot });
   const githubClient = resolvedOptions.githubClient ?? createDefaultGitHubClient(resolvedOptions.env, resolvedOptions.repoPath ?? resolvedOptions.workspaceRoot);
 
   return defineAgentProfile({

@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import './models/runtime.js';
 import { requireApiSecret } from './middleware/api-secret.js';
 import { registerChatEventRoutes } from './routes/chat-events.js';
+import { registerApprovalRoutes } from './routes/approval-routes.js';
 import { registerKnowledgeRoutes } from './routes/knowledge.js';
 import { registerTelemetryRoutes } from './routes/telemetry.js';
 import { registerTelegramAdminRoutes } from './routes/telegram-admin.js';
@@ -21,6 +22,7 @@ app.use('/runs/*', requireApiSecret);
 registerChatEventRoutes(app);
 registerKnowledgeRoutes(app);
 registerTelemetryRoutes(app);
+registerApprovalRoutes(app);
 registerTelegramAdminRoutes(app);
 app.route('/', flue());
 

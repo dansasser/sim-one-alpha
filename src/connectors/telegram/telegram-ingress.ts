@@ -1,7 +1,9 @@
 import type { Hono } from 'hono';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createSharedCodingApprovalService } from '../../approvals/shared-approval-service.js';
 import { goromboPersistenceRuntime } from '../../db.js';
+import { createApprovalIngress, createFileApprovalBindingStore } from '../../ingress/approval-ingress.js';
 import { createChatPrompt } from '../../routes/chat-prompt.js';
 import { resolveChatSession } from '../../session/session-routing.js';
 import {
@@ -10,12 +12,26 @@ import {
   markTelegramPollerStop,
   markTelegramUpdateReceived,
 } from './telegram-state.js';
-import { TelegramApiClient, type TelegramMessage, type TelegramUpdate, generatePairingCode, isMentioned } from './telegram-api.js';
+import {
+  TelegramApiClient,
+  type TelegramCallbackQuery,
+  type TelegramMessage,
+  type TelegramUpdate,
+  generatePairingCode,
+  isMentioned,
+} from './telegram-api.js';
+import {
+  buildApprovalKeyboard,
+  buildApprovalRequestMessage,
+  buildApprovalResolvedMessage,
+  parseApprovalCallback,
+} from './approval-ui/index.js';
 import { normalizeTelegramUpdate } from './telegram.js';
 
 export interface TelegramIngressConfig {
   token: string;
   approvedUserIds: string[];
+  adminUserIds: string[];
   botUsername?: string;
   enabled: boolean;
   dmPolicy: 'pairing' | 'allowlist' | 'disabled';
@@ -37,6 +53,9 @@ export function createTelegramIngress(
   }
 
   const api = new TelegramApiClient(config.token);
+  const approvalIngress = createApprovalIngressForConnector(env);
+  const sentApprovalMessages = new Map<string, number>();
+  let approvalPollerTimer: ReturnType<typeof setInterval> | undefined;
   let running = false;
   let shuttingDown = false;
   let nextOffset = 0;
@@ -51,6 +70,10 @@ export function createTelegramIngress(
     shuttingDown = false;
     markTelegramPollerStart();
     void pollLoop();
+    if (approvalIngress) {
+      void runApprovalPoller();
+      approvalPollerTimer = setInterval(runApprovalPoller, 10_000);
+    }
   };
 
   const stop = async () => {
@@ -59,6 +82,10 @@ export function createTelegramIngress(
     }
     shuttingDown = true;
     pollerAbortController?.abort();
+    if (approvalPollerTimer) {
+      clearInterval(approvalPollerTimer);
+      approvalPollerTimer = undefined;
+    }
     if (inFlightDelivery) {
       try {
         await inFlightDelivery;
@@ -116,6 +143,11 @@ export function createTelegramIngress(
   }
 
   async function handleUpdate(update: TelegramUpdate, botUsername: string): Promise<void> {
+    if (update.callback_query) {
+      await handleCallbackQuery(update.callback_query);
+      return;
+    }
+
     const message = update.message;
     if (!message) {
       return;
@@ -338,7 +370,121 @@ export function createTelegramIngress(
     };
   }
 
+  async function runApprovalPoller(): Promise<void> {
+    if (!approvalIngress) {
+      return;
+    }
+    if (!readApiSecretFromEnv()) {
+      return;
+    }
+
+    try {
+      const pending = await approvalIngress.listPendingApprovals({ connector: 'telegram' });
+      for (const record of pending) {
+        const bindings = await approvalIngress.listBindings({
+          connector: 'telegram',
+          requestId: record.request.id,
+        });
+        for (const binding of bindings) {
+          if (!binding.conversationId) {
+            continue;
+          }
+          const messageKey = `${binding.conversationId}:${record.request.id}`;
+          const existingMessageId = sentApprovalMessages.get(messageKey);
+          const text = buildApprovalRequestMessage(record);
+          const keyboard = buildApprovalKeyboard(record.request.id);
+          if (existingMessageId) {
+            await api.editMessageText(binding.conversationId, existingMessageId, text, {
+              replyMarkup: { inline_keyboard: keyboard },
+            });
+          } else {
+            const result = await api.sendInlineKeyboard(binding.conversationId, text, keyboard);
+            sentApprovalMessages.set(messageKey, result.message_id);
+          }
+        }
+      }
+    } catch (err) {
+      log('approval_poller:error', { error: String(err) });
+    }
+  }
+
+  async function handleCallbackQuery(callbackQuery: TelegramCallbackQuery): Promise<void> {
+    if (!callbackQuery.data) {
+      return;
+    }
+    const parsed = parseApprovalCallback(callbackQuery.data);
+    if (!parsed) {
+      return;
+    }
+    if (!approvalIngress) {
+      await api.answerCallbackQuery(callbackQuery.id, { text: 'Approval ingress is not configured.' });
+      return;
+    }
+
+    const userId = String(callbackQuery.from.id);
+    const role = resolveTelegramApprovalPrincipal(userId, config.adminUserIds);
+
+    try {
+      const record = await approvalIngress.getApprovalRequest(parsed.requestId);
+      if (!record) {
+        await api.answerCallbackQuery(callbackQuery.id, { text: 'Approval request not found.' });
+        return;
+      }
+      if (record.status !== 'pending') {
+        await api.answerCallbackQuery(callbackQuery.id, { text: 'This approval has already been resolved.' });
+        return;
+      }
+
+      await approvalIngress.recordApprovalDecision({
+        requestId: parsed.requestId,
+        approved: parsed.approved,
+        decidedBy: userId,
+        reason: `Telegram ${parsed.approved ? 'approve' : 'deny'} button`,
+        principal: { id: userId, roles: [role] },
+      });
+
+      const resolved = await approvalIngress.getApprovalRequest(parsed.requestId);
+      if (resolved) {
+        const messageKey = callbackQuery.message
+          ? `${callbackQuery.message.chat.id}:${parsed.requestId}`
+          : undefined;
+        if (messageKey) {
+          const messageId = callbackQuery.message?.message_id ?? sentApprovalMessages.get(messageKey);
+          if (messageId && callbackQuery.message) {
+            await api.editMessageText(callbackQuery.message.chat.id, messageId, buildApprovalResolvedMessage(resolved), {
+              replyMarkup: { inline_keyboard: [] },
+            });
+          }
+        }
+      }
+
+      await api.answerCallbackQuery(callbackQuery.id, { text: `Approval ${parsed.approved ? 'approved' : 'denied'}.` });
+    } catch (err) {
+      log('approval_callback:error', { error: String(err), requestId: parsed.requestId, userId });
+      await api.answerCallbackQuery(callbackQuery.id, { text: 'Failed to record decision.' });
+    }
+  }
+
   return { start, stop };
+}
+
+function createApprovalIngressForConnector(
+  env: Record<string, unknown> | undefined,
+): ReturnType<typeof createApprovalIngress> | undefined {
+  const mergedEnv = {
+    ...process.env,
+    ...(env ?? {}),
+  };
+  const approvalRoot = readString(mergedEnv.GOROMBO_APPROVAL_ROOT);
+  if (!approvalRoot) {
+    return undefined;
+  }
+
+  const approvalService = createSharedCodingApprovalService({ GOROMBO_APPROVAL_ROOT: approvalRoot });
+  return createApprovalIngress({
+    approvalService,
+    bindingStore: createFileApprovalBindingStore(approvalRoot),
+  });
 }
 
 export function runtimeEnvForIngress(): Record<string, unknown> {
@@ -355,11 +501,13 @@ export function resolveTelegramIngressConfig(
 
   const token = readString(mergedEnv.TELEGRAM_BOT_TOKEN);
   const approvedUserIds = parseStringList(mergedEnv.TELEGRAM_APPROVED_USER_IDS);
+  const adminUserIds = parseStringList(mergedEnv.TELEGRAM_ADMIN_USER_IDS);
   const mentionPatterns = parseStringList(mergedEnv.TELEGRAM_MENTION_PATTERNS);
 
   return {
     token,
     approvedUserIds,
+    adminUserIds,
     enabled: Boolean(token),
     dmPolicy: parseDmPolicy(mergedEnv.TELEGRAM_DM_POLICY),
     botUsername: readString(mergedEnv.TELEGRAM_BOT_USERNAME),
@@ -373,6 +521,10 @@ function resolveEffectiveDmPolicy(defaultPolicy: TelegramIngressConfig['dmPolicy
     return stored;
   }
   return defaultPolicy;
+}
+
+export function resolveTelegramApprovalPrincipal(userId: string, adminUserIds: string[]): 'admin' | 'operator' {
+  return adminUserIds.includes(userId) ? 'admin' : 'operator';
 }
 
 function readString(value: unknown): string {

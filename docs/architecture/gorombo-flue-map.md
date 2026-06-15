@@ -9,8 +9,10 @@ Every top-level `src/` directory should fit one of these categories. If a new di
 | Path | Type | Ownership rule |
 | --- | --- | --- |
 | `src/agents/` | Flue agent entrypoints | Main `createAgent(...)` files discovered by Flue. |
+| `src/approvals/` | Shared approval subsystem | Approval service factory and ingress types shared by the coding worker and connectors/HTTP/CLI surfaces. |
 | `src/commands/` | Pre-LLM command parsing | Slash command definitions and parsing that run before prompts reach the LLM. |
 | `src/config/` | Runtime configuration | Typed config loaders and shipped runtime config source files. |
+| `src/ingress/` | Application ingress modules | Cross-cutting ingress logic that turns internal worker events and storage into HTTP/connector-facing surfaces. Example: the approval ingress bridges `CodingApprovalService` to HTTP routes, CLI, and connectors. |
 | `src/connectors/` | Connector normalization | External-source adapters that normalize input into internal message shapes. |
 | `src/memory/` | Shared memory subsystem | Memory retrieval interfaces and routing shared by agents/tools/workflows. |
 | `src/middleware/` | HTTP middleware | Reusable Hono middleware such as API-secret auth. |

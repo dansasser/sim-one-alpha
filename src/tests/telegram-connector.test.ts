@@ -7,6 +7,7 @@ import {
   isMentioned,
 } from '../connectors/telegram/telegram-api.js';
 import {
+  resolveTelegramApprovalPrincipal,
   resolveTelegramIngressConfig,
   runtimeEnvForIngress,
 } from '../connectors/telegram/telegram-ingress.js';
@@ -109,6 +110,22 @@ test('telegram ingress config respects explicit dmPolicy', () => {
 
   const config = resolveTelegramIngressConfig(env);
   assert.equal(config.dmPolicy, 'allowlist');
+});
+
+test('telegram ingress config parses admin user ids', () => {
+  const env = {
+    TELEGRAM_BOT_TOKEN: '123:abc',
+    TELEGRAM_ADMIN_USER_IDS: ' 6653274440 , 999999 ',
+  };
+
+  const config = resolveTelegramIngressConfig(env);
+  assert.deepEqual(config.adminUserIds, ['6653274440', '999999']);
+});
+
+test('telegram approval principal is admin for configured admin ids', () => {
+  assert.equal(resolveTelegramApprovalPrincipal('6653274440', ['6653274440']), 'admin');
+  assert.equal(resolveTelegramApprovalPrincipal('999999', ['6653274440']), 'operator');
+  assert.equal(resolveTelegramApprovalPrincipal('999999', []), 'operator');
 });
 
 test('telegram ingress config is disabled without token', () => {

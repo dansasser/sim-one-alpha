@@ -48,9 +48,27 @@ export interface TelegramMessage {
   reply_to_message?: { message_id: number; from?: { username?: string } };
 }
 
+export interface TelegramCallbackQuery {
+  id: string;
+  from: TelegramUser;
+  message?: TelegramMessage;
+  data?: string;
+  inline_message_id?: string;
+}
+
 export interface TelegramUpdate {
   update_id: number;
   message?: TelegramMessage;
+  callback_query?: TelegramCallbackQuery;
+}
+
+export interface InlineKeyboardButton {
+  text: string;
+  callback_data: string;
+}
+
+export interface InlineKeyboardMarkup {
+  inline_keyboard: InlineKeyboardButton[][];
 }
 
 export interface TelegramApiError {
@@ -106,6 +124,7 @@ export class TelegramApiClient {
   async sendMessage(chatId: string | number, text: string, options: {
     replyTo?: number;
     parseMode?: 'MarkdownV2';
+    replyMarkup?: InlineKeyboardMarkup;
   } = {}, signal?: AbortSignal): Promise<{ message_id: number }> {
     const chunks = chunkTelegramText(text);
     let lastMessageId = 0;
@@ -124,6 +143,10 @@ export class TelegramApiClient {
         payload.parse_mode = 'MarkdownV2';
       }
 
+      if (options.replyMarkup != null && i === chunks.length - 1) {
+        payload.reply_markup = options.replyMarkup;
+      }
+
       const response = await fetch(this.url('sendMessage'), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -139,6 +162,93 @@ export class TelegramApiClient {
     }
 
     return { message_id: lastMessageId };
+  }
+
+  async sendInlineKeyboard(
+    chatId: string | number,
+    text: string,
+    buttons: InlineKeyboardButton[][],
+    options: {
+      replyTo?: number;
+      parseMode?: 'MarkdownV2';
+    } = {},
+    signal?: AbortSignal,
+  ): Promise<{ message_id: number }> {
+    return this.sendMessage(chatId, text, { ...options, replyMarkup: { inline_keyboard: buttons } }, signal);
+  }
+
+  async editMessageText(
+    chatId: string | number,
+    messageId: number,
+    text: string,
+    options: {
+      parseMode?: 'MarkdownV2';
+      replyMarkup?: InlineKeyboardMarkup;
+    } = {},
+    signal?: AbortSignal,
+  ): Promise<{ message_id: number }> {
+    const payload: Record<string, unknown> = {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+    };
+
+    if (options.parseMode === 'MarkdownV2') {
+      payload.parse_mode = 'MarkdownV2';
+    }
+
+    if (options.replyMarkup != null) {
+      payload.reply_markup = options.replyMarkup;
+    }
+
+    const response = await fetch(this.url('editMessageText'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal,
+    });
+
+    const body = (await response.json()) as TelegramApiResponse<{ message_id: number }>;
+    if (!body.ok) {
+      throw new Error(`Telegram editMessageText failed: ${body.error_code} ${body.description}`);
+    }
+    return body.result;
+  }
+
+  async answerCallbackQuery(
+    callbackQueryId: string,
+    options: {
+      text?: string;
+      showAlert?: boolean;
+      url?: string;
+    } = {},
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const payload: Record<string, unknown> = {
+      callback_query_id: callbackQueryId,
+    };
+
+    if (options.text != null) {
+      payload.text = options.text;
+    }
+    if (options.showAlert != null) {
+      payload.show_alert = options.showAlert;
+    }
+    if (options.url != null) {
+      payload.url = options.url;
+    }
+
+    const response = await fetch(this.url('answerCallbackQuery'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal,
+    });
+
+    const body = (await response.json()) as TelegramApiResponse<boolean>;
+    if (!body.ok) {
+      throw new Error(`Telegram answerCallbackQuery failed: ${body.error_code} ${body.description}`);
+    }
   }
 
   async getFile(fileId: string, signal?: AbortSignal): Promise<TelegramFile> {
