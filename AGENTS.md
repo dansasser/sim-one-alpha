@@ -526,14 +526,14 @@ Always run the relevant verification commands before calling work complete.
 
 For TypeScript changes, run the project's configured checks from `package.json` with pnpm only.
 
-Do not use npm, yarn, bun, npx, or package-manager fallback logic in this repository. The only supported package manager is pnpm through Corepack.
+Do not use npm, yarn, bun, npx, or package-manager fallback logic in this repository. The only supported package manager is pnpm.
 
 Typical required checks are:
 
 ```sh
-corepack pnpm test
-corepack pnpm run typecheck
-corepack pnpm run build
+pnpm test
+pnpm run typecheck
+pnpm run build
 ```
 
 If the project has a lint/check script, run the named script exactly as configured. Do not assume the tool is called `lint`; it may run ESLint, Biome, Ruff, Prettier, or another checker.
