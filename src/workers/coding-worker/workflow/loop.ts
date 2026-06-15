@@ -93,6 +93,18 @@ export async function runCodingWorkerLoop(
     ],
   });
 
+  if (task.protocolBundle?.protocols.length) {
+    reporter.emit({
+      type: 'coding.protocols.loaded',
+      taskId: task.taskId,
+      purpose: 'Record applicable protocol directives received from the orchestrator.',
+      summary: `Loaded ${task.protocolBundle.protocols.length} applicable protocol(s).`,
+      evidence: task.protocolBundle.protocols.map(
+        (protocol) => `${protocol.id} (priority=${protocol.priority}): ${protocol.rules.join(' ')}`,
+      ),
+    });
+  }
+
   const preflightRunner = dependencies.preflight ?? ((scopePath: string) => runCodingRepoPreflight(scopePath));
   const preflight = preflightRunner(workspaceTarget.scopePath, workspaceTarget);
 

@@ -21,6 +21,12 @@
     "test:http": "node scripts/test-built-http.mjs",
     "smoke:http": "node scripts/smoke-http-endpoints.mjs",
     "research:local": "node scripts/research.mjs",
+    "protocols:seed": "node scripts/protocol-admin.mjs seed",
+    "protocols:list": "node scripts/protocol-admin.mjs list",
+    "protocols:add": "node scripts/protocol-admin.mjs add",
+    "protocols:remove": "node scripts/protocol-admin.mjs remove",
+    "protocols:enable": "node scripts/protocol-admin.mjs enable",
+    "protocols:disable": "node scripts/protocol-admin.mjs disable",
     "start": "node --env-file=.env dist/server.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm run test:unit && pnpm run build && pnpm run test:http"

@@ -1,4 +1,4 @@
-import type { NormalizedMessageEvent } from '../../types/index.js';
+import type { NormalizedMessageEvent, ProtocolBundle } from '../../types/index.js';
 
 import {
   CodingFileEditSchema,
@@ -88,6 +88,11 @@ export interface CodingWorkerTaskRequest {
    * Defaults to 10.
    */
   maxTurns?: number;
+  /**
+   * Applicable protocol bundle loaded by the orchestrator. The coding worker
+   * should extract directives relevant to the current step and follow them.
+   */
+  protocolBundle?: ProtocolBundle;
 }
 
 export interface CodingGitWorkspaceContext {
