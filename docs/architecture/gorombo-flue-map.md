@@ -30,7 +30,7 @@ Every top-level `src/` directory should fit one of these categories. If a new di
 | `src/utils/` | Generic helpers | Small cross-cutting helpers only; domain subsystems do not belong here. |
 | `src/workers/` | Worker/subagent implementations | Specialized worker profiles plus worker-local support code and worker workspaces. |
 | `src/workflows/` | Flue workflows | Finite Flue operations that can initialize agents, manage bounded loops, and return structured results. |
-| `src/workspace/` | Main agent workspace content | User-editable persona markdown for the main agent. No TypeScript runtime code belongs here. |
+| `src/workspace/` | Main agent workspace content | User-editable persona markdown for the main agent. Also the default coding-worker sandbox root; code work lives under `repos/` and non-git projects under `projects/` inside this directory. No TypeScript runtime code belongs here. |
 
 Root source files:
 
@@ -138,8 +138,8 @@ src/workers/coding-worker/subagents/
 src/workers/coding-worker/tools/
   Worker-local workspace/project, shell, git, GitHub, and approval-aware execution tools.
   File/shell/git/test execution is backed by Flue's Node local sandbox factory.
-  The sandbox is rooted at the configured runtime workspace root. User-editable workspace files live at that root; projects live under `projects/**`; repositories live under `repos/**`.
-  The coding worker must create or resolve new project work under that runtime workspace root, not inside the agent source checkout.
+  The sandbox is rooted at the configured runtime workspace root. By default this root is `src/workspace/` (the main agent persona workspace). User-editable workspace files live at that root; non-git projects live under `projects/**`; repositories live under `repos/**`.
+  The coding worker must create or resolve new project work under that runtime workspace root.
   The main orchestrator does not own these tools directly.
 
 src/workers/coding-worker/subagents/<name>/workspace/

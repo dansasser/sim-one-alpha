@@ -6,6 +6,7 @@ import test from 'node:test';
 import orchestratorAgent from '../agents/orchestrator.js';
 import { createCodingWorkerSubagent } from '../workers/coding-worker/coding-worker.js';
 import { createResearcherSubagent } from '../workers/researcher/researcher.js';
+import { resolveCodingWorkerWorkspaceRoot as resolveCodingWorkerWorkspaceRootFromOrchestrator } from '../agents/orchestrator.js';
 
 test('root and architecture docs preserve the Flue component contract', () => {
   const agents = readText('AGENTS.md');
@@ -104,19 +105,23 @@ test('Flue orchestrator routes research to the researcher instead of owning web 
   assert.match(config.instructions ?? '', /providerFailures/);
 });
 
-test('Flue orchestrator requires an explicit coding-worker workspace root', async () => {
+test('Flue orchestrator defaults coding-worker workspace root to src/workspace/', async () => {
   const { GOROMBO_WORKSPACE_ROOT: _workspaceRoot, ...envWithoutWorkspaceRoot } = createModelEnv();
 
-  await assert.rejects(
-    async () => {
-      await Promise.resolve(orchestratorAgent.initialize({
-        id: 'architecture-contract-missing-workspace-root',
-        env: envWithoutWorkspaceRoot,
-        payload: undefined,
-      }));
-    },
-    /Missing coding-worker workspace root configuration/,
-  );
+  const defaultRoot = resolveCodingWorkerWorkspaceRootFromOrchestrator(envWithoutWorkspaceRoot);
+  assert.ok(defaultRoot.endsWith('src/workspace'), `expected root ending in src/workspace, got ${defaultRoot}`);
+
+  const config = await orchestratorAgent.initialize({
+    id: 'architecture-contract-default-workspace-root',
+    env: envWithoutWorkspaceRoot,
+    payload: undefined,
+  });
+
+  const codingWorker = config.subagents?.find((agent) => agent.name === 'coding-worker');
+  assert.ok(codingWorker);
+
+  const repoTool = codingWorker.tools?.find((tool) => tool.name === 'coding_repo_apply_patch');
+  assert.ok(repoTool);
 });
 
 test('coding worker owns its workspace-backed lead profile', async () => {
