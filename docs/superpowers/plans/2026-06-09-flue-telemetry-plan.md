@@ -59,8 +59,8 @@ Important boundary:
 
 ## Verification Plan
 
-- [x] Run `corepack pnpm test`.
-- [x] Run `corepack pnpm run typecheck`.
-- [x] Run `corepack pnpm run build`.
+- [x] Run `pnpm test`.
+- [x] Run `pnpm run typecheck`.
+- [x] Run `pnpm run build`.
 - [x] Run live HTTP chat test.
 - [x] Query `/api/telemetry/runs/:runId` for the live run and confirm `delegatedToResearcher` and `calledWebResearch`.

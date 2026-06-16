@@ -249,8 +249,8 @@ This is the final child stream before the parent branch is committed and the sin
 
 Deliverables:
 
-- [ ] Replace `corepack pnpm ...` with `pnpm ...` in `package.json` scripts.
-- [ ] Replace `corepack pnpm ...` with `pnpm ...` in `README.md` examples and prose.
+- [ ] Replace `pnpm ...` with `pnpm ...` in `package.json` scripts.
+- [ ] Replace `pnpm ...` with `pnpm ...` in `README.md` examples and prose.
 - [ ] Update `docs/superpowers/plans/coding-worker/phase2-execution-plan.md` verification blocks if any `corepack` references remain.
 - [ ] Verify `pnpm run typecheck`, `pnpm run test:unit`, and `pnpm run build` pass without `corepack`.
 

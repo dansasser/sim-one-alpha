@@ -113,7 +113,7 @@ test('unknown model specifier returns undefined', () => {
 Run:
 
 ```sh
-corepack pnpm run test:unit -- --test-name-pattern "model cards can be resolved|unknown model specifier"
+pnpm run test:unit -- --test-name-pattern "model cards can be resolved|unknown model specifier"
 ```
 
 Expected: TypeScript build fails because `resolveModelCard` does not exist.
@@ -133,7 +133,7 @@ export function resolveModelCard(specifier: string): AgentModelCard | undefined 
 Run:
 
 ```sh
-corepack pnpm run test:unit -- --test-name-pattern "model cards can be resolved|unknown model specifier"
+pnpm run test:unit -- --test-name-pattern "model cards can be resolved|unknown model specifier"
 ```
 
 Expected: both tests pass.
@@ -180,7 +180,7 @@ test('context budget exposes warning and compaction thresholds', () => {
 Run:
 
 ```sh
-corepack pnpm run test:unit -- --test-name-pattern "context budget"
+pnpm run test:unit -- --test-name-pattern "context budget"
 ```
 
 Expected: TypeScript build fails because `calculateContextBudget` does not exist.
@@ -216,7 +216,7 @@ Use provider-reported context first, then guaranteed context, then advertised co
 Run:
 
 ```sh
-corepack pnpm run test:unit -- --test-name-pattern "context budget"
+pnpm run test:unit -- --test-name-pattern "context budget"
 ```
 
 Expected: tests pass.
@@ -248,7 +248,7 @@ contextBudget: {
 Run:
 
 ```sh
-corepack pnpm run test:unit -- --test-name-pattern "chat event"
+pnpm run test:unit -- --test-name-pattern "chat event"
 ```
 
 Expected: test fails because durable ingress response does not expose context budget.
@@ -262,7 +262,7 @@ After `session.prompt(...)` returns, resolve the response model to a card and ca
 Run:
 
 ```sh
-corepack pnpm run test:unit -- --test-name-pattern "chat event"
+pnpm run test:unit -- --test-name-pattern "chat event"
 ```
 
 Expected: tests pass.
@@ -297,7 +297,7 @@ test('compaction policy requests compaction at threshold', () => {
 Run:
 
 ```sh
-corepack pnpm run test:unit -- --test-name-pattern "compaction policy"
+pnpm run test:unit -- --test-name-pattern "compaction policy"
 ```
 
 Expected: TypeScript build fails because `evaluateCompaction` does not exist.
@@ -324,7 +324,7 @@ post-response usage -> update budget telemetry
 Run:
 
 ```sh
-corepack pnpm run test:unit -- --test-name-pattern "compaction policy"
+pnpm run test:unit -- --test-name-pattern "compaction policy"
 ```
 
 Expected: tests pass.
@@ -340,9 +340,9 @@ Expected: tests pass.
 Run:
 
 ```sh
-corepack pnpm run typecheck
-corepack pnpm test
-corepack pnpm run smoke:http -- --live-chat
+pnpm run typecheck
+pnpm test
+pnpm run smoke:http -- --live-chat
 ```
 
 Expected:

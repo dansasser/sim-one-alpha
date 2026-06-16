@@ -524,10 +524,10 @@ test('repo preflight detects pnpm and exact configured verification scripts', ()
     assert.deepEqual(
       preflight.verificationPlan.map((command) => command.command),
       [
-        'corepack pnpm run test:unit',
-        'corepack pnpm run typecheck',
-        'corepack pnpm run build',
-        'corepack pnpm test',
+        'pnpm run test:unit',
+        'pnpm run typecheck',
+        'pnpm run build',
+        'pnpm test',
       ],
     );
   } finally {
@@ -558,9 +558,9 @@ test('verification planner keeps named check scripts exact when present', () => 
     },
   });
 
-  assert.equal(plan.some((command) => command.command === 'corepack pnpm run lint'), true);
-  assert.equal(plan.some((command) => command.command === 'corepack pnpm run check'), true);
-  assert.equal(plan.some((command) => command.command === 'corepack pnpm test'), true);
+  assert.equal(plan.some((command) => command.command === 'pnpm run lint'), true);
+  assert.equal(plan.some((command) => command.command === 'pnpm run check'), true);
+  assert.equal(plan.some((command) => command.command === 'pnpm test'), true);
 });
 
 test('test-debug tools expose a submit result tool for structured output', () => {

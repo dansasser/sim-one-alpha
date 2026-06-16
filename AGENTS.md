@@ -524,9 +524,9 @@ docs/architecture/worker-system.md
 
 Always run the relevant verification commands before calling work complete.
 
-For TypeScript changes, run the project's configured checks from `package.json` with pnpm only.
+For TypeScript changes, run the project's configured checks from `package.json`. pnpm and npm are both supported in this repository. The Coding Worker resolves the package manager from lockfile presence (`pnpm-lock.yaml` → pnpm, `package-lock.json` → npm) via `src/workers/coding-worker/repo/package-manager.ts`.
 
-Do not use npm, yarn, bun, npx, or package-manager fallback logic in this repository. The only supported package manager is pnpm.
+Do not invoke `corepack` to launch pnpm — modern Node respects `package.json#packageManager` automatically, and the repo no longer wires corepack into the command builder. If a `packageManager` field is declared, plain `pnpm` is enough.
 
 Typical required checks are:
 

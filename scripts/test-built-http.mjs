@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 if (!existsSync('dist/server.mjs')) {
-  throw new Error('dist/server.mjs does not exist. Run corepack pnpm run build before the built HTTP test.');
+  throw new Error('dist/server.mjs does not exist. Run pnpm run build before the built HTTP test.');
 }
 
 const port = await getFreePort();
