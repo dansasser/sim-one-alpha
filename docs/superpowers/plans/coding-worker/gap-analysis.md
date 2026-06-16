@@ -141,9 +141,9 @@ Tests:
 Before declaring any future coding-worker work complete, run:
 
 ```sh
-corepack pnpm run typecheck
-corepack pnpm run test:unit
-corepack pnpm test
+pnpm run typecheck
+pnpm run test:unit
+pnpm test
 git diff --check
 ```
 

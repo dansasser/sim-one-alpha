@@ -22,7 +22,7 @@ export function detectPackageManager(repoPath: string): RepoPackageManager {
 export function packageManagerRunCommand(packageManager: RepoPackageManager, script: string): string {
   switch (packageManager) {
     case 'pnpm':
-      return `corepack pnpm run ${script}`;
+      return `pnpm run ${script}`;
     case 'npm':
       return `npm run ${script}`;
     case 'yarn':
@@ -37,7 +37,7 @@ export function packageManagerRunCommand(packageManager: RepoPackageManager, scr
 export function packageManagerTestCommand(packageManager: RepoPackageManager): string {
   switch (packageManager) {
     case 'pnpm':
-      return 'corepack pnpm test';
+      return 'pnpm test';
     case 'npm':
       return 'npm test';
     case 'yarn':

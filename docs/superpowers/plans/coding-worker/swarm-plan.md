@@ -102,8 +102,8 @@ Teach the main GOROMBO Agent orchestrator when and how to invoke the coding work
 Before declaring any PR complete, run:
 
 ```sh
-corepack pnpm run typecheck
-corepack pnpm test  # runs test:unit, build, and HTTP integration
+pnpm run typecheck
+pnpm test  # runs test:unit, build, and HTTP integration
 git diff --check
 ```
 

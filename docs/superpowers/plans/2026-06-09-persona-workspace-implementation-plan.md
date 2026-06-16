@@ -328,9 +328,9 @@ Stub should include:
 - [x] Update imports from `src/agents/orchestrator.ts` if researcher file moves.
 - [x] Update tests to import the researcher from `src/workers/researcher/researcher.ts`.
 - [x] Remove the old researcher path instead of keeping a compatibility layer.
-- [x] Run `corepack pnpm test`.
-- [x] Run `corepack pnpm run typecheck`.
-- [x] Run `corepack pnpm run build`.
+- [x] Run `pnpm test`.
+- [x] Run `pnpm run typecheck`.
+- [x] Run `pnpm run build`.
 - [x] Fill `src/workspace/IDENTITY.md` with initial main-agent identity content.
 - [x] Fill `src/workspace/SOUL.md` with initial main-agent behavioral content.
 - [x] Fill `src/workspace/USER.md` with initial user/principal context.
