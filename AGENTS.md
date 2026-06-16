@@ -536,6 +536,12 @@ pnpm run typecheck
 pnpm run build
 ```
 
+For LSP tool changes, also run the bundled-server integration tests:
+
+```sh
+GOROMBO_LSP_REAL_SERVER_TESTS=1 pnpm run test:lsp
+```
+
 If the project has a lint/check script, run the named script exactly as configured. Do not assume the tool is called `lint`; it may run ESLint, Biome, Ruff, Prettier, or another checker.
 
 For Python modules, also run the configured Python checks when Python files are changed. Check `pyproject.toml`, `ruff.toml`, `pytest.ini`, `tox.ini`, or `.pre-commit-config.yaml` for the exact commands. Common commands include:

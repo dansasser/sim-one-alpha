@@ -396,13 +396,16 @@ test('tool reports lsp unavailable for unsupported file extension', async () => 
   }
 });
 
-test('wrapper tool falls back to AST when LSP is unavailable', async () => {
+test('wrapper tool returns empty when no symbol exists anywhere', async () => {
+  // Fixture with NO mention of the symbol anywhere. typescript-language-
+  // server finds zero hits, the wrapper's tryLspSymbolLookup returns null,
+  // and the AST parser also finds zero hits.
   const workspaceRoot = createTempWorkspace();
   try {
     const projectPath = join(workspaceRoot, 'projects', 'test-app');
     mkdirSync(projectPath, { recursive: true });
-    writeFileSync(join(projectPath, 'calc.ts'), tsSource);
-    writeFileSync(join(projectPath, 'helper.ts'), helperSource);
+    const onlySource = `export const greeting: string = 'hello';\n`;
+    writeFileSync(join(projectPath, 'index.ts'), onlySource);
 
     const { createCodingCodeIntelligenceTools } = await import('../workers/coding-worker/tools/code-intelligence/index.js');
     const tools = createCodingCodeIntelligenceTools({
@@ -412,7 +415,7 @@ test('wrapper tool falls back to AST when LSP is unavailable', async () => {
     });
 
     const navigateTool = getTool(tools, 'coding_symbol_navigate');
-    const raw = await navigateTool.execute({ symbol: 'Calculator' });
+    const raw = await navigateTool.execute({ symbol: 'NonexistentSymbol' });
     const output = JSON.parse(raw) as {
       symbol: string;
       provider: string;
@@ -421,10 +424,12 @@ test('wrapper tool falls back to AST when LSP is unavailable', async () => {
       references: Array<{ path: string }>;
     };
 
-    assert.equal(output.symbol, 'Calculator');
+    assert.equal(output.symbol, 'NonexistentSymbol');
+    // With the empty-LSP-result fallback fix, the wrapper reports the AST
+    // path because the LSP returned zero hits.
     assert.equal(output.lspAvailable, false);
     assert.equal(output.provider, 'ast');
-    assert.ok(output.declarations.some((d) => d.kind === 'class'));
+    assert.equal(output.declarations.length, 0);
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
   }

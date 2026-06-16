@@ -530,7 +530,7 @@ async function tryLspSymbolLookup(
   }
 }
 
-  if (allDeclarations.length === 0 && allReferences.length === 0 && allParsedFiles.size === 0) {
+  if (allDeclarations.length === 0 && allReferences.length === 0) {
     return null;
   }
 

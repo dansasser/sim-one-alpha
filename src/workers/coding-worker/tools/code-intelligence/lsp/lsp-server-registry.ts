@@ -1,7 +1,49 @@
 import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * Resolves a command by looking in node_modules/.bin relative to the runtime
+ * root first, then falling back to the system PATH. This keeps the LSP registry
+ * working for both the source checkout and the published package.
+ */
+async function resolveCommand(command: string): Promise<string | undefined> {
+  const runtimeBin = resolveRuntimeBin(command);
+  if (runtimeBin) {
+    return runtimeBin;
+  }
+
+  return which(command);
+}
+
+function resolveRuntimeBin(command: string): string | undefined {
+  const roots = [resolveRuntimeRoot(), process.cwd()];
+  for (const root of roots) {
+    if (process.platform === 'win32') {
+      const windowsCandidate = resolve(root, 'node_modules/.bin', `${command}.cmd`);
+      if (existsSync(windowsCandidate)) {
+        return windowsCandidate;
+      }
+    }
+    const candidate = resolve(root, 'node_modules/.bin', command);
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+function resolveRuntimeRoot(): string {
+  if (typeof import.meta.url === 'string') {
+    const thisFile = fileURLToPath(import.meta.url);
+    return resolve(dirname(thisFile), '../../../../../..');
+  }
+  return process.cwd();
+}
 
 async function which(command: string): Promise<string | undefined> {
   try {
@@ -46,7 +88,7 @@ export class LspLanguageServerRegistry {
       return undefined;
     }
 
-    const command = await which(defaults.command);
+    const command = await resolveCommand(defaults.command);
     if (!command) {
       return undefined;
     }
@@ -110,7 +152,7 @@ const defaultServerCommands: Record<string, LanguageServerCommand> = {
   python: {
     languageId: 'python',
     fileExtensions: ['.py'],
-    command: 'pylsp',
+    command: 'pyright-langserver',
     args: ['--stdio'],
   },
 };

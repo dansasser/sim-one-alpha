@@ -1,36 +1,42 @@
 import assert from 'node:assert/strict';
 import { join, resolve } from 'node:path';
-import test, { type TestContext } from 'node:test';
+import test from 'node:test';
 import { createLspTools } from '../workers/coding-worker/tools/code-intelligence/lsp/lsp-tools.js';
 import { createFlueLocalCodingSandbox } from '../workers/coding-worker/tools/sandbox-runtime.js';
-import { LspLanguageServerRegistry } from '../workers/coding-worker/tools/code-intelligence/lsp/lsp-server-registry.js';
+import { LspLanguageServerRegistry, type LanguageServerCommand } from '../workers/coding-worker/tools/code-intelligence/lsp/lsp-server-registry.js';
 
-const fixturesRoot = resolve(import.meta.dirname ?? '.', 'fixtures');
+const fixturesRoot = resolve(process.cwd(), 'src/tests/fixtures');
 
-function skipUnlessEnabled(t: TestContext) {
-  if (process.env.GOROMBO_LSP_REAL_SERVER_TESTS !== '1') {
-    t.skip('LSP integration tests disabled; set GOROMBO_LSP_REAL_SERVER_TESTS=1 to run.');
-    return false;
-  }
-  return true;
+function assertCommandAvailable(command: LanguageServerCommand | undefined, name: string): asserts command is LanguageServerCommand {
+  assert.ok(command, `expected ${name} language server to be available from bundled node_modules/.bin`);
 }
 
-test('lsp_document_symbols with real typescript-language-server', async (t) => {
-  if (!skipUnlessEnabled(t)) return;
+function assertResolvedFromBundledBin(command: LanguageServerCommand, name: string): void {
+  const hasNodeModulesBin = /node_modules[\\/]\.bin[\\/]/.test(command.command);
+  const matchesName = command.command.endsWith(name) ||
+                      command.command.endsWith(`${name}.cmd`) ||
+                      command.command.endsWith(`${name}.exe`);
 
-  const projectPath = join(fixturesRoot, 'lsp-ts');
+  assert.ok(
+    hasNodeModulesBin || matchesName,
+    `expected ${name} to be resolved from node_modules/.bin or PATH; got ${command.command}`,
+  );
+}
+
+test('lsp_document_symbols with real typescript-language-server', async () => {
+  const projectPath = join(fixturesRoot, 'repos/lsp-ts');
+  const projectSlug = 'lsp-ts';
   const registry = new LspLanguageServerRegistry();
   const command = await registry.resolve('typescript');
-  if (!command) {
-    t.skip('typescript-language-server not installed.');
-    return;
-  }
+  assertCommandAvailable(command, 'typescript-language-server');
+  assertResolvedFromBundledBin(command, 'typescript-language-server');
 
   const workspaceRoot = fixturesRoot;
   const sandbox = await createFlueLocalCodingSandbox({
     workspaceRoot,
     targetKind: 'repo',
     repoPath: projectPath,
+    projectSlug,
   });
 
   const tools = createLspTools({
@@ -55,22 +61,19 @@ test('lsp_document_symbols with real typescript-language-server', async (t) => {
   assert.ok(output.result.symbols.some((s) => s.name === 'add' && s.kind === 12));
 });
 
-test('lsp_go_to_definition with real typescript-language-server', async (t) => {
-  if (!skipUnlessEnabled(t)) return;
-
-  const projectPath = join(fixturesRoot, 'lsp-ts');
+test('lsp_go_to_definition with real typescript-language-server', async () => {
+  const projectPath = join(fixturesRoot, 'repos/lsp-ts');
+  const projectSlug = 'lsp-ts';
   const registry = new LspLanguageServerRegistry();
   const command = await registry.resolve('typescript');
-  if (!command) {
-    t.skip('typescript-language-server not installed.');
-    return;
-  }
+  assertCommandAvailable(command, 'typescript-language-server');
 
   const workspaceRoot = fixturesRoot;
   const sandbox = await createFlueLocalCodingSandbox({
     workspaceRoot,
     targetKind: 'repo',
     repoPath: projectPath,
+    projectSlug,
   });
 
   const tools = createLspTools({
@@ -80,8 +83,12 @@ test('lsp_go_to_definition with real typescript-language-server', async (t) => {
   });
 
   const defTool = getTool(tools, 'lsp_go_to_definition');
-  // Position of `calc.plus(5)` in main.ts — `plus` is at line 5, character ~24
-  const raw = await defTool.execute({ path: 'src/main.ts', line: 4, character: 24 });
+  // Open calc.ts first so the server has it in the project graph, then look up
+  // `add` at line 3 character 15 in main.ts. typescript-language-server resolves
+  // it to the declaration in calc.ts.
+  const docTool = getTool(tools, 'lsp_document_symbols');
+  await docTool.execute({ path: 'src/calc.ts' });
+  const raw = await defTool.execute({ path: 'src/main.ts', line: 3, character: 16 });
   const output = JSON.parse(raw) as {
     provider: string;
     lspAvailable: boolean;
@@ -90,25 +97,26 @@ test('lsp_go_to_definition with real typescript-language-server', async (t) => {
 
   assert.equal(output.provider, 'lsp');
   assert.equal(output.lspAvailable, true);
-  assert.ok(output.result.definitions.some((d) => d.uri.includes('calc.ts')));
+  assert.ok(
+    output.result.definitions.some((d) => d.uri.includes('calc.ts')),
+    `expected at least one definition to point to calc.ts; got ${JSON.stringify(output.result.definitions)}`,
+  );
 });
 
-test('lsp_document_symbols with real python-lsp-server', async (t) => {
-  if (!skipUnlessEnabled(t)) return;
-
-  const projectPath = join(fixturesRoot, 'lsp-py');
+test('lsp_document_symbols with real pyright-langserver', async () => {
+  const projectPath = join(fixturesRoot, 'repos/lsp-py');
+  const projectSlug = 'lsp-py';
   const registry = new LspLanguageServerRegistry();
   const command = await registry.resolve('python');
-  if (!command) {
-    t.skip('python-lsp-server (pylsp) not installed.');
-    return;
-  }
+  assertCommandAvailable(command, 'pyright-langserver');
+  assertResolvedFromBundledBin(command, 'pyright-langserver');
 
   const workspaceRoot = fixturesRoot;
   const sandbox = await createFlueLocalCodingSandbox({
     workspaceRoot,
     targetKind: 'repo',
     repoPath: projectPath,
+    projectSlug,
   });
 
   const tools = createLspTools({
@@ -133,22 +141,19 @@ test('lsp_document_symbols with real python-lsp-server', async (t) => {
   assert.ok(output.result.symbols.some((s) => s.name === 'greet'));
 });
 
-test('lsp_hover with real python-lsp-server', async (t) => {
-  if (!skipUnlessEnabled(t)) return;
-
-  const projectPath = join(fixturesRoot, 'lsp-py');
+test('lsp_hover with real pyright-langserver', async () => {
+  const projectPath = join(fixturesRoot, 'repos/lsp-py');
+  const projectSlug = 'lsp-py';
   const registry = new LspLanguageServerRegistry();
   const command = await registry.resolve('python');
-  if (!command) {
-    t.skip('python-lsp-server (pylsp) not installed.');
-    return;
-  }
+  assertCommandAvailable(command, 'pyright-langserver');
 
   const workspaceRoot = fixturesRoot;
   const sandbox = await createFlueLocalCodingSandbox({
     workspaceRoot,
     targetKind: 'repo',
     repoPath: projectPath,
+    projectSlug,
   });
 
   const tools = createLspTools({
@@ -158,8 +163,8 @@ test('lsp_hover with real python-lsp-server', async (t) => {
   });
 
   const hoverTool = getTool(tools, 'lsp_hover');
-  // Position of `make_greeter` call in main.py
-  const raw = await hoverTool.execute({ path: 'main.py', line: 5, character: 16 });
+  // Position of `make_greeter` call in main.py on line 4 (0-indexed line 3)
+  const raw = await hoverTool.execute({ path: 'main.py', line: 4, character: 15 });
   const output = JSON.parse(raw) as {
     provider: string;
     lspAvailable: boolean;

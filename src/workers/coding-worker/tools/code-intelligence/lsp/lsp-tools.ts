@@ -475,14 +475,23 @@ function normalizeLocationArray(locations: unknown[]): unknown[] {
 }
 
 function normalizeLocation(location: Record<string, unknown>): Record<string, unknown> {
-  const uri = typeof location.uri === 'string' ? location.uri : '';
-  const range = normalizeRange(
-    (location.range as { start: LspPosition; end: LspPosition }) ?? {
+  // LSP textDocument/definition can return Location (with `uri` + `range`) or
+  // LocationLink (with `targetUri` + `targetRange` + `targetSelectionRange`).
+  // Normalize both shapes to { uri, range } so callers can use one schema.
+  const rawUri =
+    typeof location.uri === 'string'
+      ? location.uri
+      : typeof location.targetUri === 'string'
+        ? location.targetUri
+        : '';
+  const rawRange =
+    (location.range as { start: LspPosition; end: LspPosition } | undefined) ??
+    (location.targetRange as { start: LspPosition; end: LspPosition } | undefined) ??
+    {
       start: { line: 0, character: 0 },
       end: { line: 0, character: 0 },
-    },
-  );
-  return { uri, range };
+    };
+  return { uri: rawUri, range: normalizeRange(rawRange) };
 }
 
 function normalizeDocumentSymbolArray(symbols: unknown[]): unknown[] {
