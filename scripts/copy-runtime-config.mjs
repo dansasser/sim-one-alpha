@@ -18,6 +18,7 @@ for (const target of targets) {
 
 copyTestFixtures(includeTscOutput ? resolve('.tmp/tsc') : resolve('dist'));
 copyWorkspaceDirectories(includeTscOutput ? resolve('.tmp/tsc') : resolve('dist'));
+copyModelsYaml(includeTscOutput ? resolve('.tmp/tsc') : resolve('dist'));
 
 function copyTestFixtures(outputRoot) {
   const fixturesSource = resolve('src/tests/fixtures');
@@ -68,4 +69,15 @@ function copyDirectoryIfExists(sourceDir, targetDir) {
 
   mkdirSync(dirname(targetDir), { recursive: true });
   cpSync(sourceDir, targetDir, { recursive: true, force: true });
+}
+
+function copyModelsYaml(outputRoot) {
+  const modelsYamlSource = resolve('src/tools/runpod-image/models.yaml');
+  if (!existsSync(modelsYamlSource)) {
+    return;
+  }
+
+  const modelsYamlTarget = join(outputRoot, 'tools/runpod-image/models.yaml');
+  mkdirSync(dirname(modelsYamlTarget), { recursive: true });
+  copyFileSync(modelsYamlSource, modelsYamlTarget);
 }

@@ -12,8 +12,13 @@ function assertCommandAvailable(command: LanguageServerCommand | undefined, name
 }
 
 function assertResolvedFromBundledBin(command: LanguageServerCommand, name: string): void {
+  const hasNodeModulesBin = /node_modules[\\/]\.bin[\\/]/.test(command.command);
+  const matchesName = command.command.endsWith(name) ||
+                      command.command.endsWith(`${name}.cmd`) ||
+                      command.command.endsWith(`${name}.exe`);
+
   assert.ok(
-    command.command.includes('node_modules/.bin') || command.command.endsWith(name),
+    hasNodeModulesBin || matchesName,
     `expected ${name} to be resolved from node_modules/.bin or PATH; got ${command.command}`,
   );
 }

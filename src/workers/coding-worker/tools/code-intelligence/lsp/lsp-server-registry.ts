@@ -23,13 +23,15 @@ async function resolveCommand(command: string): Promise<string | undefined> {
 function resolveRuntimeBin(command: string): string | undefined {
   const roots = [resolveRuntimeRoot(), process.cwd()];
   for (const root of roots) {
+    if (process.platform === 'win32') {
+      const windowsCandidate = resolve(root, 'node_modules/.bin', `${command}.cmd`);
+      if (existsSync(windowsCandidate)) {
+        return windowsCandidate;
+      }
+    }
     const candidate = resolve(root, 'node_modules/.bin', command);
     if (existsSync(candidate)) {
       return candidate;
-    }
-    const windowsCandidate = resolve(root, 'node_modules/.bin', `${command}.cmd`);
-    if (existsSync(windowsCandidate)) {
-      return windowsCandidate;
     }
   }
   return undefined;
