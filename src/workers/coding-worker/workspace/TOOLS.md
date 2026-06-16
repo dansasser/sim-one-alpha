@@ -15,6 +15,7 @@ Wired worker-local capability groups:
 - Repo support modules: preflight, package-manager detection, verification planning, git-state parsing, and diff summaries.
 - Planning tools: `coding_plan_create` builds an explicit initial plan; `coding_plan_replan` updates the plan after verification failure, code-review rejection, or newly discovered context.
 - Code intelligence tools: AST parsing (TypeScript, JavaScript, Python), symbol navigation, find declarations, find references, and import-graph analysis across the scoped source files.
+  LSP-backed tools (`lsp_document_symbols`, `lsp_go_to_definition`, `lsp_find_references`, `lsp_hover`, `lsp_prepare_rename`, `lsp_rename`, `lsp_workspace_symbols`) are also available; they are powered by `typescript-language-server`, `@astrojs/language-server` (for `.astro`), and `pyright-langserver` from `node_modules/.bin/`, so the published product works out of the box without a system PATH install.
 - Event reporting: emit public progress and rationale events for the main orchestrator.
 
 The runtime workspace root is the coding worker's access root. Do not treat the agent source checkout or `process.cwd()` as the default user project. Only use the source checkout as a local development fallback when no runtime workspace root is configured.

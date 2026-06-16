@@ -145,6 +145,7 @@ src/workers/coding-worker/subagents/
 
 src/workers/coding-worker/tools/
   Worker-local workspace/project, shell, git, GitHub, and approval-aware execution tools.
+  Includes the LSP code-intelligence tools under `src/workers/coding-worker/tools/code-intelligence/lsp/`.
   File/shell/git/test execution is backed by Flue's Node local sandbox factory.
   The sandbox is rooted at the configured runtime workspace root. By default this root is `src/workspace/` (the main agent persona workspace). User-editable workspace files live at that root; non-git projects live under `projects/**`; repositories live under `repos/**`.
   The coding worker must create or resolve new project work under that runtime workspace root.
