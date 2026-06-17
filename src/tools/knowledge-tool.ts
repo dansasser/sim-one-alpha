@@ -1,4 +1,5 @@
-﻿import { Type, defineTool } from '@flue/runtime';
+import { defineTool } from '@flue/runtime';
+import * as v from 'valibot';
 import { goromboPersistenceRuntime } from '../db.js';
 import { sharedKnowledgeStore } from '../services/knowledge-service.js';
 import type { NormalizedMessageEvent } from '../types/index.js';
@@ -9,11 +10,11 @@ export const addKnowledgeTool = defineTool({
   name: 'add_knowledge',
   description:
     'Add a piece of knowledge to the searchable vector knowledge base. Use this when the user shares a fact, preference, instruction, or context that should be remembered and retrievable later.',
-  parameters: Type.Object({
-    eventId: Type.String(),
-    title: Type.String(),
-    content: Type.String(),
-    tags: Type.Optional(Type.Array(Type.String())),
+  parameters: v.object({
+    eventId: v.string(),
+    title: v.string(),
+    content: v.string(),
+    tags: v.optional(v.array(v.string())),
   }),
   execute: async ({ eventId, title, content, tags }) => {
     const event = getTrustedKnowledgeEvent(eventId);

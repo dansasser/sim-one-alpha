@@ -1,4 +1,5 @@
-import { defineTool, Type, type ToolDefinition } from '@flue/runtime';
+import { defineTool, type ToolDefinition } from '@flue/runtime';
+import * as v from 'valibot';
 import type { CodingTriageResult } from '../../../schemas/coding-worker.js';
 
 export function createCodingTriageTools(): ToolDefinition[] {
@@ -7,34 +8,34 @@ export function createCodingTriageTools(): ToolDefinition[] {
       name: 'coding_triage_submit_result',
       description:
         'Submit the final structured triage result containing an explicit plan, files to inspect, and the recommended execution path.',
-      parameters: Type.Object({
-        plan: Type.Array(
-          Type.Object({
-            id: Type.String(),
-            description: Type.String(),
-            owner: Type.Union([
-              Type.Literal('triage'),
-              Type.Literal('implementer'),
-              Type.Literal('test-debug'),
-              Type.Literal('code-review'),
-              Type.Literal('github'),
-              Type.Literal('coding-worker'),
+      parameters: v.object({
+        plan: v.array(
+          v.object({
+            id: v.string(),
+            description: v.string(),
+            owner: v.union([
+              v.literal('triage'),
+              v.literal('implementer'),
+              v.literal('test-debug'),
+              v.literal('code-review'),
+              v.literal('github'),
+              v.literal('coding-worker'),
             ]),
-            status: Type.Union([
-              Type.Literal('pending'),
-              Type.Literal('in_progress'),
-              Type.Literal('completed'),
-              Type.Literal('blocked'),
+            status: v.union([
+              v.literal('pending'),
+              v.literal('in_progress'),
+              v.literal('completed'),
+              v.literal('blocked'),
             ]),
           })
         ),
-        filesToInspect: Type.Array(Type.String()),
-        recommendedExecutionPath: Type.Union([
-          Type.Literal('implementer'),
-          Type.Literal('github'),
-          Type.Literal('test-debug'),
-          Type.Literal('code-review'),
-          Type.Literal('manual'),
+        filesToInspect: v.array(v.string()),
+        recommendedExecutionPath: v.union([
+          v.literal('implementer'),
+          v.literal('github'),
+          v.literal('test-debug'),
+          v.literal('code-review'),
+          v.literal('manual'),
         ]),
       }),
       execute: async (args) => {

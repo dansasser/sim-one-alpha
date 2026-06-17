@@ -1,4 +1,5 @@
-import { Type, defineTool } from '@flue/runtime';
+import { defineTool } from '@flue/runtime';
+import * as v from 'valibot';
 import { readNonNegativeInteger, readPositiveInteger, readWebFetchMode } from '../utils/input.js';
 import { retrieveContext } from '../workflows/retrieval.js';
 
@@ -6,15 +7,15 @@ export const retrieveContextTool = defineTool({
   name: 'retrieve_context',
   description:
     'Researcher-only retrieval tool. It can call the RAG workflow, use Ollama Search when configured, fetch top web pages, and pack returned context to a token budget.',
-  parameters: Type.Object({
-    eventId: Type.String(),
-    text: Type.String(),
-    actorId: Type.String(),
-    conversationId: Type.String(),
-    limit: Type.Optional(Type.Number()),
-    maxContextTokens: Type.Optional(Type.Number()),
-    webFetch: Type.Optional(Type.Union([Type.Literal('auto'), Type.Literal('always'), Type.Literal('never')])),
-    fetchTopK: Type.Optional(Type.Number()),
+  parameters: v.object({
+    eventId: v.string(),
+    text: v.string(),
+    actorId: v.string(),
+    conversationId: v.string(),
+    limit: v.optional(v.number()),
+    maxContextTokens: v.optional(v.number()),
+    webFetch: v.optional(v.union([v.literal('auto'), v.literal('always'), v.literal('never')])),
+    fetchTopK: v.optional(v.number()),
   }),
   execute: async ({ eventId, text, actorId, conversationId, limit, maxContextTokens, webFetch, fetchTopK }) => {
     return JSON.stringify(

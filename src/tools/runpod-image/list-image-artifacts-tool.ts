@@ -1,4 +1,5 @@
-import { defineTool, Type } from '@flue/runtime';
+import { defineTool } from '@flue/runtime';
+import * as v from 'valibot';
 import { goromboPersistenceRuntime } from '../../db.js';
 import type { ImageArtifactRecord } from '../../schemas/runpod-image.js';
 
@@ -6,10 +7,10 @@ export const listImageArtifactsTool = defineTool({
   name: 'list_image_artifacts',
   description:
     'List previously generated image artifacts from SQLite, optionally filtered by event.',
-  parameters: Type.Object({
-    eventId: Type.Optional(Type.String()),
-    limit: Type.Optional(Type.Number()),
-    after: Type.Optional(Type.String()),
+  parameters: v.object({
+    eventId: v.optional(v.string()),
+    limit: v.optional(v.number()),
+    after: v.optional(v.string()),
   }),
   execute: async (input) => {
     const db = goromboPersistenceRuntime.sessionDatabase;

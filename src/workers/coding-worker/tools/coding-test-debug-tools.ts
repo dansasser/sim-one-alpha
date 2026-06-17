@@ -1,4 +1,5 @@
-import { defineTool, Type, type ToolDefinition } from '@flue/runtime';
+import { defineTool, type ToolDefinition } from '@flue/runtime';
+import * as v from 'valibot';
 import type { CodingTestDebugResult } from '../../../schemas/coding-worker.js';
 
 export function createCodingTestDebugTools(): ToolDefinition[] {
@@ -7,26 +8,26 @@ export function createCodingTestDebugTools(): ToolDefinition[] {
       name: 'coding_test_debug_submit_result',
       description:
         'Submit the final structured CodingTestDebugResult containing debug edits, verification commands, and failure analysis.',
-      parameters: Type.Object({
-        debugEdits: Type.Array(
-          Type.Object({
-            path: Type.String(),
-            oldText: Type.String(),
-            newText: Type.String(),
-            expectedOccurrences: Type.Optional(Type.Number()),
+      parameters: v.object({
+        debugEdits: v.array(
+          v.object({
+            path: v.string(),
+            oldText: v.string(),
+            newText: v.string(),
+            expectedOccurrences: v.optional(v.number()),
           }),
         ),
-        verificationCommands: Type.Array(
-          Type.Object({
-            name: Type.String(),
-            command: Type.String(),
-            required: Type.Optional(Type.Boolean()),
-            reason: Type.Optional(Type.String()),
-            cwd: Type.Optional(Type.String()),
-            timeoutSeconds: Type.Optional(Type.Number()),
+        verificationCommands: v.array(
+          v.object({
+            name: v.string(),
+            command: v.string(),
+            required: v.optional(v.boolean()),
+            reason: v.optional(v.string()),
+            cwd: v.optional(v.string()),
+            timeoutSeconds: v.optional(v.number()),
           }),
         ),
-        analysis: Type.String(),
+        analysis: v.string(),
       }),
       execute: async (args) => {
         const result: CodingTestDebugResult = {

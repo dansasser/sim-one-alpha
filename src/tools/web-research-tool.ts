@@ -1,4 +1,5 @@
-import { Type, defineTool } from '@flue/runtime';
+import { defineTool } from '@flue/runtime';
+import * as v from 'valibot';
 import {
   readNonNegativeInteger,
   readPositiveInteger,
@@ -12,20 +13,20 @@ export const webResearchTool = defineTool({
   name: 'web_research',
   description:
     'Researcher-only tool that runs the web research workflow with query planning, caching, web search, page fetch, source packing, and confidence metadata.',
-  parameters: Type.Object({
-    eventId: Type.String(),
-    text: Type.String(),
-    actorId: Type.String(),
-    conversationId: Type.String(),
-    depth: Type.Optional(Type.String()),
-    maxQueries: Type.Optional(Type.Union([Type.Number(), Type.String()])),
-    maxFetches: Type.Optional(Type.Union([Type.Number(), Type.String()])),
-    maxContextTokens: Type.Optional(Type.Union([Type.Number(), Type.String()])),
-    webFetch: Type.Optional(Type.String()),
-    limit: Type.Optional(Type.Union([Type.Number(), Type.String()])),
-    freshness: Type.Optional(Type.String()),
-    minSources: Type.Optional(Type.Union([Type.Number(), Type.String()])),
-    maxIterations: Type.Optional(Type.Union([Type.Number(), Type.String()])),
+  parameters: v.object({
+    eventId: v.string(),
+    text: v.string(),
+    actorId: v.string(),
+    conversationId: v.string(),
+    depth: v.optional(v.string()),
+    maxQueries: v.optional(v.union([v.number(), v.string()])),
+    maxFetches: v.optional(v.union([v.number(), v.string()])),
+    maxContextTokens: v.optional(v.union([v.number(), v.string()])),
+    webFetch: v.optional(v.string()),
+    limit: v.optional(v.union([v.number(), v.string()])),
+    freshness: v.optional(v.string()),
+    minSources: v.optional(v.union([v.number(), v.string()])),
+    maxIterations: v.optional(v.union([v.number(), v.string()])),
   }),
   execute: async ({
     eventId,
