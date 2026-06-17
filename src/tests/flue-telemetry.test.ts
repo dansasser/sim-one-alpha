@@ -139,9 +139,11 @@ test('telemetry summary ignores invalid persisted run event entries', () => {
       payload: 'missing type',
     },
     {
-      type: 'tool_call',
+      type: 'tool',
       runId: 'agent:orchestrator:run-invalid',
       toolName: 'web_research',
+      isError: false,
+      durationMs: 100,
     },
   ]);
 

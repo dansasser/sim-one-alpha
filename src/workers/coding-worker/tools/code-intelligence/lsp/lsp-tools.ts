@@ -1,4 +1,5 @@
-import { defineTool, Type } from '@flue/runtime';
+import { defineTool } from '@flue/runtime';
+import * as v from 'valibot';
 import type { ToolDefinition } from '@flue/runtime';
 import { extname, resolve } from 'node:path';
 import type { CodingSandboxRuntime } from '../../sandbox-runtime.js';
@@ -141,10 +142,10 @@ export function createLspTools(options: LspToolsOptions): ToolDefinition[] {
       name: 'lsp_go_to_definition',
       description:
         'Find the definition(s) of a symbol at a specific position in a source file using the language server.',
-      parameters: Type.Object({
-        path: Type.String(),
-        line: Type.Number(),
-        character: Type.Number(),
+      parameters: v.object({
+        path: v.string(),
+        line: v.number(),
+        character: v.number(),
       }),
       execute: async (args) => withToolProgress(options, 'lsp-go-to-definition', async () => {
         const path = requireString(args.path, 'path');
@@ -173,11 +174,11 @@ export function createLspTools(options: LspToolsOptions): ToolDefinition[] {
       name: 'lsp_find_references',
       description:
         'Find all references to a symbol at a specific position in a source file using the language server.',
-      parameters: Type.Object({
-        path: Type.String(),
-        line: Type.Number(),
-        character: Type.Number(),
-        includeDeclaration: Type.Optional(Type.Boolean()),
+      parameters: v.object({
+        path: v.string(),
+        line: v.number(),
+        character: v.number(),
+        includeDeclaration: v.optional(v.boolean()),
       }),
       execute: async (args) => withToolProgress(options, 'lsp-find-references', async () => {
         const path = requireString(args.path, 'path');
@@ -208,8 +209,8 @@ export function createLspTools(options: LspToolsOptions): ToolDefinition[] {
       name: 'lsp_document_symbols',
       description:
         'List all symbols defined in a source file using the language server.',
-      parameters: Type.Object({
-        path: Type.String(),
+      parameters: v.object({
+        path: v.string(),
       }),
       execute: async (args) => withToolProgress(options, 'lsp-document-symbols', async () => {
         const path = requireString(args.path, 'path');
@@ -235,8 +236,8 @@ export function createLspTools(options: LspToolsOptions): ToolDefinition[] {
       name: 'lsp_workspace_symbol',
       description:
         'Search for symbols across the whole workspace using the language server.',
-      parameters: Type.Object({
-        query: Type.String(),
+      parameters: v.object({
+        query: v.string(),
       }),
       execute: async (args) => withToolProgress(options, 'lsp-workspace-symbol', async () => {
         const query = requireString(args.query, 'query');
@@ -281,10 +282,10 @@ export function createLspTools(options: LspToolsOptions): ToolDefinition[] {
       name: 'lsp_hover',
       description:
         'Get hover/type information for a symbol at a specific position in a source file using the language server.',
-      parameters: Type.Object({
-        path: Type.String(),
-        line: Type.Number(),
-        character: Type.Number(),
+      parameters: v.object({
+        path: v.string(),
+        line: v.number(),
+        character: v.number(),
       }),
       execute: async (args) => withToolProgress(options, 'lsp-hover', async () => {
         const path = requireString(args.path, 'path');
@@ -313,10 +314,10 @@ export function createLspTools(options: LspToolsOptions): ToolDefinition[] {
       name: 'lsp_prepare_rename',
       description:
         'Ask the language server for the range that would be renamed at a specific position.',
-      parameters: Type.Object({
-        path: Type.String(),
-        line: Type.Number(),
-        character: Type.Number(),
+      parameters: v.object({
+        path: v.string(),
+        line: v.number(),
+        character: v.number(),
       }),
       execute: async (args) => withToolProgress(options, 'lsp-prepare-rename', async () => {
         const path = requireString(args.path, 'path');

@@ -1,4 +1,4 @@
-import { defineTool, Type, type ToolDefinition } from '@flue/runtime';
+import { defineTool, type ToolDefinition } from '@flue/runtime';
 import * as v from 'valibot';
 import { CodingImplementerResultSchema } from '../../../schemas/coding-worker.js';
 
@@ -8,29 +8,29 @@ export function createCodingImplementerTools(): ToolDefinition[] {
       name: 'coding_implementer_submit_result',
       description:
         'Submit the final structured implementation result containing file edits, files written, and commands needed to verify them. The result must match the CodingImplementerResult schema exactly; invalid submissions will be rejected.',
-      parameters: Type.Object({
-        fileEdits: Type.Array(
-          Type.Object({
-            path: Type.String(),
-            oldText: Type.String(),
-            newText: Type.String(),
-            expectedOccurrences: Type.Optional(Type.Number()),
+      parameters: v.object({
+        fileEdits: v.array(
+          v.object({
+            path: v.string(),
+            oldText: v.string(),
+            newText: v.string(),
+            expectedOccurrences: v.optional(v.number()),
           })
         ),
-        writeFiles: Type.Array(
-          Type.Object({
-            path: Type.String(),
-            content: Type.String(),
+        writeFiles: v.array(
+          v.object({
+            path: v.string(),
+            content: v.string(),
           })
         ),
-        verificationCommands: Type.Array(
-          Type.Object({
-            name: Type.String(),
-            command: Type.String(),
-            required: Type.Optional(Type.Boolean()),
-            reason: Type.Optional(Type.String()),
-            cwd: Type.Optional(Type.String()),
-            timeoutSeconds: Type.Optional(Type.Number()),
+        verificationCommands: v.array(
+          v.object({
+            name: v.string(),
+            command: v.string(),
+            required: v.optional(v.boolean()),
+            reason: v.optional(v.string()),
+            cwd: v.optional(v.string()),
+            timeoutSeconds: v.optional(v.number()),
           })
         ),
       }),

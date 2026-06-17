@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import type { SessionData } from '@flue/runtime';
+import type { SessionData } from '@flue/runtime/adapter';
 import orchestratorAgent from '../agents/orchestrator.js';
 import {
   createFlueSessionStorageKey,
@@ -30,7 +30,7 @@ test('GOROMBO persistence wrapper loads latest logical session across workflow r
     const data = createStoredSessionData();
 
     await runtime.adapter.migrate?.();
-    const store = runtime.adapter.connect().sessions;
+    const store = (await runtime.adapter.connect()).executionStore.sessions;
     await store.save(firstRunKey, data);
 
     assert.deepEqual(await store.load(secondRunKey), data);
@@ -49,7 +49,7 @@ test('GOROMBO persistence wrapper deletes the logical session when called from a
     const secondRunKey = createFlueSessionStorageKey('workflow-run-2', 'gorombo-orchestrator', 'support');
 
     await runtime.adapter.migrate?.();
-    const store = runtime.adapter.connect().sessions;
+    const store = (await runtime.adapter.connect()).executionStore.sessions;
     await store.save(firstRunKey, createStoredSessionData());
     await store.delete(secondRunKey);
 
@@ -74,7 +74,7 @@ test('GOROMBO persistence wrapper indexes saved Flue session data for session me
     });
 
     await runtime.adapter.migrate?.();
-    const store = runtime.adapter.connect().sessions;
+    const store = (await runtime.adapter.connect()).executionStore.sessions;
     await store.save(storageKey, createStoredSessionData('Remember the neon invoice audit.'));
 
     const matches = runtime.sessionDatabase.searchSessionMemory({
@@ -114,7 +114,7 @@ test('direct agent session data is indexed by agent instance id for memory retri
     });
 
     await runtime.adapter.migrate?.();
-    const store = runtime.adapter.connect().sessions;
+    const store = (await runtime.adapter.connect()).executionStore.sessions;
     await store.save(storageKey, createStoredSessionData('Remember the direct durable invoice note.'));
 
     assert.equal(
@@ -149,7 +149,7 @@ test('direct agent loads do not fall back to logical default session history', a
     const legacyData = createStoredSessionData('legacy default direct-agent history');
 
     await runtime.adapter.migrate?.();
-    const store = runtime.adapter.connect().sessions;
+    const store = (await runtime.adapter.connect()).executionStore.sessions;
     await store.save(legacyKey, legacyData);
     runtime.sessionDatabase.ensureChatSession({
       sessionId: 'new-direct-session',
@@ -179,7 +179,7 @@ test('direct agent deletes do not remove logical default session history', async
     const legacyData = createStoredSessionData('legacy default direct-agent history');
 
     await runtime.adapter.migrate?.();
-    const store = runtime.adapter.connect().sessions;
+    const store = (await runtime.adapter.connect()).executionStore.sessions;
     await store.save(legacyKey, legacyData);
     await store.delete(missingSessionKey);
 
@@ -259,7 +259,7 @@ test('session memory retrieval is scoped to the current actor or conversation', 
 
   try {
     await runtime.adapter.migrate?.();
-    const store = runtime.adapter.connect().sessions;
+    const store = (await runtime.adapter.connect()).executionStore.sessions;
     runtime.sessionDatabase.ensureChatSession({
       sessionId: 'memory-user-a',
       origin: 'web',
@@ -303,7 +303,7 @@ test('session memory indexing skips thinking blocks', async () => {
 
   try {
     await runtime.adapter.migrate?.();
-    const store = runtime.adapter.connect().sessions;
+    const store = (await runtime.adapter.connect()).executionStore.sessions;
     runtime.sessionDatabase.ensureChatSession({
       sessionId: 'thinking-memory',
       origin: 'web',
@@ -353,7 +353,7 @@ test('GOROMBO persistence wrapper restores the previous logical session when the
     const secondData = createStoredSessionData('second support snapshot', '2026-06-07T00:01:00.000Z');
 
     await runtime.adapter.migrate?.();
-    const store = runtime.adapter.connect().sessions;
+    const store = (await runtime.adapter.connect()).executionStore.sessions;
     await store.save(firstRunKey, firstData);
     await store.save(secondRunKey, secondData);
     assert.deepEqual(await runtime.getLatestSessionData('gorombo-orchestrator', 'support'), secondData);
@@ -377,7 +377,7 @@ test('GOROMBO persistence wrapper keeps the latest logical session when an older
     const secondData = createStoredSessionData('second support snapshot', '2026-06-07T00:01:00.000Z');
 
     await runtime.adapter.migrate?.();
-    const store = runtime.adapter.connect().sessions;
+    const store = (await runtime.adapter.connect()).executionStore.sessions;
     await store.save(firstRunKey, firstData);
     await store.save(secondRunKey, secondData);
 

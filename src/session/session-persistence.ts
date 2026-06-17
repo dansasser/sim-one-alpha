@@ -2,6 +2,7 @@ import { sqlite } from '@flue/runtime/node';
 import type {
   AgentExecutionStore,
   PersistenceAdapter,
+  PersistenceStores,
   SessionData,
   SessionStore,
 } from '@flue/runtime/adapter';
@@ -47,35 +48,37 @@ export function createGoromboPersistenceRuntime(config: GoromboConfig): GoromboP
   runBackgroundIndexing({ vectorStore, embeddingClient }).catch((error) =>
     console.error('[WARN] Background vector indexing failed:', error instanceof Error ? error.message : String(error)),
   );
-  let latestExecutionStore: AgentExecutionStore | undefined;
+  let latestStores: PersistenceStores | undefined;
 
   const adapter: PersistenceAdapter = {
     async migrate() {
       await flueAdapter.migrate?.();
       sessionDatabase.migrate();
     },
-    connect() {
-      const executionStore = flueAdapter.connect();
-      latestExecutionStore = executionStore;
-      return {
-        ...executionStore,
-        sessions: new GoromboLogicalSessionStore(executionStore.sessions, sessionDatabase),
+    async connect() {
+      const stores = await flueAdapter.connect();
+      const wrapped = {
+        executionStore: {
+          sessions: new GoromboLogicalSessionStore(stores.executionStore.sessions, sessionDatabase),
+          submissions: stores.executionStore.submissions,
+        },
+        runStore: stores.runStore,
+        eventStreamStore: stores.eventStreamStore,
       };
-    },
-    connectRunStore() {
-      return flueAdapter.connectRunStore();
-    },
-    connectRunRegistry() {
-      return flueAdapter.connectRunRegistry();
-    },
-    connectEventStreamStore() {
-      return flueAdapter.connectEventStreamStore();
+      latestStores = wrapped;
+      return wrapped;
     },
     async close() {
+      latestStores = undefined;
       await flueAdapter.close?.();
       sessionDatabase.close();
     },
   };
+
+  async function getExecutionStore(): Promise<AgentExecutionStore> {
+    const stores = latestStores ?? await adapter.connect();
+    return stores.executionStore;
+  }
 
   return {
     adapter,
@@ -88,8 +91,7 @@ export function createGoromboPersistenceRuntime(config: GoromboConfig): GoromboP
         return null;
       }
 
-      const sessions = latestExecutionStore?.sessions ?? adapter.connect().sessions;
-      return sessions.load(storageKey);
+      return (await getExecutionStore()).sessions.load(storageKey);
     },
     async getLatestSessionDataForInstance(instanceId, harnessName, sessionName) {
       const storageKey = sessionDatabase.getLatestStorageKeyForInstance(instanceId, harnessName, sessionName);
@@ -97,8 +99,7 @@ export function createGoromboPersistenceRuntime(config: GoromboConfig): GoromboP
         return null;
       }
 
-      const sessions = latestExecutionStore?.sessions ?? adapter.connect().sessions;
-      return sessions.load(storageKey);
+      return (await getExecutionStore()).sessions.load(storageKey);
     },
   };
 }

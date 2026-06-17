@@ -205,7 +205,7 @@ function summarizeRun(runId: string, events: TelemetryEventSummary[]): Telemetry
   const taskStarts = events.filter((event) => event.type === 'task_start');
   const toolCalls = events.filter((event) =>
     event.type === 'tool_start' ||
-    event.type === 'tool_call',
+    event.type === 'tool',
   );
   const operations = events.filter((event) => event.type === 'operation_start' || event.type === 'operation');
   const errors = events.filter((event) => event.isError);
@@ -263,9 +263,7 @@ function shouldKeepEvent(event: FlueEvent): boolean {
     'turn_start',
     'turn',
     'tool_start',
-    'tool_call',
-    'tool_execution_start',
-    'tool_execution_end',
+    'tool',
     'task_start',
     'task',
     'operation_start',

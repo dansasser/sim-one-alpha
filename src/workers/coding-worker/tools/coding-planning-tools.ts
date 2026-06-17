@@ -1,4 +1,5 @@
-import { defineTool, Type, type ToolDefinition } from '@flue/runtime';
+import { defineTool, type ToolDefinition } from '@flue/runtime';
+import * as v from 'valibot';
 import type { CodingProgressReporter } from '../events/progress-reporter.js';
 import type { CodingWorkerEventType } from '../events/coding-worker-events.js';
 import type {
@@ -10,19 +11,19 @@ import type {
 } from '../types.js';
 import { createInitialPlan, replan, type PlanningContext, type ReplanFailureContext } from '../workflow/planning.js';
 
-const CodingWorkerLoopStepSchema = Type.Union([
-  Type.Literal('triage'),
-  Type.Literal('implement'),
-  Type.Literal('test-debug'),
-  Type.Literal('code-review'),
-  Type.Literal('github'),
-  Type.Literal('commit'),
-  Type.Literal('push'),
-  Type.Literal('pr'),
-  Type.Literal('replanned'),
-  Type.Literal('completed'),
-  Type.Literal('blocked'),
-  Type.Literal('error'),
+const CodingWorkerLoopStepSchema = v.union([
+  v.literal('triage'),
+  v.literal('implement'),
+  v.literal('test-debug'),
+  v.literal('code-review'),
+  v.literal('github'),
+  v.literal('commit'),
+  v.literal('push'),
+  v.literal('pr'),
+  v.literal('replanned'),
+  v.literal('completed'),
+  v.literal('blocked'),
+  v.literal('error'),
 ]);
 
 export interface CodingPlanningToolsOptions {
@@ -36,12 +37,12 @@ export function createCodingPlanningTools(options: CodingPlanningToolsOptions = 
       name: 'coding_plan_create',
       description:
         'Create an explicit initial worker-local plan for a coding task. Returns CodingPlanItem[] with owners, descriptions, and statuses.',
-      parameters: Type.Object({
-        taskId: Type.String(),
-        text: Type.String(),
-        filesToInspect: Type.Optional(Type.Array(Type.String())),
-        hasGithubContext: Type.Optional(Type.Boolean()),
-        packageManager: Type.Optional(Type.String()),
+      parameters: v.object({
+        taskId: v.string(),
+        text: v.string(),
+        filesToInspect: v.optional(v.array(v.string())),
+        hasGithubContext: v.optional(v.boolean()),
+        packageManager: v.optional(v.string()),
       }),
       execute: async (args) => {
         const task = {
@@ -73,52 +74,52 @@ export function createCodingPlanningTools(options: CodingPlanningToolsOptions = 
       name: 'coding_plan_replan',
       description:
         'Replan the worker-local loop after a failure or when new context is discovered. Returns an updated CodingPlanItem[].',
-      parameters: Type.Object({
-        taskId: Type.String(),
+      parameters: v.object({
+        taskId: v.string(),
         currentStep: CodingWorkerLoopStepSchema,
-        turn: Type.Number(),
-        maxTurns: Type.Number(),
-        replanCount: Type.Number(),
-        plan: Type.Array(
-          Type.Object({
-            id: Type.String(),
-            description: Type.String(),
-            owner: Type.Union([
-              Type.Literal('triage'),
-              Type.Literal('implementer'),
-              Type.Literal('test-debug'),
-              Type.Literal('code-review'),
-              Type.Literal('github'),
-              Type.Literal('coding-worker'),
+        turn: v.number(),
+        maxTurns: v.number(),
+        replanCount: v.number(),
+        plan: v.array(
+          v.object({
+            id: v.string(),
+            description: v.string(),
+            owner: v.union([
+              v.literal('triage'),
+              v.literal('implementer'),
+              v.literal('test-debug'),
+              v.literal('code-review'),
+              v.literal('github'),
+              v.literal('coding-worker'),
             ]),
-            status: Type.Union([
-              Type.Literal('pending'),
-              Type.Literal('in_progress'),
-              Type.Literal('completed'),
-              Type.Literal('blocked'),
+            status: v.union([
+              v.literal('pending'),
+              v.literal('in_progress'),
+              v.literal('completed'),
+              v.literal('blocked'),
             ]),
           })
         ),
         failureStep: CodingWorkerLoopStepSchema,
-        failureSummary: Type.String(),
-        reviewFindings: Type.Optional(
-          Type.Array(
-            Type.Object({
-              file: Type.Optional(Type.String()),
-              lineStart: Type.Optional(Type.Number()),
-              lineEnd: Type.Optional(Type.Number()),
-              severity: Type.Union([Type.Literal('info'), Type.Literal('warning'), Type.Literal('blocker')]),
-              message: Type.String(),
+        failureSummary: v.string(),
+        reviewFindings: v.optional(
+          v.array(
+            v.object({
+              file: v.optional(v.string()),
+              lineStart: v.optional(v.number()),
+              lineEnd: v.optional(v.number()),
+              severity: v.union([v.literal('info'), v.literal('warning'), v.literal('blocker')]),
+              message: v.string(),
             })
           )
         ),
-        verificationEvidence: Type.Optional(
-          Type.Array(
-            Type.Object({
-              command: Type.String(),
-              status: Type.Union([Type.Literal('passed'), Type.Literal('failed'), Type.Literal('skipped')]),
-              exitCode: Type.Optional(Type.Number()),
-              summary: Type.String(),
+        verificationEvidence: v.optional(
+          v.array(
+            v.object({
+              command: v.string(),
+              status: v.union([v.literal('passed'), v.literal('failed'), v.literal('skipped')]),
+              exitCode: v.optional(v.number()),
+              summary: v.string(),
             })
           )
         ),

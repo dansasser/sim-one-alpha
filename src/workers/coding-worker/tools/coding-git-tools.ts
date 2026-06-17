@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { defineTool, Type, type ToolDefinition } from '@flue/runtime';
+import { defineTool, type ToolDefinition } from '@flue/runtime';
+import * as v from 'valibot';
 import {
   createInMemoryCodingApprovalService,
   type CodingApprovalService,
@@ -48,7 +49,7 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
     defineTool({
       name: 'coding_git_status',
       description: 'Read git status for the selected coding-worker project/repo scope.',
-      parameters: Type.Object({}),
+      parameters: v.object({}),
       execute: async () => {
         const sandbox = await getSandbox();
         const result = await sandbox.exec('git status --short --branch', { timeoutSeconds: 30 });
@@ -58,8 +59,8 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
     defineTool({
       name: 'coding_git_diff',
       description: 'Read git diff for the selected coding-worker project/repo scope.',
-      parameters: Type.Object({
-        statOnly: Type.Optional(Type.Boolean()),
+      parameters: v.object({
+        statOnly: v.optional(v.boolean()),
       }),
       execute: async (args) => {
         const sandbox = await getSandbox();
@@ -72,10 +73,10 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
       name: 'coding_git_commit',
       description:
         'Approval-gated git commit. Requires an approval decision for the deterministic request id `${taskId}:git.commit`.',
-      parameters: Type.Object({
-        taskId: Type.String(),
-        message: Type.String(),
-        paths: Type.Optional(Type.Array(Type.String())),
+      parameters: v.object({
+        taskId: v.string(),
+        message: v.string(),
+        paths: v.optional(v.array(v.string())),
       }),
       execute: async (args) => {
         const taskId = requireString(args.taskId, 'taskId');
@@ -115,10 +116,10 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
       name: 'coding_git_push',
       description:
         'Approval-gated git push. Requires an approval decision for the deterministic request id `${taskId}:git.push`.',
-      parameters: Type.Object({
-        taskId: Type.String(),
-        remote: Type.Optional(Type.String()),
-        branch: Type.String(),
+      parameters: v.object({
+        taskId: v.string(),
+        remote: v.optional(v.string()),
+        branch: v.string(),
       }),
       execute: async (args) => {
         const taskId = requireString(args.taskId, 'taskId');
@@ -156,13 +157,13 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
       name: 'coding_github_create_pr',
       description:
         'Approval-gated GitHub PR creation through gh CLI. Requires approval for `${taskId}:github.pr.create`.',
-      parameters: Type.Object({
-        taskId: Type.String(),
-        title: Type.String(),
-        body: Type.String(),
-        base: Type.Optional(Type.String()),
-        head: Type.Optional(Type.String()),
-        draft: Type.Optional(Type.Boolean()),
+      parameters: v.object({
+        taskId: v.string(),
+        title: v.string(),
+        body: v.string(),
+        base: v.optional(v.string()),
+        head: v.optional(v.string()),
+        draft: v.optional(v.boolean()),
       }),
       execute: async (args) => {
         const taskId = requireString(args.taskId, 'taskId');

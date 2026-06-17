@@ -17,8 +17,8 @@ import {
   recordImageArtifactTool,
   listImageArtifactsTool,
 } from '../tools/index.js';
-import { createTelegramReplyTool, readTelegramBotToken } from '../tools/telegram-reply-tool.js';
 import type { AgentModelCard } from '../models/types.js';
+import { telegramReplyTool } from '../channels/telegram.js';
 import { createCodingWorkerSubagent } from '../workers/coding-worker/coding-worker.js';
 import { createResearcherSubagent } from '../workers/researcher/researcher.js';
 
@@ -40,15 +40,12 @@ export default createAgent(async ({ env }) => {
     env: createCodingWorkerToolEnv(env),
   });
   const researcher = createResearcherSubagent();
-  const telegramReplyTool = createTelegramReplyToolIfConfigured(env);
 
   return {
     model: selectedModelCard.specifier,
     instructions: orchestratorInstructions,
     compaction: createFlueCompactionConfig(selectedModelCard),
-    tools: telegramReplyTool
-      ? [loadProtocolsTool, retrieveMemoryTool, addKnowledgeTool, generateImageTool, recordImageArtifactTool, listImageArtifactsTool, telegramReplyTool]
-      : [loadProtocolsTool, retrieveMemoryTool, addKnowledgeTool, generateImageTool, recordImageArtifactTool, listImageArtifactsTool],
+    tools: [loadProtocolsTool, retrieveMemoryTool, addKnowledgeTool, generateImageTool, recordImageArtifactTool, listImageArtifactsTool, telegramReplyTool],
     subagents: [codingWorker, researcher],
   };
 });
@@ -93,14 +90,6 @@ function createCodingWorkerToolEnv(env: Record<string, unknown>): Record<string,
 function readOptionalEnv(env: Record<string, unknown>, key: string): string | undefined {
   const value = env[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function createTelegramReplyToolIfConfigured(env: Record<string, unknown> | undefined) {
-  const token = readTelegramBotToken(env);
-  if (!token) {
-    return undefined;
-  }
-  return createTelegramReplyTool(token);
 }
 
 /**

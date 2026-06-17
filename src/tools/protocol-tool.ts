@@ -1,4 +1,5 @@
-import { Type, defineTool } from '@flue/runtime';
+import { defineTool } from '@flue/runtime';
+import * as v from 'valibot';
 import { goromboPersistenceRuntime } from '../db.js';
 import {
   SqliteProtocolProvider,
@@ -25,17 +26,17 @@ export interface ProtocolToolInput {
 export const loadProtocolsTool = defineTool({
   name: 'load_protocols',
   description: 'Load applicable protocol directives from the SQLite protocol store.',
-  parameters: Type.Object({
-    eventId: Type.String(),
-    connector: Type.Optional(Type.String()),
-    messageKind: Type.Optional(Type.String()),
-    actorId: Type.Optional(Type.String()),
-    conversationId: Type.Optional(Type.String()),
-    threadId: Type.Optional(Type.String()),
-    clientId: Type.Optional(Type.String()),
-    projectId: Type.Optional(Type.String()),
-    workflow: Type.Optional(Type.String()),
-    task: Type.Optional(Type.String()),
+  parameters: v.object({
+    eventId: v.string(),
+    connector: v.optional(v.string()),
+    messageKind: v.optional(v.string()),
+    actorId: v.optional(v.string()),
+    conversationId: v.optional(v.string()),
+    threadId: v.optional(v.string()),
+    clientId: v.optional(v.string()),
+    projectId: v.optional(v.string()),
+    workflow: v.optional(v.string()),
+    task: v.optional(v.string()),
   }),
   execute: async (input) => {
     const event = createProtocolLookupEvent(input as ProtocolToolInput);

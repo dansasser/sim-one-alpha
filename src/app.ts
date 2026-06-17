@@ -8,7 +8,6 @@ import { registerKnowledgeRoutes } from './routes/knowledge.js';
 import { registerTelemetryRoutes } from './routes/telemetry.js';
 import { registerTelegramAdminRoutes } from './routes/telegram-admin.js';
 import { registerFlueTelemetryObserver } from './telemetry/flue-telemetry.js';
-import { createTelegramIngress, runtimeEnvForIngress } from './connectors/telegram/telegram-ingress.js';
 
 registerFlueTelemetryObserver();
 
@@ -25,10 +24,5 @@ registerTelemetryRoutes(app);
 registerApprovalRoutes(app);
 registerTelegramAdminRoutes(app);
 app.route('/', flue());
-
-const telegramIngress = createTelegramIngress(app, runtimeEnvForIngress());
-if (telegramIngress) {
-  telegramIngress.start();
-}
 
 export default app;

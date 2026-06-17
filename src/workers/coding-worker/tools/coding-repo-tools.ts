@@ -1,4 +1,5 @@
-import { defineTool, Type, type ToolDefinition } from '@flue/runtime';
+import { defineTool, type ToolDefinition } from '@flue/runtime';
+import * as v from 'valibot';
 import { join } from 'node:path';
 import { evaluateCodingShellCommand } from './command-policy.js';
 import {
@@ -56,9 +57,9 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
       name: 'coding_repo_list_files',
       description:
         'List files inside the selected coding-worker workspace/project scope. Skips heavy generated directories by default.',
-      parameters: Type.Object({
-        root: Type.Optional(Type.String()),
-        maxFiles: Type.Optional(Type.Number()),
+      parameters: v.object({
+        root: v.optional(v.string()),
+        maxFiles: v.optional(v.number()),
       }),
       execute: async (args) => {
         const sandbox = await getSandbox();
@@ -72,8 +73,8 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
     defineTool({
       name: 'coding_repo_read_file',
       description: 'Read a UTF-8 file inside the selected coding-worker workspace/project scope.',
-      parameters: Type.Object({
-        path: Type.String(),
+      parameters: v.object({
+        path: v.string(),
       }),
       execute: async (args) => {
         const sandbox = await getSandbox();
@@ -88,10 +89,10 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
     defineTool({
       name: 'coding_repo_search',
       description: 'Search UTF-8 files for a literal string inside the selected coding-worker workspace/project scope.',
-      parameters: Type.Object({
-        query: Type.String(),
-        root: Type.Optional(Type.String()),
-        maxResults: Type.Optional(Type.Number()),
+      parameters: v.object({
+        query: v.string(),
+        root: v.optional(v.string()),
+        maxResults: v.optional(v.number()),
       }),
       execute: async (args) => {
         const sandbox = await getSandbox();
@@ -107,9 +108,9 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
       name: 'coding_repo_write_file',
       description:
         'Write a UTF-8 file inside the selected coding-worker workspace/project scope. Use for complete-file generated outputs or explicit replacements.',
-      parameters: Type.Object({
-        path: Type.String(),
-        content: Type.String(),
+      parameters: v.object({
+        path: v.string(),
+        content: v.string(),
       }),
       execute: async (args) => {
         const sandbox = await getSandbox();
@@ -130,13 +131,13 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
       name: 'coding_repo_apply_patch',
       description:
         'Apply exact text replacements to one UTF-8 file inside the selected coding-worker workspace/project scope. Each edit must include oldText and newText. Returns the applied CodingFileEdit objects so you can verify them before building your final submit_result.',
-      parameters: Type.Object({
-        path: Type.String(),
-        edits: Type.Array(
-          Type.Object({
-            oldText: Type.String(),
-            newText: Type.String(),
-            expectedOccurrences: Type.Optional(Type.Number()),
+      parameters: v.object({
+        path: v.string(),
+        edits: v.array(
+          v.object({
+            oldText: v.string(),
+            newText: v.string(),
+            expectedOccurrences: v.optional(v.number()),
           }),
         ),
       }),
@@ -171,11 +172,11 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
       name: 'coding_repo_apply_exact_edit',
       description:
         'Apply a single exact text replacement to one UTF-8 file inside the selected coding-worker workspace/project scope. Accepts one CodingFileEdit (path, oldText, newText, optional expectedOccurrences) and returns the applied edit object. Use this when you have one focused change to apply and verify.',
-      parameters: Type.Object({
-        path: Type.String(),
-        oldText: Type.String(),
-        newText: Type.String(),
-        expectedOccurrences: Type.Optional(Type.Number()),
+      parameters: v.object({
+        path: v.string(),
+        oldText: v.string(),
+        newText: v.string(),
+        expectedOccurrences: v.optional(v.number()),
       }),
       execute: async (args) => {
         const sandbox = await getSandbox();
@@ -208,23 +209,23 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
       name: 'coding_repo_apply_transaction',
       description:
         'Apply multiple UTF-8 file writes and exact-text patches atomically inside the selected coding-worker workspace/project scope. If any operation fails, every change made so far is rolled back and the result reports which operation failed and why.',
-      parameters: Type.Object({
-        id: Type.Optional(Type.String()),
-        writes: Type.Optional(
-          Type.Array(
-            Type.Object({
-              path: Type.String(),
-              content: Type.String(),
+      parameters: v.object({
+        id: v.optional(v.string()),
+        writes: v.optional(
+          v.array(
+            v.object({
+              path: v.string(),
+              content: v.string(),
             }),
           ),
         ),
-        edits: Type.Optional(
-          Type.Array(
-            Type.Object({
-              path: Type.String(),
-              oldText: Type.String(),
-              newText: Type.String(),
-              expectedOccurrences: Type.Optional(Type.Number()),
+        edits: v.optional(
+          v.array(
+            v.object({
+              path: v.string(),
+              oldText: v.string(),
+              newText: v.string(),
+              expectedOccurrences: v.optional(v.number()),
             }),
           ),
         ),
@@ -257,10 +258,10 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
       name: 'coding_shell_run',
       description:
         'Run a command through the selected coding-worker workspace/project scope. Git/GitHub write commands are blocked and must use approval-gated paths.',
-      parameters: Type.Object({
-        command: Type.String(),
-        cwd: Type.Optional(Type.String()),
-        timeoutSeconds: Type.Optional(Type.Number()),
+      parameters: v.object({
+        command: v.string(),
+        cwd: v.optional(v.string()),
+        timeoutSeconds: v.optional(v.number()),
       }),
       execute: async (args) => {
         const command = requireString(args.command, 'command');
@@ -295,11 +296,11 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
       name: 'coding_project_create',
       description:
         'Create or resolve a project directory under the runtime workspace root. Projects are stored in projects/<slug>; repos are stored in repos/<slug>.',
-      parameters: Type.Object({
-        name: Type.Optional(Type.String()),
-        slug: Type.Optional(Type.String()),
-        directoryKind: Type.Optional(Type.String()),
-        initializeReadme: Type.Optional(Type.Boolean()),
+      parameters: v.object({
+        name: v.optional(v.string()),
+        slug: v.optional(v.string()),
+        directoryKind: v.optional(v.string()),
+        initializeReadme: v.optional(v.boolean()),
       }),
       execute: async (args) => {
         const sandbox = await getSandbox();
@@ -344,12 +345,12 @@ export function createCodingRepoTools(options: CodingRepoToolsOptions): ToolDefi
     defineTool({
       name: 'coding_progress_emit',
       description: 'Emit a sanitized public coding-worker progress event for orchestrator/user visibility.',
-      parameters: Type.Object({
-        type: Type.String(),
-        summary: Type.String(),
-        action: Type.Optional(Type.String()),
-        nextAction: Type.Optional(Type.String()),
-        evidence: Type.Optional(Type.Array(Type.String())),
+      parameters: v.object({
+        type: v.string(),
+        summary: v.string(),
+        action: v.optional(v.string()),
+        nextAction: v.optional(v.string()),
+        evidence: v.optional(v.array(v.string())),
       }),
       execute: async (args) => {
         if (!options.reporter || !options.taskId) {

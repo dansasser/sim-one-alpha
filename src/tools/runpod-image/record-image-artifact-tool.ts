@@ -1,4 +1,5 @@
-import { defineTool, Type } from '@flue/runtime';
+import { defineTool } from '@flue/runtime';
+import * as v from 'valibot';
 import { loadRunpodImageCatalog, getRunpodImageModel } from './catalog.js';
 import { persistImageArtifact } from './artifact-store.js';
 import { resolveImageArtifactFilePath } from './paths.js';
@@ -8,21 +9,21 @@ export const recordImageArtifactTool = defineTool({
   name: 'record_image_artifact',
   description:
     'Persist metadata for a generated image into SQLite and index it in session memory for retrieval.',
-  parameters: Type.Object({
-    eventId: Type.String(),
-    artifactId: Type.String(),
-    filePath: Type.String(),
-    fileName: Type.String(),
-    mimeType: Type.String(),
-    prompt: Type.String(),
-    modelId: Type.String(),
-    modelName: Type.Optional(Type.String()),
-    aspectRatio: Type.Optional(Type.String()),
-    seed: Type.Optional(Type.Number()),
-    negativePrompt: Type.Optional(Type.String()),
-    providerOptions: Type.Optional(Type.Object({})),
-    referenceImageUrls: Type.Optional(Type.Array(Type.String())),
-    sourceUrl: Type.Optional(Type.String()),
+  parameters: v.object({
+    eventId: v.string(),
+    artifactId: v.string(),
+    filePath: v.string(),
+    fileName: v.string(),
+    mimeType: v.string(),
+    prompt: v.string(),
+    modelId: v.string(),
+    modelName: v.optional(v.string()),
+    aspectRatio: v.optional(v.string()),
+    seed: v.optional(v.number()),
+    negativePrompt: v.optional(v.string()),
+    providerOptions: v.optional(v.record(v.string(), v.unknown())),
+    referenceImageUrls: v.optional(v.array(v.string())),
+    sourceUrl: v.optional(v.string()),
   }),
   execute: async (input) => {
     const event = goromboPersistenceRuntime.sessionDatabase.getNormalizedMessageEvent(input.eventId);

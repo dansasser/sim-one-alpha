@@ -1,4 +1,5 @@
-import { defineTool, Type } from '@flue/runtime';
+import { defineTool } from '@flue/runtime';
+import * as v from 'valibot';
 import { randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -11,21 +12,21 @@ export const generateImageTool = defineTool({
   name: 'generate_image',
   description:
     'Generate or edit an image using Runpod Public Endpoints, download the resulting image file, and save it to workspace/images/. Returns the local file path and metadata.',
-  parameters: Type.Object({
-    prompt: Type.String(),
-    eventId: Type.String(),
-    model: Type.Optional(Type.String()),
-    aspectRatio: Type.Optional(Type.String()),
-    negativePrompt: Type.Optional(Type.String()),
-    numInferenceSteps: Type.Optional(Type.Number()),
-    guidance: Type.Optional(Type.Number()),
-    seed: Type.Optional(Type.Number()),
-    outputFormat: Type.Optional(Type.String({ enum: ['png', 'jpeg'] })),
-    referenceImageUrls: Type.Optional(Type.Array(Type.String())),
-    includeBase64: Type.Optional(Type.Boolean()),
-    enableSafetyChecker: Type.Optional(Type.Boolean()),
-    maxPollAttempts: Type.Optional(Type.Number()),
-    pollIntervalMillis: Type.Optional(Type.Number()),
+  parameters: v.object({
+    prompt: v.string(),
+    eventId: v.string(),
+    model: v.optional(v.string()),
+    aspectRatio: v.optional(v.string()),
+    negativePrompt: v.optional(v.string()),
+    numInferenceSteps: v.optional(v.number()),
+    guidance: v.optional(v.number()),
+    seed: v.optional(v.number()),
+    outputFormat: v.optional(v.picklist(['png', 'jpeg'])),
+    referenceImageUrls: v.optional(v.array(v.string())),
+    includeBase64: v.optional(v.boolean()),
+    enableSafetyChecker: v.optional(v.boolean()),
+    maxPollAttempts: v.optional(v.number()),
+    pollIntervalMillis: v.optional(v.number()),
   }),
   execute: async (input) => {
     const apiKey = readStringEnv('RUNPOD_API_KEY');

@@ -1,4 +1,5 @@
-import { Type, defineTool } from '@flue/runtime';
+import { defineTool } from '@flue/runtime';
+import * as v from 'valibot';
 import { goromboPersistenceRuntime } from '../db.js';
 import { SessionMemoryProvider } from '../memory/memory-provider.js';
 import { MemoryRouter } from '../memory/memory-router.js';
@@ -14,9 +15,9 @@ const router = new MemoryRouter(
 export const retrieveMemoryTool = defineTool({
   name: 'retrieve_memory',
   description: 'Retrieve relevant context from persisted session memory.',
-  parameters: Type.Object({
-    eventId: Type.String(),
-    text: Type.String(),
+  parameters: v.object({
+    eventId: v.string(),
+    text: v.string(),
   }),
   execute: async ({ eventId, text }) => {
     const event = getTrustedMemoryLookupEvent(eventId);

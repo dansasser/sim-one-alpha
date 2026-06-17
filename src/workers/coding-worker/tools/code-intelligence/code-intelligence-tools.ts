@@ -1,4 +1,5 @@
-import { defineTool, Type } from '@flue/runtime';
+import { defineTool } from '@flue/runtime';
+import * as v from 'valibot';
 import { join } from 'node:path';
 import type { ToolDefinition } from '@flue/runtime';
 import {
@@ -104,8 +105,8 @@ export function createCodingCodeIntelligenceTools(
       name: 'coding_ast_parse_file',
       description:
         'Parse a source file into an abstract syntax tree summary: symbols, imports, and exports. Supports TypeScript, JavaScript, and Python.',
-      parameters: Type.Object({
-        path: Type.String(),
+      parameters: v.object({
+        path: v.string(),
       }),
       execute: async (args) => withToolProgress(options, 'ast-parse', async () => {
         const sandbox = await getSandbox();
@@ -124,10 +125,10 @@ export function createCodingCodeIntelligenceTools(
       name: 'coding_symbol_navigate',
       description:
         'Find declarations and references for a symbol by name across the scoped source files. Prefers LSP where available, falls back to custom AST parsers. Supports TypeScript, JavaScript, and Python.',
-      parameters: Type.Object({
-        symbol: Type.String(),
-        root: Type.Optional(Type.String()),
-        maxFiles: Type.Optional(Type.Number()),
+      parameters: v.object({
+        symbol: v.string(),
+        root: v.optional(v.string()),
+        maxFiles: v.optional(v.number()),
       }),
       execute: async (args) => withToolProgress(options, 'symbol-navigate', async () => {
         const sandbox = await getSandbox();
@@ -180,10 +181,10 @@ export function createCodingCodeIntelligenceTools(
       name: 'coding_find_symbol_declarations',
       description:
         'Find all declarations of a symbol by name across the scoped source files. Prefers LSP where available, falls back to custom AST parsers.',
-      parameters: Type.Object({
-        symbol: Type.String(),
-        root: Type.Optional(Type.String()),
-        maxFiles: Type.Optional(Type.Number()),
+      parameters: v.object({
+        symbol: v.string(),
+        root: v.optional(v.string()),
+        maxFiles: v.optional(v.number()),
       }),
       execute: async (args) => withToolProgress(options, 'find-declarations', async () => {
         const sandbox = await getSandbox();
@@ -233,10 +234,10 @@ export function createCodingCodeIntelligenceTools(
       name: 'coding_find_symbol_references',
       description:
         'Find all references to a symbol by name across the scoped source files. Prefers LSP where available, falls back to custom AST parsers.',
-      parameters: Type.Object({
-        symbol: Type.String(),
-        root: Type.Optional(Type.String()),
-        maxFiles: Type.Optional(Type.Number()),
+      parameters: v.object({
+        symbol: v.string(),
+        root: v.optional(v.string()),
+        maxFiles: v.optional(v.number()),
       }),
       execute: async (args) => withToolProgress(options, 'find-references', async () => {
         const sandbox = await getSandbox();
@@ -286,10 +287,10 @@ export function createCodingCodeIntelligenceTools(
       name: 'coding_import_graph',
       description:
         'Build an import graph for the scoped source files. Returns nodes, outgoing edges, incoming edges, dependencies, and dependents. Supports TypeScript, JavaScript, and Python.',
-      parameters: Type.Object({
-        root: Type.Optional(Type.String()),
-        maxFiles: Type.Optional(Type.Number()),
-        path: Type.Optional(Type.String()),
+      parameters: v.object({
+        root: v.optional(v.string()),
+        maxFiles: v.optional(v.number()),
+        path: v.optional(v.string()),
       }),
       execute: async (args) => withToolProgress(options, 'import-graph', async () => {
         const sandbox = await getSandbox();
