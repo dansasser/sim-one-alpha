@@ -17,12 +17,17 @@ import { markTelegramUpdateReceived } from '../connectors/telegram/telegram-stat
 import type { NormalizedMessageEvent } from '../types/index.js';
 import * as v from 'valibot';
 
-export const client = new Api(process.env.TELEGRAM_BOT_TOKEN ?? '');
+export const client = new Api(process.env.TELEGRAM_BOT_TOKEN ?? 'placeholder-token');
+
+function getTelegramWebhookSecret(): string {
+  return process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN ?? 'placeholder-secret';
+}
+
 
 import type { TelegramChannel } from '@flue/telegram';
 
 export const channel: TelegramChannel = createTelegramChannel({
-  secretToken: process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN ?? '',
+  secretToken: getTelegramWebhookSecret(),
 
   // Path: /channels/telegram/webhook
   async webhook({ c, update }) {

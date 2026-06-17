@@ -183,6 +183,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
       name: 'coding_github_list_issues',
       description: 'List GitHub issues for a repository. Read-only.',
       parameters: v.object({
+        taskId: v.string(),
         owner: v.string(),
         repo: v.string(),
         state: v.optional(v.string()),
@@ -225,6 +226,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
       name: 'coding_github_list_prs',
       description: 'List GitHub pull requests for a repository. Read-only.',
       parameters: v.object({
+        taskId: v.string(),
         owner: v.string(),
         repo: v.string(),
         state: v.optional(v.string()),
