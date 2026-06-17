@@ -21,7 +21,7 @@ export const recordImageArtifactTool = defineTool({
     aspectRatio: v.optional(v.string()),
     seed: v.optional(v.number()),
     negativePrompt: v.optional(v.string()),
-    providerOptions: v.optional(v.object({})),
+    providerOptions: v.optional(v.record(v.string(), v.unknown())),
     referenceImageUrls: v.optional(v.array(v.string())),
     sourceUrl: v.optional(v.string()),
   }),

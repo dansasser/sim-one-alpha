@@ -30,6 +30,8 @@ const child = spawn(process.execPath, nodeArgs, {
     PORT: String(port),
     API_SECRET: requestSecret,
     GOROMBO_WORKSPACE_ROOT: codingWorkspaceRoot,
+    TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || envFileValues.TELEGRAM_BOT_TOKEN || 'built-http-test-bot-token',
+    TELEGRAM_WEBHOOK_SECRET_TOKEN: process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN || envFileValues.TELEGRAM_WEBHOOK_SECRET_TOKEN || 'built-http-test-webhook-secret',
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 });

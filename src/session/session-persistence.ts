@@ -57,8 +57,7 @@ export function createGoromboPersistenceRuntime(config: GoromboConfig): GoromboP
     },
     async connect() {
       const stores = await flueAdapter.connect();
-      latestStores = stores;
-      return {
+      const wrapped = {
         executionStore: {
           sessions: new GoromboLogicalSessionStore(stores.executionStore.sessions, sessionDatabase),
           submissions: stores.executionStore.submissions,
@@ -66,8 +65,11 @@ export function createGoromboPersistenceRuntime(config: GoromboConfig): GoromboP
         runStore: stores.runStore,
         eventStreamStore: stores.eventStreamStore,
       };
+      latestStores = wrapped;
+      return wrapped;
     },
     async close() {
+      latestStores = undefined;
       await flueAdapter.close?.();
       sessionDatabase.close();
     },

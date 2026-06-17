@@ -6,13 +6,18 @@ import type { ImageArtifactRecord } from '../../schemas/runpod-image.js';
 export const listImageArtifactsTool = defineTool({
   name: 'list_image_artifacts',
   description:
-    'List previously generated image artifacts from SQLite, optionally filtered by event.',
+    'List previously generated image artifacts from SQLite scoped to the current event. Pass the eventId from the trusted chat context.',
   parameters: v.object({
-    eventId: v.optional(v.string()),
+    eventId: v.string(),
     limit: v.optional(v.number()),
     after: v.optional(v.string()),
   }),
   execute: async (input) => {
+    const event = goromboPersistenceRuntime.sessionDatabase.getNormalizedMessageEvent(input.eventId);
+    if (!event) {
+      throw new Error(`list_image_artifacts requires a trusted eventId persisted by chat ingress.`);
+    }
+
     const db = goromboPersistenceRuntime.sessionDatabase;
     const rows = db.listImageArtifacts({
       eventId: input.eventId,

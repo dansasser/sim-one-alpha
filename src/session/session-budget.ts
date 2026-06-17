@@ -314,7 +314,8 @@ function estimateEntryTokens(input: SessionEntry | ContextBudgetEntry): number {
   // Historical 'branch_summary' entries are no longer a native Flue entry type in 1.0 beta.
   // Treat any remaining ones as compaction-like summaries for budget estimation.
   if ((entry as { type?: string }).type === 'branch_summary') {
-    return estimateTextTokens((entry as { summary?: string }).summary ?? '');
+    const summary = (entry as { summary?: unknown }).summary;
+    return estimateTextTokens(typeof summary === 'string' ? summary : '');
   }
 
   if (entry.type === 'message') {

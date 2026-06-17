@@ -7,13 +7,19 @@ if (forwardedArgs[0] === '--') {
   forwardedArgs.shift();
 }
 
+const hasTestFileArgs = forwardedArgs.some((arg) =>
+  typeof arg === 'string' && arg.endsWith('.test.js'),
+);
+
 run(process.execPath, ['scripts/clean-tsc-output.mjs']);
 run(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json']);
 run(process.execPath, ['scripts/copy-runtime-config.mjs', '--tsc']);
 
-const testFiles = globSync('.tmp/tsc/tests/*.test.js')
-  .filter((p) => !p.endsWith('.skip.test.js'))
-  .sort();
+const testFiles = hasTestFileArgs
+  ? []
+  : globSync('.tmp/tsc/tests/*.test.js')
+      .filter((p) => !p.endsWith('.skip.test.js'))
+      .sort();
 
 run(process.execPath, [
   '--test',
@@ -25,6 +31,7 @@ run(process.execPath, [
 function run(command, args) {
   const result = spawnSync(command, args, {
     stdio: 'inherit',
+    env: { ...process.env, GOROMBO_TEST_MODE: '1' },
   });
 
   if (result.error) {

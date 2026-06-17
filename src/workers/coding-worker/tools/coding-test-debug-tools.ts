@@ -1,5 +1,5 @@
 import { defineTool, type ToolDefinition } from '@flue/runtime';
-import * as v from 'valibot';
+import { CodingTestDebugResultSchema } from '../../../schemas/coding-worker.js';
 import type { CodingTestDebugResult } from '../../../schemas/coding-worker.js';
 
 export function createCodingTestDebugTools(): ToolDefinition[] {
@@ -7,33 +7,14 @@ export function createCodingTestDebugTools(): ToolDefinition[] {
     defineTool({
       name: 'coding_test_debug_submit_result',
       description:
-        'Submit the final structured CodingTestDebugResult containing debug edits, verification commands, and failure analysis.',
-      parameters: v.object({
-        debugEdits: v.array(
-          v.object({
-            path: v.string(),
-            oldText: v.string(),
-            newText: v.string(),
-            expectedOccurrences: v.optional(v.number()),
-          }),
-        ),
-        verificationCommands: v.array(
-          v.object({
-            name: v.string(),
-            command: v.string(),
-            required: v.optional(v.boolean()),
-            reason: v.optional(v.string()),
-            cwd: v.optional(v.string()),
-            timeoutSeconds: v.optional(v.number()),
-          }),
-        ),
-        analysis: v.string(),
-      }),
+        'Submit the final structured CodingTestDebugResult containing debug edits, verification commands, failure analysis, and optional test failures.',
+      parameters: CodingTestDebugResultSchema,
       execute: async (args) => {
         const result: CodingTestDebugResult = {
           debugEdits: args.debugEdits || [],
           verificationCommands: args.verificationCommands || [],
           analysis: args.analysis || '',
+          failures: args.failures,
         };
         return JSON.stringify({ status: 'submitted', result }, null, 2);
       },

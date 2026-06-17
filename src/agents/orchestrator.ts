@@ -18,6 +18,7 @@ import {
   listImageArtifactsTool,
 } from '../tools/index.js';
 import type { AgentModelCard } from '../models/types.js';
+import { telegramReplyTool } from '../channels/telegram.js';
 import { createCodingWorkerSubagent } from '../workers/coding-worker/coding-worker.js';
 import { createResearcherSubagent } from '../workers/researcher/researcher.js';
 
@@ -44,7 +45,7 @@ export default createAgent(async ({ env }) => {
     model: selectedModelCard.specifier,
     instructions: orchestratorInstructions,
     compaction: createFlueCompactionConfig(selectedModelCard),
-    tools: [loadProtocolsTool, retrieveMemoryTool, addKnowledgeTool, generateImageTool, recordImageArtifactTool, listImageArtifactsTool],
+    tools: [loadProtocolsTool, retrieveMemoryTool, addKnowledgeTool, generateImageTool, recordImageArtifactTool, listImageArtifactsTool, telegramReplyTool],
     subagents: [codingWorker, researcher],
   };
 });
