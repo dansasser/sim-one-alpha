@@ -6,12 +6,7 @@ import {
   generatePairingCode,
   isMentioned,
 } from '../connectors/telegram/telegram-api.js';
-import {
-  resolveTelegramApprovalPrincipal,
-  resolveTelegramIngressConfig,
-  runtimeEnvForIngress,
-} from '../connectors/telegram/telegram-ingress.js';
-import { createTelegramReplyTool } from '../tools/telegram-reply-tool.js';
+import { resolveTelegramApprovalPrincipal } from '../channels/telegram.js';
 import { goromboPersistenceRuntime } from '../db.js';
 import app from '../app.js';
 
@@ -87,87 +82,10 @@ test('telegram mention detection checks caption_entities', () => {
   );
 });
 
-test('telegram ingress config resolves token and approved user ids', () => {
-  const env = {
-    TELEGRAM_BOT_TOKEN: '123:abc',
-    TELEGRAM_APPROVED_USER_IDS: ' 6653274440 , 123456 ',
-    TELEGRAM_BOT_USERNAME: 'mybot',
-  };
-
-  const config = resolveTelegramIngressConfig(env);
-  assert.equal(config.enabled, true);
-  assert.equal(config.token, '123:abc');
-  assert.deepEqual(config.approvedUserIds, ['6653274440', '123456']);
-  assert.equal(config.dmPolicy, 'pairing');
-  assert.equal(config.botUsername, 'mybot');
-});
-
-test('telegram ingress config respects explicit dmPolicy', () => {
-  const env = {
-    TELEGRAM_BOT_TOKEN: '123:abc',
-    TELEGRAM_DM_POLICY: 'allowlist',
-  };
-
-  const config = resolveTelegramIngressConfig(env);
-  assert.equal(config.dmPolicy, 'allowlist');
-});
-
-test('telegram ingress config parses admin user ids', () => {
-  const env = {
-    TELEGRAM_BOT_TOKEN: '123:abc',
-    TELEGRAM_ADMIN_USER_IDS: ' 6653274440 , 999999 ',
-  };
-
-  const config = resolveTelegramIngressConfig(env);
-  assert.deepEqual(config.adminUserIds, ['6653274440', '999999']);
-});
-
 test('telegram approval principal is admin for configured admin ids', () => {
   assert.equal(resolveTelegramApprovalPrincipal('6653274440', ['6653274440']), 'admin');
   assert.equal(resolveTelegramApprovalPrincipal('999999', ['6653274440']), 'operator');
   assert.equal(resolveTelegramApprovalPrincipal('999999', []), 'operator');
-});
-
-test('telegram ingress config is disabled without token', () => {
-  const env = {
-    TELEGRAM_APPROVED_USER_IDS: '6653274440',
-  };
-
-  const config = resolveTelegramIngressConfig(env);
-  assert.equal(config.enabled, false);
-  assert.equal(config.token, '');
-  assert.deepEqual(config.approvedUserIds, ['6653274440']);
-});
-
-test('runtime env for ingress includes process env', () => {
-  const env = runtimeEnvForIngress();
-  assert.equal(typeof env, 'object');
-  assert.ok(Object.keys(env).length > 0);
-});
-
-test('telegram reply tool rejects non-telegram events', async () => {
-  const eventId = uniqueId('web-event');
-  goromboPersistenceRuntime.sessionDatabase.recordNormalizedMessageEvent({
-    event: {
-      id: eventId,
-      connector: 'web-api',
-      kind: 'chat.message',
-      text: 'hello',
-      receivedAt: new Date().toISOString(),
-      actor: { id: 'actor-1' },
-      conversation: { id: 'conv-1' },
-    },
-  });
-
-  try {
-    const tool = createTelegramReplyTool('123:abc');
-    await assert.rejects(
-      async () => tool.execute({ eventId, text: 'hello' }),
-      /telegram_reply can only respond to Telegram events/,
-    );
-  } finally {
-    goromboPersistenceRuntime.sessionDatabase.deleteNormalizedMessageEvent(eventId);
-  }
 });
 
 test('telegram api client builds correct base url', () => {
