@@ -219,7 +219,7 @@ test('telemetry run endpoint is protected and reports researcher delegation', as
     );
     flueTelemetryStore.record(
       createEvent({
-        type: 'tool_call',
+        type: 'tool',
         runId: 'agent:orchestrator:run-telemetry',
         taskId: 'task-1',
         toolCallId: 'tool-1',
@@ -269,11 +269,12 @@ test('telemetry run endpoint falls back to persisted Flue run events after memor
       agent: 'researcher',
     },
     {
-      type: 'tool_call',
+      type: 'tool',
       runId: c.req.param('runId'),
       taskId: 'task-1',
       toolName: 'web_research',
-      result: { text: 'do not expose tool result' },
+      isError: false,
+      durationMs: 12,
     },
     {
       type: 'run_end',
