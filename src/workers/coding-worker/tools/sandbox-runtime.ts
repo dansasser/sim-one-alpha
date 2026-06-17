@@ -142,7 +142,7 @@ class FlueLocalCodingSandboxRuntime implements CodingSandboxRuntime {
     return this.sessionEnv.exec(command, {
       cwd: options.cwd ? this.resolveScopePath(options.cwd) : this.scopePath,
       env: options.env,
-      timeout: options.timeoutSeconds,
+      timeoutMs: options.timeoutSeconds ? options.timeoutSeconds * 1000 : undefined,
       signal: options.signal,
     });
   }

@@ -18,7 +18,7 @@ const fakeEmbeddingClient = {
 
 function makeSessionData(content: string): SessionData {
   return {
-    version: 5,
+    version: 6,
     affinityKey: 'test',
     leafId: 'leaf-1',
     createdAt: new Date().toISOString(),
@@ -33,6 +33,7 @@ function makeSessionData(content: string): SessionData {
       },
     ],
     metadata: {},
+    taskSessions: [],
   };
 }
 

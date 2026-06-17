@@ -1,4 +1,5 @@
-import type { PromptUsage, SessionData } from '@flue/runtime';
+import type { PromptUsage } from '@flue/runtime';
+import type { SessionData } from '@flue/runtime/adapter';
 import type { AgentModelCard } from '../models/types.js';
 import { type CompactionStatus, evaluateCompaction } from './compaction-policy.js';
 import { calculateContextBudget, estimateTextTokens, type ContextBudget } from './context-budget.js';
@@ -310,8 +311,10 @@ function estimateEntryTokens(input: SessionEntry | ContextBudgetEntry): number {
     return estimateTextTokens(entry.summary);
   }
 
-  if (entry.type === 'branch_summary') {
-    return estimateTextTokens(entry.summary);
+  // Historical 'branch_summary' entries are no longer a native Flue entry type in 1.0 beta.
+  // Treat any remaining ones as compaction-like summaries for budget estimation.
+  if ((entry as { type?: string }).type === 'branch_summary') {
+    return estimateTextTokens((entry as { summary?: string }).summary ?? '');
   }
 
   if (entry.type === 'message') {

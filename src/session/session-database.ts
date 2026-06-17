@@ -1296,28 +1296,8 @@ function extractSessionMemoryChunks(input: ExtractSessionMemoryInput): Extracted
       continue;
     }
 
-    if (entry.type === 'branch_summary') {
-      chunks.push({
-        id: createChunkKey(input, entry.id, 'branch_summary'),
-        entryId: entry.id,
-        kind: 'branch_summary',
-        title: `branch summary in ${input.sessionName}`,
-        content: entry.summary,
-        tokenEstimate: estimateTextTokens(entry.summary),
-        actorId: input.actorId,
-        conversationId: input.conversationId,
-        threadId: input.threadId,
-        metadata: {
-          source: 'flue-session',
-          sessionName: input.sessionName,
-          actorId: input.actorId,
-          conversationId: input.conversationId,
-          threadId: input.threadId,
-        },
-        createdAt: entry.timestamp,
-        updatedAt: input.data.updatedAt,
-      });
-    }
+    // 'branch_summary' is not a native Flue 1.0 beta SessionEntry type. Historical entries
+    // of this kind are dropped from vector indexing. They remain in raw session storage.
   }
 
   return chunks;

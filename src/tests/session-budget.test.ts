@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { SessionData } from '@flue/runtime';
+import type { SessionData } from '@flue/runtime/adapter';
 import { minimaxM3Card } from '../models/catalog.js';
 import { calculateContextBudget } from '../session/context-budget.js';
 import {
@@ -118,7 +118,7 @@ test('session budget derivation treats latest compaction as the active context b
 
 function createSessionDataWithUsage(): SessionData {
   return {
-    version: 5,
+    version: 6,
     affinityKey: 'test-affinity',
     entries: [
       {
@@ -154,14 +154,15 @@ function createSessionDataWithUsage(): SessionData {
     ],
     leafId: 'assistant-1',
     metadata: {},
+    taskSessions: [],
     createdAt: '2026-06-07T00:00:00.000Z',
     updatedAt: '2026-06-07T00:00:01.000Z',
-  } as SessionData;
+  } as unknown as SessionData;
 }
 
 function createCompactedSessionData(): SessionData {
   return {
-    version: 5,
+    version: 6,
     affinityKey: 'test-affinity',
     entries: [
       {
@@ -217,7 +218,8 @@ function createCompactedSessionData(): SessionData {
     ],
     leafId: 'user-2',
     metadata: {},
+    taskSessions: [],
     createdAt: '2026-06-07T00:00:00.000Z',
     updatedAt: '2026-06-07T00:00:03.000Z',
-  } as SessionData;
+  } as unknown as SessionData;
 }
