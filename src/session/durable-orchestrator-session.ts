@@ -27,16 +27,13 @@ export const openDurableOrchestratorSession: DurableOrchestratorSessionOpener = 
   payload = {},
   allowFullInternetAccess = false,
 }) => {
-  const executionStore = goromboPersistenceRuntime.adapter.connect();
+  const stores = await goromboPersistenceRuntime.adapter.connect();
   const context = createFlueContext({
     id: sessionId,
     payload,
     env,
     agentConfig: {
-      systemPrompt: '',
-      skills: {},
       packagedSkills: {},
-      model: undefined,
       resolveModel,
     },
     createDefaultEnv: async () =>
@@ -46,17 +43,19 @@ export const openDurableOrchestratorSession: DurableOrchestratorSessionOpener = 
             allowFullInternetAccess
               ? {
                   fs: new InMemoryFs(),
+                  cwd: 'src',
                   network: {
                     dangerouslyAllowFullInternetAccess: true,
                   },
                 }
               : {
                   fs: new InMemoryFs(),
+                  cwd: 'src',
                 },
           ),
       ),
-    defaultStore: executionStore.sessions,
-    submissionStore: executionStore.submissions,
+    defaultStore: stores.executionStore.sessions,
+    submissionStore: stores.executionStore.submissions,
   });
 
   const harness = await context.initializeCreatedAgent(orchestratorAgent, payload);
