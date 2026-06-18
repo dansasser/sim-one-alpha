@@ -6,6 +6,9 @@ on:
     - cron: '0 6 * * 1'
 
 jobs:
+  # Deterministic smoke: drives the real Memory Helper tools + WASM engine +
+  # SQLite + retrieve_memory + durability, plus the coding-worker path. No live
+  # model required - reliable in CI.
   smoke:
     runs-on: ubuntu-latest
     steps:
@@ -22,6 +25,46 @@ jobs:
           targets: wasm32-unknown-unknown
       - run: cargo install wasm-pack --version 0.13.1 --locked || curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh -s -- -f
       - run: pnpm run wasm:build
+      - run: pnpm run build
       - run: pnpm run smoke:memory
         env:
           GOROMBO_TEST_MODE: '1'
+
+  # Real-model smoke: boots the server and lets a live model drive the
+  # orchestrator memory tools end-to-end, verifying durable persistence.
+  # Manual dispatch only; requires the model API secrets to be present in the
+  # repository secrets (OLLAMA_API_KEY, etc.) and a .env committed outside the
+  # repo or provided via env. Skipped automatically when OLLAMA_API_KEY is absent.
+  real-model-smoke:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.18.0'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10.10.0'
+      - run: pnpm install --frozen-lockfile
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - run: cargo install wasm-pack --version 0.13.1 --locked || curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh -s -- -f
+      - run: pnpm run wasm:build
+      - run: pnpm run build
+      - name: Write .env from secrets
+        run: |
+          if [ -z "${{ secrets.OLLAMA_API_KEY }}" ]; then
+            echo "OLLAMA_API_KEY secret not set; skipping real-model smoke."
+            exit 0
+          fi
+          {
+            echo "OLLAMA_API_KEY=${{ secrets.OLLAMA_API_KEY }}"
+            echo "API_SECRET=${{ secrets.GOROMBO_SMOKE_API_SECRET || 'smoke-secret' }}"
+          } > .env
+      - name: Run real-model smoke
+        if: ${{ secrets.OLLAMA_API_KEY != '' }}
+        run: |
+          if [ ! -s .env ]; then exit 0; fi
+          GOROMBO_SMOKE_REAL_MODEL=1 GOROMBO_MEMORY_SQLITE_PATH=/tmp/real-model-smoke.sqlite pnpm run smoke:memory

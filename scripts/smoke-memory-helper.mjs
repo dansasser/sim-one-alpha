@@ -51,7 +51,116 @@ function assert(cond, msg) {
   if (!cond) throw new Error(`smoke assertion failed: ${msg}`);
 }
 
+
+import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
+
+async function realModelSmoke() {
+  if (!existsSync('.env')) {
+    throw new Error('real-model smoke requires a .env with model + API creds');
+  }
+  if (!existsSync(join(process.cwd(), 'dist', 'server.mjs'))) {
+    throw new Error('real-model smoke requires `pnpm run build` first (dist/server.mjs)');
+  }
+  const port = Number(process.env.GOROMBO_SMOKE_PORT || 3997);
+  const apiSecret = process.env.GOROMBO_SMOKE_API_SECRET || 'smoke-secret';
+  const sqlitePath = process.env.GOROMBO_MEMORY_SQLITE_PATH || '/tmp/real-model-smoke.sqlite';
+  const actorId = 'rm-actor';
+  const conversationId = 'rm-conv';
+
+  const env = {
+    ...parseEnvFile('.env'),
+    PORT: String(port),
+    API_SECRET: apiSecret,
+    // Test mode lets the server boot without real Telegram creds; the
+    // GOROMBO_MEMORY_WASM_MODULE_PATH override forces the production WASM
+    // engine + SQLite (not the in-memory test fallback) so this is a real
+    // end-to-end run.
+    GOROMBO_TEST_MODE: '1',
+    GOROMBO_MEMORY_WASM_MODULE_PATH: join(process.cwd(), 'crates', 'gorombo-memory', 'pkg', 'gorombo_memory.js'),
+    GOROMBO_MEMORY_SQLITE_PATH: sqlitePath,
+    PATH: process.env.PATH,
+  };
+
+  const child = spawn(process.execPath, ['--env-file=.env', 'dist/server.mjs'], {
+    cwd: process.cwd(),
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: true,
+  });
+  let stderr = '';
+  child.stderr.on('data', (chunk) => { stderr += chunk; });
+  const logPath = join(process.cwd(), '.tmp', 'real-model-smoke-server.log');
+  try {
+    await waitForHealth(`http://127.0.0.1:${port}`);
+    console.log('[smoke:real-model] server healthy; posting chat event');
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/chat/events`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-secret': apiSecret },
+      body: JSON.stringify({
+        text: 'Use the memory tools to durably store for this conversation: (1) create_checklist titled Memory Smoke slug memory-smoke with items Setup and Run; (2) add_checklist_item nested under Setup called Nested; (3) create_todo titled Finish smoke priority high; (4) store_session_note titled Smoke decision content real-model smoke verified. Then reply with a one-line summary.',
+        actorId,
+        conversationId,
+        session: 'rm-session',
+      }),
+    });
+    const body = await response.json();
+    console.log('[smoke:real-model] agent responded:', String(body?.result?.text ?? '').slice(0, 160));
+    if (!response.ok) {
+      throw new Error(`chat event returned ${response.status}: ${JSON.stringify(body).slice(0, 300)}`);
+    }
+
+    // Verify the records were durably persisted by the real model-driven tool calls.
+    const db = new DatabaseSync(sqlitePath);
+    const rows = db.prepare('SELECT kind, title, slug, status, record_json FROM structured_memory_records ORDER BY kind').all();
+    db.close();
+    const checklist = rows.find((r) => r.kind === 'checklist');
+    const todo = rows.find((r) => r.kind === 'todo');
+    const note = rows.find((r) => r.kind === 'session_note');
+    assert(checklist && checklist.title === 'Memory Smoke', 'real model created the checklist');
+    const items = JSON.parse(checklist.record_json).items;
+    assert(items.some((i) => i.title === 'Setup') && items.some((i) => i.title === 'Run'), 'checklist has Setup + Run');
+    assert(items.some((i) => i.title === 'Nested' && i.parentId), 'nested item added under a parent');
+    assert(todo && todo.title === 'Finish smoke' && JSON.parse(todo.record_json).priority === 'high', 'high-priority todo created');
+    assert(note && note.title === 'Smoke decision' && JSON.parse(note.record_json).content.includes('real-model smoke verified'), 'session note stored');
+    console.log(`[smoke:real-model] verified ${rows.length} durable records (checklist+todo+note) created by the live model`);
+    console.log('[smoke:real-model] PASS: real-model orchestrator smoke verified end-to-end.');
+  } finally {
+    try { process.kill(-child.pid); } catch { try { child.kill(); } catch {} }
+  }
+}
+
+function parseEnvFile(path) {
+  const values = {};
+  if (!existsSync(path)) return values;
+  for (const line of readFileSync(path, 'utf-8').split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t || t.startsWith('#')) continue;
+    const sep = t.indexOf('=');
+    if (sep === -1) continue;
+    values[t.slice(0, sep)] = t.slice(sep + 1).replace(/^[\'"]|[\'"]$/g, '');
+  }
+  return values;
+}
+
+async function waitForHealth(baseUrl) {
+  const deadline = Date.now() + 20_000;
+  let lastError;
+  while (Date.now() < deadline) {
+    try { const r = await fetch(`${baseUrl}/health`); if (r.ok) return; } catch (e) { lastError = e; }
+    await new Promise((res) => setTimeout(res, 300));
+  }
+  throw new Error(`server did not become healthy: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
+}
+
 async function main() {
+  if (process.env.GOROMBO_SMOKE_REAL_MODEL === '1') {
+    await realModelSmoke();
+    return;
+  }
+
   if (!existsSync(join('crates', 'gorombo-memory', 'pkg', 'gorombo_memory_bg.wasm'))) {
     throw new Error('WASM artifact missing. Run `pnpm run wasm:build` first.');
   }

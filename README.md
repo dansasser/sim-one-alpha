@@ -801,6 +801,13 @@ pnpm run wasm:build
 pnpm run smoke:memory
 ```
 
+The default smoke drives the real Memory Helper tools, WASM engine, SQLite,
+`retrieve_memory`, and the coding-worker path end-to-end with a durability
+restart check (no live model required). To run the real-model smoke that boots
+the server and lets a live model drive the orchestrator memory tools, set
+`GOROMBO_SMOKE_REAL_MODEL=1` (requires a `.env` with model API creds and a
+built `dist`): `GOROMBO_SMOKE_REAL_MODEL=1 pnpm run smoke:memory`.
+
 Configuration lives under the `memory` block of `gorombo.config.json` and can be overridden by `GOROMBO_MEMORY_*` environment variables (`GOROMBO_MEMORY_BACKEND`, `GOROMBO_MEMORY_SQLITE_PATH`, `GOROMBO_MEMORY_RETENTION_DAYS`, `GOROMBO_MEMORY_ARCHIVE_DELETE_DAYS`, `GOROMBO_MEMORY_MAX_CHECKLIST_DEPTH`, `GOROMBO_MEMORY_DEFAULT_LIMIT`, `GOROMBO_MEMORY_MAX_CONTEXT_TOKENS`).
 
 
