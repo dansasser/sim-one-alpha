@@ -13,5 +13,5 @@ coverage/
 .gorombo/db/*
 !.gorombo/db/README.md
 
-# Bundled embedding model files are downloaded by postinstall.
+# Bundled embedding model files are downloaded by `pnpm fetch-embedding-model`.
 assets/models/embeddings/

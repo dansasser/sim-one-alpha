@@ -54,7 +54,11 @@ async function runInference(texts: string[], options: Required<LocalEmbeddingOpt
   };
 
   const results = await session.run(feeds);
-  const lastHiddenState = results.last_hidden_state as ort.Tensor;
+  const outputName = session.outputNames[0];
+  if (!outputName) {
+    throw new Error('ONNX session has no outputs');
+  }
+  const lastHiddenState = results[outputName] as ort.Tensor;
   const data = lastHiddenState.data as Float32Array;
 
   const vectors: number[][] = [];

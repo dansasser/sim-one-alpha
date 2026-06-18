@@ -50,28 +50,31 @@ export async function runBackgroundIndexing(options: BackgroundIndexerOptions): 
       const contents = records.map((record) => record.content);
       const outcome = await options.embeddingClient.embedBatchWithOutcome(contents);
 
-      let vectorRecords;
+      let vectorRecords: Array<{
+        id: string;
+        chunk_key?: string;
+        source: string;
+        title: string;
+        content: string;
+        vector: number[];
+        metadata: Record<string, unknown>;
+        updated_at: string;
+      }>;
       if (outcome.ok) {
         vectorRecords = records.map((record, index) => ({
           ...record,
           vector: outcome.result.vectors[index] ?? [],
         }));
       } else {
-        console.error(`[INFO] embedding.fallback path=keyword provider=none scope=background-indexer`);
         console.error(
           `[WARN] Background indexing embedding failed for ${collection}: ${outcome.error}`,
         );
-        vectorRecords = records.map((record) => ({
-          ...record,
-          vector: [],
-          metadata: {
-            ...record.metadata,
-            embeddingError: outcome.error,
-          },
-        }));
+        vectorRecords = [];
       }
 
-      await options.vectorStore.upsert(collection, vectorRecords);
+      if (vectorRecords.length > 0) {
+        await options.vectorStore.upsert(collection, vectorRecords);
+      }
 
       const existingIds = await options.vectorStore.listIds(collection);
       const staleIds = existingIds.filter((id) => !idsToKeep.has(id));

@@ -277,13 +277,13 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         branchName: v.string(),
       }),
       execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'branch_from_pr', 'Create branch from PR', async () => {
+        const taskId = requireString(args.taskId, 'taskId');
         if (!options.client?.createBranchFromPullRequest) {
           return toGithubResult({
             action: 'branch_from_pr',
             payload: unavailableWriteTool(),
           });
         }
-        const taskId = typeof args.taskId === 'string' && args.taskId.length > 0 ? args.taskId : 'unknown';
         const branchPayload = {
           owner: args.owner,
           repo: args.repo,
@@ -341,13 +341,13 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         inReplyTo: v.optional(v.string()),
       }),
       execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'review_comment', 'Create review comment', async () => {
+        const taskId = requireString(args.taskId, 'taskId');
         if (!options.client?.createReviewComment) {
           return toGithubResult({
             action: 'review_comment',
             payload: unavailableWriteTool(),
           });
         }
-        const taskId = typeof args.taskId === 'string' && args.taskId.length > 0 ? args.taskId : 'unknown';
         const commentPayload = {
           owner: args.owner,
           repo: args.repo,
@@ -410,13 +410,13 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         rerunFailedJobs: v.optional(v.boolean()),
       }),
       execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'rerun_check', 'Rerun GitHub check', async () => {
+        const taskId = requireString(args.taskId, 'taskId');
         if (!options.client?.rerunCheck) {
           return toGithubResult({
             action: 'rerun_check',
             payload: unavailableWriteTool(),
           });
         }
-        const taskId = typeof args.taskId === 'string' && args.taskId.length > 0 ? args.taskId : 'unknown';
         const rerunPayload = {
           owner: args.owner,
           repo: args.repo,
@@ -476,13 +476,13 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         forkName: v.optional(v.string()),
       }),
       execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'fork_repo', 'Fork GitHub repository', async () => {
+        const taskId = requireString(args.taskId, 'taskId');
         if (!options.client?.forkRepository) {
           return toGithubResult({
             action: 'fork_repo',
             payload: unavailableWriteTool(),
           });
         }
-        const taskId = typeof args.taskId === 'string' && args.taskId.length > 0 ? args.taskId : 'unknown';
         const forkPayload = {
           owner: args.owner,
           repo: args.repo,
@@ -596,13 +596,13 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         base: v.optional(v.string()),
       }),
       execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'update_pr', 'Update GitHub PR', async () => {
+        const taskId = requireString(args.taskId, 'taskId');
         if (!options.client?.updatePullRequest) {
           return toGithubResult({
             action: 'update_pr',
             payload: unavailableWriteTool(),
           });
         }
-        const taskId = typeof args.taskId === 'string' && args.taskId.length > 0 ? args.taskId : 'unknown';
         const base = readString(args.base);
         const prUpdatePayload = {
           title: readString(args.title),
@@ -667,13 +667,13 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         ready: v.boolean(),
       }),
       execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'ready_pr', 'Set PR ready/draft status', async () => {
+        const taskId = requireString(args.taskId, 'taskId');
         if (!options.client?.setPullRequestReady) {
           return toGithubResult({
             action: 'ready_pr',
             payload: unavailableWriteTool(),
           });
         }
-        const taskId = typeof args.taskId === 'string' && args.taskId.length > 0 ? args.taskId : 'unknown';
         const readyPayload = { ready: args.ready };
         const approval = await evaluateGitApproval(options, {
           approvalService,
@@ -729,13 +729,13 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         body: v.string(),
       }),
       execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'comment', 'Comment on GitHub PR', async () => {
+        const taskId = requireString(args.taskId, 'taskId');
         if (!options.client?.commentOnPullRequest) {
           return toGithubResult({
             action: 'comment',
             payload: unavailableWriteTool(),
           });
         }
-        const taskId = typeof args.taskId === 'string' && args.taskId.length > 0 ? args.taskId : 'unknown';
         const commentPayload = { body: args.body };
         const approval = await evaluateGitApproval(options, {
           approvalService,
@@ -790,13 +790,13 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         body: v.optional(v.string()),
       }),
       execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'update_issue', 'Update GitHub issue', async () => {
+        const taskId = requireString(args.taskId, 'taskId');
         if (!options.client?.updateIssue) {
           return toGithubResult({
             action: 'update_issue',
             payload: unavailableWriteTool(),
           });
         }
-        const taskId = typeof args.taskId === 'string' && args.taskId.length > 0 ? args.taskId : 'unknown';
         const issuePayload = {
           title: readString(args.title),
           body: readString(args.body),
@@ -855,13 +855,13 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         resolve: v.optional(v.boolean()),
       }),
       execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'update_review_thread', 'Update GitHub review thread', async () => {
+        const taskId = requireString(args.taskId, 'taskId');
         if (!options.client?.updateReviewThread) {
           return toGithubResult({
             action: 'update_review_thread',
             payload: unavailableWriteTool(),
           });
         }
-        const taskId = typeof args.taskId === 'string' && args.taskId.length > 0 ? args.taskId : 'unknown';
         const threadPayload = {
           replyBody: readString(args.replyBody),
           resolve: typeof args.resolve === 'boolean' ? args.resolve : undefined,

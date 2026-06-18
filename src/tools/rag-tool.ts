@@ -19,9 +19,7 @@ export const retrieveContextTool = defineTool({
   execute: async ({ eventId, text, limit, maxContextTokens, webFetch, fetchTopK }) => {
     const event = goromboPersistenceRuntime.sessionDatabase.getNormalizedMessageEvent(eventId);
     if (!event) {
-      return JSON.stringify({
-        error: `retrieve_context requires a persisted event; ${eventId} not found`,
-      });
+      throw new Error(`retrieve_context requires a persisted event; ${eventId} not found`);
     }
 
     return JSON.stringify(

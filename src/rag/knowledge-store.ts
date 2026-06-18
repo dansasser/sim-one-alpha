@@ -58,13 +58,18 @@ export class LanceDbKnowledgeStore implements KnowledgeStore {
   async add(input: AddKnowledgeInput): Promise<KnowledgeRecord> {
     const record = createKnowledgeRecord(input);
     const outcome = await this.embeddingClient.embedWithOutcome(record.content);
+
+    if (!outcome.ok) {
+      throw new Error(`Failed to embed knowledge entry: ${outcome.error}`);
+    }
+
     const vectorRecord: VectorRecord = {
       id: record.id,
       chunk_key: record.id,
       source: 'agent_knowledge',
       title: record.title,
       content: record.content,
-      vector: outcome.ok ? outcome.result.vector : [],
+      vector: outcome.result.vector,
       actor_id: record.actorId,
       conversation_id: record.conversationId,
       metadata: {
@@ -72,7 +77,6 @@ export class LanceDbKnowledgeStore implements KnowledgeStore {
         tags: record.tags,
         source: record.source,
         createdBy: record.createdBy,
-        ...(outcome.ok ? {} : { embeddingError: outcome.error }),
       },
       updated_at: record.updatedAt,
     };
@@ -82,6 +86,11 @@ export class LanceDbKnowledgeStore implements KnowledgeStore {
   }
 
   async list(filters: ListKnowledgeFilters = {}): Promise<KnowledgeRecord[]> {
+    const ids = await this.vectorStore.listIds(knowledgeCollection);
+    if (ids.length === 0) {
+      return [];
+    }
+
     const queryFilters: Record<string, unknown> = {};
     if (filters.actorId) {
       queryFilters.actor_id = filters.actorId;
@@ -93,8 +102,9 @@ export class LanceDbKnowledgeStore implements KnowledgeStore {
       queryFilters['metadata.source'] = filters.source;
     }
 
-    const results = await this.vectorStore.searchKeyword(knowledgeCollection, '', {
+    const results = await this.vectorStore.searchKeyword(knowledgeCollection, '*', {
       filters: queryFilters,
+      limit: ids.length,
     });
 
     return results
