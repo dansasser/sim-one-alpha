@@ -629,12 +629,12 @@ export class InMemoryMemoryEngine implements MemoryEngine {
 
 function isArchived(record: MemoryRecord): boolean {
   if (record.kind === 'checklist') {
-    return record.status === 'archived';
+    return record.status === 'archived' || record.archivedAt !== undefined;
   }
   if (record.kind === 'todo') {
-    return record.status === 'cancelled';
+    return record.archivedAt !== undefined;
   }
-  return record.status === 'archived';
+  return record.status === 'archived' || record.archivedAt !== undefined;
 }
 
 function createsCycle(checklist: Checklist, itemId: string, parentId: string): boolean {

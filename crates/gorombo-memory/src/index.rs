@@ -168,6 +168,7 @@ mod tests {
             updated_at: "2026-06-18T00:00:00Z".into(),
             updated_by: "test".into(),
             run_id: None,
+            archived_at: None,
         }
         .into()
     }

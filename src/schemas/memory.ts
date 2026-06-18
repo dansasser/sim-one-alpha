@@ -113,6 +113,7 @@ export const ChecklistSchema = v.object({
   updatedAt: IsoTimestamp,
   updatedBy: NonEmptyString,
   runId: OptionalNonEmptyString,
+  archivedAt: OptionalNonEmptyString,
 });
 export type Checklist = v.InferOutput<typeof ChecklistSchema>;
 
@@ -132,6 +133,7 @@ export const TodoSchema = v.object({
   updatedAt: IsoTimestamp,
   updatedBy: NonEmptyString,
   runId: OptionalNonEmptyString,
+  archivedAt: OptionalNonEmptyString,
 });
 export type Todo = v.InferOutput<typeof TodoSchema>;
 
@@ -148,6 +150,7 @@ export const SessionNoteSchema = v.object({
   updatedAt: IsoTimestamp,
   updatedBy: NonEmptyString,
   runId: OptionalNonEmptyString,
+  archivedAt: OptionalNonEmptyString,
 });
 export type SessionNote = v.InferOutput<typeof SessionNoteSchema>;
 

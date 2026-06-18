@@ -1,16 +1,19 @@
+import { estimateTextTokens } from '../session/context-budget.js';
+import type { RagQuery, RetrievedContext } from '../types/index.js';
+import type { MemoryRecord, MemoryRecordScope, QueryInput } from '../types/memory.js';
 import type { MemoryEngine } from './memory-engine.js';
 import type { MemoryProvider } from './memory-provider.js';
-import type { RagQuery, RetrievedContext } from '../types/index.js';
 
 /**
  * Options for the structured-memory RAG provider.
  *
- * `maxContextTokens` and `defaultLimit` bound how much structured memory is
- * injected into a single prompt. Defaults land in Phase 2 alongside the real
- * `retrieve` implementation and config wiring.
+ * `engineLoader` lazily resolves the `MemoryEngine` (the WASM engine loads
+ * asynchronously). The provider is constructed synchronously and loads the
+ * engine on first `retrieve`, so module-load order never blocks on the WASM
+ * artifact.
  */
 export interface ChecklistMemoryProviderOptions {
-  engine: MemoryEngine;
+  engineLoader: () => Promise<MemoryEngine>;
   maxContextTokens?: number;
   defaultLimit?: number;
 }
@@ -19,42 +22,104 @@ export interface ChecklistMemoryProviderOptions {
  * Structured-memory RAG provider.
  *
  * Surfaces checklists, todos, and session notes as `RetrievedContext` records
- * alongside session-memory chunks through the `MemoryRouter` (Phase 2). The
- * record's own `kind` field on each record's metadata tells the consumer what
- * it is (Decision 10). The new `RagProviderKind` value `'structured-memory'`
- * is added in Phase 2.
+ * (provider `'structured-memory'`) alongside session-memory chunks through
+ * the multi-provider `MemoryRouter`. The record's own `kind` field on each
+ * record's metadata tells the consumer what it is (Decision 10).
  *
- * Phase 0: stub implementation. Returns no records. Full ranking, token
- * truncation, and scope isolation land in Phase 2.
+ * Scope is derived from the trusted `RagQuery` (actorId/conversationId/
+ * projectId/threadId), never from the model. The engine enforces scope
+ * isolation; this provider only translates the query and truncates the result
+ * to the caller's context budget.
  */
 export class ChecklistMemoryProvider implements MemoryProvider {
-  private readonly engine: MemoryEngine;
-  private readonly maxContextTokens: number | undefined;
-  private readonly defaultLimit: number | undefined;
+  private readonly engineLoader: () => Promise<MemoryEngine>;
+  private readonly maxContextTokens: number;
+  private readonly defaultLimit: number;
 
   constructor(options: ChecklistMemoryProviderOptions) {
-    this.engine = options.engine;
-    this.maxContextTokens = options.maxContextTokens;
-    this.defaultLimit = options.defaultLimit;
+    this.engineLoader = options.engineLoader;
+    this.maxContextTokens = options.maxContextTokens ?? 1_500;
+    this.defaultLimit = options.defaultLimit ?? 10;
   }
 
-  /** Available for Phase 2 wiring. */
-  get maxContextTokensConfig(): number | undefined {
-    return this.maxContextTokens;
+  async retrieve(query: RagQuery): Promise<RetrievedContext[]> {
+    if (!query.text.trim()) {
+      return [];
+    }
+    const engine = await this.engineLoader();
+    const scope: MemoryRecordScope = {
+      ...(query.actorId ? { actorId: query.actorId } : {}),
+      ...(query.conversationId ? { conversationId: query.conversationId } : {}),
+      ...(query.projectId ? { projectId: query.projectId } : {}),
+      ...(query.threadId ? { threadId: query.threadId } : {}),
+    };
+    const input: QueryInput = {
+      scope,
+      text: query.text,
+      limit: query.limit ?? this.defaultLimit,
+    };
+    let records: MemoryRecord[];
+    try {
+      records = await engine.query(input);
+    } catch (error) {
+      console.error(
+        '[WARN] structured-memory retrieval failed:',
+        error instanceof Error ? error.message : String(error),
+      );
+      return [];
+    }
+    const contexts = records.map((record) => toRetrievedContext(record));
+    return truncateToTokenBudget(contexts, this.maxContextTokens);
   }
+}
 
-  /** Available for Phase 2 wiring. */
-  get defaultLimitConfig(): number | undefined {
-    return this.defaultLimit;
-  }
+/** Render a structured record as a `RetrievedContext` with stable content. */
+export function toRetrievedContext(record: MemoryRecord): RetrievedContext {
+  const content = renderContent(record);
+  return {
+    id: `structured-memory:${record.id}`,
+    provider: 'structured-memory',
+    title: record.title,
+    content,
+    score: 1,
+    metadata: {
+      kind: record.kind,
+      recordId: record.id,
+      scope: record.scope,
+      tags: record.tags,
+      status: record.status,
+      updatedAt: record.updatedAt,
+      tokenEstimate: estimateTextTokens(content),
+    },
+  };
+}
 
-  /** Available for Phase 2 wiring. */
-  protected get memoryEngine(): MemoryEngine {
-    return this.engine;
+function renderContent(record: MemoryRecord): string {
+  if (record.kind === 'checklist') {
+    const items = record.items
+      .map((item) => `  - [${item.status}] ${item.title}${item.description ? ` — ${item.description}` : ''}`)
+      .join('\n');
+    return `Checklist: ${record.title}${record.description ? `\n${record.description}` : ''}\n${items}`;
   }
+  if (record.kind === 'todo') {
+    return `Todo [${record.status}|${record.priority}]: ${record.title}${record.description ? `\n${record.description}` : ''}`;
+  }
+  return `Note (${record.importance}): ${record.title}\n${record.content}`;
+}
 
-  async retrieve(_query: RagQuery): Promise<RetrievedContext[]> {
-    // Phase 0 stub: no structured records are surfaced yet.
-    return [];
+function truncateToTokenBudget(contexts: RetrievedContext[], maxTokens: number): RetrievedContext[] {
+  const result: RetrievedContext[] = [];
+  let used = 0;
+  for (const context of contexts) {
+    const estimate =
+      typeof context.metadata?.tokenEstimate === 'number'
+        ? (context.metadata.tokenEstimate as number)
+        : estimateTextTokens(context.content);
+    if (used + estimate > maxTokens && result.length > 0) {
+      break;
+    }
+    result.push(context);
+    used += estimate;
   }
+  return result;
 }

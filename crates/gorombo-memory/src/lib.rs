@@ -392,6 +392,7 @@ mod tests {
             updated_at: "2026-06-18T00:00:00Z".into(),
             updated_by: "test".into(),
             run_id: None,
+            archived_at: None,
         }
     }
 
@@ -502,6 +503,7 @@ mod tests {
             updated_at: "2026-06-18T00:00:00Z".into(),
             updated_by: "test".into(),
             run_id: None,
+            archived_at: None,
         };
         create_todo(&to_json(&todo).unwrap()).unwrap();
         let del = to_json(&DeleteInput { id: ulid(3), kind: None }).unwrap();

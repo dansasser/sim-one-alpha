@@ -71,9 +71,21 @@ impl Record {
 
     pub fn is_archived(&self) -> bool {
         match self {
-            Record::Checklist(c) => c.status == crate::checklist::ChecklistStatus::Archived,
-            Record::Todo(t) => t.status == crate::todo::TodoStatus::Cancelled,
-            Record::SessionNote(n) => n.status == crate::note::SessionNoteStatus::Archived,
+            Record::Checklist(c) => {
+                c.status == crate::checklist::ChecklistStatus::Archived || c.archived_at.is_some()
+            }
+            Record::Todo(t) => t.archived_at.is_some(),
+            Record::SessionNote(n) => {
+                n.status == crate::note::SessionNoteStatus::Archived || n.archived_at.is_some()
+            }
+        }
+    }
+
+    pub fn archived_at(&self) -> Option<&str> {
+        match self {
+            Record::Checklist(c) => c.archived_at.as_deref(),
+            Record::Todo(t) => t.archived_at.as_deref(),
+            Record::SessionNote(n) => n.archived_at.as_deref(),
         }
     }
 }

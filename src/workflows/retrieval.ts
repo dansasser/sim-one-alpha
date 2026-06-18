@@ -106,7 +106,7 @@ export function createRetrievalRouter(
   options: RetrievalWorkflowOptions = {},
 ): RagRouter {
   return new RagRouter(
-    new MemoryRouter(options.memoryProvider ?? new SessionMemoryProvider()),
+    MemoryRouter.fromSingle('memory', options.memoryProvider ?? new SessionMemoryProvider()),
     options.providers ?? createDefaultRetrievalProviders(env),
   );
 }
