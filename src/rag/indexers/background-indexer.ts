@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import type { EmbeddingClient } from '../embeddings.js';
+import { getOnnxEmbeddingDimensions } from '../../embeddings/index.js';
 import type { VectorStore } from '../vector/index.js';
 import { indexKnowledgeDocs } from './knowledge-doc-indexer.js';
 import { indexProjectFiles } from './project-file-indexer.js';
@@ -38,24 +39,55 @@ export async function runBackgroundIndexing(options: BackgroundIndexerOptions): 
       const records = await loadRecords();
       const idsToKeep = new Set(records.map((record) => record.id).filter(Boolean));
 
+      if (records.length === 0) {
+        const existingIds = await options.vectorStore.listIds(collection);
+        const staleIds = existingIds.filter((id) => !idsToKeep.has(id));
+        if (staleIds.length > 0) {
+          await options.vectorStore.delete(collection, staleIds);
+        }
+        return;
+      }
+
+      const contents = records.map((record) => record.content);
+      const outcome = await options.embeddingClient.embedBatchWithOutcome(contents);
+
+      let vectorRecords: Array<{
+        id: string;
+        chunk_key?: string;
+        source: string;
+        title: string;
+        content: string;
+        vector: number[];
+        metadata: Record<string, unknown>;
+        updated_at: string;
+      }>;
+      if (outcome.ok) {
+        vectorRecords = records.map((record, index) => ({
+          ...record,
+          vector: outcome.result.vectors[index] ?? [],
+        }));
+      } else {
+        console.error(
+          `[WARN] Background indexing embedding failed for ${collection}: ${outcome.error}`,
+        );
+        const dimensions = await getOnnxEmbeddingDimensions();
+        vectorRecords = records.map((record) => ({
+          ...record,
+          vector: new Array(dimensions).fill(0),
+          metadata: {
+            ...record.metadata,
+            embeddingError: outcome.error,
+          },
+        }));
+      }
+
+      await options.vectorStore.upsert(collection, vectorRecords);
+
       const existingIds = await options.vectorStore.listIds(collection);
       const staleIds = existingIds.filter((id) => !idsToKeep.has(id));
       if (staleIds.length > 0) {
         await options.vectorStore.delete(collection, staleIds);
       }
-
-      if (records.length === 0) {
-        return;
-      }
-
-      const contents = records.map((record) => record.content);
-      const vectors = await options.embeddingClient.embedBatch(contents);
-      const vectorRecords = records.map((record, index) => ({
-        ...record,
-        vector: vectors[index] ?? [],
-      }));
-
-      await options.vectorStore.upsert(collection, vectorRecords);
     } catch (error) {
       console.error(
         `[WARN] Background indexing failed for ${collection}:`,

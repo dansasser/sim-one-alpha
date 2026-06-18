@@ -8,6 +8,7 @@ Every top-level `src/` directory should fit one of these categories. If a new di
 
 | Path | Type | Ownership rule |
 | --- | --- | --- |
+| `src/embeddings/` | Bundled local embedding model | In-process ONNX + tokenizer path used by the RAG embedding fallback. |
 | `src/agents/` | Flue agent entrypoints | Main `createAgent(...)` files discovered by Flue. |
 | `src/approvals/` | Shared approval subsystem | Approval service factory and ingress types shared by the coding worker and connectors/HTTP/CLI surfaces. |
 | `src/commands/` | Pre-LLM command parsing | Slash command definitions and parsing that run before prompts reach the LLM. |

@@ -9,10 +9,16 @@ import { GoromboSessionDatabase } from '../session/session-database.js';
 
 const fakeEmbeddingClient = {
   async embed(): Promise<number[]> {
-    return new Array(768).fill(0.1);
+    return new Array(384).fill(0.1);
   },
   async embedBatch(texts: string[]): Promise<number[][]> {
-    return texts.map(() => new Array(768).fill(0.1));
+    return texts.map(() => new Array(384).fill(0.1));
+  },
+  async embedWithOutcome(): Promise<{ ok: true; result: { vector: number[]; provider: 'onnx-local'; modelId: string } }> {
+    return { ok: true, result: { vector: new Array(384).fill(0.1), provider: 'onnx-local' as const, modelId: 'all-minilm-l6-v2' } };
+  },
+  async embedBatchWithOutcome(texts: string[]): Promise<{ ok: true; result: { vectors: number[][]; provider: 'onnx-local'; modelId: string } }> {
+    return { ok: true, result: { vectors: texts.map(() => new Array(384).fill(0.1)), provider: 'onnx-local' as const, modelId: 'all-minilm-l6-v2' } };
   },
 };
 
@@ -48,7 +54,7 @@ test('recordFlueSession indexes session chunks into the vector store', async () 
   try {
     await db.recordFlueSession('agent-session:["instance-1","harness-1","session-1"]', makeSessionData('remember this detail'));
 
-    const results = await vectorStore.search('session_memory', new Array(768).fill(0.1), { limit: 5 });
+    const results = await vectorStore.search('session_memory', new Array(384).fill(0.1), { limit: 5 });
     assert.ok(results.length > 0);
     assert.ok(results.some((result) => result.content.includes('remember this detail')));
   } finally {

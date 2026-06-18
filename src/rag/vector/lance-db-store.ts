@@ -1,4 +1,4 @@
-import { connect, makeArrowTable } from '@lancedb/lancedb';
+import { connect, makeArrowTable, Index } from '@lancedb/lancedb';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
@@ -36,6 +36,7 @@ export interface VectorSearchResult {
 export interface VectorStore {
   upsert(collection: string, records: VectorRecord[]): Promise<void>;
   search(collection: string, query: number[], options?: VectorSearchOptions): Promise<VectorSearchResult[]>;
+  searchKeyword(collection: string, query: string, options?: VectorSearchOptions): Promise<VectorSearchResult[]>;
   delete(collection: string, ids: string[]): Promise<void>;
   listIds(collection: string): Promise<string[]>;
 }
@@ -60,16 +61,15 @@ export class LanceDbVectorStore implements VectorStore {
     }
 
     const ids = records.map((record) => record.id).filter(Boolean);
+    const arrowRecords = makeArrowTable(records as unknown as Record<string, unknown>[]);
     const table = await this.openOrCreateTable(collection, records);
 
     if (ids.length > 0) {
-      // LanceDB does not enforce unique primary keys. Delete existing rows
-      // with the same ids before inserting replacements so upsert behaves
-      // as a true replacement and duplicate vectors do not accumulate.
       await table.delete(createIdFilter(ids));
     }
 
-    await table.add(makeArrowTable(records as unknown as Record<string, unknown>[]));
+    await table.add(arrowRecords);
+    await this.ensureKeywordIndex(collection, table);
   }
 
   async search(collection: string, query: number[], options: VectorSearchOptions = {}): Promise<VectorSearchResult[]> {
@@ -90,6 +90,28 @@ export class LanceDbVectorStore implements VectorStore {
 
     const rows = (await builder.toArray()) as unknown as Array<LanceSearchRow>;
     return rows.map(toSearchResult);
+  }
+
+  async searchKeyword(collection: string, query: string, options: VectorSearchOptions = {}): Promise<VectorSearchResult[]> {
+    const table = await this.openTable(collection);
+    if (!table) {
+      return [];
+    }
+
+    await this.ensureKeywordIndex(collection, table);
+
+    const builder = table.query().fullTextSearch(query, { columns: ['content', 'title'] });
+    if (options.limit) {
+      builder.limit(Math.max(1, Math.floor(options.limit)));
+    }
+
+    const filter = buildLanceFilter(options.filters);
+    if (filter) {
+      builder.where(filter);
+    }
+
+    const rows = (await builder.toArray()) as unknown as Array<LanceKeywordRow>;
+    return rows.map(toKeywordResult);
   }
 
   async delete(collection: string, ids: string[]): Promise<void> {
@@ -129,20 +151,48 @@ export class LanceDbVectorStore implements VectorStore {
     const db = await this.getConnection();
     const names = await db.tableNames();
     if (names.includes(collection)) {
-      return db.openTable(collection);
+      const table = await db.openTable(collection);
+      await this.ensureKeywordIndex(collection, table);
+      return table;
     }
 
     try {
-      return await db.createTable(
+      const table = await db.createTable(
         collection,
         makeArrowTable(sampleRecords as unknown as Record<string, unknown>[]),
       );
+      await this.ensureKeywordIndex(collection, table);
+      return table;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (/already exists/i.test(message)) {
-        return db.openTable(collection);
+        const table = await db.openTable(collection);
+        await this.ensureKeywordIndex(collection, table);
+        return table;
       }
       throw error;
+    }
+  }
+
+  private async ensureKeywordIndex(_collection: string, table: Awaited<ReturnType<typeof this.openTable>>): Promise<void> {
+    if (!table) {
+      return;
+    }
+    await this.ensureFtsIndex(table, 'content');
+    await this.ensureFtsIndex(table, 'title');
+  }
+
+  private async ensureFtsIndex(table: Awaited<ReturnType<typeof this.openTable>>, column: string): Promise<void> {
+    if (!table) {
+      return;
+    }
+    try {
+      await table.createIndex(column, { config: Index.fts() });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/already exists/i.test(message)) {
+        console.error(`[WARN] Failed to create FTS index on ${column}:`, message);
+      }
     }
   }
 
@@ -213,11 +263,44 @@ interface LanceSearchRow {
   updated_at: string;
 }
 
+interface LanceKeywordRow {
+  id: string;
+  chunk_key?: string;
+  source: string;
+  title: string;
+  content: string;
+  _score?: number;
+  _rank?: number;
+  metadata?: string | Record<string, unknown>;
+  updated_at: string;
+}
+
 function toSearchResult(row: LanceSearchRow): VectorSearchResult {
   const metadata = parseMetadata(row.metadata);
   const distance = typeof row._distance === 'number' ? row._distance : 0;
-  // LanceDB returns L2 distance by default. Convert to a [0,1] similarity score.
   const score = Math.max(0, Math.min(1, 1 / (1 + Math.abs(distance))));
+
+  return {
+    id: String(row.id),
+    chunk_key: row.chunk_key,
+    source: String(row.source),
+    title: String(row.title),
+    content: String(row.content),
+    score,
+    metadata,
+    updated_at: String(row.updated_at),
+  };
+}
+
+function toKeywordResult(row: LanceKeywordRow): VectorSearchResult {
+  const metadata = parseMetadata(row.metadata);
+  let score: number;
+  if (typeof row._score === 'number') {
+    score = row._score;
+  } else {
+    const rank = typeof row._rank === 'number' ? row._rank : 0;
+    score = Math.max(0, Math.min(1, 1 / (1 + Math.abs(rank))));
+  }
 
   return {
     id: String(row.id),

@@ -1,4 +1,4 @@
-﻿import type { EmbeddingClient } from './embeddings.js';
+import type { EmbeddingClient } from './embeddings.js';
 import type { RagProvider } from './providers.js';
 import type { RagQuery, RetrievedContext } from '../types/index.js';
 import type { VectorStore, VectorSearchResult } from './vector/index.js';
@@ -33,48 +33,59 @@ export class DocumentIndexProvider implements RagProvider {
       return [];
     }
 
-    const vector = await this.embeddingClient.embed(query.text);
-    const perCollection = Math.max(1, Math.ceil(limit / this.collections.length));
+    const outcome = await this.embeddingClient.embedWithOutcome(query.text);
+    const collectionFilters = this.collections.map((collection) => ({
+      collection,
+      ...buildCollectionFilters(collection, query),
+    }));
+    const activeCollections = collectionFilters.filter((entry) => !entry.skip);
+    const perCollection = activeCollections.length > 0 ? Math.max(1, Math.ceil(limit / activeCollections.length)) : limit;
     const allResults: VectorSearchResult[] = [];
 
-    for (const collection of this.collections) {
-      try {
-        const filters: Record<string, unknown> = {};
-        if (collection === 'knowledge_base') {
-          const hasActorScope = typeof query.actorId === 'string' && query.actorId.length > 0;
-          const hasConversationScope = typeof query.conversationId === 'string' && query.conversationId.length > 0;
-          if (!hasActorScope && !hasConversationScope) {
-            console.error(
-              `[WARN] Skipping unscoped knowledge_base search (collection=${collection}). ` +
-                'knowledge_base retrieval requires actor_id or conversation_id scope.',
-            );
-            continue;
-          }
-          if (query.actorId) {
-            filters.actor_id = query.actorId;
-          }
-          if (query.conversationId) {
-            filters.conversation_id = query.conversationId;
-          }
+    if (outcome.ok) {
+      for (const { collection, filters } of activeCollections) {
+        try {
+          const results = await this.vectorStore.search(collection, outcome.result.vector, {
+            limit: perCollection,
+            ...(Object.keys(filters).length > 0 ? { filters } : {}),
+          });
+          allResults.push(...results);
+        } catch (error) {
+          console.error(
+            '[WARN] Document index vector search failed for collection',
+            collection,
+            ':',
+            error instanceof Error ? error.message : String(error),
+          );
         }
-
-        const results = await this.vectorStore.search(collection, vector, {
-          limit: perCollection,
-          ...(Object.keys(filters).length > 0 ? { filters } : {}),
-        });
-        allResults.push(...results);
-      } catch (error) {
-        // Collection may not exist yet. Log and continue.
-        console.error(
-          '[WARN] Document index search failed for collection',
-          collection,
-          ':',
-          error instanceof Error ? error.message : String(error),
-        );
       }
     }
 
-    return allResults
+    const usedKeywordFallback = !outcome.ok || allResults.length === 0;
+    if (usedKeywordFallback) {
+      if (!outcome.ok) {
+        console.error(`[INFO] embedding.fallback path=keyword provider=none scope=document-index`);
+      }
+
+      for (const { collection, filters } of activeCollections) {
+        try {
+          const results = await this.vectorStore.searchKeyword(collection, query.text, {
+            limit: perCollection,
+            ...(Object.keys(filters).length > 0 ? { filters } : {}),
+          });
+          allResults.push(...results);
+        } catch (error) {
+          console.error(
+            '[WARN] Document index keyword search failed for collection',
+            collection,
+            ':',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      }
+    }
+
+    const sorted = allResults
       .sort((left, right) => right.score - left.score)
       .slice(0, limit)
       .map((result) => ({
@@ -88,9 +99,42 @@ export class DocumentIndexProvider implements RagProvider {
           collection: result.metadata?.collection ?? inferCollection(result.source),
           source: result.source,
           updatedAt: result.updated_at,
+          searchMethod: usedKeywordFallback ? ('keyword' as const) : ('vector' as const),
+          ...(outcome.ok ? { embeddingProvider: outcome.result.provider } : { embeddingError: outcome.error }),
         },
       }));
+
+    return sorted;
   }
+}
+
+function buildCollectionFilters(
+  collection: string,
+  query: RagQuery,
+): { skip: boolean; filters: Record<string, unknown> } {
+  if (collection !== 'knowledge_base') {
+    return { skip: false, filters: {} };
+  }
+
+  const hasActorScope = typeof query.actorId === 'string' && query.actorId.length > 0;
+  const hasConversationScope = typeof query.conversationId === 'string' && query.conversationId.length > 0;
+
+  if (!hasActorScope && !hasConversationScope) {
+    console.error(
+      '[WARN] Skipping unscoped knowledge_base search (collection=knowledge_base). ' +
+        'knowledge_base retrieval requires actor_id or conversation_id scope.',
+    );
+    return { skip: true, filters: {} };
+  }
+
+  const filters: Record<string, unknown> = {};
+  if (query.actorId) {
+    filters.actor_id = query.actorId;
+  }
+  if (query.conversationId) {
+    filters.conversation_id = query.conversationId;
+  }
+  return { skip: false, filters };
 }
 
 function inferCollection(source: string): string {

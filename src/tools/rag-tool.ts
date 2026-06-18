@@ -19,7 +19,7 @@ export const retrieveContextTool = defineTool({
   execute: async ({ eventId, text, limit, maxContextTokens, webFetch, fetchTopK }) => {
     const event = goromboPersistenceRuntime.sessionDatabase.getNormalizedMessageEvent(eventId);
     if (!event) {
-      throw new Error(`retrieve_context requires a trusted eventId persisted by chat ingress.`);
+      throw new Error(`retrieve_context requires a persisted event; ${eventId} not found`);
     }
 
     return JSON.stringify(

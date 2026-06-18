@@ -1,4 +1,5 @@
 import type { EmbeddingClient } from './embeddings.js';
+import { getOnnxEmbeddingDimensions } from '../embeddings/index.js';
 import type { VectorStore, VectorRecord } from './vector/index.js';
 
 export interface AddKnowledgeInput {
@@ -57,7 +58,24 @@ export class LanceDbKnowledgeStore implements KnowledgeStore {
 
   async add(input: AddKnowledgeInput): Promise<KnowledgeRecord> {
     const record = createKnowledgeRecord(input);
-    const vector = await this.embeddingClient.embed(record.content);
+    const outcome = await this.embeddingClient.embedWithOutcome(record.content);
+
+    let vector: number[];
+    const metadata: Record<string, unknown> = {
+      ...record.metadata,
+      tags: record.tags,
+      source: record.source,
+      createdBy: record.createdBy,
+    };
+
+    if (outcome.ok) {
+      vector = outcome.result.vector;
+    } else {
+      const dimensions = await getOnnxEmbeddingDimensions();
+      vector = new Array(dimensions).fill(0);
+      metadata.embeddingError = outcome.error;
+    }
+
     const vectorRecord: VectorRecord = {
       id: record.id,
       chunk_key: record.id,
@@ -67,12 +85,7 @@ export class LanceDbKnowledgeStore implements KnowledgeStore {
       vector,
       actor_id: record.actorId,
       conversation_id: record.conversationId,
-      metadata: {
-        ...record.metadata,
-        tags: record.tags,
-        source: record.source,
-        createdBy: record.createdBy,
-      },
+      metadata,
       updated_at: record.updatedAt,
     };
 
@@ -81,6 +94,11 @@ export class LanceDbKnowledgeStore implements KnowledgeStore {
   }
 
   async list(filters: ListKnowledgeFilters = {}): Promise<KnowledgeRecord[]> {
+    const ids = await this.vectorStore.listIds(knowledgeCollection);
+    if (ids.length === 0) {
+      return [];
+    }
+
     const queryFilters: Record<string, unknown> = {};
     if (filters.actorId) {
       queryFilters.actor_id = filters.actorId;
@@ -92,11 +110,9 @@ export class LanceDbKnowledgeStore implements KnowledgeStore {
       queryFilters['metadata.source'] = filters.source;
     }
 
-    const dummyVector = new Array(768).fill(0);
-    const vectorLimit = filters.tags && filters.tags.length > 0 ? 10_000 : 1_000;
-    const results = await this.vectorStore.search(knowledgeCollection, dummyVector, {
-      limit: vectorLimit,
+    const results = await this.vectorStore.searchKeyword(knowledgeCollection, '*', {
       filters: queryFilters,
+      limit: ids.length,
     });
 
     return results

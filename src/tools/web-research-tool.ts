@@ -42,7 +42,10 @@ export const webResearchTool = defineTool({
   }) => {
     const event = goromboPersistenceRuntime.sessionDatabase.getNormalizedMessageEvent(eventId);
     if (!event) {
-      throw new Error(`web_research requires a trusted eventId persisted by chat ingress.`);
+      return JSON.stringify({
+        error: `web_research requires a persisted event; ${eventId} not found`,
+        eventId,
+      });
     }
 
     return JSON.stringify(
