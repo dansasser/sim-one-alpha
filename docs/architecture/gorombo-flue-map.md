@@ -9,6 +9,7 @@ Every top-level `src/` directory should fit one of these categories. If a new di
 | Path | Type | Ownership rule |
 | --- | --- | --- |
 | `src/embeddings/` | Bundled local embedding model | In-process ONNX + tokenizer path used by the RAG embedding fallback. |
+| `crates/gorombo-memory/` | Rust/WASM memory engine crate | Core structured-memory implementation compiled to WebAssembly. Provides record CRUD, scope matching, inverted-index ranking, and JSON I/O. Built by `scripts/wasm-build.mjs` and copied into `dist/memory/` at build time. |
 | `src/agents/` | Flue agent entrypoints | Main `createAgent(...)` files discovered by Flue. |
 | `src/approvals/` | Shared approval subsystem | Approval service factory and ingress types shared by the coding worker and connectors/HTTP/CLI surfaces. |
 | `src/commands/` | Pre-LLM command parsing | Slash command definitions and parsing that run before prompts reach the LLM. |
@@ -16,7 +17,7 @@ Every top-level `src/` directory should fit one of these categories. If a new di
 | `src/ingress/` | Application ingress modules | Cross-cutting ingress logic that turns internal worker events and storage into HTTP/connector-facing surfaces. Example: the approval ingress bridges `CodingApprovalService` to HTTP routes, CLI, and connectors. |
 | `src/channels/` | Flue-native channel handlers | First-party provider ingress (e.g. Telegram) discovered by Flue under `/channels/<name>/...`. |
 | `src/connectors/` | Connector normalization | External-source adapters that normalize input into internal message shapes. Legacy Telegram ingress moved to `src/channels/telegram.ts`. |
-| `src/memory/` | Shared memory subsystem | Memory retrieval interfaces and routing shared by agents/tools/workflows. |
+| `src/memory/` | Shared memory subsystem | Memory retrieval interfaces and routing shared by agents/tools/workflows. Now includes the Rust/WASM `RustMemoryEngine` shim (`rust-memory-engine.ts`) and scope matcher (`scope-match.ts`) for the structured-memory engine. |
 | `src/middleware/` | HTTP middleware | Reusable Hono middleware such as API-secret auth. |
 | `src/models/` | Model subsystem | Model cards, provider registration, model registry, limits, and runtime bootstrap. |
 | `src/protocols/` | Protocol storage/access subsystem | Protocol schemas and provider implementations used by protocol tools. |
@@ -186,6 +187,12 @@ src/workflows/web-research.ts
   Researcher-owned web research workflow.
   Handles query planning, basic/standard/deep research depth, cache, web search, fetch, evidence packing, confidence, and failures.
   Used by the researcher-owned web_research tool.
+
+src/memory/
+  Shared memory subsystem. Memory retrieval interfaces and routing shared by agents/tools/workflows.
+  - `src/memory/rust-memory-engine.ts` — TypeScript WASM shim that loads `crates/gorombo-memory` and exposes an `InMemoryMemoryEngine`-compatible surface.
+  - `src/memory/scope-match.ts` — Scope matching and precedence helpers shared between the Rust engine and TypeScript consumers.
+  - `src/tests/rust-memory-engine.test.ts` — Parity tests between the Rust/WASM engine and the TypeScript reference implementation.
 
 src/tools/protocol-tool.ts
   Orchestrator-safe protocol loading tool.
