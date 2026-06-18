@@ -4,6 +4,7 @@ import { dirname, isAbsolute, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { SessionData } from '@flue/runtime/adapter';
 import type { EmbeddingClient } from '../rag/embeddings.js';
+import { getOnnxEmbeddingDimensions } from '../embeddings/index.js';
 import type { VectorStore, VectorRecord } from '../rag/vector/index.js';
 import type { NormalizedMessageEvent } from '../types/index.js';
 import { estimateTextTokens } from './context-budget.js';
@@ -1036,6 +1037,39 @@ export class GoromboSessionDatabase {
     await this.indexSessionMemoryVectors(storageKey, harnessName, sessionName, chunks);
   }
 
+  private buildSessionMemoryVectorRecord(
+    chunk: ExtractedSessionMemoryChunk,
+    vector: number[],
+    storageKey: string,
+    harnessName: string,
+    sessionName: string,
+    embeddingError?: string,
+  ): VectorRecord {
+    return {
+      id: chunk.id,
+      chunk_key: chunk.id,
+      source: 'session_memory',
+      title: chunk.title,
+      content: chunk.content,
+      vector,
+      actor_id: chunk.actorId,
+      conversation_id: chunk.conversationId,
+      session_name: sessionName,
+      thread_id: chunk.threadId,
+      metadata: {
+        ...chunk.metadata,
+        storageKey,
+        harnessName,
+        sessionName,
+        entryId: chunk.entryId,
+        kind: chunk.kind,
+        role: chunk.role,
+        ...(embeddingError ? { embeddingError } : {}),
+      },
+      updated_at: chunk.updatedAt,
+    };
+  }
+
   private async indexSessionMemoryVectors(
     storageKey: string,
     harnessName: string,
@@ -1049,35 +1083,51 @@ export class GoromboSessionDatabase {
     try {
       const contents = chunks.map((chunk) => chunk.content);
       const vectors = await this.embeddingClient.embedBatch(contents);
-      const records = chunks.map((chunk, index): VectorRecord => ({
-        id: chunk.id,
-        chunk_key: chunk.id,
-        source: 'session_memory',
-        title: chunk.title,
-        content: chunk.content,
-        vector: vectors[index] ?? [],
-        actor_id: chunk.actorId,
-        conversation_id: chunk.conversationId,
-        session_name: sessionName,
-        thread_id: chunk.threadId,
-        metadata: {
-          ...chunk.metadata,
+
+      if (vectors.length !== chunks.length) {
+        throw new Error(
+          `Embedding provider returned ${vectors.length} vectors for ${chunks.length} chunks`,
+        );
+      }
+
+      const records = chunks.map((chunk, index): VectorRecord =>
+        this.buildSessionMemoryVectorRecord(
+          chunk,
+          vectors[index],
           storageKey,
           harnessName,
           sessionName,
-          entryId: chunk.entryId,
-          kind: chunk.kind,
-          role: chunk.role,
-        },
-        updated_at: chunk.updatedAt,
-      }));
+        ),
+      );
 
       await this.vectorStore.upsert('session_memory', records);
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       console.error(
-        `[WARN] Failed to index session memory vectors for ${storageKey}:`,
-        error instanceof Error ? error.message : String(error),
+        `[WARN] Failed to index session memory vectors for ${storageKey}; falling back to zero-vector keyword records:`,
+        message,
       );
+
+      try {
+        const dimensions = await this.vectorStore.getVectorDimension('session_memory')
+          ?? await getOnnxEmbeddingDimensions();
+        const fallbackRecords = chunks.map((chunk): VectorRecord =>
+          this.buildSessionMemoryVectorRecord(
+            chunk,
+            new Array(dimensions).fill(0),
+            storageKey,
+            harnessName,
+            sessionName,
+            message,
+          ),
+        );
+        await this.vectorStore.upsert('session_memory', fallbackRecords);
+      } catch (fallbackError) {
+        console.error(
+          `[WARN] Failed to write session memory vector fallback for ${storageKey}:`,
+          fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+        );
+      }
     }
   }
 

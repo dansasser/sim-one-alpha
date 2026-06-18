@@ -62,9 +62,14 @@ export async function runBackgroundIndexing(options: BackgroundIndexerOptions): 
         updated_at: string;
       }>;
       if (outcome.ok) {
+        if (outcome.result.vectors.length !== records.length) {
+          throw new Error(
+            `Embedding provider returned ${outcome.result.vectors.length} vectors for ${records.length} records`,
+          );
+        }
         vectorRecords = records.map((record, index) => ({
           ...record,
-          vector: outcome.result.vectors[index] ?? [],
+          vector: outcome.result.vectors[index],
         }));
       } else {
         console.error(

@@ -7,6 +7,7 @@ import test from 'node:test';
 import { loadRunpodImageCatalog, getRunpodImageModel, getDefaultRunpodImageModel } from '../tools/runpod-image/catalog.js';
 import { normalizeWebApiMessage } from '../connectors/web-api.js';
 import { persistImageArtifact } from '../tools/runpod-image/artifact-store.js';
+import { recordImageArtifactTool } from '../tools/runpod-image/record-image-artifact-tool.js';
 import { goromboPersistenceRuntime } from '../db.js';
 
 test('catalog loads and validates', () => {
@@ -70,4 +71,26 @@ test('persistImageArtifact writes row and indexes memory', () => {
   } finally {
     rmSync(tmpDir, { recursive: true, force: true });
   }
+});
+
+
+test('record_image_artifact tool rejects a nonexistent eventId', async () => {
+  await assert.rejects(
+    async () => {
+      await recordImageArtifactTool.execute({
+        eventId: 'nonexistent-event-id',
+        artifactId: randomUUID(),
+        filePath: '/tmp/test.png',
+        fileName: 'test.png',
+        mimeType: 'image/png',
+        prompt: 'a test image',
+        modelId: 'black-forest-labs-flux-1-dev',
+      });
+    },
+    (error: Error) => {
+      assert.match(error.message, /nonexistent-event-id/);
+      assert.match(error.message, /trusted eventId persisted by chat ingress/);
+      return true;
+    },
+  );
 });
