@@ -1,4 +1,5 @@
 import type { EmbeddingClient } from './embeddings.js';
+import { getOnnxEmbeddingDimensions } from '../embeddings/index.js';
 import type { VectorStore, VectorRecord } from './vector/index.js';
 
 export interface AddKnowledgeInput {
@@ -59,8 +60,20 @@ export class LanceDbKnowledgeStore implements KnowledgeStore {
     const record = createKnowledgeRecord(input);
     const outcome = await this.embeddingClient.embedWithOutcome(record.content);
 
-    if (!outcome.ok) {
-      throw new Error(`Failed to embed knowledge entry: ${outcome.error}`);
+    let vector: number[];
+    const metadata: Record<string, unknown> = {
+      ...record.metadata,
+      tags: record.tags,
+      source: record.source,
+      createdBy: record.createdBy,
+    };
+
+    if (outcome.ok) {
+      vector = outcome.result.vector;
+    } else {
+      const dimensions = await getOnnxEmbeddingDimensions();
+      vector = new Array(dimensions).fill(0);
+      metadata.embeddingError = outcome.error;
     }
 
     const vectorRecord: VectorRecord = {
@@ -69,15 +82,10 @@ export class LanceDbKnowledgeStore implements KnowledgeStore {
       source: 'agent_knowledge',
       title: record.title,
       content: record.content,
-      vector: outcome.result.vector,
+      vector,
       actor_id: record.actorId,
       conversation_id: record.conversationId,
-      metadata: {
-        ...record.metadata,
-        tags: record.tags,
-        source: record.source,
-        createdBy: record.createdBy,
-      },
+      metadata,
       updated_at: record.updatedAt,
     };
 

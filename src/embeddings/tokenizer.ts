@@ -45,14 +45,22 @@ export function loadTokenizer(modelPath: string): LocalTokenizer {
       let tokenTypeIds = (encoding.token_type_ids ?? new Array(encoding.ids.length).fill(0)).map(BigInt);
 
       if (inputIds.length > maxLength) {
-        // Manual longest-first-style truncation: keep [CLS], take the first
-        // maxLength - 2 content tokens, keep [SEP].
-        const clsId = inputIds[0];
-        const sepId = inputIds[inputIds.length - 1];
-        const content = inputIds.slice(1, maxLength - 1);
-        inputIds = [clsId, ...content, sepId];
-        attentionMask = attentionMask.slice(0, inputIds.length);
-        tokenTypeIds = tokenTypeIds.slice(0, inputIds.length);
+        if (maxLength < 2) {
+          // Cannot preserve both special tokens below length 2; clamp to the
+          // requested cap instead of allowing an oversized result.
+          inputIds = inputIds.slice(0, maxLength);
+          attentionMask = attentionMask.slice(0, maxLength);
+          tokenTypeIds = tokenTypeIds.slice(0, maxLength);
+        } else {
+          // Manual longest-first-style truncation: keep [CLS], take the first
+          // maxLength - 2 content tokens, keep [SEP].
+          const clsId = inputIds[0];
+          const sepId = inputIds[inputIds.length - 1];
+          const content = inputIds.slice(1, maxLength - 1);
+          inputIds = [clsId, ...content, sepId];
+          attentionMask = attentionMask.slice(0, inputIds.length);
+          tokenTypeIds = tokenTypeIds.slice(0, inputIds.length);
+        }
       }
 
       return {

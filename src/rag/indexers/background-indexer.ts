@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import type { EmbeddingClient } from '../embeddings.js';
+import { getOnnxEmbeddingDimensions } from '../../embeddings/index.js';
 import type { VectorStore } from '../vector/index.js';
 import { indexKnowledgeDocs } from './knowledge-doc-indexer.js';
 import { indexProjectFiles } from './project-file-indexer.js';
@@ -69,17 +70,23 @@ export async function runBackgroundIndexing(options: BackgroundIndexerOptions): 
         console.error(
           `[WARN] Background indexing embedding failed for ${collection}: ${outcome.error}`,
         );
-        vectorRecords = [];
+        const dimensions = await getOnnxEmbeddingDimensions();
+        vectorRecords = records.map((record) => ({
+          ...record,
+          vector: new Array(dimensions).fill(0),
+          metadata: {
+            ...record.metadata,
+            embeddingError: outcome.error,
+          },
+        }));
       }
 
-      if (vectorRecords.length > 0) {
-        await options.vectorStore.upsert(collection, vectorRecords);
+      await options.vectorStore.upsert(collection, vectorRecords);
 
-        const existingIds = await options.vectorStore.listIds(collection);
-        const staleIds = existingIds.filter((id) => !idsToKeep.has(id));
-        if (staleIds.length > 0) {
-          await options.vectorStore.delete(collection, staleIds);
-        }
+      const existingIds = await options.vectorStore.listIds(collection);
+      const staleIds = existingIds.filter((id) => !idsToKeep.has(id));
+      if (staleIds.length > 0) {
+        await options.vectorStore.delete(collection, staleIds);
       }
     } catch (error) {
       console.error(

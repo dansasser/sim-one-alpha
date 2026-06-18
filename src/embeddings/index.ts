@@ -97,6 +97,12 @@ export async function embedBatch(texts: string[], options?: LocalEmbeddingOption
   return runInference(texts, resolveOptions(options));
 }
 
+export async function getOnnxEmbeddingDimensions(options?: Pick<LocalEmbeddingOptions, 'modelPath'>): Promise<number> {
+  const modelPath = options?.modelPath ?? resolveModelPath();
+  const { dimensions } = await loadSessionWithShape(modelPath);
+  return dimensions;
+}
+
 async function loadSessionWithShape(modelPath: string): Promise<{ session: ort.InferenceSession; dimensions: number }> {
   const session = await getOnnxSession(modelPath);
   const outputName = session.outputNames[0];

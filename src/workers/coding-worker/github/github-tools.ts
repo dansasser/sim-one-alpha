@@ -276,53 +276,55 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         pullRequestNumber: v.number(),
         branchName: v.string(),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'branch_from_pr', 'Create branch from PR', async () => {
-        const taskId = requireString(args.taskId, 'taskId');
-        if (!options.client?.createBranchFromPullRequest) {
-          return toGithubResult({
-            action: 'branch_from_pr',
-            payload: unavailableWriteTool(),
-          });
-        }
-        const branchPayload = {
-          owner: args.owner,
-          repo: args.repo,
-          pullRequestNumber: args.pullRequestNumber,
-          branchName: requireString(args.branchName, 'branchName'),
-        };
-        const approval = await evaluateRepoApproval(approvalService, options, {
-          taskId,
-          actionType: 'repo.branch.create',
-          summary: `Create branch ${branchPayload.branchName} from PR #${branchPayload.pullRequestNumber} (${hashApprovalPayload(branchPayload)})`,
-          reason: 'Checking out a PR branch mutates local repository state.',
-          risk: 'This creates a local branch and may fetch from the remote.',
-          target: `${args.owner}/${args.repo}#${args.pullRequestNumber}`,
-        });
-        if (!approval.evaluation.allowed) {
-          emitGithubToolApprovalRequested(
-            options,
+      execute: async (args) => {
+        const taskId = readString(args.taskId) ?? 'unknown';
+        return withGithubToolProgress(options, taskId, 'branch_from_pr', 'Create branch from PR', async () => {
+          if (!options.client?.createBranchFromPullRequest) {
+            return toGithubResult({
+              action: 'branch_from_pr',
+              payload: unavailableWriteTool(),
+            });
+          }
+          const branchPayload = {
+            owner: args.owner,
+            repo: args.repo,
+            pullRequestNumber: args.pullRequestNumber,
+            branchName: requireString(args.branchName, 'branchName'),
+          };
+          const approval = await evaluateRepoApproval(approvalService, options, {
             taskId,
-            'branch_from_pr',
-            'Create branch from PR requires approval.',
-            approval.request,
-            approval.evaluation.reason,
-          );
+            actionType: 'repo.branch.create',
+            summary: `Create branch ${branchPayload.branchName} from PR #${branchPayload.pullRequestNumber} (${hashApprovalPayload(branchPayload)})`,
+            reason: 'Checking out a PR branch mutates local repository state.',
+            risk: 'This creates a local branch and may fetch from the remote.',
+            target: `${args.owner}/${args.repo}#${args.pullRequestNumber}`,
+          });
+          if (!approval.evaluation.allowed) {
+            emitGithubToolApprovalRequested(
+              options,
+              taskId,
+              'branch_from_pr',
+              'Create branch from PR requires approval.',
+              approval.request,
+              approval.evaluation.reason,
+            );
+            return toGithubResult({
+              action: 'branch_from_pr',
+              payload: { blocked: true, ...approval },
+            });
+          }
+          const cwd = await getCwd();
+          const result = await options.client.createBranchFromPullRequest({ ...branchPayload, cwd });
           return toGithubResult({
             action: 'branch_from_pr',
-            payload: { blocked: true, ...approval },
+            payload: {
+              status: result.status,
+              branchName: result.branchName,
+              result,
+            },
           });
-        }
-        const cwd = await getCwd();
-        const result = await options.client.createBranchFromPullRequest({ ...branchPayload, cwd });
-        return toGithubResult({
-          action: 'branch_from_pr',
-          payload: {
-            status: result.status,
-            branchName: result.branchName,
-            result,
-          },
         });
-      }),
+      },
     }),
     defineTool({
       name: 'coding_github_review_comment',
@@ -340,63 +342,65 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         commitId: v.optional(v.string()),
         inReplyTo: v.optional(v.string()),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'review_comment', 'Create review comment', async () => {
-        const taskId = requireString(args.taskId, 'taskId');
-        if (!options.client?.createReviewComment) {
-          return toGithubResult({
-            action: 'review_comment',
-            payload: unavailableWriteTool(),
-          });
-        }
-        const commentPayload = {
-          owner: args.owner,
-          repo: args.repo,
-          pullRequestNumber: args.pullRequestNumber,
-          body: args.body,
-          path: args.path,
-          line: args.line,
-          side: readString(args.side),
-          commitId: readString(args.commitId),
-          inReplyTo: readString(args.inReplyTo),
-        };
-        const approval = await evaluateGitApproval(options, {
-          approvalService,
-          taskId,
-          actionType: 'github.review_comment',
-          summary: `Review comment on ${args.path}:${args.line} for PR #${args.pullRequestNumber} (${hashApprovalPayload(commentPayload)})`,
-          reason: 'Posting a line-specific review comment publishes remote GitHub review state.',
-          risk: 'This may notify users and affect review context.',
-          target: `${args.owner}/${args.repo}#${args.pullRequestNumber}`,
-          metadata: {
-            path: commentPayload.path,
-            line: commentPayload.line,
-            payloadHash: hashApprovalPayload(commentPayload),
-          },
-        });
-        if (!approval.evaluation.allowed) {
-          emitGithubToolApprovalRequested(
-            options,
+      execute: async (args) => {
+        const taskId = readString(args.taskId) ?? 'unknown';
+        return withGithubToolProgress(options, taskId, 'review_comment', 'Create review comment', async () => {
+          if (!options.client?.createReviewComment) {
+            return toGithubResult({
+              action: 'review_comment',
+              payload: unavailableWriteTool(),
+            });
+          }
+          const commentPayload = {
+            owner: args.owner,
+            repo: args.repo,
+            pullRequestNumber: args.pullRequestNumber,
+            body: args.body,
+            path: args.path,
+            line: args.line,
+            side: readString(args.side),
+            commitId: readString(args.commitId),
+            inReplyTo: readString(args.inReplyTo),
+          };
+          const approval = await evaluateGitApproval(options, {
+            approvalService,
             taskId,
-            'review_comment',
-            'Create review comment requires approval.',
-            approval.request,
-            approval.evaluation.reason,
-          );
+            actionType: 'github.review_comment',
+            summary: `Review comment on ${args.path}:${args.line} for PR #${args.pullRequestNumber} (${hashApprovalPayload(commentPayload)})`,
+            reason: 'Posting a line-specific review comment publishes remote GitHub review state.',
+            risk: 'This may notify users and affect review context.',
+            target: `${args.owner}/${args.repo}#${args.pullRequestNumber}`,
+            metadata: {
+              path: commentPayload.path,
+              line: commentPayload.line,
+              payloadHash: hashApprovalPayload(commentPayload),
+            },
+          });
+          if (!approval.evaluation.allowed) {
+            emitGithubToolApprovalRequested(
+              options,
+              taskId,
+              'review_comment',
+              'Create review comment requires approval.',
+              approval.request,
+              approval.evaluation.reason,
+            );
+            return toGithubResult({
+              action: 'review_comment',
+              payload: { blocked: true, ...approval },
+            });
+          }
+          const cwd = await getCwd();
+          const result = await options.client.createReviewComment({ ...commentPayload, cwd });
           return toGithubResult({
             action: 'review_comment',
-            payload: { blocked: true, ...approval },
+            payload: {
+              status: result.status,
+              result,
+            },
           });
-        }
-        const cwd = await getCwd();
-        const result = await options.client.createReviewComment({ ...commentPayload, cwd });
-        return toGithubResult({
-          action: 'review_comment',
-          payload: {
-            status: result.status,
-            result,
-          },
         });
-      }),
+      },
     }),
     defineTool({
       name: 'coding_github_rerun_check',
@@ -409,59 +413,61 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         runId: v.string(),
         rerunFailedJobs: v.optional(v.boolean()),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'rerun_check', 'Rerun GitHub check', async () => {
-        const taskId = requireString(args.taskId, 'taskId');
-        if (!options.client?.rerunCheck) {
-          return toGithubResult({
-            action: 'rerun_check',
-            payload: unavailableWriteTool(),
-          });
-        }
-        const rerunPayload = {
-          owner: args.owner,
-          repo: args.repo,
-          runId: requireString(args.runId, 'runId'),
-          rerunFailedJobs: args.rerunFailedJobs === true,
-        };
-        const approval = await evaluateGitApproval(options, {
-          approvalService,
-          taskId,
-          actionType: 'github.check.rerun',
-          summary: `Rerun GitHub check run ${rerunPayload.runId} (${hashApprovalPayload(rerunPayload)})`,
-          reason: 'Rerunning a check run mutates remote GitHub Actions state.',
-          risk: 'This may re-execute CI jobs and consume runner minutes.',
-          target: `${args.owner}/${args.repo}/actions/runs/${rerunPayload.runId}`,
-          metadata: {
-            runId: rerunPayload.runId,
-            rerunFailedJobs: rerunPayload.rerunFailedJobs,
-            payloadHash: hashApprovalPayload(rerunPayload),
-          },
-        });
-        if (!approval.evaluation.allowed) {
-          emitGithubToolApprovalRequested(
-            options,
+      execute: async (args) => {
+        const taskId = readString(args.taskId) ?? 'unknown';
+        return withGithubToolProgress(options, taskId, 'rerun_check', 'Rerun GitHub check', async () => {
+          if (!options.client?.rerunCheck) {
+            return toGithubResult({
+              action: 'rerun_check',
+              payload: unavailableWriteTool(),
+            });
+          }
+          const rerunPayload = {
+            owner: args.owner,
+            repo: args.repo,
+            runId: requireString(args.runId, 'runId'),
+            rerunFailedJobs: args.rerunFailedJobs === true,
+          };
+          const approval = await evaluateGitApproval(options, {
+            approvalService,
             taskId,
-            'rerun_check',
-            'Rerun GitHub check requires approval.',
-            approval.request,
-            approval.evaluation.reason,
-          );
+            actionType: 'github.check.rerun',
+            summary: `Rerun GitHub check run ${rerunPayload.runId} (${hashApprovalPayload(rerunPayload)})`,
+            reason: 'Rerunning a check run mutates remote GitHub Actions state.',
+            risk: 'This may re-execute CI jobs and consume runner minutes.',
+            target: `${args.owner}/${args.repo}/actions/runs/${rerunPayload.runId}`,
+            metadata: {
+              runId: rerunPayload.runId,
+              rerunFailedJobs: rerunPayload.rerunFailedJobs,
+              payloadHash: hashApprovalPayload(rerunPayload),
+            },
+          });
+          if (!approval.evaluation.allowed) {
+            emitGithubToolApprovalRequested(
+              options,
+              taskId,
+              'rerun_check',
+              'Rerun GitHub check requires approval.',
+              approval.request,
+              approval.evaluation.reason,
+            );
+            return toGithubResult({
+              action: 'rerun_check',
+              payload: { blocked: true, ...approval },
+            });
+          }
+          const cwd = await getCwd();
+          const result = await options.client.rerunCheck({ ...rerunPayload, cwd });
           return toGithubResult({
             action: 'rerun_check',
-            payload: { blocked: true, ...approval },
+            payload: {
+              status: result.status,
+              runId: result.runId,
+              result,
+            },
           });
-        }
-        const cwd = await getCwd();
-        const result = await options.client.rerunCheck({ ...rerunPayload, cwd });
-        return toGithubResult({
-          action: 'rerun_check',
-          payload: {
-            status: result.status,
-            runId: result.runId,
-            result,
-          },
         });
-      }),
+      },
     }),
     defineTool({
       name: 'coding_github_fork_repo',
@@ -475,60 +481,62 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         clone: v.optional(v.boolean()),
         forkName: v.optional(v.string()),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'fork_repo', 'Fork GitHub repository', async () => {
-        const taskId = requireString(args.taskId, 'taskId');
-        if (!options.client?.forkRepository) {
-          return toGithubResult({
-            action: 'fork_repo',
-            payload: unavailableWriteTool(),
-          });
-        }
-        const forkPayload = {
-          owner: args.owner,
-          repo: args.repo,
-          defaultBranchOnly: args.defaultBranchOnly === true,
-          clone: args.clone,
-          forkName: readString(args.forkName),
-        };
-        const approval = await evaluateGitApproval(options, {
-          approvalService,
-          taskId,
-          actionType: 'github.fork_repo',
-          summary: `Fork GitHub repository ${args.owner}/${args.repo} (${hashApprovalPayload(forkPayload)})`,
-          reason: 'Forking creates a remote repository copy.',
-          risk: 'This creates a new GitHub repository under the authenticated account.',
-          target: `${args.owner}/${args.repo}`,
-          metadata: {
-            defaultBranchOnly: forkPayload.defaultBranchOnly,
-            ...(forkPayload.forkName ? { forkName: forkPayload.forkName } : {}),
-            payloadHash: hashApprovalPayload(forkPayload),
-          },
-        });
-        if (!approval.evaluation.allowed) {
-          emitGithubToolApprovalRequested(
-            options,
+      execute: async (args) => {
+        const taskId = readString(args.taskId) ?? 'unknown';
+        return withGithubToolProgress(options, taskId, 'fork_repo', 'Fork GitHub repository', async () => {
+          if (!options.client?.forkRepository) {
+            return toGithubResult({
+              action: 'fork_repo',
+              payload: unavailableWriteTool(),
+            });
+          }
+          const forkPayload = {
+            owner: args.owner,
+            repo: args.repo,
+            defaultBranchOnly: args.defaultBranchOnly === true,
+            clone: args.clone,
+            forkName: readString(args.forkName),
+          };
+          const approval = await evaluateGitApproval(options, {
+            approvalService,
             taskId,
-            'fork_repo',
-            'Fork GitHub repository requires approval.',
-            approval.request,
-            approval.evaluation.reason,
-          );
+            actionType: 'github.fork_repo',
+            summary: `Fork GitHub repository ${args.owner}/${args.repo} (${hashApprovalPayload(forkPayload)})`,
+            reason: 'Forking creates a remote repository copy.',
+            risk: 'This creates a new GitHub repository under the authenticated account.',
+            target: `${args.owner}/${args.repo}`,
+            metadata: {
+              defaultBranchOnly: forkPayload.defaultBranchOnly,
+              ...(forkPayload.forkName ? { forkName: forkPayload.forkName } : {}),
+              payloadHash: hashApprovalPayload(forkPayload),
+            },
+          });
+          if (!approval.evaluation.allowed) {
+            emitGithubToolApprovalRequested(
+              options,
+              taskId,
+              'fork_repo',
+              'Fork GitHub repository requires approval.',
+              approval.request,
+              approval.evaluation.reason,
+            );
+            return toGithubResult({
+              action: 'fork_repo',
+              payload: { blocked: true, ...approval },
+            });
+          }
+          const cwd = await getCwd();
+          const result = await options.client.forkRepository({ ...forkPayload, cwd });
           return toGithubResult({
             action: 'fork_repo',
-            payload: { blocked: true, ...approval },
+            payload: {
+              status: result.status,
+              forkName: result.forkName,
+              result,
+            },
           });
-        }
-        const cwd = await getCwd();
-        const result = await options.client.forkRepository({ ...forkPayload, cwd });
-        return toGithubResult({
-          action: 'fork_repo',
-          payload: {
-            status: result.status,
-            forkName: result.forkName,
-            result,
-          },
         });
-      }),
+      },
     }),
     defineTool({
       name: 'coding_github_request_approval',
@@ -595,66 +603,68 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         body: v.optional(v.string()),
         base: v.optional(v.string()),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'update_pr', 'Update GitHub PR', async () => {
-        const taskId = requireString(args.taskId, 'taskId');
-        if (!options.client?.updatePullRequest) {
-          return toGithubResult({
-            action: 'update_pr',
-            payload: unavailableWriteTool(),
-          });
-        }
-        const base = readString(args.base);
-        const prUpdatePayload = {
-          title: readString(args.title),
-          body: readString(args.body),
-          base,
-        };
-        const approval = await evaluateGitApproval(options, {
-          approvalService,
-          taskId,
-          actionType: 'github.pr.update',
-          summary: `Update GitHub PR #${args.pullRequestNumber} (${hashApprovalPayload(prUpdatePayload)})`,
-          reason: 'Updating PR metadata mutates remote GitHub state.',
-          risk: 'This can change review context, PR body, title, or target base.',
-          target: `${args.owner}/${args.repo}#${args.pullRequestNumber}`,
-          metadata: {
-            ...(prUpdatePayload.title ? { title: prUpdatePayload.title } : {}),
-            ...(prUpdatePayload.body ? { body: prUpdatePayload.body } : {}),
-            ...(prUpdatePayload.base ? { base: prUpdatePayload.base } : {}),
-            payloadHash: hashApprovalPayload(prUpdatePayload),
-          },
-        });
-        if (!approval.evaluation.allowed) {
-          emitGithubToolApprovalRequested(
-            options,
+      execute: async (args) => {
+        const taskId = readString(args.taskId) ?? 'unknown';
+        return withGithubToolProgress(options, taskId, 'update_pr', 'Update GitHub PR', async () => {
+          if (!options.client?.updatePullRequest) {
+            return toGithubResult({
+              action: 'update_pr',
+              payload: unavailableWriteTool(),
+            });
+          }
+          const base = readString(args.base);
+          const prUpdatePayload = {
+            title: readString(args.title),
+            body: readString(args.body),
+            base,
+          };
+          const approval = await evaluateGitApproval(options, {
+            approvalService,
             taskId,
-            'update_pr',
-            'Update GitHub PR requires approval.',
-            approval.request,
-            approval.evaluation.reason,
-          );
+            actionType: 'github.pr.update',
+            summary: `Update GitHub PR #${args.pullRequestNumber} (${hashApprovalPayload(prUpdatePayload)})`,
+            reason: 'Updating PR metadata mutates remote GitHub state.',
+            risk: 'This can change review context, PR body, title, or target base.',
+            target: `${args.owner}/${args.repo}#${args.pullRequestNumber}`,
+            metadata: {
+              ...(prUpdatePayload.title ? { title: prUpdatePayload.title } : {}),
+              ...(prUpdatePayload.body ? { body: prUpdatePayload.body } : {}),
+              ...(prUpdatePayload.base ? { base: prUpdatePayload.base } : {}),
+              payloadHash: hashApprovalPayload(prUpdatePayload),
+            },
+          });
+          if (!approval.evaluation.allowed) {
+            emitGithubToolApprovalRequested(
+              options,
+              taskId,
+              'update_pr',
+              'Update GitHub PR requires approval.',
+              approval.request,
+              approval.evaluation.reason,
+            );
+            return toGithubResult({
+              action: 'update_pr',
+              payload: { blocked: true, ...approval },
+            });
+          }
+          const result = await options.client.updatePullRequest({
+            owner: args.owner,
+            repo: args.repo,
+            pullRequestNumber: args.pullRequestNumber,
+            title: readString(args.title),
+            body: readString(args.body),
+            ...(base ? { base } : {}),
+          });
           return toGithubResult({
             action: 'update_pr',
-            payload: { blocked: true, ...approval },
+            payload: {
+              status: result.status,
+              ...(base ? { base } : {}),
+              result,
+            },
           });
-        }
-        const result = await options.client.updatePullRequest({
-          owner: args.owner,
-          repo: args.repo,
-          pullRequestNumber: args.pullRequestNumber,
-          title: readString(args.title),
-          body: readString(args.body),
-          ...(base ? { base } : {}),
         });
-        return toGithubResult({
-          action: 'update_pr',
-          payload: {
-            status: result.status,
-            ...(base ? { base } : {}),
-            result,
-          },
-        });
-      }),
+      },
     }),
     defineTool({
       name: 'coding_github_set_pr_ready',
@@ -666,57 +676,59 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         pullRequestNumber: v.number(),
         ready: v.boolean(),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'ready_pr', 'Set PR ready/draft status', async () => {
-        const taskId = requireString(args.taskId, 'taskId');
-        if (!options.client?.setPullRequestReady) {
-          return toGithubResult({
-            action: 'ready_pr',
-            payload: unavailableWriteTool(),
-          });
-        }
-        const readyPayload = { ready: args.ready };
-        const approval = await evaluateGitApproval(options, {
-          approvalService,
-          taskId,
-          actionType: 'github.pr.ready',
-          summary: `${args.ready ? 'Mark ready' : 'Convert to draft'} GitHub PR #${args.pullRequestNumber} (${hashApprovalPayload(readyPayload)})`,
-          reason: 'Changing ready/draft state affects remote review automation and reviewer visibility.',
-          risk: 'This mutates remote GitHub PR state.',
-          target: `${args.owner}/${args.repo}#${args.pullRequestNumber}`,
-          metadata: {
-            ready: args.ready,
-            payloadHash: hashApprovalPayload(readyPayload),
-          },
-        });
-        if (!approval.evaluation.allowed) {
-          emitGithubToolApprovalRequested(
-            options,
+      execute: async (args) => {
+        const taskId = readString(args.taskId) ?? 'unknown';
+        return withGithubToolProgress(options, taskId, 'ready_pr', 'Set PR ready/draft status', async () => {
+          if (!options.client?.setPullRequestReady) {
+            return toGithubResult({
+              action: 'ready_pr',
+              payload: unavailableWriteTool(),
+            });
+          }
+          const readyPayload = { ready: args.ready };
+          const approval = await evaluateGitApproval(options, {
+            approvalService,
             taskId,
-            'ready_pr',
-            'Set PR ready/draft status requires approval.',
-            approval.request,
-            approval.evaluation.reason,
-          );
+            actionType: 'github.pr.ready',
+            summary: `${args.ready ? 'Mark ready' : 'Convert to draft'} GitHub PR #${args.pullRequestNumber} (${hashApprovalPayload(readyPayload)})`,
+            reason: 'Changing ready/draft state affects remote review automation and reviewer visibility.',
+            risk: 'This mutates remote GitHub PR state.',
+            target: `${args.owner}/${args.repo}#${args.pullRequestNumber}`,
+            metadata: {
+              ready: args.ready,
+              payloadHash: hashApprovalPayload(readyPayload),
+            },
+          });
+          if (!approval.evaluation.allowed) {
+            emitGithubToolApprovalRequested(
+              options,
+              taskId,
+              'ready_pr',
+              'Set PR ready/draft status requires approval.',
+              approval.request,
+              approval.evaluation.reason,
+            );
+            return toGithubResult({
+              action: 'ready_pr',
+              payload: { blocked: true, ...approval },
+            });
+          }
+          const result = await options.client.setPullRequestReady({
+            owner: args.owner,
+            repo: args.repo,
+            pullRequestNumber: args.pullRequestNumber,
+            ready: args.ready,
+          });
           return toGithubResult({
             action: 'ready_pr',
-            payload: { blocked: true, ...approval },
+            payload: {
+              status: result.status,
+              ready: args.ready,
+              result,
+            },
           });
-        }
-        const result = await options.client.setPullRequestReady({
-          owner: args.owner,
-          repo: args.repo,
-          pullRequestNumber: args.pullRequestNumber,
-          ready: args.ready,
         });
-        return toGithubResult({
-          action: 'ready_pr',
-          payload: {
-            status: result.status,
-            ready: args.ready,
-            result,
-          },
-        });
-      }),
+      },
     }),
     defineTool({
       name: 'coding_github_comment_pr',
@@ -728,55 +740,57 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         pullRequestNumber: v.number(),
         body: v.string(),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'comment', 'Comment on GitHub PR', async () => {
-        const taskId = requireString(args.taskId, 'taskId');
-        if (!options.client?.commentOnPullRequest) {
-          return toGithubResult({
-            action: 'comment',
-            payload: unavailableWriteTool(),
-          });
-        }
-        const commentPayload = { body: args.body };
-        const approval = await evaluateGitApproval(options, {
-          approvalService,
-          taskId,
-          actionType: 'github.comment',
-          summary: `Comment on GitHub PR #${args.pullRequestNumber} (${hashApprovalPayload(commentPayload)})`,
-          reason: 'Posting a PR comment publishes remote GitHub state.',
-          risk: 'This may notify users and affect review context.',
-          target: `${args.owner}/${args.repo}#${args.pullRequestNumber}`,
-          metadata: {
-            payloadHash: hashApprovalPayload(commentPayload),
-          },
-        });
-        if (!approval.evaluation.allowed) {
-          emitGithubToolApprovalRequested(
-            options,
+      execute: async (args) => {
+        const taskId = readString(args.taskId) ?? 'unknown';
+        return withGithubToolProgress(options, taskId, 'comment', 'Comment on GitHub PR', async () => {
+          if (!options.client?.commentOnPullRequest) {
+            return toGithubResult({
+              action: 'comment',
+              payload: unavailableWriteTool(),
+            });
+          }
+          const commentPayload = { body: args.body };
+          const approval = await evaluateGitApproval(options, {
+            approvalService,
             taskId,
-            'comment',
-            'Comment on GitHub PR requires approval.',
-            approval.request,
-            approval.evaluation.reason,
-          );
+            actionType: 'github.comment',
+            summary: `Comment on GitHub PR #${args.pullRequestNumber} (${hashApprovalPayload(commentPayload)})`,
+            reason: 'Posting a PR comment publishes remote GitHub state.',
+            risk: 'This may notify users and affect review context.',
+            target: `${args.owner}/${args.repo}#${args.pullRequestNumber}`,
+            metadata: {
+              payloadHash: hashApprovalPayload(commentPayload),
+            },
+          });
+          if (!approval.evaluation.allowed) {
+            emitGithubToolApprovalRequested(
+              options,
+              taskId,
+              'comment',
+              'Comment on GitHub PR requires approval.',
+              approval.request,
+              approval.evaluation.reason,
+            );
+            return toGithubResult({
+              action: 'comment',
+              payload: { blocked: true, ...approval },
+            });
+          }
+          const result = await options.client.commentOnPullRequest({
+            owner: args.owner,
+            repo: args.repo,
+            pullRequestNumber: args.pullRequestNumber,
+            body: args.body,
+          });
           return toGithubResult({
             action: 'comment',
-            payload: { blocked: true, ...approval },
+            payload: {
+              status: result.status,
+              result,
+            },
           });
-        }
-        const result = await options.client.commentOnPullRequest({
-          owner: args.owner,
-          repo: args.repo,
-          pullRequestNumber: args.pullRequestNumber,
-          body: args.body,
         });
-        return toGithubResult({
-          action: 'comment',
-          payload: {
-            status: result.status,
-            result,
-          },
-        });
-      }),
+      },
     }),
     defineTool({
       name: 'coding_github_update_issue',
@@ -789,61 +803,63 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         title: v.optional(v.string()),
         body: v.optional(v.string()),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'update_issue', 'Update GitHub issue', async () => {
-        const taskId = requireString(args.taskId, 'taskId');
-        if (!options.client?.updateIssue) {
-          return toGithubResult({
-            action: 'update_issue',
-            payload: unavailableWriteTool(),
-          });
-        }
-        const issuePayload = {
-          title: readString(args.title),
-          body: readString(args.body),
-        };
-        const approval = await evaluateGitApproval(options, {
-          approvalService,
-          taskId,
-          actionType: 'github.issue.update',
-          summary: `Update GitHub issue #${args.issueNumber} (${hashApprovalPayload(issuePayload)})`,
-          reason: 'Updating issue metadata mutates remote GitHub state.',
-          risk: 'This can change user-facing issue context.',
-          target: `${args.owner}/${args.repo}#${args.issueNumber}`,
-          metadata: {
-            ...(issuePayload.title ? { title: issuePayload.title } : {}),
-            ...(issuePayload.body ? { body: issuePayload.body } : {}),
-            payloadHash: hashApprovalPayload(issuePayload),
-          },
-        });
-        if (!approval.evaluation.allowed) {
-          emitGithubToolApprovalRequested(
-            options,
+      execute: async (args) => {
+        const taskId = readString(args.taskId) ?? 'unknown';
+        return withGithubToolProgress(options, taskId, 'update_issue', 'Update GitHub issue', async () => {
+          if (!options.client?.updateIssue) {
+            return toGithubResult({
+              action: 'update_issue',
+              payload: unavailableWriteTool(),
+            });
+          }
+          const issuePayload = {
+            title: readString(args.title),
+            body: readString(args.body),
+          };
+          const approval = await evaluateGitApproval(options, {
+            approvalService,
             taskId,
-            'update_issue',
-            'Update GitHub issue requires approval.',
-            approval.request,
-            approval.evaluation.reason,
-          );
+            actionType: 'github.issue.update',
+            summary: `Update GitHub issue #${args.issueNumber} (${hashApprovalPayload(issuePayload)})`,
+            reason: 'Updating issue metadata mutates remote GitHub state.',
+            risk: 'This can change user-facing issue context.',
+            target: `${args.owner}/${args.repo}#${args.issueNumber}`,
+            metadata: {
+              ...(issuePayload.title ? { title: issuePayload.title } : {}),
+              ...(issuePayload.body ? { body: issuePayload.body } : {}),
+              payloadHash: hashApprovalPayload(issuePayload),
+            },
+          });
+          if (!approval.evaluation.allowed) {
+            emitGithubToolApprovalRequested(
+              options,
+              taskId,
+              'update_issue',
+              'Update GitHub issue requires approval.',
+              approval.request,
+              approval.evaluation.reason,
+            );
+            return toGithubResult({
+              action: 'update_issue',
+              payload: { blocked: true, ...approval },
+            });
+          }
+          const result = await options.client.updateIssue({
+            owner: args.owner,
+            repo: args.repo,
+            issueNumber: args.issueNumber,
+            title: readString(args.title),
+            body: readString(args.body),
+          });
           return toGithubResult({
             action: 'update_issue',
-            payload: { blocked: true, ...approval },
+            payload: {
+              status: result.status,
+              result,
+            },
           });
-        }
-        const result = await options.client.updateIssue({
-          owner: args.owner,
-          repo: args.repo,
-          issueNumber: args.issueNumber,
-          title: readString(args.title),
-          body: readString(args.body),
         });
-        return toGithubResult({
-          action: 'update_issue',
-          payload: {
-            status: result.status,
-            result,
-          },
-        });
-      }),
+      },
     }),
     defineTool({
       name: 'coding_github_update_review_thread',
@@ -854,60 +870,62 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         replyBody: v.optional(v.string()),
         resolve: v.optional(v.boolean()),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'update_review_thread', 'Update GitHub review thread', async () => {
-        const taskId = requireString(args.taskId, 'taskId');
-        if (!options.client?.updateReviewThread) {
-          return toGithubResult({
-            action: 'update_review_thread',
-            payload: unavailableWriteTool(),
-          });
-        }
-        const threadPayload = {
-          replyBody: readString(args.replyBody),
-          resolve: typeof args.resolve === 'boolean' ? args.resolve : undefined,
-        };
-        const approval = await evaluateGitApproval(options, {
-          approvalService,
-          taskId,
-          actionType: 'github.review-thread.update',
-          summary: `Update GitHub review thread ${args.threadId} (${hashApprovalPayload(threadPayload)})`,
-          reason: 'Review-thread replies and resolution mutate remote review state.',
-          risk: 'This affects reviewer-visible PR review state.',
-          target: args.threadId,
-          metadata: {
-            ...(threadPayload.replyBody ? { replyBody: threadPayload.replyBody } : {}),
-            ...(threadPayload.resolve !== undefined ? { resolve: threadPayload.resolve } : {}),
-            payloadHash: hashApprovalPayload(threadPayload),
-          },
-        });
-        if (!approval.evaluation.allowed) {
-          emitGithubToolApprovalRequested(
-            options,
+      execute: async (args) => {
+        const taskId = readString(args.taskId) ?? 'unknown';
+        return withGithubToolProgress(options, taskId, 'update_review_thread', 'Update GitHub review thread', async () => {
+          if (!options.client?.updateReviewThread) {
+            return toGithubResult({
+              action: 'update_review_thread',
+              payload: unavailableWriteTool(),
+            });
+          }
+          const threadPayload = {
+            replyBody: readString(args.replyBody),
+            resolve: typeof args.resolve === 'boolean' ? args.resolve : undefined,
+          };
+          const approval = await evaluateGitApproval(options, {
+            approvalService,
             taskId,
-            'update_review_thread',
-            'Update GitHub review thread requires approval.',
-            approval.request,
-            approval.evaluation.reason,
-          );
+            actionType: 'github.review-thread.update',
+            summary: `Update GitHub review thread ${args.threadId} (${hashApprovalPayload(threadPayload)})`,
+            reason: 'Review-thread replies and resolution mutate remote review state.',
+            risk: 'This affects reviewer-visible PR review state.',
+            target: args.threadId,
+            metadata: {
+              ...(threadPayload.replyBody ? { replyBody: threadPayload.replyBody } : {}),
+              ...(threadPayload.resolve !== undefined ? { resolve: threadPayload.resolve } : {}),
+              payloadHash: hashApprovalPayload(threadPayload),
+            },
+          });
+          if (!approval.evaluation.allowed) {
+            emitGithubToolApprovalRequested(
+              options,
+              taskId,
+              'update_review_thread',
+              'Update GitHub review thread requires approval.',
+              approval.request,
+              approval.evaluation.reason,
+            );
+            return toGithubResult({
+              action: 'update_review_thread',
+              payload: { blocked: true, ...approval },
+            });
+          }
+          const result = await options.client.updateReviewThread({
+            threadId: args.threadId,
+            replyBody: readString(args.replyBody),
+            resolve: typeof args.resolve === 'boolean' ? args.resolve : undefined,
+          });
           return toGithubResult({
             action: 'update_review_thread',
-            payload: { blocked: true, ...approval },
+            payload: {
+              status: result.status,
+              id: args.threadId,
+              result,
+            },
           });
-        }
-        const result = await options.client.updateReviewThread({
-          threadId: args.threadId,
-          replyBody: readString(args.replyBody),
-          resolve: typeof args.resolve === 'boolean' ? args.resolve : undefined,
         });
-        return toGithubResult({
-          action: 'update_review_thread',
-          payload: {
-            status: result.status,
-            id: args.threadId,
-            result,
-          },
-        });
-      }),
+      },
     }),
   ];
 }

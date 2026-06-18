@@ -26,7 +26,7 @@ Files are stored in `assets/models/embeddings/all-MiniLM-L6-v2/`.
 ## System requirements
 
 - Node.js >=22.18
-- 64-bit OS: Windows x64/arm64, Linux x64/arm64 (glibc/musl), macOS x64/arm64
+- 64-bit OS: Windows x64/arm64, Linux x64/arm64 (glibc), macOS x64/arm64
 - ~300 MB disk for `onnxruntime-node` binaries + model
 - ~200 MB RAM available at runtime for a single embedding
 - CPU with AVX/AVX2 support preferred; pre-AVX x86 not supported by default installer
