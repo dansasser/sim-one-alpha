@@ -41,6 +41,9 @@ async function loadModules() {
     runtime: await import(`${base}/memory/structured-memory-runtime.js`),
     tools: await import(`${base}/tools/index.js`),
     memoryTool: await import(`${base}/tools/memory-tool.js`),
+    cwMemory: await import(`${base}/workers/coding-worker/tools/coding-task-memory-tools.js`),
+    cwApproval: await import(`${base}/workers/coding-worker/approvals/approval-service.js`),
+    taskRunStore: await import(`${base}/workers/coding-worker/session/task-run-store.js`),
   };
 }
 
@@ -61,7 +64,7 @@ async function main() {
   // Use the dev WASM artifact path.
   process.env.GOROMBO_MEMORY_WASM_MODULE_PATH = join(process.cwd(), 'crates', 'gorombo-memory', 'pkg', 'gorombo_memory.js');
 
-  const { runtime, tools, memoryTool } = await loadModules();
+  const { runtime, tools, memoryTool, cwMemory, cwApproval, taskRunStore } = await loadModules();
 
   // Register a trusted event via the session database.
   const sessionId = `smoke-${Date.now()}`;
@@ -132,8 +135,71 @@ async function main() {
   assert(afterRestart.some((r) => r.kind === 'session_note' && r.title === 'Architectural decision'), 'note survived restart');
   console.log(`[smoke] durability OK: ${afterRestart.length} records survived a simulated restart`);
 
+  // --- Coding worker path (coding_task_* tools, project-scoped + audit-only) ---
+  const cwApprovalService = cwApproval.createInMemoryCodingApprovalService();
+  const cwTaskRunStore = new taskRunStore.InMemoryCodingTaskRunStore();
+  const cwTools = cwMemory.createCodingTaskMemoryTools({
+    engineLoader: () => Promise.resolve(reloaded.engine),
+    projectId: 'smoke-cw-proj',
+    approvalService: cwApprovalService,
+    taskRunStore: cwTaskRunStore,
+  });
+  function getCw(name) { const t = cwTools.find((x) => x.name === name); if (!t) throw new Error(`coding tool ${name} missing`); return t; }
+
+  const cwChecklist = JSON.parse(
+    await getCw('coding_task_create_checklist').execute({ taskId: 'cw-task-1', title: 'CW phase', slug: 'cw-phase' }),
+  );
+  assert(cwChecklist.checklist.scope.projectId === 'smoke-cw-proj', 'coding_task_create_checklist injects projectId');
+  console.log(`[smoke] coding-worker created project-scoped checklist ${cwChecklist.checklist.id}`);
+
+  const cwTodo = JSON.parse(
+    await getCw('coding_task_add_todo').execute({ taskId: 'cw-task-1', title: 'Implement memory helper' }),
+  );
+  assert(cwTodo.todo.scope.projectId === 'smoke-cw-proj', 'coding_task_add_todo injects projectId');
+  await getCw('coding_task_complete_todo').execute({ taskId: 'cw-task-1', id: cwTodo.todo.id });
+
+  const cwNote = JSON.parse(
+    await getCw('coding_task_store_note').execute({ taskId: 'cw-task-1', title: 'CW decision', content: 'audit-only writes, projectId injected' }),
+  );
+  assert(cwNote.note.scope.projectId === 'smoke-cw-proj', 'coding_task_store_note injects projectId');
+
+  // Plan -> checklist handoff: seed a task run and hand it off.
+  await cwTaskRunStore.upsert({
+    taskId: 'cw-task-1',
+    status: 'completed',
+    sessionPlan: { harness: 'coding-worker', session: 'cw-task-1' },
+    plan: [
+      { id: 'p1', description: 'Scaffold', owner: 'implementer', status: 'completed' },
+      { id: 'p2', description: 'Tests', owner: 'test-debug', status: 'completed' },
+    ],
+    events: [],
+    verificationEvidence: [],
+    createdAt: '2026-06-18T00:00:00.000Z',
+    updatedAt: '2026-06-18T00:00:00.000Z',
+  });
+  const handoff = JSON.parse(
+    await getCw('coding_task_handoff_plan_to_checklist').execute({ taskId: 'cw-task-1', sourceTaskId: 'cw-task-1' }),
+  );
+  assert(handoff.checklist.title === 'Handoff: cw-task-1', 'handoff checklist titled from source task');
+  assert(handoff.checklist.items.length === 2, 'handoff copies plan items');
+  console.log(`[smoke] coding-worker handoff checklist ${handoff.checklist.id} (${handoff.checklist.items.length} items)`);
+
+  // Coding-worker search returns the project-scoped records.
+  const cwSearch = JSON.parse(
+    await getCw('coding_task_search_memory').execute({ taskId: 'cw-task-1', text: 'cw' }),
+  );
+  assert(cwSearch.contexts.length > 0, 'coding_task_search_memory returns contexts');
+  assert(cwSearch.contexts.every((c) => c.provider === 'structured-memory'), 'coding search returns structured-memory contexts');
+  console.log(`[smoke] coding-worker search returned ${cwSearch.contexts.length} contexts`);
+
+  const auditRecords = await cwApprovalService.listRecords('cw-task-1');
+  const memoryWrite = auditRecords.find((r) => r.request.actionType === 'memory.write');
+  assert(memoryWrite, 'coding-worker recorded a memory.write audit event');
+  assert(memoryWrite.status === 'approved', 'memory.write audit is approved (audit-only, not pending)');
+  console.log(`[smoke] coding-worker audit OK: memory.write event approved (not blocking), ${auditRecords.length} audit records`);
+
   rmSync(smokeDir, { recursive: true, force: true });
-  console.log('[smoke] PASS: Memory Helper end-to-end + durability verified.');
+  console.log('[smoke] PASS: Memory Helper end-to-end + durability verified (orchestrator + coding worker).');
 }
 
 main().catch((error) => {
