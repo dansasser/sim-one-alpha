@@ -34,20 +34,20 @@ export class DocumentIndexProvider implements RagProvider {
     }
 
     const outcome = await this.embeddingClient.embedWithOutcome(query.text);
-    const perCollection = Math.max(1, Math.ceil(limit / this.collections.length));
+    const collectionFilters = this.collections.map((collection) => ({
+      collection,
+      ...buildCollectionFilters(collection, query),
+    }));
+    const activeCollections = collectionFilters.filter((entry) => !entry.skip);
+    const perCollection = activeCollections.length > 0 ? Math.max(1, Math.ceil(limit / activeCollections.length)) : limit;
     const allResults: VectorSearchResult[] = [];
 
     if (outcome.ok) {
-      for (const collection of this.collections) {
+      for (const { collection, filters } of activeCollections) {
         try {
-          const filters = buildCollectionFilters(collection, query);
-          if (filters.skip) {
-            continue;
-          }
-
           const results = await this.vectorStore.search(collection, outcome.result.vector, {
             limit: perCollection,
-            ...(Object.keys(filters.filters).length > 0 ? { filters: filters.filters } : {}),
+            ...(Object.keys(filters).length > 0 ? { filters } : {}),
           });
           allResults.push(...results);
         } catch (error) {
@@ -67,16 +67,11 @@ export class DocumentIndexProvider implements RagProvider {
         console.error(`[INFO] embedding.fallback path=keyword provider=none scope=document-index`);
       }
 
-      for (const collection of this.collections) {
+      for (const { collection, filters } of activeCollections) {
         try {
-          const filters = buildCollectionFilters(collection, query);
-          if (filters.skip) {
-            continue;
-          }
-
           const results = await this.vectorStore.searchKeyword(collection, query.text, {
             limit: perCollection,
-            ...(Object.keys(filters.filters).length > 0 ? { filters: filters.filters } : {}),
+            ...(Object.keys(filters).length > 0 ? { filters } : {}),
           });
           allResults.push(...results);
         } catch (error) {

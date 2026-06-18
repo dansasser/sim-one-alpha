@@ -44,6 +44,7 @@ export const webResearchTool = defineTool({
     if (!event) {
       return JSON.stringify({
         error: `web_research requires a persisted event; ${eventId} not found`,
+        eventId,
       });
     }
 

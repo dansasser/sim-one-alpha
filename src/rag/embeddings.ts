@@ -62,10 +62,10 @@ export function createEmbeddingClient(options: CreateEmbeddingClientOptions = {}
       return vectors;
     },
     async embedWithOutcome(text: string): Promise<EmbedOutcome> {
-      return toOutcome(embedBatchInternal([text], cards, fetchImpl, timeoutMs, env, { captureProvider: true }));
+      return toOutcome(embedBatchInternal([text], cards, fetchImpl, timeoutMs, env));
     },
     async embedBatchWithOutcome(texts: string[]): Promise<EmbedBatchOutcome> {
-      return toBatchOutcome(embedBatchInternal(texts, cards, fetchImpl, timeoutMs, env, { captureProvider: true }));
+      return toBatchOutcome(embedBatchInternal(texts, cards, fetchImpl, timeoutMs, env));
     },
   };
 }
@@ -88,9 +88,7 @@ async function embedBatchInternal(
   fetchImpl: typeof fetch,
   timeoutMs: number,
   env?: Record<string, unknown>,
-  _options?: { captureProvider?: boolean },
 ): Promise<{ vectors: number[][]; provider: 'onnx-local' | 'cloud' | 'local'; modelId: string }> {
-  void _options;
   if (!cards.length) {
     throw new Error('No embedding model card is configured. Add an embedding role card such as nomic-embed-text.');
   }
@@ -115,19 +113,7 @@ async function embedBatchInternal(
         continue;
       }
 
-      if (card.providerId === 'ollama-cloud') {
-        const vectors = await callCloudEmbeddings({
-          baseUrl,
-          apiKey: effectiveApiKey,
-          modelId: card.modelId,
-          texts: truncated,
-          fetchImpl,
-          timeoutMs,
-        });
-        return { vectors, provider: 'cloud', modelId: card.modelId };
-      }
-
-      const vectors = await callLegacyLocalEmbeddings({
+      const vectors = await callOpenAiCompatibleEmbeddings({
         baseUrl,
         apiKey: effectiveApiKey,
         modelId: card.modelId,
@@ -135,7 +121,7 @@ async function embedBatchInternal(
         fetchImpl,
         timeoutMs,
       });
-      return { vectors, provider: 'local', modelId: card.modelId };
+      return { vectors, provider: card.providerId === 'ollama-cloud' ? 'cloud' : 'local', modelId: card.modelId };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logProviderFailure(card, message);
@@ -180,11 +166,7 @@ interface CallEmbeddingsInput {
   timeoutMs: number;
 }
 
-async function callCloudEmbeddings(input: CallEmbeddingsInput): Promise<number[][]> {
-  return callEmbeddingsEndpoint({ ...input, path: '/embeddings', responseField: 'data' });
-}
-
-async function callLegacyLocalEmbeddings(input: CallEmbeddingsInput): Promise<number[][]> {
+async function callOpenAiCompatibleEmbeddings(input: CallEmbeddingsInput): Promise<number[][]> {
   return callEmbeddingsEndpoint({ ...input, path: '/embeddings', responseField: 'data' });
 }
 
@@ -197,10 +179,7 @@ async function callEmbeddingsEndpoint(input: CallEmbeddingsEndpointInput): Promi
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), input.timeoutMs);
 
-  const body =
-    input.responseField === 'embeddings'
-      ? { model: input.modelId, input: input.texts }
-      : { model: input.modelId, input: input.texts };
+  const body = { model: input.modelId, input: input.texts };
 
   try {
     const response = await input.fetchImpl(`${trimTrailingSlash(input.baseUrl)}${input.path}`, {

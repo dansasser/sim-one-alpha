@@ -15,8 +15,8 @@ const DEFAULT_MAX_SEQUENCE_LENGTH = 256;
 
 function resolveOptions(options?: LocalEmbeddingOptions): Required<LocalEmbeddingOptions> {
   const maxSequenceLength = options?.maxSequenceLength ?? DEFAULT_MAX_SEQUENCE_LENGTH;
-  if (!Number.isInteger(maxSequenceLength) || maxSequenceLength <= 0) {
-    throw new TypeError(`maxSequenceLength must be a positive integer, received ${maxSequenceLength}`);
+  if (!Number.isInteger(maxSequenceLength) || maxSequenceLength < 2) {
+    throw new TypeError(`maxSequenceLength must be an integer of at least 2, received ${maxSequenceLength}`);
   }
   return {
     modelPath: options?.modelPath ?? resolveModelPath(),
@@ -60,6 +60,17 @@ async function runInference(texts: string[], options: Required<LocalEmbeddingOpt
   }
   const lastHiddenState = results[outputName] as ort.Tensor;
   const data = lastHiddenState.data as Float32Array;
+
+  if (
+    lastHiddenState.dims.length !== 3 ||
+    lastHiddenState.dims[0] !== batchSize ||
+    lastHiddenState.dims[1] !== maxLength ||
+    lastHiddenState.dims[2] !== dimensions
+  ) {
+    throw new Error(
+      `Unexpected ONNX output shape [${lastHiddenState.dims.join(', ')}], expected [${batchSize}, ${maxLength}, ${dimensions}]`,
+    );
+  }
 
   const vectors: number[][] = [];
   for (let b = 0; b < batchSize; b++) {

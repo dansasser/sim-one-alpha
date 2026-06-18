@@ -12,7 +12,14 @@ export interface LocalTokenizer {
   encode(text: string, maxLength: number): EncodedInput;
 }
 
+const tokenizerCache = new Map<string, LocalTokenizer>();
+
 export function loadTokenizer(modelPath: string): LocalTokenizer {
+  const cached = tokenizerCache.get(modelPath);
+  if (cached) {
+    return cached;
+  }
+
   const tokenizerPath = resolve(modelPath, 'tokenizer.json');
   if (!existsSync(tokenizerPath)) {
     throw new Error(`Tokenizer file not found at ${tokenizerPath}. Run "pnpm fetch-embedding-model".`);
@@ -26,7 +33,7 @@ export function loadTokenizer(modelPath: string): LocalTokenizer {
 
   const tokenizer = new Tokenizer(tokenizerJson as Record<string, unknown>, tokenizerConfig as Record<string, unknown> | undefined);
 
-  return {
+  const wrapper: LocalTokenizer = {
     encode(text: string, maxLength: number): EncodedInput {
       const encoding = tokenizer.encode(text, {
         add_special_tokens: true,
@@ -55,4 +62,7 @@ export function loadTokenizer(modelPath: string): LocalTokenizer {
       };
     },
   };
+
+  tokenizerCache.set(modelPath, wrapper);
+  return wrapper;
 }

@@ -100,7 +100,7 @@ export class LanceDbVectorStore implements VectorStore {
 
     await this.ensureKeywordIndex(collection, table);
 
-    const builder = table.query().fullTextSearch(query, { columns: ['content'] });
+    const builder = table.query().fullTextSearch(query, { columns: ['content', 'title'] });
     if (options.limit) {
       builder.limit(Math.max(1, Math.floor(options.limit)));
     }
@@ -178,13 +178,20 @@ export class LanceDbVectorStore implements VectorStore {
     if (!table) {
       return;
     }
+    await this.ensureFtsIndex(table, 'content');
+    await this.ensureFtsIndex(table, 'title');
+  }
+
+  private async ensureFtsIndex(table: Awaited<ReturnType<typeof this.openTable>>, column: string): Promise<void> {
+    if (!table) {
+      return;
+    }
     try {
-      await table.createIndex('content', { config: Index.fts() });
-      await table.createIndex('title', { config: Index.fts() });
+      await table.createIndex(column, { config: Index.fts() });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!/already exists/i.test(message)) {
-        console.error('[WARN] Failed to create FTS index:', message);
+        console.error(`[WARN] Failed to create FTS index on ${column}:`, message);
       }
     }
   }

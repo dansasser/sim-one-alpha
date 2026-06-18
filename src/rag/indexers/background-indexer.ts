@@ -74,12 +74,12 @@ export async function runBackgroundIndexing(options: BackgroundIndexerOptions): 
 
       if (vectorRecords.length > 0) {
         await options.vectorStore.upsert(collection, vectorRecords);
-      }
 
-      const existingIds = await options.vectorStore.listIds(collection);
-      const staleIds = existingIds.filter((id) => !idsToKeep.has(id));
-      if (staleIds.length > 0) {
-        await options.vectorStore.delete(collection, staleIds);
+        const existingIds = await options.vectorStore.listIds(collection);
+        const staleIds = existingIds.filter((id) => !idsToKeep.has(id));
+        if (staleIds.length > 0) {
+          await options.vectorStore.delete(collection, staleIds);
+        }
       }
     } catch (error) {
       console.error(

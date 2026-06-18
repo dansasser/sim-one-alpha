@@ -75,3 +75,16 @@ test('web_research tool accepts string budget controls and webFetch mode', async
     globalThis.fetch = originalFetch;
   }
 });
+
+test('web_research tool returns structured error for unresolved eventId', async () => {
+  const result = JSON.parse(
+    await webResearchTool.execute({
+      eventId: 'nonexistent-event-id',
+      text: 'query',
+    }),
+  ) as { error?: string; eventId?: string };
+
+  assert.ok(result.error, 'expected error field');
+  assert.match(result.error, /nonexistent-event-id/);
+  assert.equal(result.eventId, 'nonexistent-event-id');
+});

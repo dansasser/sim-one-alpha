@@ -10,6 +10,9 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MODEL_DIR = resolve(__dirname, '../assets/models/embeddings/all-MiniLM-L6-v2');
 const HF_REPO = 'sentence-transformers/all-MiniLM-L6-v2';
+// Pinned revision for reproducible, immutable downloads.
+const HF_REVISION = '1110a243fdf4706b3f48f1d95db1a4f5529b4d41';
+const DOWNLOAD_TIMEOUT_MS = 30_000;
 
 // Files we need. The ONNX model lives in the onnx/ subfolder.
 const FILES = [
@@ -22,8 +25,22 @@ const FILES = [
 ];
 
 async function downloadFile(remotePath, localPath) {
-  const url = `https://huggingface.co/${HF_REPO}/resolve/main/${remotePath}`;
-  const response = await fetch(url);
+  const url = `https://huggingface.co/${HF_REPO}/resolve/${HF_REVISION}/${remotePath}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
+
+  let response;
+  try {
+    response = await fetch(url, { signal: controller.signal });
+  } catch (error) {
+    clearTimeout(timer);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Download timed out after ${DOWNLOAD_TIMEOUT_MS}ms: ${url}`);
+    }
+    throw new Error(`Failed to download ${url}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  clearTimeout(timer);
+
   if (!response.ok) {
     throw new Error(`Failed to download ${url}: ${response.status} ${response.statusText}`);
   }
