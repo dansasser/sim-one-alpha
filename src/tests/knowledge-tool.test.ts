@@ -8,16 +8,16 @@ import { LanceDbVectorStore } from '../rag/vector/lance-db-store.js';
 
 const fakeEmbeddingClient = {
   async embed(): Promise<number[]> {
-    return new Array(768).fill(0.1);
+    return new Array(384).fill(0.1);
   },
   async embedBatch(texts: string[]): Promise<number[][]> {
-    return texts.map(() => new Array(768).fill(0.1));
+    return texts.map(() => new Array(384).fill(0.1));
   },
   async embedWithOutcome(): Promise<{ ok: true; result: { vector: number[]; provider: 'onnx-local'; modelId: string } }> {
-    return { ok: true, result: { vector: new Array(768).fill(0.1), provider: 'onnx-local' as const, modelId: 'all-minilm-l6-v2' } };
+    return { ok: true, result: { vector: new Array(384).fill(0.1), provider: 'onnx-local' as const, modelId: 'all-minilm-l6-v2' } };
   },
   async embedBatchWithOutcome(texts: string[]): Promise<{ ok: true; result: { vectors: number[][]; provider: 'onnx-local'; modelId: string } }> {
-    return { ok: true, result: { vectors: texts.map(() => new Array(768).fill(0.1)), provider: 'onnx-local' as const, modelId: 'all-minilm-l6-v2' } };
+    return { ok: true, result: { vectors: texts.map(() => new Array(384).fill(0.1)), provider: 'onnx-local' as const, modelId: 'all-minilm-l6-v2' } };
   },
 };
 

@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { resolveModelPath } from './model-loader.js';
 
-const sessions = new Map<string, ort.InferenceSession>();
+const sessions = new Map<string, ort.InferenceSession | Promise<ort.InferenceSession>>();
 
 export async function getOnnxSession(modelPath?: string): Promise<ort.InferenceSession> {
   const resolvedPath = modelPath ?? resolveModelPath();
@@ -17,11 +17,17 @@ export async function getOnnxSession(modelPath?: string): Promise<ort.InferenceS
     return existing;
   }
 
-  const session = await ort.InferenceSession.create(modelFile, {
+  const sessionPromise = ort.InferenceSession.create(modelFile, {
     executionProviders: ['cpu'],
   });
+  sessions.set(modelFile, sessionPromise);
 
-  sessions.set(modelFile, session);
-  console.error(`[INFO] embeddings.onnx-loaded model=${modelFile}`);
-  return session;
+  try {
+    const session = await sessionPromise;
+    console.error(`[INFO] embeddings.onnx-loaded model=${modelFile}`);
+    return session;
+  } catch (error) {
+    sessions.delete(modelFile);
+    throw error;
+  }
 }

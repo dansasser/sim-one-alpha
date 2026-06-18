@@ -93,10 +93,7 @@ export class LanceDbKnowledgeStore implements KnowledgeStore {
       queryFilters['metadata.source'] = filters.source;
     }
 
-    const dummyVector = new Array(768).fill(0);
-    const vectorLimit = filters.tags && filters.tags.length > 0 ? 10_000 : 1_000;
-    const results = await this.vectorStore.search(knowledgeCollection, dummyVector, {
-      limit: vectorLimit,
+    const results = await this.vectorStore.searchKeyword(knowledgeCollection, '', {
       filters: queryFilters,
     });
 

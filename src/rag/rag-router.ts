@@ -28,7 +28,8 @@ export class RagRouter {
     for (const provider of this.providers) {
       if (enabled.has(provider.id)) {
         try {
-          contexts.push(...(await provider.retrieve(query)));
+          const providerContexts = await provider.retrieve(query);
+          contexts.push(...providerContexts);
         } catch (error) {
           providerFailures?.push({
             provider: provider.id,

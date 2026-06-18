@@ -12,18 +12,21 @@ export interface LocalEmbeddingOptions {
 }
 
 const DEFAULT_MAX_SEQUENCE_LENGTH = 256;
-const EMBEDDING_DIMENSIONS = 384;
 
 function resolveOptions(options?: LocalEmbeddingOptions): Required<LocalEmbeddingOptions> {
+  const maxSequenceLength = options?.maxSequenceLength ?? DEFAULT_MAX_SEQUENCE_LENGTH;
+  if (!Number.isInteger(maxSequenceLength) || maxSequenceLength <= 0) {
+    throw new TypeError(`maxSequenceLength must be a positive integer, received ${maxSequenceLength}`);
+  }
   return {
     modelPath: options?.modelPath ?? resolveModelPath(),
-    maxSequenceLength: options?.maxSequenceLength ?? DEFAULT_MAX_SEQUENCE_LENGTH,
+    maxSequenceLength,
   };
 }
 
 async function runInference(texts: string[], options: Required<LocalEmbeddingOptions>): Promise<number[][]> {
   const tokenizer = loadTokenizer(options.modelPath);
-  const session = await getOnnxSession(options.modelPath);
+  const { session, dimensions } = await loadSessionWithShape(options.modelPath);
 
   const encoded = await Promise.all(
     texts.map((text) => tokenizer.encode(text, options.maxSequenceLength)),
@@ -59,9 +62,9 @@ async function runInference(texts: string[], options: Required<LocalEmbeddingOpt
   const vectors: number[][] = [];
   for (let b = 0; b < batchSize; b++) {
     const raw = meanPool(
-      data.subarray(b * maxLength * EMBEDDING_DIMENSIONS, (b + 1) * maxLength * EMBEDDING_DIMENSIONS),
+      data.subarray(b * maxLength * dimensions, (b + 1) * maxLength * dimensions),
       encoded[b].attentionMask,
-      EMBEDDING_DIMENSIONS,
+      dimensions,
     );
     vectors.push(l2Normalize(raw));
   }
@@ -79,4 +82,27 @@ export async function embedBatch(texts: string[], options?: LocalEmbeddingOption
     return [];
   }
   return runInference(texts, resolveOptions(options));
+}
+
+async function loadSessionWithShape(modelPath: string): Promise<{ session: ort.InferenceSession; dimensions: number }> {
+  const session = await getOnnxSession(modelPath);
+  const outputName = session.outputNames[0];
+  if (!outputName) {
+    throw new Error('ONNX session has no outputs');
+  }
+  const metadata = session.outputMetadata as unknown as Record<string | number, { name?: string; shape?: readonly unknown[]; dimensions?: number[] }>;
+  const tensorInfo =
+    metadata[outputName] ??
+    metadata[0] ??
+    Object.values(metadata).find((info) => info?.name === outputName);
+  const dims = (tensorInfo?.shape ?? tensorInfo?.dimensions) as number[] | undefined;
+  if (!dims || dims.length < 2) {
+    throw new Error(`Unexpected ONNX output shape: ${JSON.stringify(dims)}`);
+  }
+  const lastDim = dims[dims.length - 1];
+  const dimensions = typeof lastDim === 'number' ? lastDim : Number(lastDim);
+  if (!Number.isFinite(dimensions) || dimensions <= 0) {
+    throw new Error(`Unexpected ONNX output dimension: ${String(lastDim)}`);
+  }
+  return { session, dimensions };
 }

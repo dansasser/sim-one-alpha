@@ -54,11 +54,12 @@ export function createEmbeddingClient(options: CreateEmbeddingClientOptions = {}
 
   return {
     async embed(text: string): Promise<number[]> {
-      const results = await embedBatchInternal([text], cards, fetchImpl, timeoutMs, env);
-      return results[0] ?? [];
+      const { vectors } = await embedBatchInternal([text], cards, fetchImpl, timeoutMs, env);
+      return vectors[0] ?? [];
     },
     async embedBatch(texts: string[]): Promise<number[][]> {
-      return embedBatchInternal(texts, cards, fetchImpl, timeoutMs, env);
+      const { vectors } = await embedBatchInternal(texts, cards, fetchImpl, timeoutMs, env);
+      return vectors;
     },
     async embedWithOutcome(text: string): Promise<EmbedOutcome> {
       return toOutcome(embedBatchInternal([text], cards, fetchImpl, timeoutMs, env, { captureProvider: true }));
@@ -87,8 +88,9 @@ async function embedBatchInternal(
   fetchImpl: typeof fetch,
   timeoutMs: number,
   env?: Record<string, unknown>,
-  options?: { captureProvider?: boolean },
-): Promise<number[][]> {
+  _options?: { captureProvider?: boolean },
+): Promise<{ vectors: number[][]; provider: 'onnx-local' | 'cloud' | 'local'; modelId: string }> {
+  void _options;
   if (!cards.length) {
     throw new Error('No embedding model card is configured. Add an embedding role card such as nomic-embed-text.');
   }
@@ -99,10 +101,8 @@ async function embedBatchInternal(
   for (const card of cards) {
     try {
       if (card.providerId === onnxLocalProviderId) {
-        if (options?.captureProvider) {
-          lastSuccessProvider = { provider: 'onnx-local', modelId: card.modelId };
-        }
-        return await callOnnxLocalEmbeddings({ texts: truncated, card });
+        const vectors = await callOnnxLocalEmbeddings({ texts: truncated, card });
+        return { vectors, provider: 'onnx-local', modelId: card.modelId };
       }
 
       const resolved = resolveModelCardEnv(card, env ?? process.env);
@@ -116,10 +116,7 @@ async function embedBatchInternal(
       }
 
       if (card.providerId === 'ollama-cloud') {
-        if (options?.captureProvider) {
-          lastSuccessProvider = { provider: 'cloud', modelId: card.modelId };
-        }
-        return await callCloudEmbeddings({
+        const vectors = await callCloudEmbeddings({
           baseUrl,
           apiKey: effectiveApiKey,
           modelId: card.modelId,
@@ -127,12 +124,10 @@ async function embedBatchInternal(
           fetchImpl,
           timeoutMs,
         });
+        return { vectors, provider: 'cloud', modelId: card.modelId };
       }
 
-      if (options?.captureProvider) {
-        lastSuccessProvider = { provider: 'local', modelId: card.modelId };
-      }
-      return await callLegacyLocalEmbeddings({
+      const vectors = await callLegacyLocalEmbeddings({
         baseUrl,
         apiKey: effectiveApiKey,
         modelId: card.modelId,
@@ -140,6 +135,7 @@ async function embedBatchInternal(
         fetchImpl,
         timeoutMs,
       });
+      return { vectors, provider: 'local', modelId: card.modelId };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logProviderFailure(card, message);
@@ -185,11 +181,11 @@ interface CallEmbeddingsInput {
 }
 
 async function callCloudEmbeddings(input: CallEmbeddingsInput): Promise<number[][]> {
-  return callEmbeddingsEndpoint({ ...input, path: '/api/embed', responseField: 'embeddings' });
+  return callEmbeddingsEndpoint({ ...input, path: '/embeddings', responseField: 'data' });
 }
 
 async function callLegacyLocalEmbeddings(input: CallEmbeddingsInput): Promise<number[][]> {
-  return callEmbeddingsEndpoint({ ...input, path: '/v1/embeddings', responseField: 'data' });
+  return callEmbeddingsEndpoint({ ...input, path: '/embeddings', responseField: 'data' });
 }
 
 interface CallEmbeddingsEndpointInput extends CallEmbeddingsInput {
@@ -300,39 +296,24 @@ function defaultBaseUrlForProvider(providerId: string): string {
 
 
 
-let lastSuccessProvider: { provider: 'onnx-local' | 'cloud' | 'local'; modelId: string } | undefined;
-
-async function toOutcome(promise: Promise<number[][]>, card?: AgentModelCard): Promise<EmbedOutcome> {
+async function toOutcome(promise: Promise<{ vectors: number[][]; provider: 'onnx-local' | 'cloud' | 'local'; modelId: string }>): Promise<EmbedOutcome> {
   try {
-    const vectors = await promise;
-    const meta = card ? providerMetaFromCard(card) : (lastSuccessProvider ?? { provider: 'onnx-local', modelId: 'all-minilm-l6-v2' });
-    lastSuccessProvider = meta;
-    return { ok: true, result: { vector: vectors[0] ?? [], ...meta } };
+    const { vectors, provider, modelId } = await promise;
+    return { ok: true, result: { vector: vectors[0] ?? [], provider, modelId } };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
-async function toBatchOutcome(promise: Promise<number[][]>, card?: AgentModelCard): Promise<EmbedBatchOutcome> {
+async function toBatchOutcome(promise: Promise<{ vectors: number[][]; provider: 'onnx-local' | 'cloud' | 'local'; modelId: string }>): Promise<EmbedBatchOutcome> {
   try {
-    const vectors = await promise;
-    const meta = card ? providerMetaFromCard(card) : (lastSuccessProvider ?? { provider: 'onnx-local', modelId: 'all-minilm-l6-v2' });
-    lastSuccessProvider = meta;
-    return { ok: true, result: { vectors, ...meta } };
+    const { vectors, provider, modelId } = await promise;
+    return { ok: true, result: { vectors, provider, modelId } };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
-function providerMetaFromCard(card: AgentModelCard): { provider: 'onnx-local' | 'cloud' | 'local'; modelId: string } {
-  if (card.providerId === 'ollama-cloud') {
-    return { provider: 'cloud', modelId: card.modelId };
-  }
-  if (card.providerId === 'ollama-local') {
-    return { provider: 'local', modelId: card.modelId };
-  }
-  return { provider: 'onnx-local', modelId: card.modelId };
-}
 function truncateToEmbeddingBudget(text: string): string {
   const estimatedTokens = estimateTextTokens(text);
   if (estimatedTokens <= maxEmbeddingTokens) {

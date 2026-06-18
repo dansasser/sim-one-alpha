@@ -104,7 +104,7 @@ export class DocumentIndexProvider implements RagProvider {
           collection: result.metadata?.collection ?? inferCollection(result.source),
           source: result.source,
           updatedAt: result.updated_at,
-          searchMethod: outcome.ok ? ('vector' as const) : ('keyword' as const),
+          searchMethod: usedKeywordFallback ? ('keyword' as const) : ('vector' as const),
           ...(outcome.ok ? { embeddingProvider: outcome.result.provider } : { embeddingError: outcome.error }),
         },
       }));

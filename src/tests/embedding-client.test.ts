@@ -47,6 +47,9 @@ test('createEmbeddingClient truncates long input to embedding budget', async () 
 
   const originalEnv = { ...process.env };
   try {
+    delete process.env.OLLAMA_CLOUD_BASE_URL;
+    delete process.env.OLLAMA_API_KEY;
+    delete process.env.OLLAMA_CLOUD_API_KEY;
     process.env.OLLAMA_LOCAL_BASE_URL = 'http://localhost:11434/v1';
     process.env.OLLAMA_LOCAL_API_KEY = 'local-key';
 
@@ -65,7 +68,7 @@ test('createEmbeddingClient cloud success avoids local fallback', async () => {
   const fakeFetch = async (url: string | URL | Request): Promise<Response> => {
     if (String(url).includes('ollama.test')) {
       cloudHits++;
-      return new Response(JSON.stringify({ embeddings: [new Array(768).fill(0.1)] }), { status: 200 });
+      return new Response(JSON.stringify({ data: [{ embedding: new Array(768).fill(0.1) }] }), { status: 200 });
     }
     return new Response(null, { status: 503 });
   };
@@ -92,7 +95,7 @@ test('createEmbeddingClient embedWithOutcome reports provider on success', async
   const fakeFetch = async (url: string | URL | Request): Promise<Response> => {
     if (String(url).includes('ollama.test')) {
       cloudHits++;
-      return new Response(JSON.stringify({ embeddings: [new Array(768).fill(0.1)] }), { status: 200 });
+      return new Response(JSON.stringify({ data: [{ embedding: new Array(768).fill(0.1) }] }), { status: 200 });
     }
     return new Response(null, { status: 503 });
   };
@@ -141,8 +144,11 @@ test('createEmbeddingClient embedWithOutcome reports onnx-local on cloud failure
 });
 
 test('createEmbeddingClient embedWithOutcome returns error when all providers fail', async () => {
+  const requests: Array<string> = [];
   const fakeFetch = async (url: string | URL | Request): Promise<Response> => {
-    if (String(url).includes('ollama.local')) {
+    const urlString = String(url);
+    requests.push(urlString);
+    if (urlString.includes('ollama.local')) {
       return new Response(JSON.stringify({ error: 'unavailable' }), { status: 503 });
     }
     return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 });
@@ -160,6 +166,10 @@ test('createEmbeddingClient embedWithOutcome returns error when all providers fa
     const outcome = await client.embedWithOutcome('hello world');
 
     assert.equal(outcome.ok, false);
+    assert.ok(
+      requests.some((url) => url.includes('/embeddings')),
+      'legacy local embeddings endpoint path should be requested',
+    );
   } finally {
     process.env = originalEnv;
   }

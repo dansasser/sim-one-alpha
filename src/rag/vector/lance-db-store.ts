@@ -61,13 +61,14 @@ export class LanceDbVectorStore implements VectorStore {
     }
 
     const ids = records.map((record) => record.id).filter(Boolean);
+    const arrowRecords = makeArrowTable(records as unknown as Record<string, unknown>[]);
     const table = await this.openOrCreateTable(collection, records);
 
     if (ids.length > 0) {
       await table.delete(createIdFilter(ids));
     }
 
-    await table.add(makeArrowTable(records as unknown as Record<string, unknown>[]));
+    await table.add(arrowRecords);
     await this.ensureKeywordIndex(collection, table);
   }
 
@@ -96,6 +97,8 @@ export class LanceDbVectorStore implements VectorStore {
     if (!table) {
       return [];
     }
+
+    await this.ensureKeywordIndex(collection, table);
 
     const builder = table.query().fullTextSearch(query, { columns: ['content', 'title'] });
     if (options.limit) {
@@ -177,6 +180,7 @@ export class LanceDbVectorStore implements VectorStore {
     }
     try {
       await table.createIndex('content', { config: Index.fts() });
+      await table.createIndex('title', { config: Index.fts() });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!/already exists/i.test(message)) {
@@ -283,8 +287,13 @@ function toSearchResult(row: LanceSearchRow): VectorSearchResult {
 
 function toKeywordResult(row: LanceKeywordRow): VectorSearchResult {
   const metadata = parseMetadata(row.metadata);
-  const rank = typeof row._rank === 'number' ? row._rank : 0;
-  const score = Math.max(0, Math.min(1, 1 / (1 + Math.abs(rank))));
+  let score: number;
+  if (typeof row._score === 'number') {
+    score = row._score;
+  } else {
+    const rank = typeof row._rank === 'number' ? row._rank : 0;
+    score = Math.max(0, Math.min(1, 1 / (1 + Math.abs(rank))));
+  }
 
   return {
     id: String(row.id),

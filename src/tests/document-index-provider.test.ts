@@ -39,9 +39,18 @@ test('document-index provider skips unscoped knowledge_base queries', async () =
   assert.equal(
     searches.find((s) => s.collection === 'knowledge_base'),
     undefined,
-    'knowledge_base search should be skipped without scope',
+    'knowledge_base vector search should be skipped without scope',
   );
-  assert.ok(searches.some((s) => s.collection === 'project_files'), 'other collections should still be searched');
+  assert.equal(
+    keywordSearches.find((s) => s.collection === 'knowledge_base'),
+    undefined,
+    'knowledge_base keyword search should be skipped without scope',
+  );
+  assert.ok(searches.some((s) => s.collection === 'project_files'), 'other collections should still be searched in vector mode');
+  assert.ok(
+    keywordSearches.some((s) => s.collection === 'project_files'),
+    'other collections should still be searched in keyword fallback mode',
+  );
 });
 
 test('document-index provider allows scoped knowledge_base queries', async () => {
@@ -79,8 +88,15 @@ test('document-index provider allows scoped knowledge_base queries', async () =>
 
   assert.equal(results.length, 0);
   const knowledgeSearch = searches.find((s) => s.collection === 'knowledge_base');
-  assert.ok(knowledgeSearch, 'knowledge_base collection should be searched');
+  assert.ok(knowledgeSearch, 'knowledge_base collection should be searched in vector mode');
   assert.deepEqual((knowledgeSearch.options as { filters?: Record<string, unknown> }).filters, {
+    actor_id: 'user-1',
+    conversation_id: 'thread-1',
+  });
+
+  const keywordKnowledgeSearch = keywordSearches.find((s) => s.collection === 'knowledge_base');
+  assert.ok(keywordKnowledgeSearch, 'knowledge_base collection should be searched in keyword fallback mode');
+  assert.deepEqual((keywordKnowledgeSearch.options as { filters?: Record<string, unknown> }).filters, {
     actor_id: 'user-1',
     conversation_id: 'thread-1',
   });
