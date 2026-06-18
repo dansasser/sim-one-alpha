@@ -49,3 +49,35 @@ export function requireString(value: unknown, field: string): string {
   }
   return value;
 }
+
+import { recordMemoryMutationEvent, type MemoryMutationEvent } from '../telemetry/flue-telemetry.js';
+import type { MemoryRecord } from '../types/memory.js';
+
+/** Emit a sanitized memory_mutation telemetry event (no content body). */
+export function emitMemoryMutation(
+  toolName: string,
+  agentName: string,
+  record: MemoryRecord,
+): void {
+  const event: MemoryMutationEvent = {
+    type: 'memory_mutation',
+    timestamp: new Date().toISOString(),
+    toolName,
+    agentName,
+    recordId: record.id,
+    kind: record.kind,
+    scopeKeys: {
+      ...(record.scope.actorId ? { actorId: record.scope.actorId } : {}),
+      ...(record.scope.conversationId ? { conversationId: record.scope.conversationId } : {}),
+      ...(record.scope.projectId ? { projectId: record.scope.projectId } : {}),
+      ...(record.scope.threadId ? { threadId: record.scope.threadId } : {}),
+      ...(record.scope.global ? { global: record.scope.global } : {}),
+    },
+    updatedBy: record.updatedBy,
+  };
+  try {
+    recordMemoryMutationEvent(event);
+  } catch {
+    // Telemetry is best-effort; never fail a tool on telemetry error.
+  }
+}

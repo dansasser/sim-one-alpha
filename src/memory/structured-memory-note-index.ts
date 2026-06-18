@@ -60,6 +60,9 @@ export class StructuredMemoryNoteIndex {
             kind: 'session_note',
             recordId: note.id,
             projectId: note.scope.projectId,
+            actorId: note.scope.actorId,
+            conversationId: note.scope.conversationId,
+            threadId: note.scope.threadId,
             importance: note.importance,
             status: note.status,
             tagsCsv: note.tags.join(','),
@@ -116,15 +119,28 @@ export class StructuredMemoryNoteIndex {
   }
 }
 
-/** Post-filter vector results by project scope in TS (LanceDB nested-metadata filters are
- * unreliable). The keyword path already enforces the full scope via the engine;
- * the vector path is a best-effort semantic augmentation scoped by projectId. */
+/** Post-filter vector results by the FULL scope in TS. LanceDB nested-metadata
+ * WHERE filters are unreliable, so isolation is enforced here. The query scope
+ * must match every key the record carries - a note scoped to a different
+ * actor/conversation/project never leaks, even without a projectId on the query. */
 function scopeMatchesResult(result: VectorSearchResult, scope: MemoryRecordScope): boolean {
-  if (!scope.projectId) {
-    return true;
-  }
-  const metaProjectId = typeof result.metadata?.projectId === 'string' ? result.metadata.projectId : undefined;
-  return metaProjectId === scope.projectId;
+  const meta = result.metadata ?? {};
+  const metaProjectId = typeof meta.projectId === 'string' ? meta.projectId : undefined;
+  const metaActorId = typeof meta.actorId === 'string' ? meta.actorId : undefined;
+  const metaConversationId = typeof meta.conversationId === 'string' ? meta.conversationId : undefined;
+  const metaThreadId = typeof meta.threadId === 'string' ? meta.threadId : undefined;
+  // If the record carries a key the query does not (or differs), reject.
+  if (metaProjectId !== undefined && metaProjectId !== scope.projectId) return false;
+  if (metaActorId !== undefined && metaActorId !== scope.actorId) return false;
+  if (metaConversationId !== undefined && metaConversationId !== scope.conversationId) return false;
+  if (metaThreadId !== undefined && metaThreadId !== scope.threadId) return false;
+  // If the query carries a key the record does not have, reject (the query is
+  // asking for a specific scope the note is not part of).
+  if (scope.projectId && metaProjectId === undefined) return false;
+  if (scope.actorId && metaActorId === undefined) return false;
+  if (scope.conversationId && metaConversationId === undefined) return false;
+  if (scope.threadId && metaThreadId === undefined) return false;
+  return true;
 }
 
 function toRetrievedContext(result: VectorSearchResult): RetrievedContext {

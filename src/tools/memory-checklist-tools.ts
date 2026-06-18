@@ -4,6 +4,7 @@ import * as v from 'valibot';
 import { renderChecklistTree } from '../types/memory.js';
 import {
   deriveMemoryScope,
+  emitMemoryMutation,
   getMemoryEngine,
   getTrustedMemoryEvent,
   orchestratorAudit,
@@ -48,6 +49,12 @@ export const createChecklistTool = defineTool({
       ...(Array.isArray(items) ? { items } : {}),
       ...orchestratorAudit(),
     });
+    emitMemoryMutation('create_checklist', 'orchestrator', checklist);
+    emitMemoryMutation('update_checklist', 'orchestrator', checklist);
+    emitMemoryMutation('add_checklist_item', 'orchestrator', checklist);
+    emitMemoryMutation('update_checklist_item', 'orchestrator', checklist);
+    emitMemoryMutation('move_checklist_item', 'orchestrator', checklist);
+    emitMemoryMutation('archive_checklist', 'orchestrator', checklist);
     return JSON.stringify({ checklist: renderChecklistTree(checklist) });
   },
 });

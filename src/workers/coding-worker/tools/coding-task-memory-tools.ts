@@ -8,6 +8,7 @@ import type { CodingPlanItem } from '../types.js';
 import { toRetrievedContext } from '../../../memory/checklist-memory-provider.js';
 import type { CodingApprovalService } from '../approvals/approval-service.js';
 import { recordCodingAuditEvent } from '../approvals/approval-service.js';
+import { recordMemoryMutationEvent, type MemoryMutationEvent } from '../../../telemetry/flue-telemetry.js';
 import {
   JsonFileCodingTaskRunStore,
   type CodingTaskRunStore,
@@ -60,6 +61,31 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
       console.error('[WARN] coding-worker memory audit failed:', error instanceof Error ? error.message : String(error));
     });
 
+  const emit = (toolName: string, record: { id: string; kind: 'checklist' | 'todo' | 'session_note'; scope: MemoryRecordScope; updatedBy: string }, runId: string) => {
+    const event: MemoryMutationEvent = {
+      type: 'memory_mutation',
+      timestamp: new Date().toISOString(),
+      toolName,
+      agentName: 'coding-worker',
+      runId,
+      recordId: record.id,
+      kind: record.kind,
+      scopeKeys: {
+        ...(record.scope.actorId ? { actorId: record.scope.actorId } : {}),
+        ...(record.scope.conversationId ? { conversationId: record.scope.conversationId } : {}),
+        ...(record.scope.projectId ? { projectId: record.scope.projectId } : {}),
+        ...(record.scope.threadId ? { threadId: record.scope.threadId } : {}),
+        ...(record.scope.global ? { global: record.scope.global } : {}),
+      },
+      updatedBy: record.updatedBy,
+    };
+    try {
+      recordMemoryMutationEvent(event);
+    } catch {
+      // best-effort telemetry
+    }
+  };
+
   return [
     defineTool({
       name: 'coding_task_create_checklist',
@@ -84,6 +110,7 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
           runId: String(taskId),
         });
         await auditWrite(String(taskId), 'coding_task_create_checklist', checklist.id, String(taskId));
+        emit('coding_task_create_checklist', checklist, String(taskId));
         return JSON.stringify({ checklist: renderChecklistTree(checklist) });
       },
     }),
@@ -116,6 +143,7 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
           ...audit,
           runId: String(taskId),
         });
+        emit('coding_task_add_checklist_item', checklist, String(taskId));
         return JSON.stringify({ checklist: renderChecklistTree(checklist) });
       },
     }),
@@ -144,6 +172,7 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
           runId: String(taskId),
         });
         await auditWrite(String(taskId), 'coding_task_add_todo', todo.id, String(taskId));
+        emit('coding_task_add_todo', todo, String(taskId));
         return JSON.stringify({ todo });
       },
     }),
@@ -163,6 +192,7 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
           ...audit,
           runId: String(taskId),
         });
+        emit('coding_task_complete_todo', todo, String(taskId));
         return JSON.stringify({ todo });
       },
     }),
@@ -189,6 +219,7 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
           runId: String(taskId),
         });
         await auditWrite(String(taskId), 'coding_task_store_note', note.id, String(taskId));
+        emit('coding_task_store_note', note, String(taskId));
         return JSON.stringify({ note });
       },
     }),
@@ -208,6 +239,7 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
           ...audit,
           runId: String(taskId),
         });
+        emit('coding_task_archive_note', note, String(taskId));
         return JSON.stringify({ note });
       },
     }),
@@ -272,6 +304,7 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
         }).catch((error: unknown) => {
           console.error('[WARN] coding-worker handoff audit failed:', error instanceof Error ? error.message : String(error));
         });
+        emit('coding_task_handoff_plan_to_checklist', checklist, String(taskId));
         return JSON.stringify({ checklist: renderChecklistTree(checklist) });
       },
     }),

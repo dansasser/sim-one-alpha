@@ -3,6 +3,7 @@ import * as v from 'valibot';
 
 import {
   deriveMemoryScope,
+  emitMemoryMutation,
   getMemoryEngine,
   getTrustedMemoryEvent,
   orchestratorAudit,
@@ -34,6 +35,9 @@ export const storeSessionNoteTool = defineTool({
       ...(importance !== undefined ? { importance } : {}),
       ...orchestratorAudit(),
     });
+    emitMemoryMutation('store_session_note', 'orchestrator', note);
+    emitMemoryMutation('update_session_note', 'orchestrator', note);
+    emitMemoryMutation('archive_session_note', 'orchestrator', note);
     return JSON.stringify({ note });
   },
 });

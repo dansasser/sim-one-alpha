@@ -78,9 +78,10 @@ export interface StructuredMemoryRuntime {
 let runtimePromise: Promise<StructuredMemoryRuntime> | undefined;
 
 /** Resolve the typed memory config block from the raw `GoromboConfig.memory` record. */
-export function resolveMemoryConfig(raw: Record<string, unknown> | undefined): GoromboMemoryConfig {
+export function resolveMemoryConfig(raw: Record<string, unknown> | undefined, env: Record<string, string | undefined> = process.env): GoromboMemoryConfig {
+  const fromEnv = readMemoryEnvOverrides(env);
   if (!raw || typeof raw !== 'object') {
-    return { ...DEFAULTS };
+    return { ...DEFAULTS, ...fromEnv };
   }
   const readNum = (key: string, def: number): number =>
     typeof raw[key] === 'number' && Number.isFinite(raw[key] as number) ? (raw[key] as number) : def;
@@ -99,7 +100,33 @@ export function resolveMemoryConfig(raw: Record<string, unknown> | undefined): G
     retentionDays: readNum('retentionDays', DEFAULTS.retentionDays),
     archiveDeleteDays: readNum('archiveDeleteDays', DEFAULTS.archiveDeleteDays),
     maxChecklistDepth: readNum('maxChecklistDepth', DEFAULTS.maxChecklistDepth),
+    // Environment variables take precedence over the JSON config.
+    ...fromEnv,
   };
+}
+
+/** Read the GOROMBO_MEMORY_* env overrides. Env wins over JSON config. */
+export function readMemoryEnvOverrides(env: Record<string, string | undefined>): Partial<GoromboMemoryConfig> {
+  const out: Partial<GoromboMemoryConfig> = {};
+  const backend = env.GOROMBO_MEMORY_BACKEND;
+  if (backend === 'sqlite' || backend === 'lancedb' || backend === 'memory') {
+    out.backend = backend;
+  }
+  if (typeof env.GOROMBO_MEMORY_SQLITE_PATH === 'string' && env.GOROMBO_MEMORY_SQLITE_PATH) {
+    out.sqlitePath = env.GOROMBO_MEMORY_SQLITE_PATH;
+  }
+  const num = (key: string): number | undefined => {
+    const v = env[key];
+    if (typeof v !== 'string' || !v) return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const dl = num('GOROMBO_MEMORY_DEFAULT_LIMIT'); if (dl !== undefined) out.defaultLimit = dl;
+  const mct = num('GOROMBO_MEMORY_MAX_CONTEXT_TOKENS'); if (mct !== undefined) out.maxContextTokens = mct;
+  const rd = num('GOROMBO_MEMORY_RETENTION_DAYS'); if (rd !== undefined) out.retentionDays = rd;
+  const add = num('GOROMBO_MEMORY_ARCHIVE_DELETE_DAYS'); if (add !== undefined) out.archiveDeleteDays = add;
+  const mcd = num('GOROMBO_MEMORY_MAX_CHECKLIST_DEPTH'); if (mcd !== undefined) out.maxChecklistDepth = mcd;
+  return out;
 }
 
 /**

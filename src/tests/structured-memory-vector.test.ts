@@ -63,7 +63,7 @@ test('StructuredMemoryNoteIndex upsert + semantic search returns the note', asyn
     await index.upsertNote(note);
     const results = await index.search({
       text: 'flat store tree render',
-      scope: { projectId: 'proj-vec' },
+      scope: { projectId: 'proj-vec', conversationId: 'conv-vec', actorId: 'actor-vec' },
       limit: 5,
     });
     assert.ok(results.length > 0, 'vector search returns the note');
@@ -150,6 +150,31 @@ test('ChecklistMemoryProvider merges keyword + vector results via RRF and falls 
     });
     // The note should appear (from keyword and/or vector).
     assert.ok(withVector.some((c) => c.metadata?.kind === 'session_note'), 'note present in merged results');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('StructuredMemoryNoteIndex enforces full scope isolation across actor/conversation/project', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gorombo-sm-vector-iso-'));
+  const vectorStore = new LanceDbVectorStore({ path: dir });
+  const index = new StructuredMemoryNoteIndex({ vectorStore, embeddingClient: fakeEmbeddingClient() });
+  try {
+    const noteA = makeNote('2026-06-18T00:00:00.000Z', 'actor A secret decision', 'proj-a');
+    noteA.scope = { projectId: 'proj-a', conversationId: 'conv-a', actorId: 'actor-a' };
+    const noteB = makeNote('2026-06-18T00:00:00.000Z', 'actor B secret decision', 'proj-b');
+    noteB.scope = { projectId: 'proj-b', conversationId: 'conv-b', actorId: 'actor-b' };
+    await index.upsertNote(noteA);
+    await index.upsertNote(noteB);
+
+    // A query for actor A's scope must not return actor B's note.
+    const aResults = await index.search({ text: 'secret decision', scope: { projectId: 'proj-a', conversationId: 'conv-a', actorId: 'actor-a' }, limit: 5 });
+    assert.ok(aResults.every((r) => r.metadata?.recordId !== noteB.id), 'no cross-actor leak');
+
+    // A projectId-only query (no actor/conversation) must not see notes that
+    // carry an actor/conversation scope (strict isolation).
+    const projectOnly = await index.search({ text: 'secret decision', scope: { projectId: 'proj-a' }, limit: 5 });
+    assert.ok(projectOnly.every((r) => r.metadata?.recordId !== noteA.id), 'project-only query does not see actor-scoped note');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -3,6 +3,7 @@ import * as v from 'valibot';
 
 import {
   deriveMemoryScope,
+  emitMemoryMutation,
   getMemoryEngine,
   getTrustedMemoryEvent,
   orchestratorAudit,
@@ -38,6 +39,10 @@ export const createTodoTool = defineTool({
       ...(dueAt !== undefined ? { dueAt: String(dueAt) } : {}),
       ...orchestratorAudit(),
     });
+    emitMemoryMutation('create_todo', 'orchestrator', todo);
+    emitMemoryMutation('update_todo', 'orchestrator', todo);
+    emitMemoryMutation('complete_todo', 'orchestrator', todo);
+    emitMemoryMutation('cancel_todo', 'orchestrator', todo);
     return JSON.stringify({ todo });
   },
 });

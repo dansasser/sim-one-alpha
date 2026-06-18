@@ -199,6 +199,9 @@ src/tools/memory-tool.ts
   Uses persisted session-memory FTS records and LanceDB vector embeddings extracted from Flue SessionData.
   Combines keyword and semantic search for hybrid retrieval.
 
+src/memory/structured-memory-note-index.ts
+  LanceDB-backed semantic index over session-note content. Embeds title+content on upsert, deletes on archive, and supports semantic search merged with the engine keyword index via RRF (Decision 5). Graceful keyword-only fallback when no embedding client is configured.
+
 src/memory/structured-memory-database.ts
   Durable SQLite storage for structured-memory records. TS owns the schema: the full record is stored as JSON with scope denormalized into indexed columns. Feeds `reconcile_index` on cold start and runs the retention cleanup job.
 
