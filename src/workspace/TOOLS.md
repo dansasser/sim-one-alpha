@@ -130,3 +130,14 @@ Use `list_image_artifacts` when the user asks about prior images or references a
 - Research tools belong to the researcher unless explicitly attached to the main agent in a future architecture change.
 - Security and approval requirements belong in `SECURITY.md`.
 - Detailed researcher method belongs in the researcher's `TOOLS.md`.
+
+## Memory Helper (structured memory)
+
+The orchestrator can durably maintain and query structured memory: checklists, todos, and session notes. These survive across process restarts and are scoped by actor/conversation/project derived from a trusted `eventId`. **Never pass scope** (`actorId`/`conversationId`/`projectId`/`threadId`) — it is derived from the trusted `eventId` you pass.
+
+- Checklists: `create_checklist`, `update_checklist`, `archive_checklist`, `list_checklists`, `add_checklist_item`, `update_checklist_item`, `move_checklist_item`. Items may be nested via `parentId` up to the configured max depth.
+- Todos: `create_todo`, `update_todo`, `complete_todo`, `cancel_todo`, `list_todos`.
+- Session notes: `store_session_note`, `update_session_note`, `archive_session_note`, `list_session_notes`.
+- Search: `search_memory_records` (keyword/tag search returning `RetrievedContext` with `provider: "structured-memory"`).
+
+Structured records are also surfaced automatically through `retrieve_memory` (default providers include `structured-memory`) alongside session memory, ranked and truncated to the context budget. Use these during long-running tasks to keep a working todo/checklist and pinned facts.

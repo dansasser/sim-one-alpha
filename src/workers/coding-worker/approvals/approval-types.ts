@@ -18,7 +18,9 @@ export type CodingApprovalActionType =
   | 'github.branch_from_pr'
   | 'github.review_comment'
   | 'github.check.rerun'
-  | 'github.fork_repo';
+  | 'github.fork_repo'
+  | 'memory.write'
+  | 'memory.handoff';
 
 export type CodingApprovalStatus = 'pending' | 'approved' | 'denied' | 'expired' | 'cancelled';
 

@@ -268,7 +268,34 @@ export class RustMemoryEngine implements MemoryEngine {
   }
 
   async updateChecklistItem(input: UpdateChecklistItemInput): Promise<Checklist> {
-    return this.addChecklistItem(input as AddChecklistItemInput);
+    const existing = this.cache.get(input.checklistId);
+    if (!existing || existing.kind !== 'checklist') {
+      throw new MemoryEngineErrorClass('not_found', `checklist ${input.checklistId} not found`);
+    }
+    const current = existing.items.find((i) => i.id === input.itemId);
+    if (!current) {
+      throw new MemoryEngineErrorClass('not_found', `checklist item ${input.itemId} not found`);
+    }
+    const merged: ChecklistItem = {
+      ...current,
+      ...stripUndefined({
+        parentId: input.parentId,
+        title: input.title,
+        description: input.description,
+        status: input.status,
+        ordinal: input.ordinal,
+        tags: input.tags,
+        dueAt: input.dueAt,
+        completedAt: input.completedAt,
+      }),
+    };
+    const record = (await this.call('add_checklist_item', {
+      checklistId: input.checklistId,
+      item: merged,
+      updatedAt: nowIso(),
+    })) as Checklist;
+    this.cache.set(record.id, record);
+    return record;
   }
 
   async createTodo(input: CreateTodoInput): Promise<Todo> {
@@ -479,7 +506,35 @@ export class InMemoryMemoryEngine implements MemoryEngine {
   }
 
   async updateChecklistItem(input: UpdateChecklistItemInput): Promise<Checklist> {
-    return this.addChecklistItem(input as AddChecklistItemInput);
+    const existing = this.store.get(input.checklistId);
+    if (!existing || existing.kind !== 'checklist') {
+      throw new MemoryEngineErrorClass('not_found', `checklist ${input.checklistId} not found`);
+    }
+    const current = existing.items.find((i) => i.id === input.itemId);
+    if (!current) {
+      throw new MemoryEngineErrorClass('not_found', `checklist item ${input.itemId} not found`);
+    }
+    const merged: ChecklistItem = {
+      ...current,
+      ...stripUndefined({
+        parentId: input.parentId,
+        title: input.title,
+        description: input.description,
+        status: input.status,
+        ordinal: input.ordinal,
+        tags: input.tags,
+        dueAt: input.dueAt,
+        completedAt: input.completedAt,
+      }),
+    };
+    const next: Checklist = {
+      ...existing,
+      items: existing.items.map((i) => (i.id === merged.id ? merged : i)),
+      updatedAt: nowIso(),
+    };
+    this.validateChecklistInvariants(next);
+    this.store.set(next.id, next);
+    return next;
   }
 
   async createTodo(input: CreateTodoInput): Promise<Todo> {

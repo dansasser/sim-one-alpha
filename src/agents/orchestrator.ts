@@ -16,6 +16,23 @@ import {
   generateImageTool,
   recordImageArtifactTool,
   listImageArtifactsTool,
+  createChecklistTool,
+  updateChecklistTool,
+  addChecklistItemTool,
+  updateChecklistItemTool,
+  moveChecklistItemTool,
+  archiveChecklistTool,
+  listChecklistsTool,
+  createTodoTool,
+  completeTodoTool,
+  updateTodoTool,
+  cancelTodoTool,
+  listTodosTool,
+  storeSessionNoteTool,
+  updateSessionNoteTool,
+  archiveSessionNoteTool,
+  listSessionNotesTool,
+  searchMemoryRecordsTool,
 } from '../tools/index.js';
 import type { AgentModelCard } from '../models/types.js';
 import { telegramReplyTool } from '../channels/telegram.js';
@@ -45,7 +62,32 @@ export default createAgent(async ({ env }) => {
     model: selectedModelCard.specifier,
     instructions: orchestratorInstructions,
     compaction: createFlueCompactionConfig(selectedModelCard),
-    tools: [loadProtocolsTool, retrieveMemoryTool, addKnowledgeTool, generateImageTool, recordImageArtifactTool, listImageArtifactsTool, telegramReplyTool],
+    tools: [
+      loadProtocolsTool,
+      retrieveMemoryTool,
+      addKnowledgeTool,
+      createChecklistTool,
+      updateChecklistTool,
+      addChecklistItemTool,
+      updateChecklistItemTool,
+      moveChecklistItemTool,
+      archiveChecklistTool,
+      listChecklistsTool,
+      createTodoTool,
+      completeTodoTool,
+      updateTodoTool,
+      cancelTodoTool,
+      listTodosTool,
+      storeSessionNoteTool,
+      updateSessionNoteTool,
+      archiveSessionNoteTool,
+      listSessionNotesTool,
+      searchMemoryRecordsTool,
+      generateImageTool,
+      recordImageArtifactTool,
+      listImageArtifactsTool,
+      telegramReplyTool,
+    ],
     subagents: [codingWorker, researcher],
   };
 });
@@ -103,6 +145,11 @@ The following capabilities are actually attached to this main agent at runtime:
 - Tool: \`load_protocols\`
 - Tool: \`retrieve_memory\`
 - Tool: \`add_knowledge\`
+- Tool: \`create_checklist\` / \`update_checklist\` / \`archive_checklist\` / \`list_checklists\`
+- Tool: \`add_checklist_item\` / \`update_checklist_item\` / \`move_checklist_item\`
+- Tool: \`create_todo\` / \`update_todo\` / \`complete_todo\` / \`cancel_todo\` / \`list_todos\`
+- Tool: \`store_session_note\` / \`update_session_note\` / \`archive_session_note\` / \`list_session_notes\`
+- Tool: \`search_memory_records\`
 - Tool: \`generate_image\`
 - Tool: \`record_image_artifact\`
 - Tool: \`list_image_artifacts\`

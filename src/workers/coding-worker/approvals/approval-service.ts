@@ -6,7 +6,9 @@ import {
 } from './approval-store.js';
 import type {
   CodingApprovalDecision,
+  CodingApprovalActionType,
   CodingApprovalEvaluation,
+  CodingApprovalMetadata,
   CodingApprovalPrincipal,
   CodingApprovalRecord,
   CodingApprovalRequest,
@@ -179,5 +181,47 @@ class DefaultCodingApprovalService implements CodingApprovalService {
     const record = await this.store.getRecord(request.id);
     const persistedRequest = record?.request ?? request;
     return evaluateCodingApproval(persistedRequest, record?.decision);
+  }
+}
+
+/**
+ * Record a non-blocking audit event (e.g. a coding-worker memory write) on the
+ * approval service. Creates an approval request for the action and immediately
+ * records an approved `system:audit` decision so the event is durable proof
+ * that the action happened - without gating on a human decision (Decision 4).
+ *
+ * `actionType` must NOT be in `defaultApprovalRequiredActions` (e.g.
+ * `'memory.write'`, `'memory.handoff'`); this helper is audit-only.
+ */
+export async function recordCodingAuditEvent(
+  service: CodingApprovalService,
+  input: {
+    taskId: string;
+    actionType: CodingApprovalActionType;
+    summary: string;
+    reason?: string;
+    target?: string;
+    metadata?: CodingApprovalMetadata;
+  },
+): Promise<void> {
+  const request = await service.createRequest({
+    taskId: input.taskId,
+    actionType: input.actionType,
+    summary: input.summary,
+    reason: input.reason ?? 'audit-only coding-worker memory event',
+    risk: 'none',
+    ...(input.target ? { target: input.target } : {}),
+    ...(input.metadata ? { metadata: input.metadata } : {}),
+  });
+  try {
+    await service.recordDecision({
+      requestId: request.id,
+      approved: true,
+      decidedBy: 'system:audit',
+      principal: { id: 'system:audit', roles: ['operator'] },
+      reason: 'audit-only',
+    });
+  } catch {
+    // Already decided (retry) or expired - the audit record already exists.
   }
 }

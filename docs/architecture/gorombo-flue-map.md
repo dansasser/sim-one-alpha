@@ -222,6 +222,21 @@ src/tools/web-research-tool.ts
   Researcher-owned web research tool.
   Accepts bounded research controls such as depth, freshness, query/fetch budgets, and context budgets.
 
+src/tools/memory-checklist-tools.ts
+  Orchestrator-owned Flue tools for checklist CRUD (create/update/add_item/update_item/move/archive/list). Scope is derived from the trusted eventId; model-facing parameters omit scope/audit.
+
+src/tools/memory-todo-tools.ts
+  Orchestrator-owned Flue tools for todo CRUD (create/update/complete/cancel/list).
+
+src/tools/memory-note-tools.ts
+  Orchestrator-owned Flue tools for session-note CRUD (store/update/archive/list).
+
+src/tools/memory-search-tools.ts
+  Orchestrator-owned keyword/tag search across structured memory, returning RetrievedContext with provider `structured-memory`.
+
+src/workers/coding-worker/tools/coding-task-memory-tools.ts
+  Worker-local memory tool aliases (`coding_task_*`). `projectId` is injected from `CodingWorkspaceTargetInput`; every mutating write is recorded as an audit-only `memory.write`/`memory.handoff` event on `SharedCodingApprovalService` (never blocking). Includes `coding_task_handoff_plan_to_checklist` (Decision 9 cross-run handoff). Lead-only - not exposed to internal subagents.
+
 src/tools/rag-tool.ts
   Researcher-only low-level retrieval tool.
   Not attached to the orchestrator.

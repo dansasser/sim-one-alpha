@@ -23,3 +23,15 @@ The runtime workspace root is the coding worker's access root. Do not treat the 
 Do not use GitHub write actions, repo workflow mutations, clones, syncs, pushes, PR creation, comments, or review-thread updates without backend approval.
 
 Do not invent tools. If a needed capability is not attached, report the limitation through a public progress event and the final result.
+
+## Memory Helper (structured memory, project-scoped)
+
+The coding-worker lead can durably maintain project-scoped structured memory. `projectId` is injected from the worker context; the model cannot supply scope. Every mutating write is recorded as an audit-only `memory.write` (or `memory.handoff`) event on the approval service — it is never gated on a human decision and the model cannot approve its own requests.
+
+- `coding_task_create_checklist`, `coding_task_add_checklist_item`
+- `coding_task_add_todo`, `coding_task_complete_todo`
+- `coding_task_store_note`, `coding_task_archive_note`
+- `coding_task_search_memory`
+- `coding_task_handoff_plan_to_checklist`: copy a finished/blocked task run's `CodingPlanItem[]` into a new durable checklist so the Memory Helper is the cross-run handoff (the run-local plan is the active task plan; the Memory Helper is the cross-run continuity).
+
+Use these to keep a project-level checklist and pinned decisions/conventions across long coding runs. Trust anchor is `taskId`; scope (`projectId`) is injected.
