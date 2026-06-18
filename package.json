@@ -54,7 +54,9 @@
     "valibot": "^1.4.1"
   },
   "optionalDependencies": {
-    "tokenizers-linux-x64-gnu": "0.13.4-rc1"
+    "tokenizers-darwin-x64": "0.13.4-rc1",
+    "tokenizers-linux-x64-gnu": "0.13.4-rc1",
+    "tokenizers-win32-x64-msvc": "0.13.4-rc1"
   },
   "devDependencies": {
     "@flue/cli": "1.0.0-beta.1",

@@ -73,7 +73,13 @@ importers:
         specifier: ^4.1.4
         version: 4.1.4
     optionalDependencies:
+      tokenizers-darwin-x64:
+        specifier: 0.13.4-rc1
+        version: 0.13.4-rc1
       tokenizers-linux-x64-gnu:
+        specifier: 0.13.4-rc1
+        version: 0.13.4-rc1
+      tokenizers-win32-x64-msvc:
         specifier: 0.13.4-rc1
         version: 0.13.4-rc1
 
@@ -2197,12 +2203,24 @@ packages:
     resolution: {integrity: sha512-dRXchy+C0IgK8WPC6xvCHFRIWYUbqqdEIKPaKo/AcTUNzwLTK6AH7RjdLWsEZcAN/TBdtfUw3PYEgPr5VPr6ww==}
     engines: {node: '>=14.16'}
 
+  tokenizers-darwin-x64@0.13.4-rc1:
+    resolution: {integrity: sha512-dIrcy8rs/8s3eZc4YxtGz8a4rShRkVa45KYBOsTQIQOg25L6+1JJPMbO7S8AzVHhnd3RjCY3geSEIqvpDbxWXw==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [darwin]
+
   tokenizers-linux-x64-gnu@0.13.4-rc1:
     resolution: {integrity: sha512-6bz+3Eyid9gg3hEXCuxJSmuBHrV+I2SgjHK5v0RHxHd7u1F2OdvFJyzeMqFSfVHfEv1REKcUC/6MVzoEQKeaMQ==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
+
+  tokenizers-win32-x64-msvc@0.13.4-rc1:
+    resolution: {integrity: sha512-thozhjs5ZAKMabLr3hEIWNKH7apYQsL/AV+NJtL4D4NzduvV5WyHz80Pdw+DabICljt1nts4m46/t9jdpzLc8g==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [win32]
 
   tokenizers@0.13.3:
     resolution: {integrity: sha512-nWSQFwvWQTxE4xWZQEUYTZ00kDLjCUKEByUCpqZ6Fo4kJUsDgHBnZcVrIv/rbOvQs5WK3RUzmvaip+Z7IeZ5/A==}
@@ -4783,7 +4801,13 @@ snapshots:
       '@tokenizer/token': 0.3.0
       ieee754: 1.2.1
 
+  tokenizers-darwin-x64@0.13.4-rc1:
+    optional: true
+
   tokenizers-linux-x64-gnu@0.13.4-rc1:
+    optional: true
+
+  tokenizers-win32-x64-msvc@0.13.4-rc1:
     optional: true
 
   tokenizers@0.13.3: {}
