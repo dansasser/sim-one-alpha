@@ -12,7 +12,20 @@ const MODEL_DIR = resolve(__dirname, '../assets/models/embeddings/all-MiniLM-L6-
 const HF_REPO = 'sentence-transformers/all-MiniLM-L6-v2';
 // Pinned revision for reproducible, immutable downloads.
 const HF_REVISION = '1110a243fdf4706b3f48f1d95db1a4f5529b4d41';
-const DOWNLOAD_TIMEOUT_MS = 30_000;
+function readTimeoutMs() {
+  const envValue = process.env.DOWNLOAD_TIMEOUT_MS;
+  if (!envValue) {
+    return 30_000;
+  }
+  const parsed = Number(envValue);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    console.warn(`[WARN] Invalid DOWNLOAD_TIMEOUT_MS "${envValue}"; using default 30000ms`);
+    return 30_000;
+  }
+  return parsed;
+}
+
+const DOWNLOAD_TIMEOUT_MS = readTimeoutMs();
 
 // Files we need. The ONNX model lives in the onnx/ subfolder.
 const FILES = [
