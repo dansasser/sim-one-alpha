@@ -15,3 +15,7 @@ coverage/
 
 # Bundled embedding model files are downloaded by `pnpm fetch-embedding-model`.
 assets/models/embeddings/
+
+# Rust / wasm-pack
+crates/gorombo-memory/pkg/
+crates/gorombo-memory/target/
