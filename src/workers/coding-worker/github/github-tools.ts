@@ -569,27 +569,30 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         risk: v.string(),
         target: v.optional(v.string()),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'approve_request', 'Request approval', async () => {
-        const request = await approvalService.createRequest({
-          taskId: args.taskId ?? 'unknown',
-          actionType: args.actionType,
-          summary: args.summary,
-          reason: args.reason,
-          risk: args.risk,
-          target: readString(args.target),
+      execute: async (args) => {
+        const taskId = readString(args.taskId) ?? 'unknown';
+        return withGithubToolProgress(options, taskId, 'approve_request', 'Request approval', async () => {
+          const request = await approvalService.createRequest({
+            taskId,
+            actionType: args.actionType,
+            summary: args.summary,
+            reason: args.reason,
+            risk: args.risk,
+            target: readString(args.target),
+          });
+          const evaluation = await approvalService.evaluateRequest(request);
+          if (!evaluation.allowed && evaluation.requiresApproval) {
+            emitApprovalRequested(options, request, evaluation.reason);
+          }
+          return toGithubResult({
+            action: 'approve_request',
+            payload: {
+              request,
+              evaluation,
+            },
+          });
         });
-        const evaluation = await approvalService.evaluateRequest(request);
-        if (!evaluation.allowed && evaluation.requiresApproval) {
-          emitApprovalRequested(options, request, evaluation.reason);
-        }
-        return toGithubResult({
-          action: 'approve_request',
-          payload: {
-            request,
-            evaluation,
-          },
-        });
-      }),
+      },
     }),
     defineTool({
       name: 'coding_github_update_pr',

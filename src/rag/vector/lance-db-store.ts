@@ -100,7 +100,7 @@ export class LanceDbVectorStore implements VectorStore {
 
     await this.ensureKeywordIndex(collection, table);
 
-    const builder = table.query().fullTextSearch(query, { columns: ['content', 'title'] });
+    const builder = table.query().fullTextSearch(query, { columns: ['content'] });
     if (options.limit) {
       builder.limit(Math.max(1, Math.floor(options.limit)));
     }

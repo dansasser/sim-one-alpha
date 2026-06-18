@@ -13,8 +13,15 @@ export interface CatalogLoaderOptions {
   modelsPath?: string;
 }
 
+const catalogCache = new Map<string, RunpodImageCatalog>();
+
 export function loadRunpodImageCatalog(options: CatalogLoaderOptions = {}): RunpodImageCatalog {
   const path = resolveCatalogPath(options.modelsPath);
+  const cached = catalogCache.get(path);
+  if (cached) {
+    return cached;
+  }
+
   const raw = readFileSync(path, 'utf8');
   const parsed = load(raw) as unknown;
 
@@ -23,6 +30,7 @@ export function loadRunpodImageCatalog(options: CatalogLoaderOptions = {}): Runp
     throw new Error(`Invalid Runpod image model catalog at ${path}: ${JSON.stringify(v.flatten(result.issues))}`);
   }
 
+  catalogCache.set(path, result.output);
   return result.output;
 }
 

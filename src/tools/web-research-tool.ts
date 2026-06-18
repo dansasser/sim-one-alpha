@@ -42,10 +42,7 @@ export const webResearchTool = defineTool({
   }) => {
     const event = goromboPersistenceRuntime.sessionDatabase.getNormalizedMessageEvent(eventId);
     if (!event) {
-      return JSON.stringify({
-        error: `web_research requires a persisted event; ${eventId} not found`,
-        eventId,
-      });
+      throw new Error(`web_research requires a persisted event; ${eventId} not found`);
     }
 
     return JSON.stringify(

@@ -28,7 +28,7 @@ export const recordImageArtifactTool = defineTool({
   execute: async (input) => {
     const event = goromboPersistenceRuntime.sessionDatabase.getNormalizedMessageEvent(input.eventId);
     if (!event) {
-      return JSON.stringify({ ok: false, error: `No persisted event found for eventId ${input.eventId}` });
+      throw new Error(`record_image_artifact requires a trusted eventId persisted by chat ingress; ${input.eventId} not found`);
     }
 
     try {
