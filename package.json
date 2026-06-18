@@ -28,7 +28,8 @@
     "protocols:disable": "node scripts/protocol-admin.mjs disable",
     "start": "node --env-file=.env dist/server.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm run test:unit && pnpm run build && pnpm run test:http"
+    "test": "pnpm run test:unit && pnpm run build && pnpm run test:http",
+    "fetch-embedding-model": "node scripts/fetch-embedding-model.mjs"
   },
   "engines": {
     "node": ">=22.18.0"
@@ -44,8 +45,11 @@
     "grammy": "^1.44.0",
     "hono": "^4.12.23",
     "js-yaml": "^4.2.0",
+    "onnxruntime-node": "^1.26.0",
     "proper-lockfile": "^4.1.2",
     "pyright": "^1.1.410",
+    "tokenizers": "^0.13.3",
+    "tokenizers-linux-x64-gnu": "0.13.4-rc1",
     "typescript": "^6.0.3",
     "typescript-language-server": "^5.3.0",
     "valibot": "^1.4.1"

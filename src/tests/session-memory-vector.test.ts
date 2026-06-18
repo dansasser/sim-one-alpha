@@ -14,6 +14,12 @@ const fakeEmbeddingClient = {
   async embedBatch(texts: string[]): Promise<number[][]> {
     return texts.map(() => new Array(768).fill(0.1));
   },
+  async embedWithOutcome(): Promise<{ ok: true; result: { vector: number[]; provider: 'onnx-local'; modelId: string } }> {
+    return { ok: true, result: { vector: new Array(768).fill(0.1), provider: 'onnx-local' as const, modelId: 'all-minilm-l6-v2' } };
+  },
+  async embedBatchWithOutcome(texts: string[]): Promise<{ ok: true; result: { vectors: number[][]; provider: 'onnx-local'; modelId: string } }> {
+    return { ok: true, result: { vectors: texts.map(() => new Array(768).fill(0.1)), provider: 'onnx-local' as const, modelId: 'all-minilm-l6-v2' } };
+  },
 };
 
 function makeSessionData(content: string): SessionData {

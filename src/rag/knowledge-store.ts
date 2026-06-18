@@ -57,14 +57,14 @@ export class LanceDbKnowledgeStore implements KnowledgeStore {
 
   async add(input: AddKnowledgeInput): Promise<KnowledgeRecord> {
     const record = createKnowledgeRecord(input);
-    const vector = await this.embeddingClient.embed(record.content);
+    const outcome = await this.embeddingClient.embedWithOutcome(record.content);
     const vectorRecord: VectorRecord = {
       id: record.id,
       chunk_key: record.id,
       source: 'agent_knowledge',
       title: record.title,
       content: record.content,
-      vector,
+      vector: outcome.ok ? outcome.result.vector : [],
       actor_id: record.actorId,
       conversation_id: record.conversationId,
       metadata: {
@@ -72,6 +72,7 @@ export class LanceDbKnowledgeStore implements KnowledgeStore {
         tags: record.tags,
         source: record.source,
         createdBy: record.createdBy,
+        ...(outcome.ok ? {} : { embeddingError: outcome.error }),
       },
       updated_at: record.updatedAt,
     };

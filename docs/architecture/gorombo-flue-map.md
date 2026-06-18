@@ -4,7 +4,10 @@ This file maps Flue architecture to this repository.
 
 ## Top-Level Source Directory Map
 
-Every top-level `src/` directory should fit one of these categories. If a new directory is added, update this map in the same change.
+Every top-level `src/` directory
+
+| `src/embeddings/` | Bundled local embedding model | In-process ONNX + tokenizer path used by the RAG embedding fallback. |
+ should fit one of these categories. If a new directory is added, update this map in the same change.
 
 | Path | Type | Ownership rule |
 | --- | --- | --- |

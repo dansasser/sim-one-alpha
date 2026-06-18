@@ -397,6 +397,14 @@ Build the project:
 pnpm run build
 ```
 
+Download the bundled local embedding model (required for local RAG out of the box):
+
+```sh
+pnpm fetch-embedding-model
+```
+
+After downloading the model, RAG works without Ollama running and without any API keys. The system tries the cloud provider first when `OLLAMA_API_KEY` is configured, and falls back to the bundled `all-MiniLM-L6-v2` ONNX model automatically.
+
 Use the actual scripts defined in `package.json`.
 
 Do not assume a command exists unless it is configured in the project.
@@ -445,6 +453,18 @@ OLLAMA_WEB_SEARCH_BASE_URL=https://ollama.com
 GOROMBO_RAG_MAX_CONTEXT_TOKENS=4000
 GOROMBO_RAG_WEB_FETCH_TOP_K=1
 ```
+
+Embedding provider chain:
+
+```text
+cloud (Ollama Cloud, if OLLAMA_API_KEY is set)
+  ↓ on any failure
+onnx-local (bundled all-MiniLM-L6-v2, 384-dim, no network)
+  ↓ on any failure
+local (legacy Ollama local /v1/embeddings)
+```
+
+`OLLAMA_API_KEY` is optional. Without it, the bundled local model is used. If the local model files are missing, run `pnpm fetch-embedding-model`. Pre-AVX x86 CPUs and GPU execution providers are not supported by the default installer.
 
 Select another project-owned model card by changing the shipped `gorombo.config.json` runtime file and restarting the runtime:
 

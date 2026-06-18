@@ -4,18 +4,25 @@ import { DocumentIndexProvider } from '../rag/document-index-provider.js';
 
 test('document-index provider skips unscoped knowledge_base queries', async () => {
   const searches: Array<{ collection: string; query: number[]; options: unknown }> = [];
+  const keywordSearches: Array<{ collection: string; query: string; options: unknown }> = [];
   const vectorStore = {
     upsert: async () => {},
     search: async (collection: string, query: number[], options: unknown) => {
       searches.push({ collection, query, options });
       return [];
     },
+    searchKeyword: async (collection: string, query: string, options: unknown) => {
+      keywordSearches.push({ collection, query, options });
+      return [];
+    },
     delete: async () => {},
     listIds: async () => [],
   };
-  const embeddingClient = {
+  const embeddingClient: import('../rag/embeddings.js').EmbeddingClient = {
     embed: async () => [1, 2, 3],
     embedBatch: async () => [],
+    embedWithOutcome: async () => ({ ok: true as const, result: { vector: [1, 2, 3], provider: 'onnx-local' as const, modelId: 'all-minilm-l6-v2' } }),
+    embedBatchWithOutcome: async () => ({ ok: true as const, result: { vectors: [], provider: 'onnx-local' as const, modelId: 'all-minilm-l6-v2' } }),
   };
   const provider = new DocumentIndexProvider({ vectorStore, embeddingClient });
 
@@ -39,18 +46,25 @@ test('document-index provider skips unscoped knowledge_base queries', async () =
 
 test('document-index provider allows scoped knowledge_base queries', async () => {
   const searches: Array<{ collection: string; query: number[]; options: unknown }> = [];
+  const keywordSearches: Array<{ collection: string; query: string; options: unknown }> = [];
   const vectorStore = {
     upsert: async () => {},
     search: async (collection: string, query: number[], options: unknown) => {
       searches.push({ collection, query, options });
       return [];
     },
+    searchKeyword: async (collection: string, query: string, options: unknown) => {
+      keywordSearches.push({ collection, query, options });
+      return [];
+    },
     delete: async () => {},
     listIds: async () => [],
   };
-  const embeddingClient = {
+  const embeddingClient: import('../rag/embeddings.js').EmbeddingClient = {
     embed: async () => [1, 2, 3],
     embedBatch: async () => [],
+    embedWithOutcome: async () => ({ ok: true as const, result: { vector: [1, 2, 3], provider: 'onnx-local' as const, modelId: 'all-minilm-l6-v2' } }),
+    embedBatchWithOutcome: async () => ({ ok: true as const, result: { vectors: [], provider: 'onnx-local' as const, modelId: 'all-minilm-l6-v2' } }),
   };
   const provider = new DocumentIndexProvider({ vectorStore, embeddingClient });
 

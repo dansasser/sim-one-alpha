@@ -12,3 +12,6 @@ coverage/
 !.gorombo/db/
 .gorombo/db/*
 !.gorombo/db/README.md
+
+# Bundled embedding model files are downloaded by postinstall.
+assets/models/embeddings/

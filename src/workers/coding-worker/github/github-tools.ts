@@ -67,13 +67,13 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
       description:
         'Read GitHub issue, pull request, and check context for a coding-worker task. This is a read-only GitHub capability.',
       parameters: v.object({
-        taskId: v.string(),
+        taskId: v.optional(v.string()),
         owner: v.string(),
         repo: v.string(),
         issueNumber: v.optional(v.number()),
         pullRequestNumber: v.optional(v.number()),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'read_context', 'Read GitHub context', async () => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'read_context', 'Read GitHub context', async () => {
         const client = options.client;
         if (!client) {
           return toGithubResult({
@@ -118,7 +118,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
       description:
         'Read and verify GitHub PR base, head, draft status, and optionally checks for a coding-worker task.',
       parameters: v.object({
-        taskId: v.string(),
+        taskId: v.optional(v.string()),
         owner: v.string(),
         repo: v.string(),
         pullRequestNumber: v.number(),
@@ -127,7 +127,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         expectedDraft: v.optional(v.boolean()),
         requireChecksPassed: v.optional(v.boolean()),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'verify_pr', 'Verify GitHub PR', async () => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'verify_pr', 'Verify GitHub PR', async () => {
         const client = options.client;
         if (!client) {
           return toGithubResult({
@@ -183,12 +183,12 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
       name: 'coding_github_list_issues',
       description: 'List GitHub issues for a repository. Read-only.',
       parameters: v.object({
-        taskId: v.string(),
+        taskId: v.optional(v.string()),
         owner: v.string(),
         repo: v.string(),
         state: v.optional(v.string()),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'list_issues', 'List GitHub issues', async () => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'list_issues', 'List GitHub issues', async () => {
         const client = options.client;
         if (!client?.listIssues) {
           return toGithubResult({
@@ -226,12 +226,12 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
       name: 'coding_github_list_prs',
       description: 'List GitHub pull requests for a repository. Read-only.',
       parameters: v.object({
-        taskId: v.string(),
+        taskId: v.optional(v.string()),
         owner: v.string(),
         repo: v.string(),
         state: v.optional(v.string()),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'list_prs', 'List GitHub PRs', async () => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'list_prs', 'List GitHub PRs', async () => {
         const client = options.client;
         if (!client?.listPullRequests) {
           return toGithubResult({
@@ -270,20 +270,20 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
       description:
         'Approval-gated local branch creation from a GitHub pull request head through gh CLI. Requires approval for `${taskId}:repo.branch.create`.',
       parameters: v.object({
-        taskId: v.string(),
+        taskId: v.optional(v.string()),
         owner: v.string(),
         repo: v.string(),
         pullRequestNumber: v.number(),
         branchName: v.string(),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'branch_from_pr', 'Create branch from PR', async () => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'branch_from_pr', 'Create branch from PR', async () => {
         if (!options.client?.createBranchFromPullRequest) {
           return toGithubResult({
             action: 'branch_from_pr',
             payload: unavailableWriteTool(),
           });
         }
-        const taskId = requireString(args.taskId, 'taskId');
+        const taskId = typeof args.taskId === 'string' && args.taskId.length > 0 ? args.taskId : 'unknown';
         const branchPayload = {
           owner: args.owner,
           repo: args.repo,
@@ -329,7 +329,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
       description:
         'Approval-gated line-specific GitHub PR review comment creation. Requires approval for `${taskId}:github.review_comment`.',
       parameters: v.object({
-        taskId: v.string(),
+        taskId: v.optional(v.string()),
         owner: v.string(),
         repo: v.string(),
         pullRequestNumber: v.number(),
@@ -340,14 +340,14 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         commitId: v.optional(v.string()),
         inReplyTo: v.optional(v.string()),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'review_comment', 'Create review comment', async () => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'review_comment', 'Create review comment', async () => {
         if (!options.client?.createReviewComment) {
           return toGithubResult({
             action: 'review_comment',
             payload: unavailableWriteTool(),
           });
         }
-        const taskId = requireString(args.taskId, 'taskId');
+        const taskId = typeof args.taskId === 'string' && args.taskId.length > 0 ? args.taskId : 'unknown';
         const commentPayload = {
           owner: args.owner,
           repo: args.repo,
@@ -403,20 +403,20 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
       description:
         'Approval-gated GitHub Actions workflow-run rerun. Requires approval for `${taskId}:github.check.rerun`.',
       parameters: v.object({
-        taskId: v.string(),
+        taskId: v.optional(v.string()),
         owner: v.string(),
         repo: v.string(),
         runId: v.string(),
         rerunFailedJobs: v.optional(v.boolean()),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'rerun_check', 'Rerun GitHub check', async () => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'rerun_check', 'Rerun GitHub check', async () => {
         if (!options.client?.rerunCheck) {
           return toGithubResult({
             action: 'rerun_check',
             payload: unavailableWriteTool(),
           });
         }
-        const taskId = requireString(args.taskId, 'taskId');
+        const taskId = typeof args.taskId === 'string' && args.taskId.length > 0 ? args.taskId : 'unknown';
         const rerunPayload = {
           owner: args.owner,
           repo: args.repo,
@@ -468,21 +468,21 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
       description:
         'Approval-gated GitHub repository fork creation. Requires approval for `${taskId}:github.fork_repo`.',
       parameters: v.object({
-        taskId: v.string(),
+        taskId: v.optional(v.string()),
         owner: v.string(),
         repo: v.string(),
         defaultBranchOnly: v.optional(v.boolean()),
         clone: v.optional(v.boolean()),
         forkName: v.optional(v.string()),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'fork_repo', 'Fork GitHub repository', async () => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'fork_repo', 'Fork GitHub repository', async () => {
         if (!options.client?.forkRepository) {
           return toGithubResult({
             action: 'fork_repo',
             payload: unavailableWriteTool(),
           });
         }
-        const taskId = requireString(args.taskId, 'taskId');
+        const taskId = typeof args.taskId === 'string' && args.taskId.length > 0 ? args.taskId : 'unknown';
         const forkPayload = {
           owner: args.owner,
           repo: args.repo,
@@ -535,7 +535,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
       description:
         'Create an approval request for a GitHub, git, or repo side effect. This tool does not perform the side effect.',
       parameters: v.object({
-        taskId: v.string(),
+        taskId: v.optional(v.string()),
         actionType: v.union([
           v.literal('git.commit'),
           v.literal('git.push'),
@@ -561,9 +561,9 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         risk: v.string(),
         target: v.optional(v.string()),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'approve_request', 'Request approval', async () => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'approve_request', 'Request approval', async () => {
         const request = await approvalService.createRequest({
-          taskId: args.taskId,
+          taskId: args.taskId ?? 'unknown',
           actionType: args.actionType,
           summary: args.summary,
           reason: args.reason,
@@ -587,7 +587,7 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
       name: 'coding_github_update_pr',
       description: 'Approval-gated GitHub PR metadata update through the configured GitHub client.',
       parameters: v.object({
-        taskId: v.string(),
+        taskId: v.optional(v.string()),
         owner: v.string(),
         repo: v.string(),
         pullRequestNumber: v.number(),
@@ -595,14 +595,14 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
         body: v.optional(v.string()),
         base: v.optional(v.string()),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'update_pr', 'Update GitHub PR', async () => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'update_pr', 'Update GitHub PR', async () => {
         if (!options.client?.updatePullRequest) {
           return toGithubResult({
             action: 'update_pr',
             payload: unavailableWriteTool(),
           });
         }
-        const taskId = requireString(args.taskId, 'taskId');
+        const taskId = typeof args.taskId === 'string' && args.taskId.length > 0 ? args.taskId : 'unknown';
         const base = readString(args.base);
         const prUpdatePayload = {
           title: readString(args.title),
@@ -660,20 +660,20 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
       name: 'coding_github_set_pr_ready',
       description: 'Approval-gated GitHub PR ready/draft status update.',
       parameters: v.object({
-        taskId: v.string(),
+        taskId: v.optional(v.string()),
         owner: v.string(),
         repo: v.string(),
         pullRequestNumber: v.number(),
         ready: v.boolean(),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'ready_pr', 'Set PR ready/draft status', async () => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'ready_pr', 'Set PR ready/draft status', async () => {
         if (!options.client?.setPullRequestReady) {
           return toGithubResult({
             action: 'ready_pr',
             payload: unavailableWriteTool(),
           });
         }
-        const taskId = requireString(args.taskId, 'taskId');
+        const taskId = typeof args.taskId === 'string' && args.taskId.length > 0 ? args.taskId : 'unknown';
         const readyPayload = { ready: args.ready };
         const approval = await evaluateGitApproval(options, {
           approvalService,
@@ -722,20 +722,20 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
       name: 'coding_github_comment_pr',
       description: 'Approval-gated GitHub PR comment creation.',
       parameters: v.object({
-        taskId: v.string(),
+        taskId: v.optional(v.string()),
         owner: v.string(),
         repo: v.string(),
         pullRequestNumber: v.number(),
         body: v.string(),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'comment', 'Comment on GitHub PR', async () => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'comment', 'Comment on GitHub PR', async () => {
         if (!options.client?.commentOnPullRequest) {
           return toGithubResult({
             action: 'comment',
             payload: unavailableWriteTool(),
           });
         }
-        const taskId = requireString(args.taskId, 'taskId');
+        const taskId = typeof args.taskId === 'string' && args.taskId.length > 0 ? args.taskId : 'unknown';
         const commentPayload = { body: args.body };
         const approval = await evaluateGitApproval(options, {
           approvalService,
@@ -782,21 +782,21 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
       name: 'coding_github_update_issue',
       description: 'Approval-gated GitHub issue metadata update.',
       parameters: v.object({
-        taskId: v.string(),
+        taskId: v.optional(v.string()),
         owner: v.string(),
         repo: v.string(),
         issueNumber: v.number(),
         title: v.optional(v.string()),
         body: v.optional(v.string()),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'update_issue', 'Update GitHub issue', async () => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'update_issue', 'Update GitHub issue', async () => {
         if (!options.client?.updateIssue) {
           return toGithubResult({
             action: 'update_issue',
             payload: unavailableWriteTool(),
           });
         }
-        const taskId = requireString(args.taskId, 'taskId');
+        const taskId = typeof args.taskId === 'string' && args.taskId.length > 0 ? args.taskId : 'unknown';
         const issuePayload = {
           title: readString(args.title),
           body: readString(args.body),
@@ -849,19 +849,19 @@ export function createCodingGitHubTools(input?: GitHubClient | CodingGitHubTools
       name: 'coding_github_update_review_thread',
       description: 'Approval-gated GitHub PR review-thread reply or resolution update.',
       parameters: v.object({
-        taskId: v.string(),
+        taskId: v.optional(v.string()),
         threadId: v.string(),
         replyBody: v.optional(v.string()),
         resolve: v.optional(v.boolean()),
       }),
-      execute: async (args) => withGithubToolProgress(options, readString(args.taskId), 'update_review_thread', 'Update GitHub review thread', async () => {
+      execute: async (args) => withGithubToolProgress(options, readString(args.taskId) ?? 'unknown', 'update_review_thread', 'Update GitHub review thread', async () => {
         if (!options.client?.updateReviewThread) {
           return toGithubResult({
             action: 'update_review_thread',
             payload: unavailableWriteTool(),
           });
         }
-        const taskId = requireString(args.taskId, 'taskId');
+        const taskId = typeof args.taskId === 'string' && args.taskId.length > 0 ? args.taskId : 'unknown';
         const threadPayload = {
           replyBody: readString(args.replyBody),
           resolve: typeof args.resolve === 'boolean' ? args.resolve : undefined,

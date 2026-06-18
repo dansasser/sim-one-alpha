@@ -1,12 +1,37 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { MemoryProvider } from '../memory/memory-provider.js';
 import type { RagProvider, WebFetchResult } from '../rag/providers.js';
+import { GoromboSessionDatabase } from '../session/session-database.js';
 import { estimateTextTokens } from '../session/context-budget.js';
 import type { RagQuery, RetrievedContext } from '../types/index.js';
 import { retrieveContext } from '../workflows/retrieval.js';
 
+let eventCounter = 0;
+function seedEvent() {
+  const dir = mkdtempSync(join(tmpdir(), 'retrieval-test-'));
+  const db = new GoromboSessionDatabase(join(dir, 'sessions.sqlite'));
+  const id = `event-${++eventCounter}`;
+  db.recordNormalizedMessageEvent({
+    event: {
+      id,
+      connector: 'test',
+      kind: 'chat.message',
+      text: 'seed event',
+      receivedAt: new Date().toISOString(),
+      actor: { id: 'user-1' },
+      conversation: { id: 'thread-1' },
+    },
+  });
+  db.close();
+  return { id, dir };
+}
+
 test('retrieve_context tool reads Ollama search configuration at execution time', async () => {
+  const seeded = seedEvent();
   const originalFetch = globalThis.fetch;
   const originalEnv = {
     GOROMBO_WEB_SEARCH_PROVIDER: process.env.GOROMBO_WEB_SEARCH_PROVIDER,
@@ -46,7 +71,7 @@ test('retrieve_context tool reads Ollama search configuration at execution time'
 
     const result = JSON.parse(
       await module.retrieveContextTool.execute({
-        eventId: 'event-1',
+        eventId: seeded.id,
         text: 'ollama web search api',
         actorId: 'user-1',
         conversationId: 'thread-1',
@@ -60,6 +85,7 @@ test('retrieve_context tool reads Ollama search configuration at execution time'
   } finally {
     restoreEnv(originalEnv);
     globalThis.fetch = originalFetch;
+    rmSync(seeded.dir, { recursive: true, force: true });
   }
 });
 
@@ -78,6 +104,7 @@ test('retrieve_context tool forwards retrieval budget controls', async () => {
 
   const module = (await import(`../tools/rag-tool.js?budget-controls=${Date.now()}`)) as typeof import('../tools/rag-tool.js');
 
+  const seeded = seedEvent();
   try {
     globalThis.fetch = async () =>
       new Response(
@@ -98,7 +125,7 @@ test('retrieve_context tool forwards retrieval budget controls', async () => {
 
     const result = JSON.parse(
       await module.retrieveContextTool.execute({
-        eventId: 'event-1',
+        eventId: seeded.id,
         text: 'Use web search for source-backed context.',
         actorId: 'user-1',
         conversationId: 'thread-1',
@@ -113,6 +140,7 @@ test('retrieve_context tool forwards retrieval budget controls', async () => {
   } finally {
     restoreEnv(originalEnv);
     globalThis.fetch = originalFetch;
+    rmSync(seeded.dir, { recursive: true, force: true });
   }
 });
 
