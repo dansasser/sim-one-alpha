@@ -1,5 +1,5 @@
-import { Tokenizer } from 'tokenizers';
-import { existsSync } from 'node:fs';
+import { Tokenizer } from '@huggingface/tokenizers';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 export interface EncodedInput {
@@ -9,7 +9,7 @@ export interface EncodedInput {
 }
 
 export interface LocalTokenizer {
-  encode(text: string, maxLength: number): Promise<EncodedInput>;
+  encode(text: string, maxLength: number): EncodedInput;
 }
 
 export function loadTokenizer(modelPath: string): LocalTokenizer {
@@ -18,21 +18,40 @@ export function loadTokenizer(modelPath: string): LocalTokenizer {
     throw new Error(`Tokenizer file not found at ${tokenizerPath}. Run "pnpm fetch-embedding-model".`);
   }
 
-  const tokenizer = Tokenizer.fromFile(tokenizerPath);
+  const configPath = resolve(modelPath, 'tokenizer_config.json');
+  const tokenizerJson = JSON.parse(readFileSync(tokenizerPath, 'utf8')) as unknown;
+  const tokenizerConfig = existsSync(configPath)
+    ? (JSON.parse(readFileSync(configPath, 'utf8')) as unknown)
+    : undefined;
+
+  const tokenizer = new Tokenizer(tokenizerJson as Record<string, unknown>, tokenizerConfig as Record<string, unknown> | undefined);
 
   return {
-    async encode(text: string, maxLength: number): Promise<EncodedInput> {
-      tokenizer.setTruncation(maxLength, { strategy: 'LongestFirst' as unknown as NonNullable<NonNullable<Parameters<Tokenizer['setTruncation']>[1]>['strategy']> });
-      tokenizer.disablePadding();
-
-      const encoding = await tokenizer.encode(text, null, {
-        addSpecialTokens: true,
+    encode(text: string, maxLength: number): EncodedInput {
+      const encoding = tokenizer.encode(text, {
+        add_special_tokens: true,
+        return_token_type_ids: true,
       });
 
+      let inputIds = encoding.ids.map(BigInt);
+      let attentionMask = encoding.attention_mask.map(BigInt);
+      let tokenTypeIds = (encoding.token_type_ids ?? new Array(encoding.ids.length).fill(0)).map(BigInt);
+
+      if (inputIds.length > maxLength) {
+        // Manual longest-first-style truncation: keep [CLS], take the first
+        // maxLength - 2 content tokens, keep [SEP].
+        const clsId = inputIds[0];
+        const sepId = inputIds[inputIds.length - 1];
+        const content = inputIds.slice(1, maxLength - 1);
+        inputIds = [clsId, ...content, sepId];
+        attentionMask = attentionMask.slice(0, inputIds.length);
+        tokenTypeIds = tokenTypeIds.slice(0, inputIds.length);
+      }
+
       return {
-        inputIds: encoding.getIds().map(BigInt),
-        attentionMask: encoding.getAttentionMask().map(BigInt),
-        tokenTypeIds: encoding.getTypeIds().map(BigInt),
+        inputIds,
+        attentionMask,
+        tokenTypeIds,
       };
     },
   };

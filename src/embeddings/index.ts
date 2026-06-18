@@ -28,9 +28,7 @@ async function runInference(texts: string[], options: Required<LocalEmbeddingOpt
   const tokenizer = loadTokenizer(options.modelPath);
   const { session, dimensions } = await loadSessionWithShape(options.modelPath);
 
-  const encoded = await Promise.all(
-    texts.map((text) => tokenizer.encode(text, options.maxSequenceLength)),
-  );
+  const encoded = texts.map((text) => tokenizer.encode(text, options.maxSequenceLength));
 
   const maxLength = Math.max(...encoded.map((e) => e.inputIds.length));
   const batchSize = encoded.length;
