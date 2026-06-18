@@ -1109,7 +1109,8 @@ export class GoromboSessionDatabase {
       );
 
       try {
-        const dimensions = await getOnnxEmbeddingDimensions();
+        const dimensions = await this.vectorStore.getVectorDimension('session_memory')
+          ?? await getOnnxEmbeddingDimensions();
         const fallbackRecords = chunks.map((chunk): VectorRecord =>
           this.buildSessionMemoryVectorRecord(
             chunk,

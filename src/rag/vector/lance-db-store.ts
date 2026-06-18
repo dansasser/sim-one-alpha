@@ -39,6 +39,8 @@ export interface VectorStore {
   searchKeyword(collection: string, query: string, options?: VectorSearchOptions): Promise<VectorSearchResult[]>;
   delete(collection: string, ids: string[]): Promise<void>;
   listIds(collection: string): Promise<string[]>;
+  /** Returns the vector dimension of an existing collection, or undefined if the collection does not exist or is empty. */
+  getVectorDimension(collection: string): Promise<number | undefined>;
 }
 
 export interface LanceDbVectorStoreOptions {
@@ -204,6 +206,25 @@ export class LanceDbVectorStore implements VectorStore {
 
     const rows = (await table.query().select(['id']).toArray()) as unknown as Array<{ id: string }>;
     return rows.map((row) => String(row.id));
+  }
+
+  async getVectorDimension(collection: string): Promise<number | undefined> {
+    const table = await this.openTable(collection);
+    if (!table) {
+      return undefined;
+    }
+
+    try {
+      const rows = (await table.query().select(['vector']).limit(1).toArray()) as unknown as Array<{ vector?: number[] }>;
+      const vector = rows[0]?.vector;
+      if (Array.isArray(vector) && vector.length > 0) {
+        return vector.length;
+      }
+    } catch {
+      // Collection exists but has no readable vector column or is empty.
+    }
+
+    return undefined;
   }
 }
 
