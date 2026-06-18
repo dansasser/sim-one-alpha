@@ -27,9 +27,9 @@ Flue exposes compaction in two ways:
 
 `CompactionConfig` has `reserveTokens`, `keepRecentTokens`, and `model`. Flue automatic threshold compaction triggers when the current context token count is greater than `contextWindow - reserveTokens`. The installed runtime estimates context with provider usage from the latest assistant message plus a character-count estimate for trailing messages. It also has overflow recovery that compacts and retries after a provider context overflow.
 
-Flue does not expose a public pre-prompt exact token count for application code in the installed `@flue/runtime` package. GOROMBO owns the pre-prompt budget layer by estimating the next prompt and the persisted session context before calling `session.prompt(...)`.
+Flue does not expose a public pre-prompt exact token count for application code in the installed `@flue/runtime` package. SIM-ONE Alpha owns the pre-prompt budget layer by estimating the next prompt and the persisted session context before calling `session.prompt(...)`.
 
-## Implemented GOROMBO Layer
+## Implemented SIM-ONE Alpha Layer
 
 The active runtime model card now drives context budgeting and compaction:
 
@@ -39,14 +39,14 @@ The active runtime model card now drives context budgeting and compaction:
 - `src/session/compaction-policy.ts` converts token estimates into `normal`, `warn`, `compact`, or `stop`.
 - `src/db.ts` exports the Flue persistence adapter discovered by Flue at build time.
 - `src/session/session-persistence.ts` wraps Flue's built-in SQLite adapter through the public `PersistenceAdapter` contract.
-- `src/session/session-database.ts` stores GOROMBO session catalog, active-session routing, logical Flue session indexes, durable direct-agent instance indexes, normalized event context, and extracted session-memory FTS records.
+- `src/session/session-database.ts` stores SIM-ONE Alpha session catalog, active-session routing, logical Flue session indexes, durable direct-agent instance indexes, normalized event context, and extracted session-memory FTS records.
 - `src/session/flue-session-store.ts` contains Flue session-key helpers only.
 - `src/session/session-budget.ts` derives budget state from stored Flue `SessionData` and keeps an in-process fallback ledger for cases where session data is unavailable.
 - `src/routes/chat-events.ts` owns HTTP chat ingress and opens durable direct-agent sessions for slash commands.
 - `src/routes/chat-events.ts` is the primary app-owned chat ingress. It persists normalized event context and prompts `/agents/orchestrator/:sessionId?wait=result` so normal chat enters Flue's durable agent submission lifecycle.
 - `src/agents/orchestrator.ts` passes card-derived Flue compaction settings to `createAgent(...)`; it does not pass persistence. Persistence belongs to `src/db.ts`.
 
-Flue remains the owner of canonical `SessionData`. The GOROMBO wrapper indexes latest data by logical harness/session name for workflows and by instance/harness/session identity for durable direct-agent sessions.
+Flue remains the owner of canonical `SessionData`. The SIM-ONE Alpha wrapper indexes latest data by logical harness/session name for workflows and by instance/harness/session identity for durable direct-agent sessions.
 
 The durable chat ingress sequence is:
 
@@ -64,7 +64,7 @@ This keeps Flue's native automatic compaction enabled on the durable direct-agen
 
 ## Persistence And Session Memory Boundary
 
-`src/db.ts` is the Flue persistence boundary. `src/session/session-database.ts` is the GOROMBO sidecar index for product session records and extracted session-memory retrieval.
+`src/db.ts` is the Flue persistence boundary. `src/session/session-database.ts` is the SIM-ONE Alpha sidecar index for product session records and extracted session-memory retrieval.
 
 Current behavior:
 
@@ -90,7 +90,7 @@ The SQLite implementation stores:
 - normalized message event context for protocol and memory lookup
 - session-memory FTS chunks extracted from Flue `SessionData`
 
-Session memory does not fork conversation truth into a separate transcript. It indexes text extracted from Flue `SessionData` and returns matching chunks through the memory tool. The future seven-layer GOROMBO memory stack remains separate from this session-memory layer.
+Session memory does not fork conversation truth into a separate transcript. It indexes text extracted from Flue `SessionData` and returns matching chunks through the memory tool. The future seven-layer SIM-ONE Alpha memory stack remains separate from this session-memory layer.
 
 ## Budget Inputs
 
@@ -127,7 +127,7 @@ durable direct-agent session
 -> persisted SessionData and session-memory index update
 ```
 
-Flue's own threshold and overflow compaction still run during and after the prompt. The GOROMBO layer keeps the budget data available so RAG can receive a real remaining-token budget before retrieved context is injected.
+Flue's own threshold and overflow compaction still run during and after the prompt. The SIM-ONE Alpha layer keeps the budget data available so RAG can receive a real remaining-token budget before retrieved context is injected.
 
 Backup model failover is an availability path, not a way to bypass context budgeting. Current durable chat execution uses the primary configured card; backup cards remain configured metadata for future fallback-capable paths.
 

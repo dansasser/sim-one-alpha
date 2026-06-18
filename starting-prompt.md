@@ -1,4 +1,4 @@
-/goal Build the first production-ready foundation of our GOROMBO multi-purpose orchestrating agent.
+/goal Build the first production-ready foundation of our SIM-ONE Alpha multi-purpose orchestrating agent.
 
 Important: work incrementally. Do not try to build the entire final system in one pass. Create a clean, testable foundation first.
 

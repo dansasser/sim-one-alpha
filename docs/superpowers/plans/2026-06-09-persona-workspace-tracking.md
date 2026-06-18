@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Track the persona workspace design for GOROMBO agents so decisions survive context compaction and future phase work.
+Track the persona workspace design for SIM-ONE Alpha agents so decisions survive context compaction and future phase work.
 
 ## Current Context
 
@@ -38,7 +38,7 @@ Required initial files:
    - Status: Needs discussion
    - Answer:
 
-3. Do we want the main persona to sound like "GOROMBO" as a named assistant, or stay mostly invisible as a routing orchestrator?
+3. Do we want the main persona to sound like "SIM-ONE Alpha" as a named assistant, or stay mostly invisible as a routing orchestrator?
    - Status: Partially answered
    - Answer: The main agent is an AI employee, usually named by the user. It should not be named after the company by default. Its persona depends on the employee role, such as personal assistant, sales team manager, production manager, technical employee, or another user-defined role.
 

@@ -1,4 +1,4 @@
-# GOROMBO Flue Map
+# SIM-ONE Alpha Flue Map
 
 This file maps Flue architecture to this repository.
 
@@ -44,7 +44,7 @@ src/app.ts
 
 src/db.ts
   Flue Node persistence adapter entrypoint discovered by Flue at build time.
-  Exports the GOROMBO persistence adapter wrapper around Flue's sqlite() adapter.
+  Exports the SIM-ONE Alpha persistence adapter wrapper around Flue's sqlite() adapter.
 
 src/index.ts
   Package barrel for exported connector, registry, and type helpers.
@@ -86,7 +86,7 @@ src/routes/knowledge.ts
 src/db.ts
   Flue persistence adapter entrypoint.
   Uses Flue's Node sqlite() adapter for canonical agent sessions, durable direct/dispatch submissions, and event streams.
-  Supplies SQLite workflow run and run registry records through GOROMBO's persistence wrapper.
+  Supplies SQLite workflow run and run registry records through SIM-ONE Alpha's persistence wrapper.
   Wraps the Flue session store to maintain logical session indexes, direct agent instance indexes, persisted normalized event context, and extracted session-memory FTS records.
   Exposes a shared LanceDB vector store and embedding client used by session memory, document index, and knowledge base retrieval.
 
@@ -168,7 +168,7 @@ src/commands/
   Commands are application machinery; they are not sent to the LLM as prompts.
 
 src/config/
-  Typed loader and source JSON for the main GOROMBO runtime config file.
+  Typed loader and source JSON for the main SIM-ONE Alpha runtime config file.
 
 dist/gorombo.config.json
   Built editable runtime config shipped with the product. Starts with primary and backup model card keys.
