@@ -1,4 +1,6 @@
 import { estimateTextTokens } from '../session/context-budget.js';
+import { reciprocalRankFusion } from './memory-router.js';
+import type { StructuredMemoryNoteIndex } from './structured-memory-note-index.js';
 import type { RagQuery, RetrievedContext } from '../types/index.js';
 import type { MemoryRecord, MemoryRecordScope, QueryInput } from '../types/memory.js';
 import type { MemoryEngine } from './memory-engine.js';
@@ -16,6 +18,8 @@ export interface ChecklistMemoryProviderOptions {
   engineLoader: () => Promise<MemoryEngine>;
   maxContextTokens?: number;
   defaultLimit?: number;
+  /** Optional LanceDB note index for semantic session-note search (Decision 5). */
+  noteIndex?: StructuredMemoryNoteIndex;
 }
 
 /**
@@ -35,11 +39,13 @@ export class ChecklistMemoryProvider implements MemoryProvider {
   private readonly engineLoader: () => Promise<MemoryEngine>;
   private readonly maxContextTokens: number;
   private readonly defaultLimit: number;
+  private readonly noteIndex?: StructuredMemoryNoteIndex;
 
   constructor(options: ChecklistMemoryProviderOptions) {
     this.engineLoader = options.engineLoader;
     this.maxContextTokens = options.maxContextTokens ?? 1_500;
     this.defaultLimit = options.defaultLimit ?? 10;
+    this.noteIndex = options.noteIndex;
   }
 
   async retrieve(query: RagQuery): Promise<RetrievedContext[]> {
@@ -68,8 +74,29 @@ export class ChecklistMemoryProvider implements MemoryProvider {
       );
       return [];
     }
-    const contexts = records.map((record) => toRetrievedContext(record));
-    return truncateToTokenBudget(contexts, this.maxContextTokens);
+    const keywordContexts = records.map((record) => toRetrievedContext(record));
+
+    // Semantic session-note search (optional). Merged with the keyword results
+    // via reciprocal rank fusion. Graceful fallback: returns [] when no note
+    // index is configured or the vector search throws.
+    let vectorContexts: RetrievedContext[] = [];
+    if (this.noteIndex?.available) {
+      try {
+        vectorContexts = await this.noteIndex.search({
+          text: query.text,
+          scope,
+          limit: query.limit ?? this.defaultLimit,
+        });
+      } catch (error) {
+        console.error(
+          '[WARN] structured-memory vector search failed:',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
+    const merged = reciprocalRankFusion([keywordContexts, vectorContexts]);
+    return truncateToTokenBudget(merged, this.maxContextTokens);
   }
 }
 

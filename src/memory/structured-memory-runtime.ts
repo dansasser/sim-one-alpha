@@ -28,6 +28,7 @@ import {
   defaultStructuredMemoryDatabasePath,
 } from './structured-memory-database.js';
 import { InMemoryMemoryEngine, RustMemoryEngine } from './rust-memory-engine.js';
+import { StructuredMemoryNoteIndex } from './structured-memory-note-index.js';
 
 /** Runtime config for the structured-memory subsystem (plan §Configuration). */
 export interface GoromboMemoryConfig {
@@ -135,11 +136,18 @@ async function createStructuredMemoryRuntime(config?: GoromboConfig): Promise<St
   const snapshot: MemoryRecordSnapshot = { records };
   await baseEngine.reconcile(snapshot, memConfig.maxChecklistDepth);
 
-  const engine = new PersistingMemoryEngine(baseEngine, database);
+  const noteIndex = memConfig.enableSemanticNotes
+    ? new StructuredMemoryNoteIndex({
+        vectorStore: goromboPersistenceRuntime.vectorStore,
+        embeddingClient: goromboPersistenceRuntime.embeddingClient as never,
+      })
+    : undefined;
+  const engine = new PersistingMemoryEngine(baseEngine, database, noteIndex);
   const provider = new ChecklistMemoryProvider({
     engineLoader: () => Promise.resolve(engine),
     maxContextTokens: memConfig.maxContextTokens,
     defaultLimit: memConfig.defaultLimit,
+    noteIndex,
   });
 
   return { engine, database, provider, config: memConfig };
@@ -191,6 +199,7 @@ class PersistingMemoryEngine implements MemoryEngine {
   constructor(
     private readonly inner: MemoryEngine,
     private readonly database: GoromboStructuredMemoryDatabase,
+    private readonly noteIndex?: StructuredMemoryNoteIndex,
   ) {}
 
   version(): Promise<string> {
@@ -236,12 +245,18 @@ class PersistingMemoryEngine implements MemoryEngine {
   async createSessionNote(input: CreateSessionNoteInput): Promise<SessionNote> {
     const record = await this.inner.createSessionNote(input);
     this.database.writeRecord(record);
+    await this.noteIndex?.upsertNote(record);
     return record;
   }
 
   async updateSessionNote(input: UpdateSessionNoteInput): Promise<SessionNote> {
     const record = await this.inner.updateSessionNote(input);
     this.database.writeRecord(record);
+    if (record.status === 'archived') {
+      await this.noteIndex?.deleteNote(record.id);
+    } else {
+      await this.noteIndex?.upsertNote(record);
+    }
     return record;
   }
 
@@ -252,6 +267,7 @@ class PersistingMemoryEngine implements MemoryEngine {
   async delete(input: DeleteInput): Promise<void> {
     await this.inner.delete(input);
     this.database.deleteRecord(input.id);
+    await this.noteIndex?.deleteNote(input.id);
   }
 
   async reconcile(snapshot: MemoryRecordSnapshot, maxChecklistDepth?: number): Promise<void> {
