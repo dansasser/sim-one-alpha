@@ -15,5 +15,6 @@ pub struct SessionNote {
     pub created_at: String,
     pub updated_at: String,
     pub updated_by: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub run_id: Option<String>,
 }

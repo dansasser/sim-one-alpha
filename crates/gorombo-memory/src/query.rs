@@ -9,7 +9,7 @@ pub struct QueryInput {
     pub text: Option<String>,
     pub tags: Vec<String>,
     pub kinds: Option<Vec<String>>,
-    pub statuses: Option<Vec<String>>,
+    pub status: Option<Vec<String>>,
     pub scope: Scope,
     pub limit: usize,
 }
@@ -43,15 +43,15 @@ pub fn query_records(index: &InMemoryIndex, input: QueryInput) -> Result<QueryRe
     });
     let kinds_ref = kinds.as_ref();
 
-    let statuses: Option<HashSet<&str>> =
-        input.statuses.as_ref().map(|list| list.iter().map(|s| s.as_str()).collect());
-    let statuses_ref = statuses.as_ref();
+    let status: Option<HashSet<&str>> =
+        input.status.as_ref().map(|list| list.iter().map(|s| s.as_str()).collect());
+    let status_ref = status.as_ref();
 
     let keyword_hits = index.query_keywords(
-        &words, &input.scope, kinds_ref, statuses_ref, limit,
+        &words, &input.scope, kinds_ref, status_ref, limit,
     );
     let tag_hits = index.query_tags(
-        &input.tags, &input.scope, kinds_ref, statuses_ref, limit,
+        &input.tags, &input.scope, kinds_ref, status_ref, limit,
     );
 
     let merged = reciprocal_rank_fusion(
@@ -149,7 +149,7 @@ mod tests {
                 text: Some("task".to_string()),
                 tags: vec![],
                 kinds: None,
-                statuses: None,
+                status: None,
                 scope: Scope::default(),
                 limit: 2,
             },
@@ -172,7 +172,7 @@ mod tests {
                 text: Some("task".to_string()),
                 tags: vec![],
                 kinds: None,
-                statuses: None,
+                status: None,
                 scope: Scope {
                     project_id: Some("other".to_string()),
                     ..Default::default()

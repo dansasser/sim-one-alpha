@@ -6,10 +6,15 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Scope {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub actor_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub conversation_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub project_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub thread_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub global: Option<bool>,
 }
 

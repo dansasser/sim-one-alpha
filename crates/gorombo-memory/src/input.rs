@@ -164,7 +164,7 @@ pub struct QueryInputWire {
     pub text: Option<String>,
     pub tags: Option<Vec<String>>,
     pub kinds: Option<Vec<String>>,
-    pub statuses: Option<Vec<String>>,
+    pub status: Option<Vec<String>>,
     pub scope: Scope,
     pub limit: Option<usize>,
 }

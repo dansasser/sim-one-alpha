@@ -8,6 +8,7 @@ pub struct Checklist {
     pub id: String,
     pub title: String,
     pub slug: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub scope: Scope,
     pub tags: Vec<String>,
@@ -16,6 +17,7 @@ pub struct Checklist {
     pub created_at: String,
     pub updated_at: String,
     pub updated_by: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub run_id: Option<String>,
 }
 
@@ -23,13 +25,17 @@ pub struct Checklist {
 #[serde(rename_all = "camelCase")]
 pub struct ChecklistItem {
     pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<String>,
     pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub status: String,
     pub ordinal: f64,
     pub tags: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub due_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub completed_at: Option<String>,
     pub children: Vec<ChecklistItem>,
 }

@@ -147,7 +147,7 @@ impl InMemoryIndex {
         words: &[String],
         scope: &Scope,
         kinds: Option<&HashSet<&str>>,
-        statuses: Option<&HashSet<&str>>,
+        status: Option<&HashSet<&str>>,
         limit: usize,
     ) -> Vec<(Record, f64)> {
         if words.is_empty() {
@@ -155,7 +155,7 @@ impl InMemoryIndex {
         }
 
         let lowered: Vec<String> = words.iter().map(|w| w.to_lowercase()).collect();
-        let candidates = self.candidate_ids(scope, kinds, statuses);
+        let candidates = self.candidate_ids(scope, kinds, status);
         let mut scored: Vec<(Record, f64)> = candidates
             .iter()
             .filter_map(|id| self.by_id.get(id))
@@ -181,7 +181,7 @@ impl InMemoryIndex {
         tags: &[String],
         scope: &Scope,
         kinds: Option<&HashSet<&str>>,
-        statuses: Option<&HashSet<&str>>,
+        status: Option<&HashSet<&str>>,
         limit: usize,
     ) -> Vec<(Record, f64)> {
         if tags.is_empty() {
@@ -189,7 +189,7 @@ impl InMemoryIndex {
         }
 
         let lowered: Vec<String> = tags.iter().map(|t| t.to_lowercase()).collect();
-        let candidates = self.candidate_ids(scope, kinds, statuses);
+        let candidates = self.candidate_ids(scope, kinds, status);
 
         let mut scored: Vec<(Record, f64)> = candidates
             .iter()
@@ -215,7 +215,7 @@ impl InMemoryIndex {
         &self,
         scope: &Scope,
         kinds: Option<&HashSet<&str>>,
-        statuses: Option<&HashSet<&str>>,
+        status: Option<&HashSet<&str>>,
     ) -> HashSet<String> {
         let mut ids: HashSet<String> = HashSet::new();
 
@@ -229,8 +229,8 @@ impl InMemoryIndex {
                 for id in set {
                     if let Some(record) = self.by_id.get(id) {
                         if matches(record.scope(), scope) {
-                            if let Some(statuses) = statuses {
-                                if !statuses.contains(record.status()) {
+                            if let Some(status) = status {
+                                if !status.contains(record.status()) {
                                     continue;
                                 }
                             }

@@ -415,7 +415,7 @@ pub fn query_records(json: &str) -> Result<String, String> {
                 text: wire.text,
                 tags: wire.tags.unwrap_or_default(),
                 kinds: wire.kinds,
-                statuses: wire.statuses,
+                status: wire.status,
                 scope: wire.scope,
                 limit: wire.limit.unwrap_or(20),
             },
