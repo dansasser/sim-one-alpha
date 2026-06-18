@@ -188,6 +188,9 @@ export type MemoryRecordKind = v.InferOutput<typeof MemoryRecordKindSchema>;
 export const CreateChecklistInputSchema = v.object({
   title: NonEmptyString,
   slug: NonEmptyString,
+  updatedBy: NonEmptyString,
+  runId: OptionalNonEmptyString,
+
   description: OptionalNonEmptyString,
   scope: MemoryRecordScopeSchema,
   tags: v.optional(v.array(NonEmptyString)),
@@ -211,6 +214,9 @@ export type CreateChecklistInput = v.InferOutput<typeof CreateChecklistInputSche
 
 export const UpdateChecklistInputSchema = v.object({
   id: RecordId,
+  updatedBy: NonEmptyString,
+  runId: OptionalNonEmptyString,
+
   title: OptionalNonEmptyString,
   slug: OptionalNonEmptyString,
   description: OptionalNonEmptyString,
@@ -222,6 +228,9 @@ export type UpdateChecklistInput = v.InferOutput<typeof UpdateChecklistInputSche
 
 export const AddChecklistItemInputSchema = v.object({
   checklistId: RecordId,
+  updatedBy: NonEmptyString,
+  runId: OptionalNonEmptyString,
+
   parentId: OptionalNonEmptyString,
   title: NonEmptyString,
   description: OptionalNonEmptyString,
@@ -235,6 +244,9 @@ export type AddChecklistItemInput = v.InferOutput<typeof AddChecklistItemInputSc
 export const UpdateChecklistItemInputSchema = v.object({
   checklistId: RecordId,
   itemId: RecordId,
+  updatedBy: NonEmptyString,
+  runId: OptionalNonEmptyString,
+
   parentId: OptionalNonEmptyString,
   title: OptionalNonEmptyString,
   description: OptionalNonEmptyString,
@@ -250,6 +262,9 @@ export type UpdateChecklistItemInput = v.InferOutput<
 
 export const CreateTodoInputSchema = v.object({
   title: NonEmptyString,
+  updatedBy: NonEmptyString,
+  runId: OptionalNonEmptyString,
+
   slug: OptionalNonEmptyString,
   description: OptionalNonEmptyString,
   scope: MemoryRecordScopeSchema,
@@ -262,6 +277,9 @@ export type CreateTodoInput = v.InferOutput<typeof CreateTodoInputSchema>;
 
 export const UpdateTodoInputSchema = v.object({
   id: RecordId,
+  updatedBy: NonEmptyString,
+  runId: OptionalNonEmptyString,
+
   title: OptionalNonEmptyString,
   slug: OptionalNonEmptyString,
   description: OptionalNonEmptyString,
@@ -276,6 +294,9 @@ export type UpdateTodoInput = v.InferOutput<typeof UpdateTodoInputSchema>;
 
 export const CreateSessionNoteInputSchema = v.object({
   title: NonEmptyString,
+  updatedBy: NonEmptyString,
+  runId: OptionalNonEmptyString,
+
   content: NonEmptyString,
   scope: MemoryRecordScopeSchema,
   tags: v.optional(v.array(NonEmptyString)),
@@ -286,6 +307,9 @@ export type CreateSessionNoteInput = v.InferOutput<typeof CreateSessionNoteInput
 
 export const UpdateSessionNoteInputSchema = v.object({
   id: RecordId,
+  updatedBy: NonEmptyString,
+  runId: OptionalNonEmptyString,
+
   title: OptionalNonEmptyString,
   content: OptionalNonEmptyString,
   scope: v.optional(MemoryRecordScopeSchema),
@@ -309,6 +333,9 @@ export type QueryInput = v.InferOutput<typeof QueryInputSchema>;
 
 export const DeleteInputSchema = v.object({
   id: RecordId,
+  updatedBy: NonEmptyString,
+  runId: OptionalNonEmptyString,
+
   kind: v.optional(MemoryRecordKindSchema),
 });
 export type DeleteInput = v.InferOutput<typeof DeleteInputSchema>;

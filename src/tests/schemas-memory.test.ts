@@ -122,17 +122,17 @@ test('MemoryRecordSnapshotSchema validates a snapshot of mixed records', () => {
 });
 
 test('create/update input schemas carry scope and reject empty scope ids', () => {
-  parseOrThrow(CreateChecklistInputSchema, { title: 't', slug: 's', scope });
-  parseOrThrow(UpdateChecklistInputSchema, { id: '01CL', title: 'new' });
-  parseOrThrow(AddChecklistItemInputSchema, { checklistId: '01CL', title: 'item' });
-  parseOrThrow(UpdateChecklistItemInputSchema, { checklistId: '01CL', itemId: '01H5' });
-  parseOrThrow(CreateTodoInputSchema, { title: 't', scope });
-  parseOrThrow(UpdateTodoInputSchema, { id: '01TD', status: 'completed' });
-  parseOrThrow(CreateSessionNoteInputSchema, { title: 't', content: 'c', scope });
-  parseOrThrow(UpdateSessionNoteInputSchema, { id: '01SN', content: 'new' });
+  parseOrThrow(CreateChecklistInputSchema, { title: 't', slug: 's', scope, updatedBy: 'orchestrator' });
+  parseOrThrow(UpdateChecklistInputSchema, { id: '01CL', title: 'new', updatedBy: 'orchestrator' });
+  parseOrThrow(AddChecklistItemInputSchema, { checklistId: '01CL', title: 'item', updatedBy: 'orchestrator' });
+  parseOrThrow(UpdateChecklistItemInputSchema, { checklistId: '01CL', itemId: '01H5', updatedBy: 'orchestrator' });
+  parseOrThrow(CreateTodoInputSchema, { title: 't', scope, updatedBy: 'orchestrator' });
+  parseOrThrow(UpdateTodoInputSchema, { id: '01TD', status: 'completed', updatedBy: 'orchestrator' });
+  parseOrThrow(CreateSessionNoteInputSchema, { title: 't', content: 'c', scope, updatedBy: 'orchestrator' });
+  parseOrThrow(UpdateSessionNoteInputSchema, { id: '01SN', content: 'new', updatedBy: 'orchestrator' });
   parseOrThrow(QueryInputSchema, { scope });
-  parseOrThrow(DeleteInputSchema, { id: '01TD' });
-  assert.throws(() => parseOrThrow(CreateChecklistInputSchema, { title: 't', slug: 's', scope: { projectId: '' } }));
+  parseOrThrow(DeleteInputSchema, { id: '01TD', updatedBy: 'orchestrator' });
+  assert.throws(() => parseOrThrow(CreateChecklistInputSchema, { title: 't', slug: 's', scope: { projectId: '' }, updatedBy: 'orchestrator' }));
 });
 
 test('QueryInputSchema rejects an out-of-range limit', () => {

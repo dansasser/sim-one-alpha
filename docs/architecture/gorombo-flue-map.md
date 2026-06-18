@@ -16,14 +16,14 @@ Every top-level `src/` directory should fit one of these categories. If a new di
 | `src/ingress/` | Application ingress modules | Cross-cutting ingress logic that turns internal worker events and storage into HTTP/connector-facing surfaces. Example: the approval ingress bridges `CodingApprovalService` to HTTP routes, CLI, and connectors. |
 | `src/channels/` | Flue-native channel handlers | First-party provider ingress (e.g. Telegram) discovered by Flue under `/channels/<name>/...`. |
 | `src/connectors/` | Connector normalization | External-source adapters that normalize input into internal message shapes. Legacy Telegram ingress moved to `src/channels/telegram.ts`. |
-| `src/memory/` | Shared memory subsystem | Memory retrieval interfaces and routing shared by agents/tools/workflows. |
+| `src/memory/` | Shared memory subsystem | Memory retrieval interfaces and routing shared by agents/tools/workflows. Hosts `rust-memory-engine.ts`, the TypeScript shim for the `gorombo-memory` WASM engine (structured memory: checklists, todos, session notes), and `checklist-memory-provider.ts`, the structured-memory RAG provider. |
 | `src/middleware/` | HTTP middleware | Reusable Hono middleware such as API-secret auth. |
 | `src/models/` | Model subsystem | Model cards, provider registration, model registry, limits, and runtime bootstrap. |
 | `src/protocols/` | Protocol storage/access subsystem | Protocol schemas and provider implementations used by protocol tools. |
 | `src/rag/` | Shared retrieval subsystem | Retrieval provider interfaces and routing. This name is pending a user-selected rename, but the concept remains top-level because it is shared architecture. |
 | `src/registries/` | Registry subsystem | Typed registries for tools, skills, agents, protocols, and future discoverable capabilities. |
 | `src/routes/` | HTTP route modules | Concrete app-owned Hono route registration modules. |
-| `src/schemas/` | Shared runtime schemas | Valibot schemas for structured-output contracts and cross-subsystem data shapes. Each domain owns a file here when its schemas are reused outside a single file. Imported by `src/types/` and worker type contracts; kept separate so type-only consumers do not pull in schema runtime code. |
+| `src/schemas/` | Shared runtime schemas | Valibot schemas for structured-output contracts and cross-subsystem data shapes. Each domain owns a file here when its schemas are reused outside a single file. `memory.ts` is the source of truth for the Rust Memory Helper record/input shapes. Imported by `src/types/` and worker type contracts; kept separate so type-only consumers do not pull in schema runtime code. |
 | `src/session/` | Session/context subsystem | Flue session persistence, compaction policy, context budget, and usage tracking. |
 | `src/services/` | Shared service modules | Non-tool persistence helpers used by both routes and tools, such as `knowledge-service.ts`. Kept separate from `src/tools/` so routes do not import tool modules and tools do not import route modules. |
 | `src/skills/` | Imported/bundled skills | Reusable workflow knowledge for the main orchestrator and shared subagents. |
@@ -35,6 +35,10 @@ Every top-level `src/` directory should fit one of these categories. If a new di
 | `src/workers/` | Worker/subagent implementations | Specialized worker profiles plus worker-local support code and worker workspaces. |
 | `src/workflows/` | Flue workflows | Finite Flue operations that can initialize agents, manage bounded loops, and return structured results. |
 | `src/workspace/` | Main agent workspace content | User-editable persona markdown for the main agent. Also the default coding-worker sandbox root; code work lives under `repos/` and non-git projects under `projects/` inside this directory. No TypeScript runtime code belongs here. |
+
+Top-level non-`src/` directories:
+
+| `crates/gorombo-memory/` | Rust engine compiled to WebAssembly via `wasm-pack`. Owns the structured-memory data model, validation (scope non-empty, slug uniqueness, checklist cycle/depth), the in-memory inverted index, and the query planner. Never exposed to the model or agents directly — only via `src/memory/rust-memory-engine.ts`. The TypeScript shim generates ids/timestamps/audit fields (Rust owns no clock/RNG in the WASM target) and passes fully-formed records to the WASM exports. The WASM module keeps a `thread_local` store hydrated by `reconcile_index` from the durable SQLite store on cold start. |
 
 Root source files:
 
@@ -194,6 +198,9 @@ src/tools/memory-tool.ts
   Orchestrator-safe memory lookup tool.
   Uses persisted session-memory FTS records and LanceDB vector embeddings extracted from Flue SessionData.
   Combines keyword and semantic search for hybrid retrieval.
+
+src/memory/rust-memory-engine.ts
+  TypeScript shim for the `gorombo-memory` WASM engine. Exposes `RustMemoryEngine` (loads the WASM, asserts version, calls exports, maps `Err(String)` prefixes to typed `MemoryEngineError`) and `InMemoryMemoryEngine` (pure-TypeScript parity reference for unit tests). The shim owns ids/timestamps/audit fields; the WASM owns validation, indexing, and query planning.
 
 src/tools/knowledge-tool.ts
   Orchestrator-safe knowledge writing tool.

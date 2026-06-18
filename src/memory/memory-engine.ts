@@ -79,5 +79,5 @@ export interface MemoryEngine {
   delete(input: DeleteInput): Promise<void>;
 
   /** Rebuild the in-memory index from a durable-store snapshot (cold start). */
-  reconcile(snapshot: MemoryRecordSnapshot): Promise<void>;
+  reconcile(snapshot: MemoryRecordSnapshot, maxChecklistDepth?: number): Promise<void>;
 }
