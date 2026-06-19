@@ -53,8 +53,18 @@ test('reciprocalRankFusion merges and de-duplicates by provider+id', () => {
   ]);
   // 'b' from different providers are distinct (different provider key).
   assert.equal(merged.length, 3);
-  // 'b' from memory and 'b' from structured-memory both present.
   assert.equal(merged.filter((m) => m.id === 'b').length, 2);
+});
+
+test('reciprocalRankFusion de-duplicates the same provider+id across lists', () => {
+  // Same provider + id appearing in two lists must merge to a single entry
+  // (boosted by RRF), not two.
+  const merged = reciprocalRankFusion([
+    [ctx('dup', 0.5, 'memory')],
+    [ctx('dup', 0.9, 'memory')],
+  ]);
+  assert.equal(merged.length, 1, 'same provider+id deduped to one entry');
+  assert.equal(merged[0].id, 'dup');
 });
 
 test('MemoryRouter swallows a failing provider and continues', async () => {

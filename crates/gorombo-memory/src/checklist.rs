@@ -114,15 +114,17 @@ impl Checklist {
                     return true;
                 }
                 // Walk up from `parent`; if we reach `item_id`, it's a cycle.
+                // Track visited ids so a pre-existing cycle in the parent chain
+                // (one that does not include `item_id`) cannot hang this walk.
+                let mut visited = std::collections::HashSet::new();
                 let mut current = Some(parent.to_string());
-                let mut depth = 0usize;
                 while let Some(ref id) = current {
                     if id == item_id {
                         return true;
                     }
-                    depth += 1;
-                    if depth > self.items.len() {
-                        return true;
+                    if !visited.insert(id.clone()) {
+                        // Cycle in existing data that does not include item_id.
+                        return false;
                     }
                     current = self.item(id).and_then(|i| i.parent_id.clone());
                 }

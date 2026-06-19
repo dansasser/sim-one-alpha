@@ -26,23 +26,30 @@ export function setupMemoryToolTest(input: {
   projectId?: string;
 } = {}): MemoryTestSetup {
   const dir = mkdtempSync(join(tmpdir(), 'gorombo-memtools-'));
-  resetStructuredMemoryRuntime();
-  void getStructuredMemoryRuntime({
-    version: 1,
-    models: { primary: 'x' },
-    memory: { backend: 'memory', sqlitePath: join(dir, 'structured.sqlite') },
-  } as never);
+  let event: NormalizedMessageEvent | undefined;
+  try {
+    resetStructuredMemoryRuntime();
+    void getStructuredMemoryRuntime({
+      version: 1,
+      models: { primary: 'x' },
+      memory: { backend: 'memory', sqlitePath: join(dir, 'structured.sqlite') },
+    } as never);
 
-  const event = normalizeWebApiMessage({
-    text: 'memory tool test',
-    actorId: input.actorId ?? 'mem-actor',
-    conversationId: input.conversationId ?? 'mem-conv',
-    ...(input.projectId ? { projectId: input.projectId } : {}),
-  });
-  rememberMemoryLookupEvent(event);
+    event = normalizeWebApiMessage({
+      text: 'memory tool test',
+      actorId: input.actorId ?? 'mem-actor',
+      conversationId: input.conversationId ?? 'mem-conv',
+      ...(input.projectId ? { projectId: input.projectId } : {}),
+    });
+    rememberMemoryLookupEvent(event);
+  } catch (error) {
+    resetStructuredMemoryRuntime();
+    rmSync(dir, { recursive: true, force: true });
+    throw error;
+  }
 
   return {
-    event,
+    event: event,
     cleanup: () => {
       resetStructuredMemoryRuntime();
       rmSync(dir, { recursive: true, force: true });

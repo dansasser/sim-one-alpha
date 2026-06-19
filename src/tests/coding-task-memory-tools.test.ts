@@ -37,10 +37,11 @@ test('memory.write is NOT a blocking-approval action (audit only)', () => {
 test('coding_task_create_checklist injects projectId from the worker context (model cannot set scope)', async () => {
   const { tools } = await setup();
   const tool = getTool(tools, 'coding_task_create_checklist');
-  // The model-facing parameters must not expose scope/projectId.
-  const params = JSON.stringify(tool.parameters ?? {});
-  assert.doesNotMatch(params, /projectId/);
-  assert.doesNotMatch(params, /scope/);
+  // Inspect the actual parameter schema keys (not stringified text, which can
+  // false-match on description wording) to prove scope/projectId are not exposed.
+  const paramKeys = new Set(Object.keys((tool.parameters as { entries?: Record<string, unknown> }).entries ?? {}));
+  assert.ok(!paramKeys.has('projectId'), 'projectId must not be a model-facing parameter');
+  assert.ok(!paramKeys.has('scope'), 'scope must not be a model-facing parameter');
 
   const result = JSON.parse(
     await tool.execute({ taskId: 'task-1', title: 'Phase 2', slug: 'phase-2' }),

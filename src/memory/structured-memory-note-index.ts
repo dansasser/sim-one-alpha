@@ -88,6 +88,25 @@ export class StructuredMemoryNoteIndex {
     }
   }
 
+  /** Prune vector rows whose note ids are not in `activeIds` (orphans after cleanup). */
+  async pruneStaleNoteVectors(activeIds: Set<string>): Promise<void> {
+    if (!this.vectorStore) {
+      return;
+    }
+    try {
+      const ids = await this.vectorStore.listIds(STRUCTURED_MEMORY_NOTES_COLLECTION);
+      const orphans = ids.filter((id) => !activeIds.has(id));
+      for (const id of orphans) {
+        await this.deleteNote(id);
+      }
+    } catch (error) {
+      console.error(
+        '[WARN] structured-memory note vector prune failed:',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
   /** Semantic search over session notes. Returns [] when unavailable or on error. */
   async search(query: NoteSearchQuery): Promise<RetrievedContext[]> {
     if (!this.available || !query.text.trim()) {
@@ -100,12 +119,9 @@ export class StructuredMemoryNoteIndex {
       const results = await this.vectorStore!.search(STRUCTURED_MEMORY_NOTES_COLLECTION, vector, {
         limit: fetchLimit,
       });
-      const filtered = results
-        .filter((result) => result.metadata?.kind === 'session_note');
-      const scopeFiltered = this.scopeFilters
-        ? filtered.filter((result) => scopeMatchesResult(result, query.scope))
-        : filtered;
-      return scopeFiltered
+      return results
+        .filter((result) => result.metadata?.kind === 'session_note')
+        .filter((result) => scopeMatchesResult(result, query.scope))
         .map((result) => toRetrievedContext(result))
         .slice(0, query.limit ?? 10);
     } catch (error) {

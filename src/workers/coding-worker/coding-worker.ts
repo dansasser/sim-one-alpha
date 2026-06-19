@@ -148,6 +148,9 @@ export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOp
       ...createCodingTaskMemoryTools({
         engineLoader: () => getStructuredMemoryEngine(),
         projectId: resolvedOptions.projectId,
+        projectSlug: resolvedOptions.projectSlug,
+        projectRelativePath: resolvedOptions.projectRelativePath,
+        repoPath: resolvedOptions.repoPath,
         workspaceRoot,
         approvalService,
       }),

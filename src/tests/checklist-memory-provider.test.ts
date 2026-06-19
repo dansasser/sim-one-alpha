@@ -72,7 +72,7 @@ test('ChecklistMemoryProvider.retrieve truncates to the token budget', async () 
   const contexts = await provider.retrieve(baseQuery({ text: 'phase' }));
   // With a 1-token budget, at most one record fits (the first non-empty wins;
   // subsequent records are skipped once the budget is exceeded).
-  assert.ok(contexts.length <= 1, 'token budget truncates the result list');
+  assert.equal(contexts.length, 1, 'token budget truncates to exactly one record (proves >=1 returned)');
 });
 
 test('ChecklistMemoryProvider.retrieve returns [] for empty query text', async () => {

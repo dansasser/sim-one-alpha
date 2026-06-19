@@ -39,10 +39,6 @@ export const createTodoTool = defineTool({
       ...(dueAt !== undefined ? { dueAt: String(dueAt) } : {}),
       ...orchestratorAudit(),
     });
-    emitMemoryMutation('create_todo', 'orchestrator', todo);
-    emitMemoryMutation('update_todo', 'orchestrator', todo);
-    emitMemoryMutation('complete_todo', 'orchestrator', todo);
-    emitMemoryMutation('cancel_todo', 'orchestrator', todo);
     return JSON.stringify({ todo });
   },
 });
@@ -62,7 +58,7 @@ export const updateTodoTool = defineTool({
     dueAt: v.optional(v.string()),
   }),
   execute: async ({ eventId, id, title, description, priority, status, tags, dueAt }) => {
-    getTrustedMemoryEvent(eventId);
+    const event = getTrustedMemoryEvent(eventId);
     const engine = await getMemoryEngine();
     const todo = await engine.updateTodo({
       id: String(id),
@@ -73,6 +69,7 @@ export const updateTodoTool = defineTool({
       ...(Array.isArray(tags) ? { tags } : {}),
       ...(dueAt !== undefined ? { dueAt: String(dueAt) } : {}),
       ...orchestratorAudit(),
+      expectedScope: deriveMemoryScope(event),
     });
     return JSON.stringify({ todo });
   },
@@ -86,12 +83,13 @@ export const completeTodoTool = defineTool({
     id: v.pipe(v.string(), v.minLength(1)),
   }),
   execute: async ({ eventId, id }) => {
-    getTrustedMemoryEvent(eventId);
+    const event = getTrustedMemoryEvent(eventId);
     const engine = await getMemoryEngine();
     const todo = await engine.updateTodo({
       id: String(id),
       status: 'completed',
       ...orchestratorAudit(),
+      expectedScope: deriveMemoryScope(event),
     });
     return JSON.stringify({ todo });
   },
@@ -105,12 +103,13 @@ export const cancelTodoTool = defineTool({
     id: v.pipe(v.string(), v.minLength(1)),
   }),
   execute: async ({ eventId, id }) => {
-    getTrustedMemoryEvent(eventId);
+    const event = getTrustedMemoryEvent(eventId);
     const engine = await getMemoryEngine();
     const todo = await engine.updateTodo({
       id: String(id),
       status: 'cancelled',
       ...orchestratorAudit(),
+      expectedScope: deriveMemoryScope(event),
     });
     return JSON.stringify({ todo });
   },

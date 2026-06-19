@@ -109,6 +109,9 @@ struct AddChecklistItemRequest {
     item: ChecklistItem,
     /// New `updated_at` for the checklist (provided by the TS shim).
     updated_at: String,
+    /// Audit attribution propagated from AddChecklistItemInput (TS shim).
+    updated_by: Option<String>,
+    run_id: Option<String>,
 }
 
 /// Module version. The TS shim asserts this matches its expected build before
@@ -124,6 +127,12 @@ pub fn create_checklist(json: &str) -> Result<String, String> {
     validate_request(&value)?;
     let checklist: Checklist = from_json(json)?;
     with_state(|state| {
+        if state.index.get(&checklist.id).is_some() {
+            return Err(MemoryHelperError::Conflict(format!(
+                "checklist id {} already exists",
+                checklist.id
+            )));
+        }
         validate_checklist_invariants(state, &checklist)?;
         state.index.insert(checklist.clone().into());
         Ok(checklist)
@@ -137,11 +146,16 @@ pub fn update_checklist(json: &str) -> Result<String, String> {
     validate_request(&value)?;
     let checklist: Checklist = from_json(json)?;
     with_state(|state| {
-        if state.index.get(&checklist.id).is_none() {
-            return Err(MemoryHelperError::NotFound(format!(
+        match state.index.get(&checklist.id) {
+            Some(Record::Checklist(_)) => {}
+            Some(_) => return Err(MemoryHelperError::Validation(format!(
+                "id {} is not a checklist",
+                checklist.id
+            ))),
+            None => return Err(MemoryHelperError::NotFound(format!(
                 "checklist {} not found",
                 checklist.id
-            )));
+            ))),
         }
         validate_checklist_invariants(state, &checklist)?;
         state.index.insert(checklist.clone().into());
@@ -173,6 +187,12 @@ pub fn add_checklist_item(json: &str) -> Result<String, String> {
             checklist.items.push(request.item.clone());
         }
         checklist.updated_at = request.updated_at;
+        if let Some(updated_by) = request.updated_by {
+            checklist.updated_by = updated_by;
+        }
+        if let Some(run_id) = request.run_id {
+            checklist.run_id = Some(run_id);
+        }
         state.index.insert(checklist.clone().into());
         Ok(checklist)
     })
@@ -191,6 +211,9 @@ pub fn create_todo(json: &str) -> Result<String, String> {
     validate_request(&value)?;
     let todo: Todo = from_json(json)?;
     with_state(|state| {
+        if state.index.get(&todo.id).is_some() {
+            return Err(MemoryHelperError::Conflict(format!("todo id {} already exists", todo.id)));
+        }
         state.index.insert(todo.clone().into());
         Ok(todo)
     })
@@ -203,8 +226,13 @@ pub fn update_todo(json: &str) -> Result<String, String> {
     validate_request(&value)?;
     let todo: Todo = from_json(json)?;
     with_state(|state| {
-        if state.index.get(&todo.id).is_none() {
-            return Err(MemoryHelperError::NotFound(format!("todo {} not found", todo.id)));
+        match state.index.get(&todo.id) {
+            Some(Record::Todo(_)) => {}
+            Some(_) => return Err(MemoryHelperError::Validation(format!(
+                "id {} is not a todo",
+                todo.id
+            ))),
+            None => return Err(MemoryHelperError::NotFound(format!("todo {} not found", todo.id))),
         }
         state.index.insert(todo.clone().into());
         Ok(todo)
@@ -218,6 +246,9 @@ pub fn create_session_note(json: &str) -> Result<String, String> {
     validate_request(&value)?;
     let note: SessionNote = from_json(json)?;
     with_state(|state| {
+        if state.index.get(&note.id).is_some() {
+            return Err(MemoryHelperError::Conflict(format!("session_note id {} already exists", note.id)));
+        }
         state.index.insert(note.clone().into());
         Ok(note)
     })
@@ -230,8 +261,13 @@ pub fn update_session_note(json: &str) -> Result<String, String> {
     validate_request(&value)?;
     let note: SessionNote = from_json(json)?;
     with_state(|state| {
-        if state.index.get(&note.id).is_none() {
-            return Err(MemoryHelperError::NotFound(format!("session_note {} not found", note.id)));
+        match state.index.get(&note.id) {
+            Some(Record::SessionNote(_)) => {}
+            Some(_) => return Err(MemoryHelperError::Validation(format!(
+                "id {} is not a session_note",
+                note.id
+            ))),
+            None => return Err(MemoryHelperError::NotFound(format!("session_note {} not found", note.id))),
         }
         state.index.insert(note.clone().into());
         Ok(note)
@@ -349,6 +385,9 @@ fn validate_item_invariants(
     checklist: &Checklist,
     item: &ChecklistItem,
 ) -> Result<(), MemoryHelperError> {
+    if item.id.is_empty() {
+        return Err(MemoryHelperError::Validation("checklist item id must be non-empty".into()));
+    }
     if item.title.is_empty() {
         return Err(MemoryHelperError::Validation("checklist item title must be non-empty".into()));
     }
@@ -479,6 +518,75 @@ mod tests {
         ];
         let err = create_checklist(&to_json(&checklist).unwrap()).unwrap_err();
         assert!(err.starts_with("validation:"), "got: {err}");
+    }
+
+    fn sample_todo(id: &str) -> Todo {
+        Todo {
+            id: id.into(),
+            kind: TodoKind::Todo,
+            title: "Run smoke".into(),
+            slug: None,
+            description: None,
+            scope: Scope { project_id: Some("proj-1".into()), ..Default::default() },
+            priority: TodoPriority::High,
+            status: TodoStatus::Pending,
+            tags: vec![],
+            due_at: None,
+            completed_at: None,
+            created_at: "2026-06-18T00:00:00Z".into(),
+            updated_at: "2026-06-18T00:00:00Z".into(),
+            updated_by: "test".into(),
+            run_id: None,
+            archived_at: None,
+        }
+    }
+
+    #[test]
+    fn create_rejects_duplicate_id() {
+        STATE.with(|c| c.replace(EngineState::new()));
+        let a = sample_checklist(&ulid(1), "dup-id");
+        create_checklist(&to_json(&a).unwrap()).unwrap();
+        let err = create_checklist(&to_json(&a).unwrap()).unwrap_err();
+        assert!(err.starts_with("conflict:"), "got: {err}");
+    }
+
+    #[test]
+    fn update_rejects_kind_mismatch() {
+        STATE.with(|c| c.replace(EngineState::new()));
+        let todo = sample_todo(&ulid(9));
+        create_todo(&to_json(&todo).unwrap()).unwrap();
+        let mut cl = sample_checklist(&ulid(9), "kindmismatch");
+        cl.id = todo.id.clone();
+        let err = update_checklist(&to_json(&cl).unwrap()).unwrap_err();
+        assert!(err.starts_with("validation:") || err.starts_with("not_found:"), "got: {err}");
+    }
+
+    #[test]
+    fn empty_scope_string_is_rejected() {
+        STATE.with(|c| c.replace(EngineState::new()));
+        let mut cl = sample_checklist(&ulid(1), "emptyscope");
+        cl.scope = Scope { actor_id: Some(String::new()), ..Default::default() };
+        let err = create_checklist(&to_json(&cl).unwrap()).unwrap_err();
+        assert!(err.starts_with("validation:"), "got: {err}");
+    }
+
+    #[test]
+    fn checklist_item_empty_id_rejected() {
+        STATE.with(|c| c.replace(EngineState::new()));
+        let mut cl = sample_checklist(&ulid(1), "emptyitemid");
+        cl.items = vec![ChecklistItem {
+            id: String::new(),
+            parent_id: None,
+            title: "no id".into(),
+            description: None,
+            status: ChecklistItemStatus::Pending,
+            ordinal: 0,
+            tags: vec![],
+            due_at: None,
+            completed_at: None,
+        }];
+        let err = create_checklist(&to_json(&cl).unwrap()).unwrap_err();
+        assert!(err.contains("item id must be non-empty"), "got: {err}");
     }
 
     #[test]

@@ -176,6 +176,20 @@ async function createStructuredMemoryRuntime(config?: GoromboConfig): Promise<St
         embeddingClient: goromboPersistenceRuntime.embeddingClient as never,
       })
     : undefined;
+  // Backfill the semantic note index with active session notes so existing
+  // notes are searchable without a re-write, and prune vectors whose notes no
+  // longer exist in the durable store.
+  if (noteIndex?.available) {
+    const activeNotes = records.filter(
+      (r): r is import('../types/memory.js').SessionNote => r.kind === 'session_note' && r.status === 'active',
+    );
+    const activeNoteIds = new Set(activeNotes.map((n) => n.id));
+    for (const note of activeNotes) {
+      await noteIndex.upsertNote(note);
+    }
+    await noteIndex.pruneStaleNoteVectors(activeNoteIds);
+  }
+
   const engine = new PersistingMemoryEngine(baseEngine, database, noteIndex);
   const provider = new ChecklistMemoryProvider({
     engineLoader: () => Promise.resolve(engine),
@@ -240,52 +254,78 @@ class PersistingMemoryEngine implements MemoryEngine {
     return this.inner.version();
   }
 
+  /** Persist a record; surface failures (logged) + roll back the in-memory write. */
+  private async persist(record: MemoryRecord): Promise<void> {
+    try {
+      this.database.writeRecord(record);
+    } catch (error) {
+      console.error(
+        '[ERROR] structured-memory persistence failed; rolling back in-memory write:',
+        error instanceof Error ? error.message : String(error),
+      );
+      await this.inner.delete({ id: record.id, updatedBy: 'system:rollback' }).catch(() => {});
+      throw error;
+    }
+  }
+
+  private async persistDelete(id: string): Promise<void> {
+    try {
+      this.database.deleteRecord(id);
+    } catch (error) {
+      console.error(
+        '[ERROR] structured-memory delete persistence failed:',
+        error instanceof Error ? error.message : String(error),
+      );
+      throw error;
+    }
+  }
+
   async createChecklist(input: CreateChecklistInput): Promise<Checklist> {
     const record = await this.inner.createChecklist(input);
-    this.database.writeRecord(record);
+    await this.persist(record);
     return record;
   }
 
   async updateChecklist(input: UpdateChecklistInput): Promise<Checklist> {
     const record = await this.inner.updateChecklist(input);
-    this.database.writeRecord(record);
+    await this.persist(record);
     return record;
   }
 
   async addChecklistItem(input: AddChecklistItemInput): Promise<Checklist> {
     const record = await this.inner.addChecklistItem(input);
-    this.database.writeRecord(record);
+    await this.persist(record);
     return record;
   }
 
   async updateChecklistItem(input: UpdateChecklistItemInput): Promise<Checklist> {
     const record = await this.inner.updateChecklistItem(input);
-    this.database.writeRecord(record);
+    await this.persist(record);
     return record;
   }
 
   async createTodo(input: CreateTodoInput): Promise<Todo> {
     const record = await this.inner.createTodo(input);
-    this.database.writeRecord(record);
+    await this.persist(record);
     return record;
   }
 
   async updateTodo(input: UpdateTodoInput): Promise<Todo> {
     const record = await this.inner.updateTodo(input);
-    this.database.writeRecord(record);
+    await this.persist(record);
     return record;
   }
 
   async createSessionNote(input: CreateSessionNoteInput): Promise<SessionNote> {
     const record = await this.inner.createSessionNote(input);
-    this.database.writeRecord(record);
+    await this.persist(record);
     await this.noteIndex?.upsertNote(record);
     return record;
   }
 
   async updateSessionNote(input: UpdateSessionNoteInput): Promise<SessionNote> {
     const record = await this.inner.updateSessionNote(input);
-    this.database.writeRecord(record);
+    await this.persist(record);
     if (record.status === 'archived') {
       await this.noteIndex?.deleteNote(record.id);
     } else {
@@ -300,7 +340,7 @@ class PersistingMemoryEngine implements MemoryEngine {
 
   async delete(input: DeleteInput): Promise<void> {
     await this.inner.delete(input);
-    this.database.deleteRecord(input.id);
+    await this.persistDelete(input.id);
     await this.noteIndex?.deleteNote(input.id);
   }
 

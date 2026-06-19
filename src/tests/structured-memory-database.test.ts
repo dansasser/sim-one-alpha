@@ -70,6 +70,7 @@ test('structured-memory database round-trips a checklist with a nested child, a 
   const path = tmpDbPath();
   const now = '2026-06-18T00:00:00.000Z';
   const db = new GoromboStructuredMemoryDatabase({ filePath: path });
+  let reopened: GoromboStructuredMemoryDatabase | undefined;
   const checklist = sampleChecklist(now);
   const todo = sampleTodo(now);
   const note = sampleNote(now);
@@ -87,13 +88,16 @@ test('structured-memory database round-trips a checklist with a nested child, a 
   assert.equal(all.length, 3);
   db.close();
 
-  // Reopen from the same file and confirm durable reads.
-  const reopened = new GoromboStructuredMemoryDatabase({ filePath: path });
-  const allAgain = reopened.loadAllRecords();
-  assert.equal(allAgain.length, 3);
-  assert.ok(allAgain.some((r) => r.id === todo.id));
-  reopened.close();
-  rmSync(join(path, '..'), { recursive: true, force: true });
+  try {
+    // Reopen from the same file and confirm durable reads.
+    reopened = new GoromboStructuredMemoryDatabase({ filePath: path });
+    const allAgain = reopened.loadAllRecords();
+    assert.equal(allAgain.length, 3);
+    assert.ok(allAgain.some((r) => r.id === todo.id));
+  } finally {
+    reopened?.close();
+    rmSync(join(path, '..'), { recursive: true, force: true });
+  }
 });
 
 test('structured-memory database delete removes a record', () => {

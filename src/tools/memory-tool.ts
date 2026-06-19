@@ -3,7 +3,7 @@ import * as v from 'valibot';
 import { goromboPersistenceRuntime } from '../db.js';
 import { SessionMemoryProvider } from '../memory/memory-provider.js';
 import { MemoryRouter } from '../memory/memory-router.js';
-import { getStructuredMemoryRuntime } from '../memory/structured-memory-runtime.js';
+import { getStructuredMemoryRuntime, resetStructuredMemoryRuntime } from '../memory/structured-memory-runtime.js';
 import type { MemoryProvider } from '../memory/memory-provider.js';
 import type { RagProviderKind, RetrievedContext } from '../types/index.js';
 import type { NormalizedMessageEvent } from '../types/index.js';
@@ -36,9 +36,13 @@ async function buildMemoryRouter(): Promise<MemoryRouter> {
     providers.set('structured-memory', runtime.provider);
   } catch (error) {
     console.error(
-      '[WARN] structured-memory provider unavailable:',
+      '[WARN] structured-memory provider unavailable; will retry on next call:',
       error instanceof Error ? error.message : String(error),
     );
+    // Invalidate the cached (failed) runtime + router so the next retrieve_memory
+    // call retries initialization instead of permanently serving a degraded router.
+    resetStructuredMemoryRuntime();
+    routerPromise = undefined;
   }
   return new MemoryRouter(providers);
 }

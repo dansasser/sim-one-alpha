@@ -226,6 +226,7 @@ export const UpdateChecklistInputSchema = v.object({
   scope: v.optional(MemoryRecordScopeSchema),
   tags: v.optional(v.array(NonEmptyString)),
   status: v.optional(ChecklistStatusSchema),
+  expectedScope: v.optional(MemoryRecordScopeSchema),
 });
 export type UpdateChecklistInput = v.InferOutput<typeof UpdateChecklistInputSchema>;
 
@@ -241,6 +242,7 @@ export const AddChecklistItemInputSchema = v.object({
   ordinal: v.optional(v.number()),
   tags: v.optional(v.array(NonEmptyString)),
   dueAt: OptionalNonEmptyString,
+  expectedScope: v.optional(MemoryRecordScopeSchema),
 });
 export type AddChecklistItemInput = v.InferOutput<typeof AddChecklistItemInputSchema>;
 
@@ -258,6 +260,7 @@ export const UpdateChecklistItemInputSchema = v.object({
   tags: v.optional(v.array(NonEmptyString)),
   dueAt: OptionalNonEmptyString,
   completedAt: OptionalNonEmptyString,
+  expectedScope: v.optional(MemoryRecordScopeSchema),
 });
 export type UpdateChecklistItemInput = v.InferOutput<
   typeof UpdateChecklistItemInputSchema
@@ -292,6 +295,7 @@ export const UpdateTodoInputSchema = v.object({
   tags: v.optional(v.array(NonEmptyString)),
   dueAt: OptionalNonEmptyString,
   completedAt: OptionalNonEmptyString,
+  expectedScope: v.optional(MemoryRecordScopeSchema),
 });
 export type UpdateTodoInput = v.InferOutput<typeof UpdateTodoInputSchema>;
 
@@ -319,6 +323,7 @@ export const UpdateSessionNoteInputSchema = v.object({
   tags: v.optional(v.array(NonEmptyString)),
   status: v.optional(SessionNoteStatusSchema),
   importance: v.optional(SessionNoteImportanceSchema),
+  expectedScope: v.optional(MemoryRecordScopeSchema),
 });
 export type UpdateSessionNoteInput = v.InferOutput<
   typeof UpdateSessionNoteInputSchema

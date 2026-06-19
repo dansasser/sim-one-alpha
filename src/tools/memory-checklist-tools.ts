@@ -50,11 +50,6 @@ export const createChecklistTool = defineTool({
       ...orchestratorAudit(),
     });
     emitMemoryMutation('create_checklist', 'orchestrator', checklist);
-    emitMemoryMutation('update_checklist', 'orchestrator', checklist);
-    emitMemoryMutation('add_checklist_item', 'orchestrator', checklist);
-    emitMemoryMutation('update_checklist_item', 'orchestrator', checklist);
-    emitMemoryMutation('move_checklist_item', 'orchestrator', checklist);
-    emitMemoryMutation('archive_checklist', 'orchestrator', checklist);
     return JSON.stringify({ checklist: renderChecklistTree(checklist) });
   },
 });
@@ -73,7 +68,7 @@ export const updateChecklistTool = defineTool({
     status: v.optional(ChecklistStatusSchema),
   }),
   execute: async ({ eventId, id, title, slug, description, tags, status }) => {
-    getTrustedMemoryEvent(eventId);
+    const event = getTrustedMemoryEvent(eventId);
     const engine = await getMemoryEngine();
     const checklist = await engine.updateChecklist({
       id: String(id),
@@ -83,7 +78,9 @@ export const updateChecklistTool = defineTool({
       ...(Array.isArray(tags) ? { tags } : {}),
       ...(status !== undefined ? { status } : {}),
       ...orchestratorAudit(),
+      expectedScope: deriveMemoryScope(event),
     });
+    emitMemoryMutation('update_checklist', 'orchestrator', checklist);
     return JSON.stringify({ checklist: renderChecklistTree(checklist) });
   },
 });
@@ -104,7 +101,7 @@ export const addChecklistItemTool = defineTool({
     dueAt: v.optional(v.string()),
   }),
   execute: async ({ eventId, checklistId, parentId, title, description, status, ordinal, tags, dueAt }) => {
-    getTrustedMemoryEvent(eventId);
+    const event = getTrustedMemoryEvent(eventId);
     const engine = await getMemoryEngine();
     const checklist = await engine.addChecklistItem({
       checklistId: String(checklistId),
@@ -116,7 +113,9 @@ export const addChecklistItemTool = defineTool({
       ...(Array.isArray(tags) ? { tags } : {}),
       ...(dueAt !== undefined ? { dueAt: String(dueAt) } : {}),
       ...orchestratorAudit(),
+      expectedScope: deriveMemoryScope(event),
     });
+    emitMemoryMutation('add_checklist_item', 'orchestrator', checklist);
     return JSON.stringify({ checklist: renderChecklistTree(checklist) });
   },
 });
@@ -138,7 +137,7 @@ export const updateChecklistItemTool = defineTool({
     completedAt: v.optional(v.string()),
   }),
   execute: async ({ eventId, checklistId, itemId, title, description, status, ordinal, tags, dueAt, completedAt }) => {
-    getTrustedMemoryEvent(eventId);
+    const event = getTrustedMemoryEvent(eventId);
     const engine = await getMemoryEngine();
     const checklist = await engine.updateChecklistItem({
       checklistId: String(checklistId),
@@ -151,7 +150,9 @@ export const updateChecklistItemTool = defineTool({
       ...(dueAt !== undefined ? { dueAt: String(dueAt) } : {}),
       ...(completedAt !== undefined ? { completedAt: String(completedAt) } : {}),
       ...orchestratorAudit(),
+      expectedScope: deriveMemoryScope(event),
     });
+    emitMemoryMutation('update_checklist_item', 'orchestrator', checklist);
     return JSON.stringify({ checklist: renderChecklistTree(checklist) });
   },
 });
@@ -164,11 +165,11 @@ export const moveChecklistItemTool = defineTool({
     eventId: v.string(),
     checklistId: v.pipe(v.string(), v.minLength(1)),
     itemId: v.pipe(v.string(), v.minLength(1)),
-    parentId: v.optional(v.pipe(v.string(), v.minLength(1))),
+    parentId: v.optional(v.string()),
     ordinal: v.optional(v.number()),
   }),
   execute: async ({ eventId, checklistId, itemId, parentId, ordinal }) => {
-    getTrustedMemoryEvent(eventId);
+    const event = getTrustedMemoryEvent(eventId);
     const engine = await getMemoryEngine();
     const checklist = await engine.updateChecklistItem({
       checklistId: String(checklistId),
@@ -176,7 +177,9 @@ export const moveChecklistItemTool = defineTool({
       ...(parentId !== undefined ? { parentId: parentId || undefined } : {}),
       ...(ordinal !== undefined ? { ordinal } : {}),
       ...orchestratorAudit(),
+      expectedScope: deriveMemoryScope(event),
     });
+    emitMemoryMutation('move_checklist_item', 'orchestrator', checklist);
     return JSON.stringify({ checklist: renderChecklistTree(checklist) });
   },
 });
@@ -189,13 +192,15 @@ export const archiveChecklistTool = defineTool({
     id: v.pipe(v.string(), v.minLength(1)),
   }),
   execute: async ({ eventId, id }) => {
-    getTrustedMemoryEvent(eventId);
+    const event = getTrustedMemoryEvent(eventId);
     const engine = await getMemoryEngine();
     const checklist = await engine.updateChecklist({
       id: String(id),
       status: 'archived',
       ...orchestratorAudit(),
+      expectedScope: deriveMemoryScope(event),
     });
+    emitMemoryMutation('archive_checklist', 'orchestrator', checklist);
     return JSON.stringify({ checklist: renderChecklistTree(checklist) });
   },
 });

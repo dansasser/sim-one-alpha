@@ -1,5 +1,4 @@
 import { createRequire } from 'node:module';
-import { pathToFileURL } from 'node:url';
 
 import type {
   AddChecklistItemInput,
@@ -37,6 +36,24 @@ export function nowIso(): string {
 }
 
 /** Scope match mirroring `crates/gorombo-memory/src/scope.rs::Scope::matches`. */
+/** Verify an existing record's scope matches the trusted expected scope (cross-scope write guard). */
+export function assertExpectedScope(
+  existing: { actorId?: string; conversationId?: string; projectId?: string; threadId?: string; global?: boolean },
+  expected: { actorId?: string; conversationId?: string; projectId?: string; threadId?: string; global?: boolean } | undefined,
+  kind: string,
+  id: string,
+): void {
+  if (!expected) {
+    return;
+  }
+  if (!scopeMatches(existing, expected)) {
+    throw new MemoryEngineErrorClass(
+      'not_found',
+      `${kind} ${id} not found in the requested scope`,
+    );
+  }
+}
+
 export function scopeMatches(
   recordScope: { actorId?: string; conversationId?: string; projectId?: string; threadId?: string; global?: boolean },
   queryScope: { actorId?: string; conversationId?: string; projectId?: string; threadId?: string; global?: boolean },
@@ -233,6 +250,7 @@ export class RustMemoryEngine implements MemoryEngine {
     if (!existing || existing.kind !== 'checklist') {
       throw new MemoryEngineErrorClass('not_found', `checklist ${input.id} not found`);
     }
+    assertExpectedScope(existing.scope, input.expectedScope, 'checklist', input.id);
     const next: Checklist = {
       ...existing,
       ...stripUndefined({
@@ -257,11 +275,14 @@ export class RustMemoryEngine implements MemoryEngine {
     if (!existing || existing.kind !== 'checklist') {
       throw new MemoryEngineErrorClass('not_found', `checklist ${input.checklistId} not found`);
     }
+    assertExpectedScope(existing.scope, input.expectedScope, 'checklist', input.checklistId);
     const item = this.composeItem(input);
     const record = (await this.call('add_checklist_item', {
       checklistId: input.checklistId,
       item,
       updatedAt: nowIso(),
+      updatedBy: input.updatedBy,
+      runId: input.runId,
     })) as Checklist;
     this.cache.set(record.id, record);
     return record;
@@ -272,6 +293,7 @@ export class RustMemoryEngine implements MemoryEngine {
     if (!existing || existing.kind !== 'checklist') {
       throw new MemoryEngineErrorClass('not_found', `checklist ${input.checklistId} not found`);
     }
+    assertExpectedScope(existing.scope, input.expectedScope, 'checklist', input.checklistId);
     const current = existing.items.find((i) => i.id === input.itemId);
     if (!current) {
       throw new MemoryEngineErrorClass('not_found', `checklist item ${input.itemId} not found`);
@@ -289,10 +311,12 @@ export class RustMemoryEngine implements MemoryEngine {
         completedAt: input.completedAt,
       }),
     };
-    const record = (await this.call('add_checklist_item', {
+    const record = (await this.call('update_checklist_item', {
       checklistId: input.checklistId,
       item: merged,
       updatedAt: nowIso(),
+      updatedBy: input.updatedBy,
+      runId: input.runId,
     })) as Checklist;
     this.cache.set(record.id, record);
     return record;
@@ -309,6 +333,7 @@ export class RustMemoryEngine implements MemoryEngine {
     if (!existing || existing.kind !== 'todo') {
       throw new MemoryEngineErrorClass('not_found', `todo ${input.id} not found`);
     }
+    assertExpectedScope(existing.scope, input.expectedScope, 'todo', input.id);
     const status = input.status ?? existing.status;
     const next: Todo = {
       ...existing,
@@ -344,6 +369,7 @@ export class RustMemoryEngine implements MemoryEngine {
     if (!existing || existing.kind !== 'session_note') {
       throw new MemoryEngineErrorClass('not_found', `session_note ${input.id} not found`);
     }
+    assertExpectedScope(existing.scope, input.expectedScope, 'session_note', input.id);
     const next: SessionNote = {
       ...existing,
       ...stripUndefined({
@@ -408,7 +434,11 @@ export class RustMemoryEngine implements MemoryEngine {
     } catch (error) {
       throw mapWasmError(error instanceof Error ? error.message : String(error));
     }
-    return Promise.resolve(raw === 'null' ? undefined : JSON.parse(raw));
+    try {
+      return Promise.resolve(raw === 'null' ? undefined : JSON.parse(raw));
+    } catch (error) {
+      throw mapWasmError(`malformed WASM output: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   private call<T>(exportName: keyof GoromboMemoryModule, payload: unknown): Promise<T> {
@@ -460,6 +490,7 @@ export class InMemoryMemoryEngine implements MemoryEngine {
     if (!existing || existing.kind !== 'checklist') {
       throw new MemoryEngineErrorClass('not_found', `checklist ${input.id} not found`);
     }
+    assertExpectedScope(existing.scope, input.expectedScope, 'checklist', input.id);
     const next: Checklist = {
       ...existing,
       ...stripUndefined({
@@ -484,6 +515,7 @@ export class InMemoryMemoryEngine implements MemoryEngine {
     if (!existing || existing.kind !== 'checklist') {
       throw new MemoryEngineErrorClass('not_found', `checklist ${input.checklistId} not found`);
     }
+    assertExpectedScope(existing.scope, input.expectedScope, 'checklist', input.checklistId);
     const item: ChecklistItem = {
       id: ulid(),
       parentId: input.parentId,
@@ -510,6 +542,7 @@ export class InMemoryMemoryEngine implements MemoryEngine {
     if (!existing || existing.kind !== 'checklist') {
       throw new MemoryEngineErrorClass('not_found', `checklist ${input.checklistId} not found`);
     }
+    assertExpectedScope(existing.scope, input.expectedScope, 'checklist', input.checklistId);
     const current = existing.items.find((i) => i.id === input.itemId);
     if (!current) {
       throw new MemoryEngineErrorClass('not_found', `checklist item ${input.itemId} not found`);
@@ -538,6 +571,9 @@ export class InMemoryMemoryEngine implements MemoryEngine {
   }
 
   async createTodo(input: CreateTodoInput): Promise<Todo> {
+    if (scopeIsEmpty(input.scope)) {
+      throw new MemoryEngineErrorClass('validation', 'todo scope must be non-empty');
+    }
     const todo = buildTodo(input);
     this.store.set(todo.id, todo);
     return todo;
@@ -548,6 +584,7 @@ export class InMemoryMemoryEngine implements MemoryEngine {
     if (!existing || existing.kind !== 'todo') {
       throw new MemoryEngineErrorClass('not_found', `todo ${input.id} not found`);
     }
+    assertExpectedScope(existing.scope, input.expectedScope, 'todo', input.id);
     const status = input.status ?? existing.status;
     const next: Todo = {
       ...existing,
@@ -572,6 +609,9 @@ export class InMemoryMemoryEngine implements MemoryEngine {
   }
 
   async createSessionNote(input: CreateSessionNoteInput): Promise<SessionNote> {
+    if (scopeIsEmpty(input.scope)) {
+      throw new MemoryEngineErrorClass('validation', 'session_note scope must be non-empty');
+    }
     const note = buildSessionNote(input);
     this.store.set(note.id, note);
     return note;
@@ -582,6 +622,7 @@ export class InMemoryMemoryEngine implements MemoryEngine {
     if (!existing || existing.kind !== 'session_note') {
       throw new MemoryEngineErrorClass('not_found', `session_note ${input.id} not found`);
     }
+    assertExpectedScope(existing.scope, input.expectedScope, 'session_note', input.id);
     const next: SessionNote = {
       ...existing,
       ...stripUndefined({

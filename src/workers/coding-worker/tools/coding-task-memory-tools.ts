@@ -18,7 +18,10 @@ export interface CodingTaskMemoryToolsOptions {
   engineLoader: () => Promise<MemoryEngine>;
   /** Project scope injected from `CodingWorkspaceTargetInput.projectId`. The model cannot set this. */
   projectId?: string;
-  /** Fallback scope key when projectId is absent (workspace-scoped worker). */
+  /** Trusted scope identifiers (fail closed if none of projectId/projectSlug/projectRelativePath/repoPath is set). */
+  projectSlug?: string;
+  projectRelativePath?: string;
+  repoPath?: string;
   workspaceRoot?: string;
   approvalService: CodingApprovalService;
   /** Optional task-run store for the plan->checklist handoff. */
@@ -40,9 +43,12 @@ const KindSchema = v.picklist(['checklist', 'todo', 'session_note']);
  * `defaultApprovalRequiredActions` and is never gated on a human decision.
  */
 export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOptions): ToolDefinition[] {
-  const scope: MemoryRecordScope = {
-    projectId: options.projectId ?? (options.workspaceRoot ? `workspace:${options.workspaceRoot}` : 'coding-worker'),
-  };
+  const scopeKey =
+    options.projectId ??
+    options.projectSlug ??
+    options.projectRelativePath ??
+    options.repoPath;
+  const scope: MemoryRecordScope = { projectId: scopeKey };
   const audit = { updatedBy: 'coding-worker' };
 
   const auditWrite = (taskId: string, toolName: string, targetId: string, runId: string) =>
@@ -144,6 +150,8 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
           runId: String(taskId),
         });
         emit('coding_task_add_checklist_item', checklist, String(taskId));
+        await auditWrite(String(taskId), 'coding_task_add_checklist_item', checklist.id, String(taskId));
+        emit('coding_task_add_checklist_item', checklist, String(taskId));
         return JSON.stringify({ checklist: renderChecklistTree(checklist) });
       },
     }),
@@ -191,7 +199,9 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
           status: 'completed',
           ...audit,
           runId: String(taskId),
+          expectedScope: scope,
         });
+        await auditWrite(String(taskId), 'coding_task_complete_todo', todo.id, String(taskId));
         emit('coding_task_complete_todo', todo, String(taskId));
         return JSON.stringify({ todo });
       },
@@ -238,7 +248,9 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
           status: 'archived',
           ...audit,
           runId: String(taskId),
+          expectedScope: scope,
         });
+        await auditWrite(String(taskId), 'coding_task_archive_note', note.id, String(taskId));
         emit('coding_task_archive_note', note, String(taskId));
         return JSON.stringify({ note });
       },
