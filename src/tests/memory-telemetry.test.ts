@@ -39,3 +39,25 @@ test('recordMemoryMutationEvent keeps the audit bounded and snapshot is a copy',
   snap.mutations.push({ type: 'memory_mutation', toolName: 'tamper' } as never);
   assert.equal(flueTelemetryStore.memoryMutationSnapshot().mutations.length, before, 'snapshot is a defensive copy');
 });
+
+test('recordMemoryMutationEvent deep-copies entries (post-record mutation cannot tamper the audit log)', () => {
+  const evt = {
+    type: 'memory_mutation' as const,
+    timestamp: '2026-06-19T00:00:00.000Z',
+    toolName: 'tamper_test',
+    agentName: 'orchestrator',
+    recordId: 'rec-1',
+    kind: 'todo' as const,
+    scopeKeys: {},
+    updatedBy: 'orch',
+  };
+  flueTelemetryStore.recordMemoryMutation(evt);
+  // Mutate the original object after recording.
+  evt.recordId = 'tampered';
+  evt.scopeKeys = { projectId: 'leaked' };
+  const snap = flueTelemetryStore.memoryMutationSnapshot();
+  const stored = snap.mutations.find((m) => m.toolName === 'tamper_test');
+  assert.ok(stored);
+  assert.equal(stored?.recordId, 'rec-1', 'stored entry is a deep copy, not a reference');
+  assert.deepEqual(stored?.scopeKeys, {});
+});

@@ -59,12 +59,11 @@ export class ChecklistMemoryProvider implements MemoryProvider {
       ...(query.projectId ? { projectId: query.projectId } : {}),
       ...(query.threadId ? { threadId: query.threadId } : {}),
     };
-    const rawLimit = query.limit ?? this.defaultLimit;
-    const normalizedLimit = Math.max(1, Math.floor(rawLimit));
+    const limit = normalizeLimit(query.limit, this.defaultLimit);
     const input: QueryInput = {
       scope,
       text: query.text,
-      limit: normalizedLimit,
+      limit,
     };
     let records: MemoryRecord[];
     try {
@@ -87,7 +86,7 @@ export class ChecklistMemoryProvider implements MemoryProvider {
         vectorContexts = await this.noteIndex.search({
           text: query.text,
           scope,
-          limit: query.limit ?? this.defaultLimit,
+          limit,
         });
       } catch (error) {
         console.error(
@@ -134,6 +133,14 @@ function renderContent(record: MemoryRecord): string {
     return `Todo [${record.status}|${record.priority}]: ${record.title}${record.description ? `\n${record.description}` : ''}`;
   }
   return `Note (${record.importance}): ${record.title}\n${record.content}`;
+}
+
+/** Normalize a caller-supplied limit: reject NaN/Infinity/non-positive, clamp to the engine hard cap. */
+function normalizeLimit(value: number | undefined, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return fallback;
+  }
+  return Math.min(100, Math.max(1, Math.floor(value)));
 }
 
 function truncateToTokenBudget(contexts: RetrievedContext[], maxTokens: number): RetrievedContext[] {

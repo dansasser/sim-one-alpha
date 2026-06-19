@@ -104,7 +104,9 @@ export class FlueTelemetryStore {
    */
   recordMemoryMutation(event: MemoryMutationEvent): void {
     this.withMutationLock(() => {
-      this.memoryMutations.push(event);
+      // Deep-copy on record so callers cannot mutate the audit log entry
+      // after it is recorded.
+      this.memoryMutations.push(structuredClone(event));
       trimArray(this.memoryMutations, this.options.maxMemoryMutations ?? 500);
     });
   }
@@ -113,7 +115,8 @@ export class FlueTelemetryStore {
    * Returns the bounded memory-mutation audit log (no record content).
    */
   memoryMutationSnapshot(): MemoryMutationSnapshot {
-    return { mutations: [...this.memoryMutations] };
+    // Deep-clone each entry so snapshot consumers cannot modify the originals.
+    return { mutations: this.memoryMutations.map((event) => structuredClone(event)) };
   }
 
   /**

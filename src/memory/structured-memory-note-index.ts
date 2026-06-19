@@ -8,8 +8,6 @@ export const STRUCTURED_MEMORY_NOTES_COLLECTION = 'structured_memory_notes';
 export interface StructuredMemoryNoteIndexOptions {
   vectorStore?: VectorStore;
   embeddingClient?: EmbeddingClient;
-  /** Filter vector results by projectId when the query scope carries one. */
-  scopeFilters?: boolean;
 }
 
 export interface NoteSearchQuery {
@@ -28,12 +26,10 @@ export interface NoteSearchQuery {
 export class StructuredMemoryNoteIndex {
   private readonly vectorStore?: VectorStore;
   private readonly embeddingClient?: EmbeddingClient;
-  private readonly scopeFilters: boolean;
 
   constructor(options: StructuredMemoryNoteIndexOptions = {}) {
     this.vectorStore = options.vectorStore;
     this.embeddingClient = options.embeddingClient;
-    this.scopeFilters = options.scopeFilters ?? true;
   }
 
   get available(): boolean {
@@ -123,9 +119,9 @@ export class StructuredMemoryNoteIndex {
 }
 
 /** Post-filter vector results by the FULL scope in TS. LanceDB nested-metadata
- * WHERE filters are unreliable, so isolation is enforced here. The query scope
- * must match every key the record carries - a note scoped to a different
- * actor/conversation/project never leaks, even without a projectId on the query. */
+ * WHERE filters are unreliable, so scope isolation is enforced here
+ * unconditionally. The query scope must match every key the record carries -
+ * a note scoped to a different actor/conversation/project never leaks. */
 function scopeMatchesResult(result: VectorSearchResult, scope: MemoryRecordScope): boolean {
   const meta = result.metadata ?? {};
   const metaProjectId = typeof meta.projectId === 'string' ? meta.projectId : undefined;
