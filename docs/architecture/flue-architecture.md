@@ -140,7 +140,7 @@ Model cards do not contain secret values.
 
 Provider runtime resolves the card-declared environment variable names against the runtime environment and registers Flue providers.
 
-## GOROMBO Boundary
+## SIM-ONE Alpha Boundary
 
 The orchestrator routes and delegates. The researcher owns web research.
 

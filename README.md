@@ -1,10 +1,10 @@
-# astro-flue-agent (GOROMBO Agent)
+# astro-flue-agent (SIM-ONE Alpha)
 
-GOROMBO Agent is a Flue-based agent project for building practical AI Employees, business automation workflows, research assistants, coding workers, connected chat experiences, and operational AI systems.
+SIM-ONE Alpha is a Flue-based agent project for building practical AI Employees, business automation workflows, research assistants, coding workers, connected chat experiences, and operational AI systems.
 
 It is built on [Flue](https://flueframework.com), a TypeScript agent harness framework from the Astro ecosystem.
 
-GOROMBO Agent adds its own protocol system, memory layer, RAG architecture, registry-driven tools, registry-driven skills, registry-driven workers, Telegram/API connectors, and business workflow patterns on top of Flue.
+SIM-ONE Alpha adds its own protocol system, memory layer, RAG architecture, registry-driven tools, registry-driven skills, registry-driven workers, Telegram/API connectors, and business workflow patterns on top of Flue.
 
 The goal is simple:
 
@@ -28,7 +28,7 @@ The goal is simple:
 
 ## Why Flue
 
-GOROMBO Agent is built with Flue because Flue provides the programmable agent harness layer needed for real agent workflows.
+SIM-ONE Alpha is built with Flue because Flue provides the programmable agent harness layer needed for real agent workflows.
 
 Flue gives the project a foundation for:
 
@@ -41,7 +41,7 @@ Flue gives the project a foundation for:
 - sandboxed execution
 - deployable runtimes
 
-GOROMBO Agent builds on that foundation with:
+SIM-ONE Alpha builds on that foundation with:
 
 - protocols
 - memory
@@ -53,7 +53,16 @@ GOROMBO Agent builds on that foundation with:
 
 Flue provides the harness.
 
-GOROMBO Agent defines the operating system built on top of it.
+SIM-ONE Alpha defines the operating system built on top of it.
+
+## About Gorombo
+
+SIM-ONE Alpha is built by [Gorombo](https://gorombo.com), a governance-first AI software company since 1999.
+
+Gorombo's mission: better AI comes from better governance, not bigger models.
+
+- Website: https://gorombo.com
+- Founder/CEO: Daniel T Sasser II
 
 ## How It Works
 
@@ -616,9 +625,9 @@ Implemented pieces:
 - `chatSessionBudgetStore` remains as an in-process fallback when stored session data is not available.
 - The `/compact` slash command opens the durable direct-agent session and calls Flue `session.compact()` without sending the command text to the model.
 
-Flue's native automatic compaction remains enabled on the orchestrator agent with card-derived `reserveTokens` and `keepRecentTokens`. The GOROMBO layer adds explicit command compaction, persisted context lookup, and budget telemetry for future RAG allocation.
+Flue's native automatic compaction remains enabled on the orchestrator agent with card-derived `reserveTokens` and `keepRecentTokens`. The SIM-ONE Alpha layer adds explicit command compaction, persisted context lookup, and budget telemetry for future RAG allocation.
 
-Session memory is now indexed from stored Flue `SessionData` and retrieved through the memory tool. The future full GOROMBO memory stack is separate from this session-memory layer. Web search/document chunks should be injected only after the budget layer reports remaining context capacity.
+Session memory is now indexed from stored Flue `SessionData` and retrieved through the memory tool. The future full SIM-ONE Alpha memory stack is separate from this session-memory layer. Web search/document chunks should be injected only after the budget layer reports remaining context capacity.
 
 Runtime SQLite defaults:
 
@@ -811,46 +820,6 @@ If the project defines other scripts in `package.json`, use those exact scripts.
 
 Do not claim tests passed unless they were actually run.
 
-## Roadmap
-
-Near-term:
-
-- base Flue agent
-- Telegram connector
-- Secure Web API / Gateway
-- normalized message event flow
-- SQLite protocol storage
-- protocol loading tool
-- memory retrieval interface
-- initial RAG architecture
-- Ollama web search provider
-- document-index placeholder
-- registry interfaces
-- worker interfaces
-
-Mid-term:
-
-- database-backed memory
-- richer document indexing
-- runtime tool gateway
-- user-defined tools
-- user-defined skills
-- user-defined workers
-- approval gates
-- observability
-- persistent sessions
-
-Long-term:
-
-- production AI Employee deployments
-- client-specific memory
-- client-specific protocols
-- coding-worker loop
-- sandboxed code execution
-- testing and review workers
-- business automation packages
-- marketplace-style capability registry
-
 ## Public Development Status
 
 This repository is public during early development to help the community learn from and contribute to the project.
@@ -899,15 +868,15 @@ TBD: license selection.
 
 ## Attribution
 
-GOROMBO Agent is built with [Flue](https://flueframework.com), the TypeScript agent harness framework from the Astro ecosystem.
+SIM-ONE Alpha is built by [Gorombo](https://gorombo.com) with [Flue](https://flueframework.com), the TypeScript agent harness framework from the Astro ecosystem.
 
 Flue provides the underlying agent harness.
 
-GOROMBO Agent adds protocol, memory, registry, connector, retrieval, worker, and business workflow layers on top of Flue.
+SIM-ONE Alpha adds protocol, memory, registry, connector, retrieval, worker, and business workflow layers on top of Flue.
 
 ## Guiding Principle
 
-GOROMBO Agent is not built around one giant prompt.
+SIM-ONE Alpha is not built around one giant prompt.
 
 It is built around an agent that can coordinate rules, memory, retrieval, tools, skills, workers, registries, and connectors.
 

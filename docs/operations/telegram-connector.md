@@ -1,6 +1,6 @@
 # Telegram Connector — Operations Guide
 
-This guide covers running and administering the native Telegram ingress/egress connector in GOROMBO Agent.
+This guide covers running and administering the native Telegram ingress/egress connector in SIM-ONE Alpha.
 
 ## What it does
 
@@ -113,7 +113,7 @@ Photos, documents, voice, audio, video, video notes, and stickers are downloaded
 
 ## Deployment notes
 
-- **One poller per token.** Running two GOROMBO Agent processes with the same token will cause `409 Conflict` from Telegram.
+- **One poller per token.** Running two SIM-ONE Alpha processes with the same token will cause `409 Conflict` from Telegram.
 - **IPv4-first DNS.** Telegram's API can silently hang on IPv6 in some environments. Start the process with:
 
   ```bash

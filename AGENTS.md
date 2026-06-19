@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This repository contains the GOROMBO multi-purpose orchestrating agent.
+This repository contains the SIM-ONE Alpha multi-purpose orchestrating agent.
 Never edit the main branch.
 Always create a new branch for your work, and open a pull request when ready.
 
@@ -16,14 +16,14 @@ The orchestrator is a coordinator, not a hardcoded knowledge base.
 
 ```text
 Gorombo       = the company
-GOROMBO Agent = the product / AI employee system built in this repository
+SIM-ONE Alpha = the product / AI employee system built in this repository
 Flue          = the TypeScript agent harness framework from the Astro team
 Ollie         = the main agent persona (defined in src/workspace contents, not paths)
 ```
 
-Keep company, product, framework, agent, worker, workspace, and repository names distinct. Do not use "Gorombo" as the default product name. This repository is `astro-flue-agent`; the runtime product is GOROMBO Agent.
+Keep company, product, framework, agent, worker, workspace, and repository names distinct. Do not use "Gorombo" as the default product name. This repository is `astro-flue-agent`; the runtime product is SIM-ONE Alpha.
 
-Workers are subsystems of GOROMBO Agent, not standalone products or public endpoints.
+Workers are subsystems of SIM-ONE Alpha, not standalone products or public endpoints.
 
 
 ## Flue Architecture Contract
@@ -225,7 +225,7 @@ Skills do not store mandatory runtime rules.
 
 ## Worker / Subagent System
 
-Workers are specialized executors. They are subsystems of GOROMBO Agent, not standalone products or public endpoints.
+Workers are specialized executors. They are subsystems of SIM-ONE Alpha, not standalone products or public endpoints.
 
 Workers live under `src/workers/<name>/`. They are built like normal Flue agents but are organized away from the main agent entrypoint.
 

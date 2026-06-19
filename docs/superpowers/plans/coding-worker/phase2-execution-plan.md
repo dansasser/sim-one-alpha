@@ -13,7 +13,7 @@ This plan consolidates the [Phase 2 Handoff](./phase2-handoff.md), the [Gap Anal
 ## Guiding Principles
 
 1. **Flue first — non-negotiable.** Use Flue-native APIs, tool-calling loops, context budgets, subagent delegation, structured outputs, and sandbox execution before inventing custom orchestration. If a need seems unmet, check the Flue docs, source, and existing project patterns first. Only introduce custom TypeScript machinery after confirming Flue does not provide the primitive.
-2. **Gorombo architecture on top.** Apply Gorombo agent relationships, approval gates, and progress-event conventions on top of Flue primitives.
+2. **SIM-ONE Alpha architecture on top.** Apply SIM-ONE Alpha agent relationships, approval gates, and progress-event conventions on top of Flue primitives.
 3. **Fail-closed and approval-gated.** Every mutating side effect (file write, git commit, push, PR create/update) requires an explicit approval record.
 4. **Main orchestrator does not see internal subagents.** Only the `coding-worker` lead is exposed. `coding-worker-triage`, `coding-worker-implementer`, `coding-worker-test-debug`, `coding-worker-code-review`, and `coding-worker-github` are internal tools.
 5. **Orchestrator integration is out of scope for this phase.** We will not teach `src/agents/orchestrator.ts` to route to the coding worker yet. That follows the protocol layer.

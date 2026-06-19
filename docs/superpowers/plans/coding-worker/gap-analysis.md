@@ -17,7 +17,7 @@ Any agent picking up this work from a clean session should read this file first,
 - All mutating side effects (commit, push, repo mutations, GitHub writes) must go through the approval service and be fail-closed.
 - Execution uses Flue's Node local sandbox, scoped under `workspaceRoot` (`projects/<slug>` or `repos/<slug>`). `process.cwd()` is only a local-dev fallback.
 - The researcher subagent owns web research; the coding worker does not do web search.
-- `Gorombo` is the company, not the default product name. Keep labels distinct.
+- `Gorombo` is the company, not the default product name. Keep labels distinct. SIM-ONE Alpha is the product.
 
 ## Current state
 
