@@ -1062,10 +1062,10 @@ export class GoromboSessionDatabase {
         title: chunk.title,
         content: chunk.content,
         vector: vectors[index] ?? [],
-        actor_id: chunk.actorId,
-        conversation_id: chunk.conversationId,
+        actor_id: chunk.actorId ?? '',
+        conversation_id: chunk.conversationId ?? '',
         session_name: sessionName,
-        thread_id: chunk.threadId,
+        thread_id: chunk.threadId ?? '',
         metadata: {
           ...chunk.metadata,
           storageKey,

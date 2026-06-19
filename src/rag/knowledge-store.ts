@@ -83,8 +83,8 @@ export class LanceDbKnowledgeStore implements KnowledgeStore {
       title: record.title,
       content: record.content,
       vector,
-      actor_id: record.actorId,
-      conversation_id: record.conversationId,
+      actor_id: record.actorId ?? '',
+      conversation_id: record.conversationId ?? '',
       metadata,
       updated_at: record.updatedAt,
     };

@@ -49,9 +49,9 @@ export class StructuredMemoryNoteIndex {
           title: note.title,
           content: note.content,
           vector,
-          actor_id: note.scope.actorId,
-          conversation_id: note.scope.conversationId,
-          thread_id: note.scope.threadId,
+          actor_id: note.scope.actorId ?? '',
+          conversation_id: note.scope.conversationId ?? '',
+          thread_id: note.scope.threadId ?? '',
           metadata: {
             kind: 'session_note',
             recordId: note.id,
