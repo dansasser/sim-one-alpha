@@ -1,4 +1,4 @@
-# astro-flue-agent (SIM-ONE Alpha)
+# flue-agent (SIM-ONE Alpha)
 
 SIM-ONE Alpha is a Flue-based agent project for building practical AI Employees, business automation workflows, research assistants, coding workers, connected chat experiences, and operational AI systems.
 
