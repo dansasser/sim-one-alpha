@@ -36,8 +36,6 @@ export const storeSessionNoteTool = defineTool({
       ...orchestratorAudit(),
     });
     emitMemoryMutation('store_session_note', 'orchestrator', note);
-    emitMemoryMutation('update_session_note', 'orchestrator', note);
-    emitMemoryMutation('archive_session_note', 'orchestrator', note);
     return JSON.stringify({ note });
   },
 });
@@ -56,10 +54,11 @@ export const updateSessionNoteTool = defineTool({
     importance: v.optional(NoteImportanceSchema),
   }),
   execute: async ({ eventId, id, title, content, tags, status, importance }) => {
-    getTrustedMemoryEvent(eventId);
+    const event = getTrustedMemoryEvent(eventId);
     const engine = await getMemoryEngine();
     const note = await engine.updateSessionNote({
       id: String(id),
+      scope: deriveMemoryScope(event),
       ...(title !== undefined ? { title: String(title) } : {}),
       ...(content !== undefined ? { content: String(content) } : {}),
       ...(Array.isArray(tags) ? { tags } : {}),
@@ -79,10 +78,11 @@ export const archiveSessionNoteTool = defineTool({
     id: v.pipe(v.string(), v.minLength(1)),
   }),
   execute: async ({ eventId, id }) => {
-    getTrustedMemoryEvent(eventId);
+    const event = getTrustedMemoryEvent(eventId);
     const engine = await getMemoryEngine();
     const note = await engine.updateSessionNote({
       id: String(id),
+      scope: deriveMemoryScope(event),
       status: 'archived',
       ...orchestratorAudit(),
     });

@@ -204,6 +204,12 @@ export async function recordCodingAuditEvent(
     metadata?: CodingApprovalMetadata;
   },
 ): Promise<void> {
+  const { requiresCodingApproval } = await import('./approval-policy.js');
+  if (requiresCodingApproval(input.actionType)) {
+    throw new Error(
+      `recordCodingAuditEvent cannot be used for approval-required action type: ${input.actionType}`,
+    );
+  }
   const request = await service.createRequest({
     taskId: input.taskId,
     actionType: input.actionType,
@@ -221,7 +227,11 @@ export async function recordCodingAuditEvent(
       principal: { id: 'system:audit', roles: ['operator'] },
       reason: 'audit-only',
     });
-  } catch {
-    // Already decided (retry) or expired - the audit record already exists.
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('not pending') || message.includes('expired')) {
+      return;
+    }
+    throw error;
   }
 }

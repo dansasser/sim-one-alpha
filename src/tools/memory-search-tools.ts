@@ -20,7 +20,7 @@ export const searchMemoryRecordsTool = defineTool({
     text: v.optional(v.string()),
     tags: TagsSchema,
     kinds: v.optional(v.array(KindSchema)),
-    limit: v.optional(v.number()),
+    limit: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
     includeArchived: v.optional(v.boolean()),
   }),
   execute: async ({ eventId, text, tags, kinds, limit, includeArchived }) => {

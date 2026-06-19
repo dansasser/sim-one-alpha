@@ -26,7 +26,7 @@ Do not invent tools. If a needed capability is not attached, report the limitati
 
 ## Memory Helper (structured memory, project-scoped)
 
-The coding-worker lead can durably maintain project-scoped structured memory. `projectId` is injected from the worker context; the model cannot supply scope. Every mutating write is recorded as an audit-only `memory.write` (or `memory.handoff`) event on the approval service — it is never gated on a human decision and the model cannot approve its own requests.
+The coding-worker lead can durably maintain project-scoped structured memory. `projectId` is injected from the worker context; the model cannot supply scope. Memory writes are tracked through the worker audit trail; explicit approval decisions are recorded for handoff operations.
 
 - `coding_task_create_checklist`, `coding_task_add_checklist_item`
 - `coding_task_add_todo`, `coding_task_complete_todo`
