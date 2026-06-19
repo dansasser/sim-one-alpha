@@ -44,8 +44,10 @@ impl MemoryHelperError {
 const CROCKFORD: &[u8] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
 fn is_crockford_char(c: char) -> bool {
+    if !c.is_ascii() {
+        return false;
+    }
     let upper = c.to_ascii_uppercase();
-    // Reject O/I/L per Crockford, but tolerate lowercase input.
     if matches!(upper, 'O' | 'I' | 'L') {
         return false;
     }
@@ -65,6 +67,12 @@ pub fn parse_ulid(s: &str) -> Result<String, MemoryHelperError> {
     if !s.chars().all(is_crockford_char) {
         return Err(MemoryHelperError::Validation(format!(
             "invalid ULID encoding: {s}"
+        )));
+    }
+    let first = s.chars().next().unwrap().to_ascii_uppercase();
+    if !matches!(first, '0'..='7') {
+        return Err(MemoryHelperError::Validation(format!(
+            "invalid ULID timestamp overflow: first char must be 0-7, got {first}"
         )));
     }
     Ok(s.to_string())

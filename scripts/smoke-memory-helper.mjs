@@ -65,7 +65,7 @@ async function realModelSmoke() {
   }
   const port = Number(process.env.GOROMBO_SMOKE_PORT || 3997);
   const apiSecret = process.env.GOROMBO_SMOKE_API_SECRET || 'smoke-secret';
-  const sqlitePath = process.env.GOROMBO_MEMORY_SQLITE_PATH || '/tmp/real-model-smoke.sqlite';
+  const sqlitePath = process.env.GOROMBO_MEMORY_SQLITE_PATH || join(tmpdir(), `real-model-smoke-${Date.now()}.sqlite`);
   const actorId = 'rm-actor';
   const conversationId = 'rm-conv';
 

@@ -115,8 +115,13 @@ impl Checklist {
                 }
                 // Walk up from `parent`; if we reach `item_id`, it's a cycle.
                 let mut current = Some(parent.to_string());
+                let mut depth = 0usize;
                 while let Some(ref id) = current {
                     if id == item_id {
+                        return true;
+                    }
+                    depth += 1;
+                    if depth > self.items.len() {
                         return true;
                     }
                     current = self.item(id).and_then(|i| i.parent_id.clone());

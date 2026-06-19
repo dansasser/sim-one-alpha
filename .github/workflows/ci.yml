@@ -33,7 +33,7 @@ jobs:
       - name: Install wasm-pack
         run: |
           cargo install wasm-pack --version 0.13.1 --locked || \
-          curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh -s -- -f
+          curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh -s -- -f --version 0.13.1
 
       - name: Build WASM artifact
         run: pnpm run wasm:build
@@ -51,6 +51,11 @@ jobs:
 
       - name: Build
         run: pnpm run build
+
+      - name: Integration tests
+        run: pnpm run test:http
+        env:
+          GOROMBO_TEST_MODE: '1'
 
       - name: Verify WASM artifact in dist
         run: test -f dist/memory/gorombo_memory_bg.wasm

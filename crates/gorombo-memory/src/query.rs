@@ -72,12 +72,11 @@ pub fn run_query(index: &InMemoryIndex, input: &QueryInput) -> QueryResult {
             })
             .filter(|(_, score)| *score > 0.0)
             .collect();
-        // Rank: (1) exact title/slug, (2) tag overlap, (3) keyword freq,
-        // (4) recency tiebreak by updated_at descending.
         scored.sort_by(|a, b| {
             b.1.partial_cmp(&a.1)
                 .unwrap_or(std::cmp::Ordering::Equal)
                 .then_with(|| b.0.updated_at().cmp(a.0.updated_at()))
+                .then_with(|| a.0.id().cmp(b.0.id()))
         });
         scored.truncate(limit);
         QueryResult {
@@ -85,8 +84,11 @@ pub fn run_query(index: &InMemoryIndex, input: &QueryInput) -> QueryResult {
             total_scanned,
         }
     } else {
-        // No text/tags: sort by recency descending.
-        candidates.sort_by(|a, b| b.updated_at().cmp(a.updated_at()));
+        candidates.sort_by(|a, b| {
+            b.updated_at()
+                .cmp(a.updated_at())
+                .then_with(|| a.id().cmp(b.id()))
+        });
         candidates.truncate(limit);
         QueryResult {
             records: candidates,

@@ -104,9 +104,12 @@ export class StructuredMemoryNoteIndex {
       const results = await this.vectorStore!.search(STRUCTURED_MEMORY_NOTES_COLLECTION, vector, {
         limit: fetchLimit,
       });
-      return results
-        .filter((result) => result.metadata?.kind === 'session_note')
-        .filter((result) => scopeMatchesResult(result, query.scope))
+      const filtered = results
+        .filter((result) => result.metadata?.kind === 'session_note');
+      const scopeFiltered = this.scopeFilters
+        ? filtered.filter((result) => scopeMatchesResult(result, query.scope))
+        : filtered;
+      return scopeFiltered
         .map((result) => toRetrievedContext(result))
         .slice(0, query.limit ?? 10);
     } catch (error) {

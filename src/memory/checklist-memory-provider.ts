@@ -59,10 +59,12 @@ export class ChecklistMemoryProvider implements MemoryProvider {
       ...(query.projectId ? { projectId: query.projectId } : {}),
       ...(query.threadId ? { threadId: query.threadId } : {}),
     };
+    const rawLimit = query.limit ?? this.defaultLimit;
+    const normalizedLimit = Math.max(1, Math.floor(rawLimit));
     const input: QueryInput = {
       scope,
       text: query.text,
-      limit: query.limit ?? this.defaultLimit,
+      limit: normalizedLimit,
     };
     let records: MemoryRecord[];
     try {

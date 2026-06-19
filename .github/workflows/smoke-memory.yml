@@ -23,7 +23,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - run: cargo install wasm-pack --version 0.13.1 --locked || curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh -s -- -f
+      - run: cargo install wasm-pack --version 0.13.1 --locked || curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh -s -- -f --version 0.13.1
       - run: pnpm run wasm:build
       - run: pnpm run build
       - run: pnpm run smoke:memory
@@ -50,21 +50,24 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - run: cargo install wasm-pack --version 0.13.1 --locked || curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh -s -- -f
+      - run: cargo install wasm-pack --version 0.13.1 --locked || curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh -s -- -f --version 0.13.1
       - run: pnpm run wasm:build
       - run: pnpm run build
       - name: Write .env from secrets
+        id: setup_env
         run: |
           if [ -z "${{ secrets.OLLAMA_API_KEY }}" ]; then
             echo "OLLAMA_API_KEY secret not set; skipping real-model smoke."
+            echo "has_secrets=false" >> $GITHUB_OUTPUT
             exit 0
           fi
           {
             echo "OLLAMA_API_KEY=${{ secrets.OLLAMA_API_KEY }}"
             echo "API_SECRET=${{ secrets.GOROMBO_SMOKE_API_SECRET || 'smoke-secret' }}"
           } > .env
+          echo "has_secrets=true" >> $GITHUB_OUTPUT
       - name: Run real-model smoke
-        if: ${{ secrets.OLLAMA_API_KEY != '' }}
+        if: steps.setup_env.outputs.has_secrets == 'true'
         run: |
           if [ ! -s .env ]; then exit 0; fi
           GOROMBO_SMOKE_REAL_MODEL=1 GOROMBO_MEMORY_SQLITE_PATH=/tmp/real-model-smoke.sqlite pnpm run smoke:memory

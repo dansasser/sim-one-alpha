@@ -51,7 +51,7 @@ export function reciprocalRankFusion(lists: RetrievedContext[][]): RetrievedCont
   for (const list of lists) {
     for (let index = 0; index < list.length; index += 1) {
       const context = list[index];
-      const key = `${context.provider}\0${context.id}\0${context.title}\0${context.content}`;
+      const key = `${context.provider}\0${context.id}`;
       const rrfScore = 1 / (RRF_K + index + 1);
       const existing = scores.get(key);
       if (existing) {

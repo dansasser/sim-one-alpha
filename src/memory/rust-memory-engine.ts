@@ -205,7 +205,7 @@ export class RustMemoryEngine implements MemoryEngine {
   }
 
   static async load(options: RustMemoryEngineLoadOptions): Promise<RustMemoryEngine> {
-    const require = createRequire(pathToFileURL(import.meta.url));
+    const require = createRequire(import.meta.url);
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const module = require(options.wasmModulePath) as GoromboMemoryModule;
     const version = module.memory_helper_version();

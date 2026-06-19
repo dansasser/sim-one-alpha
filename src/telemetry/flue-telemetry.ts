@@ -163,6 +163,7 @@ export class FlueTelemetryStore {
     this.withMutationLock(() => {
       this.eventsByRunId.clear();
       this.unscopedEvents.length = 0;
+      this.memoryMutations.length = 0;
     });
   }
 

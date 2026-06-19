@@ -23,7 +23,7 @@ for (const target of targets) {
   for (const file of files) {
     const src = join(sourceDir, file);
     if (!existsSync(src)) {
-      continue;
+      throw new Error(`Required WASM artifact missing: ${src}. Build incomplete.`);
     }
     const dest = join(target, file);
     mkdirSync(dirname(dest), { recursive: true });

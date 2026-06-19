@@ -40,11 +40,32 @@ pub fn validate_request(value: &Value) -> Result<(), MemoryHelperError> {
         }
     }
 
-    // Validate scope presence for create-class requests.
     if let Some(scope) = obj.get("scope").and_then(|v| v.as_object()) {
+        for key in ["actorId", "conversationId", "projectId", "threadId"] {
+            if let Some(val) = scope.get(key) {
+                if val.is_null() {
+                    return Err(MemoryHelperError::Validation(format!(
+                        "scope.{key} must not be null"
+                    )));
+                }
+                if let Some(s) = val.as_str() {
+                    if s.is_empty() {
+                        return Err(MemoryHelperError::Validation(format!(
+                            "scope.{key} must be non-empty"
+                        )));
+                    }
+                }
+            }
+        }
         let has_scope = ["actorId", "conversationId", "projectId", "threadId"]
             .iter()
-            .any(|k| scope.get(*k).is_some())
+            .any(|k| {
+                scope
+                    .get(*k)
+                    .and_then(|v| v.as_str())
+                    .map(|s| !s.is_empty())
+                    .unwrap_or(false)
+            })
             || scope
                 .get("global")
                 .and_then(|v| v.as_bool())

@@ -8,6 +8,9 @@ import { randomBytes } from 'node:crypto';
 
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
+let lastTimestamp = 0;
+let counter = 0;
+
 function encodeTime(ms: number, length: number): string {
   let value = ms;
   let out = '';
@@ -28,7 +31,24 @@ function encodeRandom(bytes: number): string {
   return out;
 }
 
+function encodeCounter(value: number): string {
+  let out = '';
+  for (let i = 0; i < 16; i += 1) {
+    out += CROCKFORD[value & 31];
+    value = Math.floor(value / 32);
+  }
+  return out;
+}
+
 /** Generate a new ULID string. */
 export function ulid(): string {
-  return encodeTime(Date.now(), 10) + encodeRandom(16);
+  const now = Date.now();
+  if (now === lastTimestamp) {
+    counter += 1;
+  } else {
+    lastTimestamp = now;
+    counter = 0;
+  }
+  const randomPart = counter === 0 ? encodeRandom(16) : encodeCounter(counter);
+  return encodeTime(now, 10) + randomPart;
 }

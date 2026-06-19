@@ -63,11 +63,12 @@ impl Scope {
     /// This is the trust boundary in Rust: a record scoped to projectId=A is
     /// never returned to a query whose projectId is B (or absent).
     pub fn matches(record: &Scope, query: &Scope) -> bool {
-        // Global records are visible to any query.
+        if record.is_empty() {
+            return false;
+        }
         if record.global.unwrap_or(false) && only_global(record) {
             return true;
         }
-        // Each present record key must equal the query's key.
         if let Some(ref r) = record.project_id {
             if query.project_id.as_deref() != Some(r.as_str()) {
                 return false;

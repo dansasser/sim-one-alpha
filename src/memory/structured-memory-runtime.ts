@@ -137,7 +137,10 @@ export function readMemoryEnvOverrides(env: Record<string, string | undefined>):
  */
 export function getStructuredMemoryRuntime(config?: GoromboConfig): Promise<StructuredMemoryRuntime> {
   if (!runtimePromise) {
-    runtimePromise = createStructuredMemoryRuntime(config);
+    runtimePromise = createStructuredMemoryRuntime(config).catch((error) => {
+      runtimePromise = undefined;
+      throw error;
+    });
   }
   return runtimePromise;
 }
@@ -149,6 +152,10 @@ export function resetStructuredMemoryRuntime(): void {
 
 async function createStructuredMemoryRuntime(config?: GoromboConfig): Promise<StructuredMemoryRuntime> {
   const memConfig = resolveMemoryConfig(config?.memory as Record<string, unknown> | undefined);
+
+  if (memConfig.enabled === false) {
+    throw new Error('Structured memory is disabled via config (memory.enabled = false)');
+  }
 
   const database = new GoromboStructuredMemoryDatabase({
     filePath: memConfig.sqlitePath ?? defaultStructuredMemoryDatabasePath,
