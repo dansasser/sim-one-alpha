@@ -449,12 +449,18 @@ export class GoromboSessionDatabase {
                 provider_options_json, source_url, file_path, file_name, mime_type, file_size_bytes,
                 reference_image_urls_json, created_at, updated_at
          FROM image_artifacts
-         WHERE (?1 IS NULL OR event_id = ?1)
-           AND (?2 IS NULL OR created_at > ?2)
+         WHERE (? IS NULL OR event_id = ?)
+           AND (? IS NULL OR created_at > ?)
          ORDER BY created_at DESC
-         LIMIT ?3`
+         LIMIT ?`
       )
-      .all(input.eventId ?? null, input.after ?? null, limit) as unknown as Array<ImageArtifactRow>;
+      .all(
+        input.eventId ?? null,
+        input.eventId ?? null,
+        input.after ?? null,
+        input.after ?? null,
+        limit,
+      ) as unknown as Array<ImageArtifactRow>;
     return rows;
   }
 

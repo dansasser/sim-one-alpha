@@ -41,6 +41,9 @@ jobs:
       - name: Typecheck
         run: pnpm run typecheck
 
+      - name: Fetch embedding model
+        run: pnpm run fetch-embedding-model
+
       - name: Unit tests
         run: pnpm run test:unit
         env:
