@@ -24,6 +24,11 @@ const testFiles = hasTestFileArgs
 run(process.execPath, [
   '--test',
   '--test-force-exit',
+  // Cap parallel test files so spawn-heavy suites (coding-worker git/exec
+  // subprocesses) can't exhaust CI runner memory and fail later spawns with
+  // ENOMEM. 2 keeps the single spawn-heavy file from ever running alongside
+  // more than one other file. Tunable if the runner budget changes.
+  '--test-concurrency=2',
   ...forwardedArgs,
   ...testFiles,
 ]);
