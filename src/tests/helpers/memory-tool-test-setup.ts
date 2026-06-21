@@ -20,16 +20,16 @@ export interface MemoryTestSetup {
  * engine under GOROMBO_TEST_MODE) and register a trusted normalized message
  * event for the orchestrator memory tools. Returns the event + a cleanup fn.
  */
-export function setupMemoryToolTest(input: {
+export async function setupMemoryToolTest(input: {
   actorId?: string;
   conversationId?: string;
   projectId?: string;
-} = {}): MemoryTestSetup {
+} = {}): Promise<MemoryTestSetup> {
   const dir = mkdtempSync(join(tmpdir(), 'gorombo-memtools-'));
   let event: NormalizedMessageEvent | undefined;
   try {
     resetStructuredMemoryRuntime();
-    void getStructuredMemoryRuntime({
+    await getStructuredMemoryRuntime({
       version: 1,
       models: { primary: 'x' },
       memory: { backend: 'memory', sqlitePath: join(dir, 'structured.sqlite') },

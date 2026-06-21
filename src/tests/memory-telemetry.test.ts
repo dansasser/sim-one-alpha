@@ -12,7 +12,7 @@ function lastMutation(): MemoryMutationEvent | undefined {
 
 test('create_checklist emits a sanitized memory_mutation telemetry event with no content body', async () => {
   const before = flueTelemetryStore.memoryMutationSnapshot().mutations.length;
-  const { event, cleanup } = setupMemoryToolTest({ projectId: 'proj-tel' });
+  const { event, cleanup } = await setupMemoryToolTest({ projectId: 'proj-tel' });
   try {
     await createChecklistTool.execute({ eventId: event.id, title: 'Telemetry', slug: 'telemetry' });
     const after = flueTelemetryStore.memoryMutationSnapshot().mutations;

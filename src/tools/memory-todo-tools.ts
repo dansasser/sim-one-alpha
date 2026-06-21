@@ -39,6 +39,7 @@ export const createTodoTool = defineTool({
       ...(dueAt !== undefined ? { dueAt: String(dueAt) } : {}),
       ...orchestratorAudit(),
     });
+    emitMemoryMutation('create_todo', 'orchestrator', todo);
     return JSON.stringify({ todo });
   },
 });
@@ -71,6 +72,7 @@ export const updateTodoTool = defineTool({
       ...orchestratorAudit(),
       expectedScope: deriveMemoryScope(event),
     });
+    emitMemoryMutation('update_todo', 'orchestrator', todo);
     return JSON.stringify({ todo });
   },
 });
@@ -91,6 +93,7 @@ export const completeTodoTool = defineTool({
       ...orchestratorAudit(),
       expectedScope: deriveMemoryScope(event),
     });
+    emitMemoryMutation('complete_todo', 'orchestrator', todo);
     return JSON.stringify({ todo });
   },
 });
@@ -111,6 +114,7 @@ export const cancelTodoTool = defineTool({
       ...orchestratorAudit(),
       expectedScope: deriveMemoryScope(event),
     });
+    emitMemoryMutation('cancel_todo', 'orchestrator', todo);
     return JSON.stringify({ todo });
   },
 });

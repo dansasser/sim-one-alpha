@@ -580,6 +580,9 @@ export class InMemoryMemoryEngine implements MemoryEngine {
   }
 
   async updateTodo(input: UpdateTodoInput): Promise<Todo> {
+    if (input.scope !== undefined && scopeIsEmpty(input.scope)) {
+      throw new MemoryEngineErrorClass('validation', 'todo scope must be non-empty');
+    }
     const existing = this.store.get(input.id);
     if (!existing || existing.kind !== 'todo') {
       throw new MemoryEngineErrorClass('not_found', `todo ${input.id} not found`);
@@ -618,6 +621,9 @@ export class InMemoryMemoryEngine implements MemoryEngine {
   }
 
   async updateSessionNote(input: UpdateSessionNoteInput): Promise<SessionNote> {
+    if (input.scope !== undefined && scopeIsEmpty(input.scope)) {
+      throw new MemoryEngineErrorClass('validation', 'session_note scope must be non-empty');
+    }
     const existing = this.store.get(input.id);
     if (!existing || existing.kind !== 'session_note') {
       throw new MemoryEngineErrorClass('not_found', `session_note ${input.id} not found`);

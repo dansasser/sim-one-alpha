@@ -10,7 +10,7 @@ import {
 import { setupMemoryToolTest } from './helpers/memory-tool-test-setup.js';
 
 test('todo tools create/complete/list through the trusted event scope', async () => {
-  const { event, cleanup } = setupMemoryToolTest({ projectId: 'proj-todo' });
+  const { event, cleanup } = await setupMemoryToolTest({ projectId: 'proj-todo' });
   try {
     const created = JSON.parse(
       await createTodoTool.execute({ eventId: event.id, title: 'Run smoke', priority: 'high' }),
@@ -37,7 +37,7 @@ test('todo tools create/complete/list through the trusted event scope', async ()
 });
 
 test('update_todo changes priority', async () => {
-  const { event, cleanup } = setupMemoryToolTest({ projectId: 'proj-todo2' });
+  const { event, cleanup } = await setupMemoryToolTest({ projectId: 'proj-todo2' });
   try {
     const created = JSON.parse(
       await createTodoTool.execute({ eventId: event.id, title: 'T' }),

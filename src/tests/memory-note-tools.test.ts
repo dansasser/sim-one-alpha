@@ -10,7 +10,7 @@ import {
 import { setupMemoryToolTest } from './helpers/memory-tool-test-setup.js';
 
 test('note tools store/list/archive through the trusted event scope', async () => {
-  const { event, cleanup } = setupMemoryToolTest({ projectId: 'proj-note' });
+  const { event, cleanup } = await setupMemoryToolTest({ projectId: 'proj-note' });
   try {
     const stored = JSON.parse(
       await storeSessionNoteTool.execute({ eventId: event.id, title: 'Decision', content: 'flat store', importance: 'high' }),

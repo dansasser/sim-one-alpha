@@ -71,31 +71,39 @@ test('structured-memory database round-trips a checklist with a nested child, a 
   const now = '2026-06-18T00:00:00.000Z';
   const db = new GoromboStructuredMemoryDatabase({ filePath: path });
   let reopened: GoromboStructuredMemoryDatabase | undefined;
-  const checklist = sampleChecklist(now);
-  const todo = sampleTodo(now);
-  const note = sampleNote(now);
-  db.writeRecord(checklist);
-  db.writeRecord(todo);
-  db.writeRecord(note);
-
-  const byId = db.getRecordById(checklist.id);
-  assert.equal(byId?.kind, 'checklist');
-  assert.equal((byId as Checklist)?.items.length, 3);
-  const nested = (byId as Checklist).items.find((i) => i.title === 'Nested child');
-  assert.ok(nested?.parentId, 'nested child retains parentId');
-
-  const all = db.loadAllRecords();
-  assert.equal(all.length, 3);
-  db.close();
-
   try {
+    const checklist = sampleChecklist(now);
+    const todo = sampleTodo(now);
+    const note = sampleNote(now);
+    db.writeRecord(checklist);
+    db.writeRecord(todo);
+    db.writeRecord(note);
+
+    const byId = db.getRecordById(checklist.id);
+    assert.equal(byId?.kind, 'checklist');
+    assert.equal((byId as Checklist)?.items.length, 3);
+    const nested = (byId as Checklist).items.find((i) => i.title === 'Nested child');
+    assert.ok(nested?.parentId, 'nested child retains parentId');
+
+    const all = db.loadAllRecords();
+    assert.equal(all.length, 3);
+    db.close();
+
     // Reopen from the same file and confirm durable reads.
     reopened = new GoromboStructuredMemoryDatabase({ filePath: path });
     const allAgain = reopened.loadAllRecords();
     assert.equal(allAgain.length, 3);
     assert.ok(allAgain.some((r) => r.id === todo.id));
   } finally {
+    // Guarantee cleanup of both DB handles and the temp dir even if an
+    // assertion fails, preventing file-handle/directory leaks that can
+    // destabilize subsequent tests.
     reopened?.close();
+    try {
+      db.close();
+    } catch {
+      // db may already be closed above; ignore.
+    }
     rmSync(join(path, '..'), { recursive: true, force: true });
   }
 });

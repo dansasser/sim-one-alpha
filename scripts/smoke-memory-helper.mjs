@@ -31,8 +31,16 @@ function compileTs() {
     throw new Error(`tsc compile failed (status ${r.status})`);
   }
   // Copy the WASM artifact + runtime config into .tmp/tsc so imports resolve.
-  spawnSync(process.execPath, ['scripts/copy-runtime-config.mjs', '--tsc'], { stdio: 'inherit' });
-  spawnSync(process.execPath, ['scripts/copy-wasm-artifact.mjs', '--tsc'], { stdio: 'inherit' });
+  // Fail fast if either copy step fails; otherwise we would proceed with stale
+  // artifacts and produce misleading downstream errors.
+  const cfg = spawnSync(process.execPath, ['scripts/copy-runtime-config.mjs', '--tsc'], { stdio: 'inherit' });
+  if (cfg.status !== 0) {
+    throw new Error(`copy-runtime-config.mjs failed (status ${cfg.status})`);
+  }
+  const wasm = spawnSync(process.execPath, ['scripts/copy-wasm-artifact.mjs', '--tsc'], { stdio: 'inherit' });
+  if (wasm.status !== 0) {
+    throw new Error(`copy-wasm-artifact.mjs failed (status ${wasm.status})`);
+  }
 }
 
 async function loadModules() {

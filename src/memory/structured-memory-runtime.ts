@@ -254,7 +254,16 @@ class PersistingMemoryEngine implements MemoryEngine {
     return this.inner.version();
   }
 
-  /** Persist a record; surface failures (logged) + roll back the in-memory write. */
+  /**
+   * Persist a record; surface failures (logged) + roll back the in-memory write.
+   *
+   * Rollback restores the in-memory index from the durable SQLite store, which
+   * still holds the pre-write state (writeRecord threw before mutating it). For
+   * create operations the new record is absent from the DB so reconcile removes
+   * it from memory; for updates the DB retains the previous value so reconcile
+   * restores it. This avoids the previous behavior of always deleting the
+   * record on failure, which lost the prior value for update operations.
+   */
   private async persist(record: MemoryRecord): Promise<void> {
     try {
       this.database.writeRecord(record);
@@ -263,7 +272,17 @@ class PersistingMemoryEngine implements MemoryEngine {
         '[ERROR] structured-memory persistence failed; rolling back in-memory write:',
         error instanceof Error ? error.message : String(error),
       );
-      await this.inner.delete({ id: record.id, updatedBy: 'system:rollback' }).catch(() => {});
+      // Restore in-memory state from the durable store (pre-write state). Fall
+      // back to a hard delete of the rolled-back record if reconcile fails.
+      try {
+        await this.inner.reconcile({ records: this.database.loadAllRecords() });
+      } catch (rollbackError) {
+        console.error(
+          '[ERROR] structured-memory rollback reconcile failed; falling back to in-memory delete:',
+          rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+        );
+        await this.inner.delete({ id: record.id, updatedBy: 'system:rollback' }).catch(() => {});
+      }
       throw error;
     }
   }
@@ -339,8 +358,12 @@ class PersistingMemoryEngine implements MemoryEngine {
   }
 
   async delete(input: DeleteInput): Promise<void> {
-    await this.inner.delete(input);
+    // Persist the delete to the durable store BEFORE mutating the in-memory
+    // index, so a persistDelete failure leaves both layers consistent (the
+    // record remains present in both) instead of diverging (gone in memory,
+    // still in DB).
     await this.persistDelete(input.id);
+    await this.inner.delete(input);
     await this.noteIndex?.deleteNote(input.id);
   }
 

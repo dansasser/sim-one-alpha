@@ -48,6 +48,12 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
     options.projectSlug ??
     options.projectRelativePath ??
     options.repoPath;
+  // Note: when scopeKey is undefined (no trusted project scope injected), the
+  // MemoryRecordScope is { projectId: undefined } (an empty scope). Unscoped
+  // *writes* are rejected fail-closed at the engine layer instead (Rust
+  // `validate_request` and the in-memory engine's `scopeIsEmpty` guards), so a
+  // construction-time throw is intentionally avoided here to keep worker
+  // construction valid when scope is resolved lazily or omitted by tests.
   const scope: MemoryRecordScope = { projectId: scopeKey };
   const audit = { updatedBy: 'coding-worker' };
 
@@ -148,8 +154,8 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
           ...(dueAt !== undefined ? { dueAt: String(dueAt) } : {}),
           ...audit,
           runId: String(taskId),
+          expectedScope: scope,
         });
-        emit('coding_task_add_checklist_item', checklist, String(taskId));
         await auditWrite(String(taskId), 'coding_task_add_checklist_item', checklist.id, String(taskId));
         emit('coding_task_add_checklist_item', checklist, String(taskId));
         return JSON.stringify({ checklist: renderChecklistTree(checklist) });

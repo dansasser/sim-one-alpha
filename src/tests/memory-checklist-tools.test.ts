@@ -22,7 +22,7 @@ function findInTree(items: TreeItem[], title: string): TreeItem | undefined {
 }
 
 test('memory checklist tools trust boundary: missing eventId is rejected', async () => {
-  const { cleanup } = setupMemoryToolTest();
+  const { cleanup } = await setupMemoryToolTest();
   try {
     await assert.rejects(
       createChecklistTool.execute({ eventId: 'missing-event-id', title: 't', slug: 's' } as never),
@@ -34,7 +34,7 @@ test('memory checklist tools trust boundary: missing eventId is rejected', async
 });
 
 test('create_checklist + add_checklist_item + list_checklists round-trip through the trusted event scope', async () => {
-  const { event, cleanup } = setupMemoryToolTest({ projectId: 'proj-cl' });
+  const { event, cleanup } = await setupMemoryToolTest({ projectId: 'proj-cl' });
   try {
     const created = JSON.parse(
       await createChecklistTool.execute({ eventId: event.id, title: 'Phase 0', slug: 'phase-0', items: [{ title: 'Schemas' }] }),
@@ -75,7 +75,7 @@ test('create_checklist + add_checklist_item + list_checklists round-trip through
 });
 
 test('update_checklist_item changes item status', async () => {
-  const { event, cleanup } = setupMemoryToolTest({ projectId: 'proj-cl2' });
+  const { event, cleanup } = await setupMemoryToolTest({ projectId: 'proj-cl2' });
   try {
     const created = JSON.parse(
       await createChecklistTool.execute({ eventId: event.id, title: 'CL', slug: 'cl', items: [{ title: 'A' }] }),

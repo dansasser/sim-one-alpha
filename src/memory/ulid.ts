@@ -8,9 +8,6 @@ import { randomBytes } from 'node:crypto';
 
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
-let lastTimestamp = 0;
-let counter = 0;
-
 function encodeTime(ms: number, length: number): string {
   let value = ms;
   let out = '';
@@ -31,24 +28,18 @@ function encodeRandom(bytes: number): string {
   return out;
 }
 
-function encodeCounter(value: number): string {
-  let out = '';
-  for (let i = 0; i < 16; i += 1) {
-    out += CROCKFORD[value & 31];
-    value = Math.floor(value / 32);
-  }
-  return out;
-}
-
-/** Generate a new ULID string. */
+/**
+ * Generate a new ULID string (Crockford base32, 26 chars: 48-bit ms timestamp +
+ * 80-bit randomness).
+ *
+ * The random suffix is ALWAYS drawn from `crypto.randomBytes` rather than a
+ * process-local monotonic counter. A deterministic counter starts at 0 in
+ * every Node process, so two processes generating ULIDs within the same
+ * millisecond would collide (process A counter=0..N, process B counter=0..N).
+ * Pure 80-bit crypto randomness is process-independent and collision-proof for
+ * practical ID volumes, matching the ULID spec's random-component intent.
+ */
 export function ulid(): string {
   const now = Date.now();
-  if (now === lastTimestamp) {
-    counter += 1;
-  } else {
-    lastTimestamp = now;
-    counter = 0;
-  }
-  const randomPart = counter === 0 ? encodeRandom(16) : encodeCounter(counter);
-  return encodeTime(now, 10) + randomPart;
+  return encodeTime(now, 10) + encodeRandom(16);
 }

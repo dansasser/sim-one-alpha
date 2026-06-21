@@ -101,14 +101,28 @@ impl InMemoryIndex {
     }
 
     /// Tag intersection search. Score = fraction of query tags present.
+    ///
+    /// Uses the `tag_index` inverted index to collect only candidate record IDs
+    /// that carry at least one matching tag, then scores those candidates. This
+    /// is O(K) over matching records rather than O(N) over the full index.
     pub fn query_tags(&self, tags: &[String], limit: usize) -> Vec<(Record, f64)> {
         if tags.is_empty() {
             return Vec::new();
         }
         let norm_tags: Vec<String> = tags.iter().map(|t| normalize(t)).collect();
-        let mut scored: Vec<(Record, f64)> = self
-            .by_id
-            .values()
+        // Collect candidate record IDs from the tag inverted index (union of
+        // all IDs that carry at least one of the query tags).
+        let mut candidate_ids: HashSet<String> = HashSet::new();
+        for tag in &norm_tags {
+            if let Some(ids) = self.tag_index.get(tag) {
+                for id in ids {
+                    candidate_ids.insert(id.clone());
+                }
+            }
+        }
+        let mut scored: Vec<(Record, f64)> = candidate_ids
+            .iter()
+            .filter_map(|id| self.by_id.get(id))
             .map(|record| {
                 let record_tags: HashSet<String> =
                     record.tags().iter().map(|t| normalize(t)).collect();
