@@ -8,7 +8,7 @@ export type OrchestratorStatus = 'ok' | 'error';
 
 export type WorkerStatus = 'completed' | 'failed' | 'not_implemented';
 
-export type RagProviderKind = 'memory' | 'web-search' | 'document-index' | 'future-vector';
+export type RagProviderKind = 'memory' | 'web-search' | 'document-index' | 'future-vector' | 'structured-memory';
 
 export type RetrievalCaller = 'orchestrator' | 'researcher' | 'research-workflow' | 'system';
 
@@ -137,6 +137,10 @@ export interface RagQuery {
   text: string;
   actorId: string;
   conversationId: string;
+  /** Project scope, derived from the trusted `NormalizedMessageEvent.context.projectId`. */
+  projectId?: string;
+  /** Thread scope, derived from the trusted `NormalizedMessageEvent.context`/conversation. */
+  threadId?: string;
   sessionId?: string;
   providers?: RagProviderKind[];
   caller?: RetrievalCaller;

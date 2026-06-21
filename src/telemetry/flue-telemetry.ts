@@ -41,6 +41,33 @@ export interface TelemetrySnapshot {
 }
 
 /**
+ * Sanitized record of a structured-memory mutation (checklist/todo/note
+ * create/update/delete). No record content body is kept - only id, kind, scope
+ * keys, tool name, run id, agent, and updatedBy. Per plan §Observability.
+ */
+export interface MemoryMutationEvent {
+  type: 'memory_mutation';
+  timestamp: string;
+  toolName: string;
+  runId?: string;
+  agentName: string;
+  recordId: string;
+  kind: 'checklist' | 'todo' | 'session_note';
+  scopeKeys: {
+    actorId?: string;
+    conversationId?: string;
+    projectId?: string;
+    threadId?: string;
+    global?: boolean;
+  };
+  updatedBy: string;
+}
+
+export interface MemoryMutationSnapshot {
+  mutations: MemoryMutationEvent[];
+}
+
+/**
  * Keeps a bounded in-memory summary of sanitized Flue events.
  *
  * A synchronous mutation lock serializes `record`, `reset`, and trimming work
@@ -50,6 +77,7 @@ export interface TelemetrySnapshot {
 export class FlueTelemetryStore {
   private readonly eventsByRunId = new Map<string, TelemetryEventSummary[]>();
   private readonly unscopedEvents: TelemetryEventSummary[] = [];
+  private readonly memoryMutations: MemoryMutationEvent[] = [];
   private readonly pendingMutations: Array<() => void> = [];
   private mutationLocked = false;
 
@@ -58,6 +86,7 @@ export class FlueTelemetryStore {
       maxRuns?: number;
       maxEventsPerRun?: number;
       maxUnscopedEvents?: number;
+      maxMemoryMutations?: number;
     } = {},
   ) {}
 
@@ -68,6 +97,26 @@ export class FlueTelemetryStore {
     this.withMutationLock(() => {
       this.recordLocked(event);
     });
+  }
+
+  /**
+   * Records a sanitized structured-memory mutation (no content body).
+   */
+  recordMemoryMutation(event: MemoryMutationEvent): void {
+    this.withMutationLock(() => {
+      // Deep-copy on record so callers cannot mutate the audit log entry
+      // after it is recorded.
+      this.memoryMutations.push(structuredClone(event));
+      trimArray(this.memoryMutations, this.options.maxMemoryMutations ?? 500);
+    });
+  }
+
+  /**
+   * Returns the bounded memory-mutation audit log (no record content).
+   */
+  memoryMutationSnapshot(): MemoryMutationSnapshot {
+    // Deep-clone each entry so snapshot consumers cannot modify the originals.
+    return { mutations: this.memoryMutations.map((event) => structuredClone(event)) };
   }
 
   /**
@@ -117,6 +166,7 @@ export class FlueTelemetryStore {
     this.withMutationLock(() => {
       this.eventsByRunId.clear();
       this.unscopedEvents.length = 0;
+      this.memoryMutations.length = 0;
     });
   }
 
@@ -158,6 +208,14 @@ export class FlueTelemetryStore {
 }
 
 export const flueTelemetryStore = new FlueTelemetryStore();
+
+/**
+ * Record a structured-memory mutation on the singleton telemetry store. Called
+ * by mutating Memory Helper tools after a successful write. Keeps no content.
+ */
+export function recordMemoryMutationEvent(event: MemoryMutationEvent): void {
+  flueTelemetryStore.recordMemoryMutation(event);
+}
 
 /**
  * Builds a sanitized telemetry summary from a persisted Flue run event stream.

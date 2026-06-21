@@ -794,6 +794,34 @@ Use small, testable steps.
 
 Do not build the entire final system in one pass.
 
+## Memory Helper (Structured Memory)
+
+The agent and the coding worker maintain durable **structured memory** - checklists, todos, and session notes - that survive across long-running tasks and process restarts. The engine is a Rust crate (`crates/gorombo-memory/`) compiled to WebAssembly via `wasm-pack`; a thin TypeScript shim (`src/memory/rust-memory-engine.ts`) loads it, and a pure-TypeScript `InMemoryMemoryEngine` is the parity reference for tests.
+
+- **Scope is truth, never from the model.** Scope derivation differs by tool family:
+  - **Orchestrator tools** (`create_checklist`, `create_todo`, `store_session_note`, and their update/list counterparts) derive all scope fields (`actorId`/`conversationId`/`projectId`/`threadId`) from a trusted persisted `NormalizedMessageEvent` (`eventId`); the model cannot supply scope, and update operations verify the target record's scope matches the trusted event scope before mutating.
+  - **Coding-worker tools** (`coding_task_*`) inject `projectId` from the trusted worker context (`CodingWorkspaceTargetInput` — `projectId`/`projectSlug`/`projectRelativePath`/`repoPath`), not from a chat event; `taskId` is the trust anchor. They fail closed if no trusted project scope is available.
+- **Persistence** is SQLite (default `.gorombo/db/structured-memory.sqlite`); the WASM in-memory index is hydrated from the durable store on cold start via `reconcile_index`.
+- **Retrieval** is surfaced through `retrieve_memory` (default providers include `structured-memory`) alongside session memory, ranked and truncated to the context budget. Session notes are optionally searchable by LanceDB semantic similarity (merged with the keyword index via reciprocal rank fusion), with a graceful keyword-only fallback when no embedding client is configured.
+- **Coding worker** tools (`coding_task_*`) inject `projectId` from the worker context and route every mutating write through `SharedCodingApprovalService` as an audit-only `memory.write` event (never blocking). The `coding_task_handoff_plan_to_checklist` tool copies a finished task run's plan into a durable checklist for cross-run continuity.
+
+Build the WASM artifact and run the Memory Helper smoke:
+
+```sh
+pnpm run wasm:build
+pnpm run smoke:memory
+```
+
+The default smoke drives the real Memory Helper tools, WASM engine, SQLite,
+`retrieve_memory`, and the coding-worker path end-to-end with a durability
+restart check (no live model required). To run the real-model smoke that boots
+the server and lets a live model drive the orchestrator memory tools, set
+`GOROMBO_SMOKE_REAL_MODEL=1` (requires a `.env` with model API creds and a
+built `dist`): `GOROMBO_SMOKE_REAL_MODEL=1 pnpm run smoke:memory`.
+
+Configuration lives under the `memory` block of `gorombo.config.json` and can be overridden by `GOROMBO_MEMORY_*` environment variables (`GOROMBO_MEMORY_BACKEND`, `GOROMBO_MEMORY_SQLITE_PATH`, `GOROMBO_MEMORY_RETENTION_DAYS`, `GOROMBO_MEMORY_ARCHIVE_DELETE_DAYS`, `GOROMBO_MEMORY_MAX_CHECKLIST_DEPTH`, `GOROMBO_MEMORY_DEFAULT_LIMIT`, `GOROMBO_MEMORY_MAX_CONTEXT_TOKENS`).
+
+
 ## Testing
 
 Run relevant verification before calling work complete.
@@ -806,6 +834,9 @@ pnpm run typecheck
 pnpm run build
 pnpm run test:http
 pnpm run smoke:http
+pnpm run wasm:build        # build the gorombo-memory WASM artifact
+pnpm run cargo:test        # cargo test -p gorombo-memory (Rust crate tests)
+pnpm run smoke:memory      # Memory Helper end-to-end + durability smoke
 ```
 
 `pnpm test` runs the TypeScript unit suite, builds `dist/server.mjs`, then runs `pnpm run test:http` against the built server over real localhost HTTP. The root `.env` file remains the runtime environment source; it is not copied into `dist`.

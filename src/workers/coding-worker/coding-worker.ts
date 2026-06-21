@@ -22,6 +22,8 @@ import { createCodingWorkerInternalSubagents } from './subagents/index.js';
 import { createCodingCodeIntelligenceTools } from './tools/code-intelligence/index.js';
 import { createCodingGitTools } from './tools/coding-git-tools.js';
 import { createCodingPlanningTools } from './tools/coding-planning-tools.js';
+import { createCodingTaskMemoryTools } from './tools/coding-task-memory-tools.js';
+import { getStructuredMemoryEngine } from '../../memory/structured-memory-runtime.js';
 import { createCodingRepoTools } from './tools/coding-repo-tools.js';
 import { createCodingRepoWorkflowTools } from './tools/coding-repo-workflow-tools.js';
 import { createCodingWorkerLoopDelegate } from './workflow/loop.js';
@@ -143,6 +145,15 @@ export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOp
         approvalService,
       }),
       ...createCodingPlanningTools(),
+      ...createCodingTaskMemoryTools({
+        engineLoader: () => getStructuredMemoryEngine(),
+        projectId: resolvedOptions.projectId,
+        projectSlug: resolvedOptions.projectSlug,
+        projectRelativePath: resolvedOptions.projectRelativePath,
+        repoPath: resolvedOptions.repoPath,
+        workspaceRoot,
+        approvalService,
+      }),
     ],
     skills: codingWorkerSkills,
     subagents: createCodingWorkerInternalSubagents({
