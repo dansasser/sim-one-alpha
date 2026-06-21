@@ -22,7 +22,7 @@ The goal is simple:
 - Registry-driven skills
 - Registry-driven workers/subagents
 - Runtime-extensible capability model
-- Placeholder structure for future coding-worker workflows
+- Coding worker with plan / implement / test-debug / review / GitHub subagents and approval-gated repo mutations
 - Business-focused AI Employee architecture
 - Runpod Public Endpoints image generation tool (`generate_image`) attached directly to the main orchestrator
 
@@ -111,26 +111,15 @@ Examples of protocol records may include:
 
 ### Memory
 
-Memory is a first-class architecture layer.
+Memory is a first-class architecture layer. Protocols provide rules; memory provides context.
 
-Protocols provide rules.
+Structured memory is implemented as durable **checklists, todos, and session notes** that survive across long-running tasks and process restarts. The data model, scope matching, and query/scoring logic live in a Rust crate (`crates/gorombo-memory/`) compiled to WebAssembly via `wasm-pack`; a thin TypeScript shim (`src/memory/rust-memory-engine.ts`) loads the WASM module and delegates every create/update/delete/query to it. A pure-TypeScript `InMemoryMemoryEngine` mirrors the same contract as a parity reference for unit tests.
 
-Memory provides context.
+- **Durable store:** every mutation is persisted to SQLite (default `.gorombo/db/structured-memory.sqlite`); the WASM in-memory index is hydrated from the durable store on cold start via `reconcile_index`.
+- **Scope is truth, never from the model:** scope (`actorId`/`conversationId`/`projectId`/`threadId`) is derived from a trusted persisted `NormalizedMessageEvent` (`eventId`) for orchestrator tools, and injected from the worker context for coding-worker tools. Update operations verify the target record's scope matches before mutating.
+- **Retrieval:** surfaced through `retrieve_memory` alongside session memory and RAG, ranked and truncated to the context budget.
 
-Memory will use a database-backed storage and retrieval layer.
-
-The first memory priority is retrieval, especially:
-
-- conversation history
-- project context
-- client context
-- user preferences
-- workflow state
-- task history
-- stored notes
-- document-index records
-
-The initial memory architecture may start from the existing `doc-index` approach and grow from there.
+See [Memory Helper (Structured Memory)](#memory-helper-structured-memory) for the full architecture, configuration, and smoke commands.
 
 ### RAG
 
@@ -328,41 +317,41 @@ Core stack:
 TypeScript
 Flue
 SQLite
-mongoDB
+Rust (WASM) — structured-memory engine
+LanceDB — vector store
 Node.js
 ```
 
 Primary storage roles:
 
 ```text
-SQLite = protocol storage
-
-Database-backed memory = memory retrieval and context storage
-
-Future stores = vector search, document indexes, client data, project data
+SQLite      = protocol storage, Flue persistence, session state, structured memory
+Rust/WASM   = structured-memory engine (checklists, todos, session notes)
+LanceDB     = vector search (session memory, session notes, knowledge/project-file index)
 ```
 
 ## Project Structure
 
-Planned structure:
 
 ```text
 src/
-  agents/
-  workspace/
-  connectors/
-  routes/
+  agents/            # orchestrator + worker agent entrypoints
+  workspace/         # main agent persona files
+  connectors/        # telegram, web-api, scheduled-job normalizers
+  routes/            # Hono HTTP routes (chat, approval, telemetry, schedules, ...)
   middleware/
-  memory/
-  protocols/
-  rag/
-  registries/
+  memory/            # structured-memory shim, SQLite store, providers (Rust/WASM engine lives in crates/)
+  protocols/         # protocol system + SQLite protocol provider
+  rag/                # retrieval, embeddings, vector store, indexers
+  registries/        # tool / skill / agent registries
   skills/
-  tools/
+  tools/             # orchestrator-owned tools (memory, research, ...)
   types/
-  workers/
-  workflows/
+  workers/           # coding worker + subagents + tools
+  workflows/         # finite Flue operations (research, retrieval, web-research)
   tests/
+crates/
+  gorombo-memory/    # Rust structured-memory engine -> WASM (wasm-pack)
 ```
 
 ## Installation
@@ -727,12 +716,25 @@ It starts with model selection and is intended to grow into the deployment-level
 ```json
 {
   "version": 1,
-  "models": {
-    "primary": "minimax-m3-cloud",
-    "backup": "codex-brain"
+  "models": { "primary": "minimax-m3-cloud", "backup": "codex-brain" },
+  "storage": {
+    "flueDatabasePath": ".gorombo/db/flue.sqlite",
+    "sessionDatabasePath": ".gorombo/db/sessions.sqlite"
+  },
+  "memory": {
+    "enabled": true,
+    "backend": "sqlite",
+    "defaultLimit": 10,
+    "maxContextTokens": 1500,
+    "enableSemanticNotes": true,
+    "retentionDays": 30,
+    "archiveDeleteDays": 365,
+    "maxChecklistDepth": 5
   }
 }
 ```
+
+`storage` selects the Flue persistence and session SQLite paths. `memory` configures the structured-memory engine (see [Memory Helper](#memory-helper-structured-memory)). Any `memory` field can be overridden by a `GOROMBO_MEMORY_*` environment variable (`GOROMBO_MEMORY_BACKEND`, `GOROMBO_MEMORY_SQLITE_PATH`, `GOROMBO_MEMORY_RETENTION_DAYS`, `GOROMBO_MEMORY_ARCHIVE_DELETE_DAYS`, `GOROMBO_MEMORY_MAX_CHECKLIST_DEPTH`, `GOROMBO_MEMORY_DEFAULT_LIMIT`, `GOROMBO_MEMORY_MAX_CONTEXT_TOKENS`); env wins over JSON.
 
 Change model choices in the shipped runtime JSON file, then restart the runtime/gateway. Keep API keys and service credentials in `.env` or the deployment secret manager.
 
@@ -757,9 +759,6 @@ OLLAMA_LOCAL_API_KEY
 CODEX_BRAIN_LOCAL_API_URL
 CODEX_BRAIN_LOCAL_API_KEY
 TELEGRAM_BOT_TOKEN
-DATABASE_URL
-PROTOCOL_DB_PATH
-MEMORY_DB_URL
 API_SECRET
 TAVILY_API_KEY
 BRAVE_SEARCH_API_KEY
@@ -796,14 +795,35 @@ Do not build the entire final system in one pass.
 
 ## Memory Helper (Structured Memory)
 
-The agent and the coding worker maintain durable **structured memory** - checklists, todos, and session notes - that survive across long-running tasks and process restarts. The engine is a Rust crate (`crates/gorombo-memory/`) compiled to WebAssembly via `wasm-pack`; a thin TypeScript shim (`src/memory/rust-memory-engine.ts`) loads it, and a pure-TypeScript `InMemoryMemoryEngine` is the parity reference for tests.
+The Memory Helper is the agent's durable memory: **checklists, todos, and session notes** that survive across long-running tasks and process restarts. It is built as a Rust crate compiled to WebAssembly, with SQLite as the durable backing store.
 
+### How it works
+
+```text
+model tools (orchestrator / coding-worker)
+  -> TypeScript shim  (src/memory/rust-memory-engine.ts)
+  -> Rust engine       (crates/gorombo-memory/ -> WASM via wasm-pack)
+       - data model: Checklist / ChecklistItem / Todo / SessionNote
+       - scope matching + tag/keyword scoring + cycle/depth validation
+  -> PersistingMemoryEngine decorator
+       - every create/update/delete is written to SQLite
+       - on cold start the WASM index is hydrated from SQLite via reconcile_index
+  -> retrieve_memory (structured-memory provider) -> context budget -> model
+```
+
+- **Engine:** the data model, scope matching, and query scoring live in Rust (`crates/gorombo-memory/`), compiled to WASM with `wasm-pack`. A thin TypeScript shim (`src/memory/rust-memory-engine.ts`) loads the WASM module and delegates every mutation and query to it. A pure-TypeScript `InMemoryMemoryEngine` mirrors the same contract as a parity reference for unit tests.
+- **Durable store:** a `PersistingMemoryEngine` decorator wraps the engine so every create/update/delete is persisted to SQLite (default `.gorombo/db/structured-memory.sqlite`). The WASM in-memory index is hydrated from the durable store on cold start via `reconcile_index`, so records survive process restarts.
+- **Data model:**
+  - **Checklist** — a scoped list with nested `ChecklistItem`s (parentId tree, ordinal ordering, status, tags, due dates).
+  - **Todo** — a scoped task with priority, status, due date, tags.
+  - **SessionNote** — a pinned decision/reminder with importance and optional LanceDB semantic search.
 - **Scope is truth, never from the model.** Scope derivation differs by tool family:
   - **Orchestrator tools** (`create_checklist`, `create_todo`, `store_session_note`, and their update/list counterparts) derive all scope fields (`actorId`/`conversationId`/`projectId`/`threadId`) from a trusted persisted `NormalizedMessageEvent` (`eventId`); the model cannot supply scope, and update operations verify the target record's scope matches the trusted event scope before mutating.
-  - **Coding-worker tools** (`coding_task_*`) inject `projectId` from the trusted worker context (`CodingWorkspaceTargetInput` — `projectId`/`projectSlug`/`projectRelativePath`/`repoPath`), not from a chat event; `taskId` is the trust anchor. They fail closed if no trusted project scope is available.
-- **Persistence** is SQLite (default `.gorombo/db/structured-memory.sqlite`); the WASM in-memory index is hydrated from the durable store on cold start via `reconcile_index`.
+  - **Coding-worker tools** (`coding_task_*`) inject `projectId` from the trusted worker context (`CodingWorkspaceTargetInput` — `projectId`/`projectSlug`/`projectRelativePath`/`repoPath`), not from a chat event; `taskId` is the trust anchor. They fail closed at execution time if no trusted project scope is available.
 - **Retrieval** is surfaced through `retrieve_memory` (default providers include `structured-memory`) alongside session memory, ranked and truncated to the context budget. Session notes are optionally searchable by LanceDB semantic similarity (merged with the keyword index via reciprocal rank fusion), with a graceful keyword-only fallback when no embedding client is configured.
-- **Coding worker** tools (`coding_task_*`) inject `projectId` from the worker context and route every mutating write through `SharedCodingApprovalService` as an audit-only `memory.write` event (never blocking). The `coding_task_handoff_plan_to_checklist` tool copies a finished task run's plan into a durable checklist for cross-run continuity.
+- **Coding worker** tools (`coding_task_*`) route every mutating write through `SharedCodingApprovalService` as an audit-only `memory.write` event (never blocking). The `coding_task_handoff_plan_to_checklist` tool copies a finished task run's plan into a durable checklist for cross-run continuity.
+
+### Build and smoke
 
 Build the WASM artifact and run the Memory Helper smoke:
 
@@ -812,14 +832,28 @@ pnpm run wasm:build
 pnpm run smoke:memory
 ```
 
-The default smoke drives the real Memory Helper tools, WASM engine, SQLite,
-`retrieve_memory`, and the coding-worker path end-to-end with a durability
-restart check (no live model required). To run the real-model smoke that boots
-the server and lets a live model drive the orchestrator memory tools, set
-`GOROMBO_SMOKE_REAL_MODEL=1` (requires a `.env` with model API creds and a
-built `dist`): `GOROMBO_SMOKE_REAL_MODEL=1 pnpm run smoke:memory`.
+The default smoke drives the real Memory Helper tools, WASM engine, SQLite, `retrieve_memory`, and the coding-worker path end-to-end with a durability restart check (no live model required). To run the real-model smoke that boots the server and lets a live model drive the orchestrator memory tools, set `GOROMBO_SMOKE_REAL_MODEL=1` (requires a `.env` with model API creds and a built `dist`): `GOROMBO_SMOKE_REAL_MODEL=1 pnpm run smoke:memory`.
 
-Configuration lives under the `memory` block of `gorombo.config.json` and can be overridden by `GOROMBO_MEMORY_*` environment variables (`GOROMBO_MEMORY_BACKEND`, `GOROMBO_MEMORY_SQLITE_PATH`, `GOROMBO_MEMORY_RETENTION_DAYS`, `GOROMBO_MEMORY_ARCHIVE_DELETE_DAYS`, `GOROMBO_MEMORY_MAX_CHECKLIST_DEPTH`, `GOROMBO_MEMORY_DEFAULT_LIMIT`, `GOROMBO_MEMORY_MAX_CONTEXT_TOKENS`).
+### Configuration
+
+The `memory` block of `gorombo.config.json` configures the engine:
+
+```json
+{
+  "memory": {
+    "enabled": true,
+    "backend": "sqlite",
+    "defaultLimit": 10,
+    "maxContextTokens": 1500,
+    "enableSemanticNotes": true,
+    "retentionDays": 30,
+    "archiveDeleteDays": 365,
+    "maxChecklistDepth": 5
+  }
+}
+```
+
+Any field can be overridden by a `GOROMBO_MEMORY_*` environment variable (`GOROMBO_MEMORY_BACKEND`, `GOROMBO_MEMORY_SQLITE_PATH`, `GOROMBO_MEMORY_RETENTION_DAYS`, `GOROMBO_MEMORY_ARCHIVE_DELETE_DAYS`, `GOROMBO_MEMORY_MAX_CHECKLIST_DEPTH`, `GOROMBO_MEMORY_DEFAULT_LIMIT`, `GOROMBO_MEMORY_MAX_CONTEXT_TOKENS`); env wins over JSON.
 
 
 ## Testing
