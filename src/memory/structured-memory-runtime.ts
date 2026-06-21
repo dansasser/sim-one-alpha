@@ -363,7 +363,27 @@ class PersistingMemoryEngine implements MemoryEngine {
     // record remains present in both) instead of diverging (gone in memory,
     // still in DB).
     await this.persistDelete(input.id);
-    await this.inner.delete(input);
+    // At this point the durable store no longer has the record. If the
+    // in-memory delete fails, we must restore consistency: memory should also
+    // drop the record (reconcile from the durable store, which no longer
+    // carries it) and the vector index must still be cleaned up. Throw the
+    // original error after best-effort cleanup.
+    try {
+      await this.inner.delete(input);
+    } catch (error) {
+      try {
+        await this.inner.reconcile({ records: this.database.loadAllRecords() });
+      } catch (rollbackError) {
+        console.error(
+          '[ERROR] structured-memory delete rollback reconcile failed:',
+          rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+        );
+      }
+      // The durable record is gone, so the note vector entry must go too,
+      // regardless of the in-memory delete failure. deleteNote is best-effort.
+      await this.noteIndex?.deleteNote(input.id).catch(() => {});
+      throw error;
+    }
     await this.noteIndex?.deleteNote(input.id);
   }
 

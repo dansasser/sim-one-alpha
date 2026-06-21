@@ -83,3 +83,25 @@ test('coding_task_search_memory returns RetrievedContext with provider structure
   assert.ok(result.contexts.length > 0);
   assert.equal(result.contexts[0].provider, 'structured-memory');
 });
+
+test('coding_task memory tools fail closed at execution time when no trusted project scope is injected', async () => {
+  // Construction without a project scope is legitimate (architecture-contract
+  // tests, lazy scope resolution), but every execute method must fail closed
+  // rather than run a read/write against an unscoped context.
+  const engine = new InMemoryMemoryEngine();
+  await engine.reconcile({ records: [] });
+  const tools = createCodingTaskMemoryTools({
+    engineLoader: () => Promise.resolve(engine as MemoryEngine),
+    approvalService: createInMemoryCodingApprovalService(),
+  });
+  const createTool = getTool(tools, 'coding_task_create_checklist');
+  await assert.rejects(
+    createTool.execute({ taskId: 'task-no-scope', title: 'x', slug: 'x' }),
+    /trusted project scope/,
+  );
+  const searchTool = getTool(tools, 'coding_task_search_memory');
+  await assert.rejects(
+    searchTool.execute({ taskId: 'task-no-scope', text: 'x' }),
+    /trusted project scope/,
+  );
+});

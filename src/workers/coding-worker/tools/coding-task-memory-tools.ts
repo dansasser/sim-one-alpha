@@ -48,14 +48,27 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
     options.projectSlug ??
     options.projectRelativePath ??
     options.repoPath;
-  // Note: when scopeKey is undefined (no trusted project scope injected), the
-  // MemoryRecordScope is { projectId: undefined } (an empty scope). Unscoped
-  // *writes* are rejected fail-closed at the engine layer instead (Rust
-  // `validate_request` and the in-memory engine's `scopeIsEmpty` guards), so a
-  // construction-time throw is intentionally avoided here to keep worker
-  // construction valid when scope is resolved lazily or omitted by tests.
+  // The MemoryRecordScope is { projectId: scopeKey }; when scopeKey is
+  // undefined this is an empty scope. Construction stays valid (worker
+  // construction with no project scope is legitimate, e.g. architecture-
+  // contract tests and lazy scope resolution), but every execute method
+  // fail-closes at *execution time* via `requireTrustedScope()` so that no
+  // read or write ever runs against an unscoped context. This complements the
+  // engine-layer guards (Rust `validate_request` + in-memory `scopeIsEmpty`)
+  // which reject unscoped writes; the execution-time guard additionally
+  // prevents unscoped reads (engine.query) and gives an early, clear error.
   const scope: MemoryRecordScope = { projectId: scopeKey };
   const audit = { updatedBy: 'coding-worker' };
+
+  /** Fail closed if no trusted project scope was injected by the worker context. */
+  const requireTrustedScope = (): MemoryRecordScope => {
+    if (!scopeKey) {
+      throw new Error(
+        'coding-worker memory tools require a trusted project scope (projectId, projectSlug, projectRelativePath, or repoPath); none was provided by the worker context.',
+      );
+    }
+    return scope;
+  };
 
   const auditWrite = (taskId: string, toolName: string, targetId: string, runId: string) =>
     recordCodingAuditEvent(options.approvalService, {
@@ -111,6 +124,7 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
         tags: TagsSchema,
       }),
       execute: async ({ taskId, title, slug, description, tags }) => {
+        requireTrustedScope();
         const engine = await options.engineLoader();
         const checklist = await engine.createChecklist({
           title: String(title),
@@ -142,6 +156,7 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
         dueAt: v.optional(v.string()),
       }),
       execute: async ({ taskId, checklistId, parentId, title, description, status, ordinal, tags, dueAt }) => {
+        requireTrustedScope();
         const engine = await options.engineLoader();
         const checklist = await engine.addChecklistItem({
           checklistId: String(checklistId),
@@ -174,6 +189,7 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
         dueAt: v.optional(v.string()),
       }),
       execute: async ({ taskId, title, description, priority, tags, dueAt }) => {
+        requireTrustedScope();
         const engine = await options.engineLoader();
         const todo = await engine.createTodo({
           title: String(title),
@@ -199,6 +215,7 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
         id: v.pipe(v.string(), v.minLength(1)),
       }),
       execute: async ({ taskId, id }) => {
+        requireTrustedScope();
         const engine = await options.engineLoader();
         const todo = await engine.updateTodo({
           id: String(id),
@@ -224,6 +241,7 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
         importance: v.optional(NoteImportanceSchema),
       }),
       execute: async ({ taskId, title, content, tags, importance }) => {
+        requireTrustedScope();
         const engine = await options.engineLoader();
         const note = await engine.createSessionNote({
           title: String(title),
@@ -248,6 +266,7 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
         id: v.pipe(v.string(), v.minLength(1)),
       }),
       execute: async ({ taskId, id }) => {
+        requireTrustedScope();
         const engine = await options.engineLoader();
         const note = await engine.updateSessionNote({
           id: String(id),
@@ -274,6 +293,7 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
         includeArchived: v.optional(v.boolean()),
       }),
       execute: async ({ taskId: _taskId, text, tags, kinds, limit, includeArchived }) => {
+        requireTrustedScope();
         const engine = await options.engineLoader();
         const records = await engine.query({
           scope,
@@ -296,6 +316,7 @@ export function createCodingTaskMemoryTools(options: CodingTaskMemoryToolsOption
         sourceTaskId: v.pipe(v.string(), v.minLength(1)),
       }),
       execute: async ({ taskId, sourceTaskId }) => {
+        requireTrustedScope();
         const engine = await options.engineLoader();
         const store = options.taskRunStore ?? JsonFileCodingTaskRunStore.atWorkspaceRoot(options.workspaceRoot ?? process.cwd());
         const run = await store.get(String(sourceTaskId));
