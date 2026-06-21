@@ -1,0 +1,24 @@
+README.md
+  s_7b99391a80ace8::t_5a1313aed84d7b 25,114,116,118-120,122,320-321,328-330
+  s_7b99391a80ace8::t_e7f89909c74321 338-341,343-346,348,350-351,353-354
+  s_7b99391a80ace8::t_9ae7a3a4ac72ee 719-732,737-738
+  s_7b99391a80ace8::t_6d1605a6479b32 798-800,802-819,822,824-826,835-854,856
+docs/architecture/memory-system.md
+  s_7b99391a80ace8::t_5a7771ba785203 1-122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "31f339ac7ad0b295723a1b82eb0d519bb4e2bbfd",
+  "prompts": {},
+  "sessions": {
+    "s_7b99391a80ace8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eeb43-302e-78c3-bbd8-6a9ac58bc877",
+        "model": "glm-5.2:cloud"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
