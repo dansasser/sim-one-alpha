@@ -45,9 +45,17 @@ export function createGoromboPersistenceRuntime(config: GoromboConfig): GoromboP
   const sessionDatabase = new GoromboSessionDatabase(sessionDatabasePath, { vectorStore, embeddingClient });
 
   // Index project files and knowledge docs in the background so startup is not blocked.
-  runBackgroundIndexing({ vectorStore, embeddingClient }).catch((error) =>
-    console.error('[WARN] Background vector indexing failed:', error instanceof Error ? error.message : String(error)),
-  );
+  // Skip in test mode: the indexer defaults `projectRoot` to `process.cwd()`, which under
+  // the test runner is the repository root, so it embeds the ENTIRE repo's source/docs into
+  // Lance vectors. That consumes gigabytes of native memory (ONNX + Arrow) and OOMs the CI
+  // runner (spawn ENOMEM). Tests don't need this production RAG warmup. CI sets
+  // GOROMBO_TEST_MODE=1 (see .github/workflows/ci.yml), matching the guard used elsewhere
+  // (e.g. src/memory/structured-memory-runtime.ts).
+  if (process.env.GOROMBO_TEST_MODE !== '1' && process.env.NODE_ENV !== 'test') {
+    runBackgroundIndexing({ vectorStore, embeddingClient }).catch((error) =>
+      console.error('[WARN] Background vector indexing failed:', error instanceof Error ? error.message : String(error)),
+    );
+  }
   let latestStores: PersistenceStores | undefined;
 
   const adapter: PersistenceAdapter = {
