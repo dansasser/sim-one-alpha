@@ -1,8 +1,8 @@
-# Telegram Connector Plan — GOROMBO Agent
+# Telegram Connector Plan — SIM-ONE Alpha
 
 ## Goal
 
-Add native Telegram ingress and egress to **GOROMBO Agent** (the runtime product built in `astro-flue-agent`). A Telegram bot token and one or more approved user IDs are configured through the existing runtime config and environment variables. Unapproved users trigger a pairing flow. Approved Telegram messages reach the orchestrator agent through the same durable path that `/api/chat/events` already uses. The orchestrator replies through a model-callable tool.
+Add native Telegram ingress and egress to **SIM-ONE Alpha** (the runtime product built in `astro-flue-agent`). A Telegram bot token and one or more approved user IDs are configured through the existing runtime config and environment variables. Unapproved users trigger a pairing flow. Approved Telegram messages reach the orchestrator agent through the same durable path that `/api/chat/events` already uses. The orchestrator replies through a model-callable tool.
 
 ## First principle: use Flue before building our own
 
@@ -312,11 +312,11 @@ This matches the existing pattern of reminding the orchestrator which tool owns 
   - Pro: zero new runtime dependencies.
   - Con: more code for polling loop, file uploads, entity parsing.
 
-Recommendation: start with raw `fetch` because GOROMBO Agent's dependency rule says "prefer existing dependencies" and the Bot API surface we need is small. If file handling or polling reliability becomes painful, switch to `grammy` in a later iteration.
+Recommendation: start with raw `fetch` because SIM-ONE Alpha's dependency rule says "prefer existing dependencies" and the Bot API surface we need is small. If file handling or polling reliability becomes painful, switch to `grammy` in a later iteration.
 
 ## Operational notes
 
-- Telegram only allows one active `getUpdates` consumer per bot token. Running two GOROMBO Agent processes with the same token will cause `409 Conflict`. The deployment model is one running `pnpm start` process per bot token.
+- Telegram only allows one active `getUpdates` consumer per bot token. Running two SIM-ONE Alpha processes with the same token will cause `409 Conflict`. The deployment model is one running `pnpm start` process per bot token.
 - Set `NODE_OPTIONS=--dns-result-order=ipv4first` on the deployment environment to avoid silent IPv6 hangs to Telegram's API servers.
 - BotFather group privacy must be disabled for group delivery, and the bot must be re-added after the change.
 

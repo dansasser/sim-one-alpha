@@ -29,7 +29,7 @@ Where does PromptResponse.usage come from?
 Does Flue expose pre-prompt token counts or only post-response usage?
 Does Flue have built-in compaction?
 If compaction exists, when is it triggered and can application code configure it?
-If compaction does not exist at the app layer, what hook point should GOROMBO own?
+If compaction does not exist at the app layer, what hook point should SIM-ONE Alpha own?
 ```
 
 - [ ] **Step 2: Inspect local runtime types**

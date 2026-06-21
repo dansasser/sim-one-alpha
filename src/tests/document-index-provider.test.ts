@@ -17,6 +17,7 @@ test('document-index provider skips unscoped knowledge_base queries', async () =
     },
     delete: async () => {},
     listIds: async () => [],
+    getVectorDimension: async () => undefined,
   };
   const embeddingClient: import('../rag/embeddings.js').EmbeddingClient = {
     embed: async () => [1, 2, 3],
@@ -68,6 +69,7 @@ test('document-index provider allows scoped knowledge_base queries', async () =>
     },
     delete: async () => {},
     listIds: async () => [],
+    getVectorDimension: async () => undefined,
   };
   const embeddingClient: import('../rag/embeddings.js').EmbeddingClient = {
     embed: async () => [1, 2, 3],

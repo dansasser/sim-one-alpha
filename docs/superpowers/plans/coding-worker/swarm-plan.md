@@ -6,12 +6,12 @@
 
 ## Goal
 
-Close the gap between the current coding-worker runtime foundation (PR #14) and a fully autonomous, approval-gated coding agent inside GOROMBO Agent. The coding worker must be able to take a natural-language coding task, plan, read code, generate edits, run tests, debug on failure, commit, push, and open/update PRs against `main` — with every turn emitting structured progress events back to the user UI.
+Close the gap between the current coding-worker runtime foundation (PR #14) and a fully autonomous, approval-gated coding agent inside SIM-ONE Alpha. The coding worker must be able to take a natural-language coding task, plan, read code, generate edits, run tests, debug on failure, commit, push, and open/update PRs against `main` — with every turn emitting structured progress events back to the user UI.
 
 ## Product context
 
-- **Gorombo** is the company. **GOROMBO Agent** is the product.
-- The coding worker is a subsystem of GOROMBO Agent, not a standalone product.
+- **Gorombo** is the company. **SIM-ONE Alpha** is the product.
+- The coding worker is a subsystem of SIM-ONE Alpha, not a standalone product.
 - It is invoked by the main orchestrator. Internal subagents must not be exposed to the orchestrator.
 - The researcher subagent owns web research; the coding worker does not do web search.
 - All mutating side effects go through the approval service and are fail-closed.
@@ -95,7 +95,7 @@ Apply multi-file edits atomically or rollback on failure. Define transaction bou
 
 Owns: `src/agents/orchestrator.ts`, `src/workspace/`, `src/registries/`
 
-Teach the main GOROMBO Agent orchestrator when and how to invoke the coding worker. Add routing context, memory of prior coding tasks, and main-agent workspace instructions.
+Teach the main SIM-ONE Alpha orchestrator when and how to invoke the coding worker. Add routing context, memory of prior coding tasks, and main-agent workspace instructions.
 
 ## Verification discipline
 

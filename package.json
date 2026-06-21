@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "GOROMBO Flue-based multi-purpose orchestrating agent foundation.",
+  "description": "SIM-ONE Alpha — Flue-based multi-purpose orchestrating agent foundation.",
   "files": [
     "dist/**",
     "scripts/test-built-http.mjs",
