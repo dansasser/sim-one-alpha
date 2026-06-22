@@ -1,0 +1,19 @@
+docs/agents/domain.md
+  s_9c13c6b9c9911e::t_0cd47026118db5 17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "bace2cc499db4712cf0e8dbaea3c683b777bcfb3",
+  "prompts": {},
+  "sessions": {
+    "s_9c13c6b9c9911e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "64da1c8e-5860-412b-9aba-072f0b74ae2a",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
