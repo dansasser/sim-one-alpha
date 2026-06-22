@@ -4,7 +4,7 @@
 
 **Goal:** Address the 31 unresolved issues identified by cubic-dev-ai in the merged PRs #23, #25, and #26, organized into logical PR-sized chunks with focused commits.
 
-**Architecture:** Apply fixes on the worktree branch `codex/cubic-fixes-pr-23-25-26` checked out at `/opt/ai/astro-flue-agent-cubic-fixes`. Each PR's fixes should land as one or more dedicated commits so the final PR groups changes by addressed PR. Do not modify the original merge commits; this is a follow-up fix branch off `main`.
+**Architecture:** Apply fixes on the worktree branch `codex/cubic-fixes-pr-23-25-26` checked out at `/opt/ai/sim-one-alpha-cubic-fixes`. Each PR's fixes should land as one or more dedicated commits so the final PR groups changes by addressed PR. Do not modify the original merge commits; this is a follow-up fix branch off `main`.
 
 **Tech Stack:** TypeScript, Flue, SQLite, LanceDB, LSP, Vitest/node:test, pnpm.
 
@@ -12,7 +12,7 @@
 
 ## Global Preconditions
 
-- [x] Confirm worktree branch is `codex/cubic-fixes-pr-23-25-26` at `/opt/ai/astro-flue-agent-cubic-fixes`.
+- [x] Confirm worktree branch is `codex/cubic-fixes-pr-23-25-26` at `/opt/ai/sim-one-alpha-cubic-fixes`.
 - [x] Run `pnpm install` to ensure dependencies are present.
 - [x] Run baseline checks: `pnpm run typecheck`, `pnpm run build`, `pnpm test` (or equivalent scripts from `package.json`).
 - [x] Record baseline results.

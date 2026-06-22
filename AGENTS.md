@@ -21,7 +21,7 @@ Flue          = the TypeScript agent harness framework from the Astro team
 Ollie         = the main agent persona (defined in src/workspace contents, not paths)
 ```
 
-Keep company, product, framework, agent, worker, workspace, and repository names distinct. Do not use "Gorombo" as the default product name. This repository is `astro-flue-agent`; the runtime product is SIM-ONE Alpha.
+Keep company, product, framework, agent, worker, workspace, and repository names distinct. Do not use "Gorombo" as the default product name. This repository is `sim-one-alpha`; the runtime product is SIM-ONE Alpha.
 
 Workers are subsystems of SIM-ONE Alpha, not standalone products or public endpoints.
 
@@ -527,6 +527,14 @@ Always run the relevant verification commands before calling work complete.
 For TypeScript changes, run the project's configured checks from `package.json`. pnpm and npm are both supported in this repository. The Coding Worker resolves the package manager from lockfile presence (`pnpm-lock.yaml` → pnpm, `package-lock.json` → npm) via `src/workers/coding-worker/repo/package-manager.ts`.
 
 Do not invoke `corepack` to launch pnpm — the repo no longer wires corepack into the command builder. Contributors must have pnpm installed (via npm, standalone installer, or Corepack) before running pnpm commands. The `package.json#packageManager` field documents the required version but does not automatically install or shim the binary.
+
+Required one-time setup before running tests: the bundled local embedding model is gitignored (90MB, not committed) and must be downloaded before the embedding/RAG unit tests can pass. Run it once after `pnpm install`:
+
+```sh
+pnpm fetch-embedding-model
+```
+
+This fetches `assets/models/embeddings/all-MiniLM-L6-v2/` (model.onnx + tokenizer). Without it, the embedding fallback-chain tests fail because the onnx-local provider has no model to run. The cloud provider is expected to 401/403 until a valid cloud embedding key is configured; onnx-local is the working fallback by design.
 
 Typical required checks are:
 

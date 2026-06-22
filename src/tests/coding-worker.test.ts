@@ -238,7 +238,7 @@ test('coding worker live delegate uses Flue task delegation to worker-local suba
     assert.match(result.summary, /Triage selected execution path/);
     assert.equal(result.structuredOutput?.type, 'triage');
   } finally {
-    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmrf(workspaceRoot);
   }
 });
 
@@ -289,7 +289,7 @@ test('coding workspace resolver stores projects and repos under the runtime work
       /escape|relative/,
     );
   } finally {
-    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmrf(workspaceRoot);
   }
 });
 
@@ -531,7 +531,7 @@ test('repo preflight detects pnpm and exact configured verification scripts', ()
       ],
     );
   } finally {
-    rmSync(repoPath, { recursive: true, force: true });
+    rmrf(repoPath);
   }
 });
 
@@ -544,7 +544,7 @@ test('repo preflight returns no scripts for invalid package json', () => {
     assert.deepEqual(readPackageScripts(repoPath), {});
     assert.deepEqual(runCodingRepoPreflight(repoPath).scripts, {});
   } finally {
-    rmSync(repoPath, { recursive: true, force: true });
+    rmrf(repoPath);
   }
 });
 
@@ -668,7 +668,7 @@ test('GitHub side effects are approval-gated and GitHub read tool is mockable', 
   const output = JSON.parse(
     await readContext.execute({
       owner: 'dansasser',
-      repo: 'astro-flue-agent',
+      repo: 'sim-one-alpha',
       issueNumber: 7,
       pullRequestNumber: 8,
     }),
@@ -750,7 +750,7 @@ test('approval service persists trusted decisions and rejects untrusted actors',
     const reloaded = createFileCodingApprovalService(workspaceRoot);
     assert.equal((await reloaded.getRecord(request.id))?.status, 'approved');
   } finally {
-    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmrf(workspaceRoot);
   }
 });
 
@@ -800,7 +800,7 @@ test('concurrent file-store approval service serializes create and recordDecisio
       );
     }
   } finally {
-    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmrf(workspaceRoot);
   }
 });
 
@@ -905,7 +905,7 @@ test('coding worker profile wires GitHub read context with a client and supports
     const context = JSON.parse(
       await readContext.execute({
         owner: 'dansasser',
-        repo: 'astro-flue-agent',
+        repo: 'sim-one-alpha',
         issueNumber: 7,
         pullRequestNumber: 8,
       }),
@@ -932,7 +932,7 @@ test('coding worker profile wires GitHub read context with a client and supports
     const file = JSON.parse(await readFile.execute({ path: 'README.md' })) as { content?: string };
     assert.equal(file.content, '# scoped repo\n');
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -968,7 +968,7 @@ test('GitHub tools read extended PR context and gate PR updates through approval
   const context = JSON.parse(
     await readContext.execute({
       owner: 'dansasser',
-      repo: 'astro-flue-agent',
+      repo: 'sim-one-alpha',
       issueNumber: 7,
       pullRequestNumber: 13,
     }),
@@ -990,7 +990,7 @@ test('GitHub tools read extended PR context and gate PR updates through approval
     await updatePr.execute({
       taskId: 'task-gh-update',
       owner: 'dansasser',
-      repo: 'astro-flue-agent',
+      repo: 'sim-one-alpha',
       pullRequestNumber: 13,
       body: 'Updated body',
     }),
@@ -1016,7 +1016,7 @@ test('GitHub tools read extended PR context and gate PR updates through approval
     await updatePr.execute({
       taskId: 'task-gh-update',
       owner: 'dansasser',
-      repo: 'astro-flue-agent',
+      repo: 'sim-one-alpha',
       pullRequestNumber: 13,
       body: 'Updated body',
     }),
@@ -1056,7 +1056,7 @@ test('GitHub tools verify explicit PR base, head, draft status, and checks', asy
   const verified = JSON.parse(
     await verifyPr.execute({
       owner: 'dansasser',
-      repo: 'astro-flue-agent',
+      repo: 'sim-one-alpha',
       pullRequestNumber: 13,
       expectedBase: 'codex/coding-worker-agent-subsystem',
       expectedHead: 'codex/coding-worker-runtime-approvals',
@@ -1075,7 +1075,7 @@ test('GitHub tools verify explicit PR base, head, draft status, and checks', asy
   const mismatch = JSON.parse(
     await verifyPr.execute({
       owner: 'dansasser',
-      repo: 'astro-flue-agent',
+      repo: 'sim-one-alpha',
       pullRequestNumber: 13,
       expectedBase: 'main',
       expectedDraft: true,
@@ -1398,7 +1398,7 @@ test('coding worker tools create projects under the workspace root and scope fil
     assert.match(output.content, /return 42/);
     await assert.rejects(() => read.execute({ path: '../README.md' }), /escapes coding-worker/);
   } finally {
-    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmrf(workspaceRoot);
   }
 });
 
@@ -1427,7 +1427,7 @@ test('coding worker edit transaction applies multi-file writes and patches atomi
     assert.equal(readFileSync(join(workspaceRoot, 'b.js'), 'utf8'), 'const b = 3;\n');
     assert.equal(readFileSync(join(workspaceRoot, 'c.js'), 'utf8'), 'const c = 4;\n');
   } finally {
-    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmrf(workspaceRoot);
   }
 });
 
@@ -1453,7 +1453,7 @@ test('coding worker edit transaction allows multiple edits targeting the same fi
     assert.equal(result.results.every((r) => r.status === 'applied'), true);
     assert.equal(readFileSync(join(workspaceRoot, 'a.js'), 'utf8'), 'const a = 10;\nconst b = 20;\n');
   } finally {
-    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmrf(workspaceRoot);
   }
 });
 
@@ -1489,7 +1489,7 @@ test('coding worker edit transaction rolls back all changes on first application
     const cResult = result.results.find((r) => r.path === 'c.js');
     assert.equal(cResult?.status, 'rolled_back');
   } finally {
-    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmrf(workspaceRoot);
   }
 });
 
@@ -1516,7 +1516,7 @@ test('coding worker edit transaction remains atomic when pre-flight validation f
     assert.equal(readFileSync(join(workspaceRoot, 'a.js'), 'utf8'), 'const a = 1;\n');
     assert.equal(result.results.length, 0);
   } finally {
-    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmrf(workspaceRoot);
   }
 });
 
@@ -1540,7 +1540,7 @@ test('coding worker edit transaction rejects binary patch targets', async () => 
     assert.equal(result.failure?.path, 'binary.bin');
     assert.match(result.failure?.reason ?? '', /binary file/);
   } finally {
-    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmrf(workspaceRoot);
   }
 });
 
@@ -1563,7 +1563,7 @@ test('coding worker edit transaction rejects patches to missing files', async ()
     assert.equal(result.failure?.path, 'missing.js');
     assert.match(result.failure?.reason ?? '', /does not exist/);
   } finally {
-    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmrf(workspaceRoot);
   }
 });
 
@@ -1609,7 +1609,7 @@ test('coding worker edit transaction tool applies and rolls back through the rep
     assert.equal(readFileSync(join(workspaceRoot, 'y.js'), 'utf8'), 'const y = 2;\n');
     assert.equal(existsSync(join(workspaceRoot, 'w.js')), false);
   } finally {
-    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmrf(workspaceRoot);
   }
 });
 
@@ -1657,7 +1657,7 @@ test('repo workflow tools gate branch creation through approval service', async 
     });
     assert.match(branches, /feature-runtime/);
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -1742,8 +1742,8 @@ test('repo workflow tools clone, register, and discover workspace repositories t
       true,
     );
   } finally {
-    rmSync(source.workspaceRoot, { recursive: true, force: true });
-    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmrf(source.workspaceRoot);
+    rmrf(workspaceRoot);
   }
 });
 
@@ -1779,7 +1779,7 @@ test('orchestrator exposes repo execution only through the coding-worker lead', 
 
     assert.equal(output.exitCode, 0);
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -1807,7 +1807,7 @@ test('coding worker workspace scope can edit workspace files and reject path esc
     assert.match(output.content, /main orchestrator agent/);
     await assert.rejects(() => read.execute({ path: '../outside.txt' }), /escapes coding-worker/);
   } finally {
-    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmrf(workspaceRoot);
   }
 });
 
@@ -1862,7 +1862,7 @@ test('coding worker execFile only exposes baseline and approved environment vari
     } else {
       process.env.CODING_WORKER_SECRET_LEAK = previousSecret;
     }
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -1892,7 +1892,7 @@ test('coding worker shell tool blocks git and GitHub writes without approval', a
     assert.equal(ghOutput.blocked, true);
     assert.equal(ghOutput.approvalAction, 'github.write');
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -1959,7 +1959,7 @@ test('coding worker git commit tool requires approval and commits when approved'
     const log = execFileSync('git', ['log', '--oneline', '-1'], { cwd: project.repoPath, encoding: 'utf8' });
     assert.match(log, /Update answer/);
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -1991,7 +1991,7 @@ test('coding worker GitHub PR creation tool is approval-gated', async () => {
     assert.equal(output.actions[0]?.action, 'create_pr');
     assert.equal(output.actions[0]?.payload.blocked, true);
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -2029,7 +2029,7 @@ test('coding worker loop emits completion telemetry for blocked verification com
       'Git write commands must use the coding-worker approval-gated git/GitHub path.',
     );
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -2077,7 +2077,7 @@ test('coding worker loop emits public progress and blocks completion without ver
     assert.equal(reporter.events().some((event) => event.type === 'coding.plan.updated'), true);
     assert.equal(reporter.events().some((event) => event.type === 'coding.blocked'), true);
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -2122,7 +2122,7 @@ test('coding worker loop edits a temp repo and completes only after verification
     assert.equal(stored?.sessionPlan.childSessions.implementer.includes(':implementer'), true);
     assert.equal(stored?.events.some((event) => event.type === 'coding.completed'), true);
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -2168,7 +2168,7 @@ test('coding worker loop debug loop patches after a failed verification run', as
     assert.equal(result.verification.evidence.some((item) => item.status === 'failed'), true);
     assert.equal(result.verification.evidence.some((item) => item.status === 'passed'), true);
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -2220,7 +2220,7 @@ test('coding worker loop can complete with passing required verification evidenc
   assert.equal(result.status, 'completed');
   assert.doesNotThrow(() => assertCodingWorkerCanComplete(result));
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -2288,7 +2288,7 @@ test('coding repo apply patch produces valid CodingFileEdit objects', async () =
     assert.equal(edit.newText, 'return 42;');
     assert.equal(edit.expectedOccurrences, 1);
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -2321,7 +2321,7 @@ test('coding repo apply exact edit works and returns a valid CodingFileEdit', as
     assert.equal(edit.newText, 'return 42;');
     assert.equal(edit.expectedOccurrences, 1);
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -2376,7 +2376,7 @@ test('coding worker lead loop applies implementer structured edits and completes
     assert.equal(result.subagentResults.some((item) => item.subagent === 'implementer'), true);
     assert.doesNotThrow(() => assertCodingWorkerCanComplete(result));
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -2384,6 +2384,41 @@ interface TempWorkspaceProject {
   workspaceRoot: string;
   projectRelativePath: string;
   repoPath: string;
+}
+
+/**
+ * Recursive temp-dir cleanup with manual retry on transient fs races.
+ *
+ * Node's synchronous rmSync does not reliably retry ENOTEMPTY on inner
+ * subdirectories during a recursive walk: when the test runner drives many
+ * test files concurrently, a real `.git` directory (objects/pack/refs/logs)
+ * can report ENOTEMPTY for a brief window after its children are unlinked --
+ * a tmpfs directory-entry invalidation race. The first rmSync throws from the
+ * inner rmdir and the whole teardown aborts.
+ *
+ * We wrap the whole rmSync in a small retry loop. On ENOTEMPTY/EBUSY/EPERM we
+ * briefly sleep (synchronous busy-wait) to let the kernel settle, then re-run
+ * the full recursive removal. By the second pass the stale entries have flushed
+ * and the directory removes cleanly. This is the standard fix for intermittent
+ * ENOTEMPTY on recursive removal of git repos under concurrent test load.
+ */
+function rmrf(path: string): void {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      rmSync(path, { recursive: true, force: true });
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      if ((code === 'ENOTEMPTY' || code === 'EBUSY' || code === 'EPERM') && attempt < 8) {
+        const end = Date.now() + 25 * (attempt + 1);
+        while (Date.now() < end) {
+          /* synchronous busy-wait to let the filesystem settle */
+        }
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 function createTempWorkspace() {
@@ -2489,7 +2524,7 @@ test('coding worker loop state initializes with bounded turn guard and checkpoin
     assert.equal(checkpoint.pendingEdits.writeFiles.length, 0);
     assert.equal(checkpoint.verificationResults.requiredCommands.length, preflight.verificationPlan.length);
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -2535,7 +2570,7 @@ test('coding worker loop persists a checkpoint after each turn', async () => {
     assert.equal(stored.checkpoint.turn >= 1, true);
     assert.equal(stored.checkpoint.subagentHistory.length > 0, true);
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -2568,7 +2603,7 @@ test('coding worker loop blocks when file edit approval is denied', async () => 
     assert.equal(reporter.events().some((event) => event.type === 'coding.approval.requested'), true);
     assert.equal(readFileSync(join(project.repoPath, 'index.js'), 'utf8').includes('return 41'), true);
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -2629,7 +2664,7 @@ test('coding worker loop replans when code review rejects', async () => {
     assert.equal(reporter.events().some((event) => event.type === 'coding.replanned'), true);
     assert.equal((result.checkpoint?.replanCount ?? 0) >= 1, true);
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -2677,7 +2712,7 @@ test('coding worker loop pauses when code review repeatedly rejects and replan b
     assert.ok(result.checkpoint);
     assert.equal((result.checkpoint?.replanCount ?? 0) >= 2, true);
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -2719,7 +2754,7 @@ test('coding worker loop respects the max turn guard and returns blocked', async
     assert.match(result.summary, /Exceeded maximum loop turns/);
     assert.equal(result.checkpoint?.maxTurns, 2);
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
   }
 });
 
@@ -2749,7 +2784,7 @@ test('coding worker end-to-end fixes bug, commits, pushes branch, and prepares a
         workspaceRoot: project.workspaceRoot,
         targetKind: 'project',
         projectRelativePath: project.projectRelativePath,
-        github: { owner: 'dansasser', repo: 'astro-flue-agent', issueNumber: 7 },
+        github: { owner: 'dansasser', repo: 'sim-one-alpha', issueNumber: 7 },
         verificationCommands: [
           {
             name: 'unit',
@@ -2810,8 +2845,8 @@ test('coding worker end-to-end fixes bug, commits, pushes branch, and prepares a
     assert.equal(events.some((event) => event.type === 'coding.github.completed'), true);
     assert.equal(events.some((event) => event.type === 'coding.completed'), true);
   } finally {
-    rmSync(project.workspaceRoot, { recursive: true, force: true });
-    rmSync(remotePath, { recursive: true, force: true });
+    rmrf(project.workspaceRoot);
+    rmrf(remotePath);
   }
 });
 
@@ -2973,7 +3008,7 @@ function createEndToEndDelegate(input: EndToEndDelegateInput): (
               action: 'create_pr',
               payload: {
                 owner: 'dansasser',
-                repo: 'astro-flue-agent',
+                repo: 'sim-one-alpha',
                 title: message,
                 body: 'Fixes the off-by-one bug in index.js.',
                 head: branch,

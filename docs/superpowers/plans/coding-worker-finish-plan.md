@@ -1,6 +1,6 @@
 # Finish the Coding Worker Product
 
-*Repository:* `astro-flue-agent`
+*Repository:* `sim-one-alpha`
 *Path:* `src/workers/coding-worker/`, `src/protocols/`, `src/agents/orchestrator.ts`
 *Updated:* 2026-06-14
 
@@ -47,7 +47,7 @@ Until the integration test in step 12 passes with a real model and live approval
 ### Phase 1 — Real Protocols, Top-Level
 
 **Branch:** `codex/coding-worker-finish-protocols`
-**Worktree:** `../astro-flue-agent-phase2-finish-protocols`
+**Worktree:** `../sim-one-alpha-phase2-finish-protocols`
 **Base:** `codex/coding-worker-finish` parent
 
 The protocol layer is now a real SQLite-backed provider. Phase 1 is implemented in PR #23 (`codex/coding-worker-finish-protocols`).
@@ -75,7 +75,7 @@ git diff --check
 ### Phase 2 — LSP Code Intelligence Gateway
 
 **Branch:** `codex/coding-worker-finish-lsp`
-**Worktree:** `../astro-flue-agent-phase2-finish-lsp`
+**Worktree:** `../sim-one-alpha-phase2-finish-lsp`
 **Base:** parent with Phase 1 merged
 
 Add real language-server intelligence through a pluggable LSP gateway. The custom AST parsers from Phase 2.7 remain as fallbacks; LSP becomes the primary path where available.
@@ -113,7 +113,7 @@ git diff --check
 ### Phase 3 — Approval Ingress
 
 **Branch:** `codex/coding-worker-finish-approval`
-**Worktree:** `../astro-flue-agent-phase2-finish-approval`
+**Worktree:** `../sim-one-alpha-phase2-finish-approval`
 **Base:** parent with Phases 1 and 2 merged
 
 This is the critical production blocker. The approval service persists requests to `.gorombo-approvals/approvals.json`, but nothing surfaces them to a real user. The connector layer should not need to know about the coding worker's internal approval storage. Build a generic **approval ingress** that any connector can poll or subscribe to, and a matching **approval decision ingress** that connectors write decisions into.
@@ -154,7 +154,7 @@ git diff --check
 ### Phase 4 — Real Model Smoke Test and Failure-Mode Hardening
 
 **Branch:** `codex/coding-worker-finish-smoke`
-**Worktree:** `../astro-flue-agent-phase2-finish-smoke`
+**Worktree:** `../sim-one-alpha-phase2-finish-smoke`
 **Base:** parent with Phases 1–3 merged
 
 The existing E2E test uses `createEndToEndDelegate()` — a fake subagent that always emits correct structured output. Run the loop against a real model and harden against real failure modes.
@@ -187,7 +187,7 @@ git diff --check
 ### Phase 5 — Streaming Progress
 
 **Branch:** `codex/coding-worker-finish-streaming`
-**Worktree:** `../astro-flue-agent-phase2-finish-streaming`
+**Worktree:** `../sim-one-alpha-phase2-finish-streaming`
 **Base:** parent with Phases 1–4 merged
 
 Progress events are emitted but currently batched and returned at the end. A user watching a long coding task sees nothing until it finishes or blocks.
@@ -211,7 +211,7 @@ git diff --check
 ### Phase 6 — Error Recovery and Retry
 
 **Branch:** `codex/coding-worker-finish-retry`
-**Worktree:** `../astro-flue-agent-phase2-finish-retry`
+**Worktree:** `../sim-one-alpha-phase2-finish-retry`
 **Base:** parent with Phases 1–5 merged
 
 Transient failures currently have minimal retry/backoff.
@@ -237,7 +237,7 @@ git diff --check
 ### Phase 7 — Durable Project Memory
 
 **Branch:** `codex/coding-worker-finish-memory`
-**Worktree:** `../astro-flue-agent-phase2-finish-memory`
+**Worktree:** `../sim-one-alpha-phase2-finish-memory`
 **Base:** parent with Phases 1–6 merged
 
 Each task starts fresh. Remember conventions, decisions, and failed approaches across coding sessions.
@@ -263,7 +263,7 @@ git diff --check
 ### Phase 8 — Final Integration and Production Hardening
 
 **Branch:** `codex/coding-worker-finish-integration`
-**Worktree:** `../astro-flue-agent-phase2-finish-integration`
+**Worktree:** `../sim-one-alpha-phase2-finish-integration`
 **Base:** parent with Phases 1–7 merged
 
 Integrate everything and prove the full definition of done.
@@ -294,8 +294,8 @@ git diff --check
 
 One parent worktree, sequential child PRs merged into it, single final PR.
 
-- **Parent worktree:** `/opt/ai/astro-flue-agent-phase2-finish` on `codex/coding-worker-finish`
-- **Child worktrees:** `/opt/ai/astro-flue-agent-phase2-finish-<phase>` on `codex/coding-worker-finish-<phase>`
+- **Parent worktree:** `/opt/ai/sim-one-alpha-phase2-finish` on `codex/coding-worker-finish`
+- **Child worktrees:** `/opt/ai/sim-one-alpha-phase2-finish-<phase>` on `codex/coding-worker-finish-<phase>`
 
 Lifecycle:
 

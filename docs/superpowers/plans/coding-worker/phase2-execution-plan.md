@@ -1,6 +1,6 @@
 # Phase 2 Execution Plan: Autonomous Coding Worker Swarm
 
-*Repository:* `astro-flue-agent`
+*Repository:* `sim-one-alpha`
 *Path:* `src/workers/coding-worker/`
 *Updated:* 2026-06-14
 
@@ -270,11 +270,11 @@ This swarm produces **one PR at the end** after all work is integrated into a si
 
 1. **Create the parent worktree** from `main`:
    ```sh
-   git worktree add ../astro-flue-agent-phase2 codex/coding-worker-phase2
+   git worktree add ../sim-one-alpha-phase2 codex/coding-worker-phase2
    ```
 2. **Create child worktrees** from the parent branch for each parallel stream:
    ```sh
-   git worktree add ../astro-flue-agent-phase2-<phase> codex/coding-worker-phase2-<phase-name>
+   git worktree add ../sim-one-alpha-phase2-<phase> codex/coding-worker-phase2-<phase-name>
    ```
 3. **Delegate each child stream** to a subagent in its child worktree.
 4. If a subagent needs a clean retry or parallel exploration, create an iteration worktree from that child branch.

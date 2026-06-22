@@ -1,6 +1,6 @@
 # Coding Worker Autonomous Agent Swarm Plan
 
-*Repository:* `astro-flue-agent`
+*Repository:* `sim-one-alpha`
 *Context:* `src/workers/coding-worker/`
 *Updated:* 2026-06-13
 
