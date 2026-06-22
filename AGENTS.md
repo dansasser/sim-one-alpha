@@ -662,3 +662,17 @@ Workers perform specialized execution.
 Registries provide discoverability.
 
 The orchestrator coordinates the system.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub (`dansasser/sim-one-alpha`), via the `gh` CLI. External PRs are not a triage surface — only issues are triaged. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context — one `CONTEXT.md` + `docs/adr/` at the repo root (created lazily by `/domain-modeling`; neither exists yet). See `docs/agents/domain.md`.
