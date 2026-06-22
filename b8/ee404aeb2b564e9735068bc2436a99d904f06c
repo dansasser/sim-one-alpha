@@ -1,0 +1,25 @@
+docs/agents/domain.md
+  s_9c13c6b9c9911e::t_6c6a5d741bc450 1-38
+docs/agents/triage-labels.md
+  s_9c13c6b9c9911e::t_ab719067d314b1 1-15
+docs/agents/issue-tracker.md
+  s_9c13c6b9c9911e::t_9d56d625724893 1-34
+AGENTS.md
+  s_9c13c6b9c9911e::t_079aad00b7d6b8 657-670
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "b8ee404aeb2b564e9735068bc2436a99d904f06c",
+  "prompts": {},
+  "sessions": {
+    "s_9c13c6b9c9911e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "64da1c8e-5860-412b-9aba-072f0b74ae2a",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
