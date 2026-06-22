@@ -860,6 +860,14 @@ Any field can be overridden by a `GOROMBO_MEMORY_*` environment variable (`GOROM
 
 Run relevant verification before calling work complete.
 
+**Required one-time setup:** download the bundled local embedding model before running tests. It is gitignored (90MB, not committed) and the embedding/RAG unit tests cannot pass without it:
+
+```sh
+pnpm fetch-embedding-model
+```
+
+This populates `assets/models/embeddings/all-MiniLM-L6-v2/`. The cloud embedding provider is expected to return 401/403 until a valid cloud embedding key is configured; the bundled `all-MiniLM-L6-v2` ONNX model is the working fallback by design, so it must be present for the fallback-chain tests to pass.
+
 Common commands:
 
 ```sh

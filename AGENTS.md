@@ -528,6 +528,14 @@ For TypeScript changes, run the project's configured checks from `package.json`.
 
 Do not invoke `corepack` to launch pnpm — the repo no longer wires corepack into the command builder. Contributors must have pnpm installed (via npm, standalone installer, or Corepack) before running pnpm commands. The `package.json#packageManager` field documents the required version but does not automatically install or shim the binary.
 
+Required one-time setup before running tests: the bundled local embedding model is gitignored (90MB, not committed) and must be downloaded before the embedding/RAG unit tests can pass. Run it once after `pnpm install`:
+
+```sh
+pnpm fetch-embedding-model
+```
+
+This fetches `assets/models/embeddings/all-MiniLM-L6-v2/` (model.onnx + tokenizer). Without it, the embedding fallback-chain tests fail because the onnx-local provider has no model to run. The cloud provider is expected to 401/403 until a valid cloud embedding key is configured; onnx-local is the working fallback by design.
+
 Typical required checks are:
 
 ```sh
