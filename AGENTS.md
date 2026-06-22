@@ -21,7 +21,7 @@ Flue          = the TypeScript agent harness framework from the Astro team
 Ollie         = the main agent persona (defined in src/workspace contents, not paths)
 ```
 
-Keep company, product, framework, agent, worker, workspace, and repository names distinct. Do not use "Gorombo" as the default product name. This repository is `astro-flue-agent`; the runtime product is SIM-ONE Alpha.
+Keep company, product, framework, agent, worker, workspace, and repository names distinct. Do not use "Gorombo" as the default product name. This repository is `sim-one-alpha`; the runtime product is SIM-ONE Alpha.
 
 Workers are subsystems of SIM-ONE Alpha, not standalone products or public endpoints.
 

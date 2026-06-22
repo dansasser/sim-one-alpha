@@ -668,7 +668,7 @@ test('GitHub side effects are approval-gated and GitHub read tool is mockable', 
   const output = JSON.parse(
     await readContext.execute({
       owner: 'dansasser',
-      repo: 'astro-flue-agent',
+      repo: 'sim-one-alpha',
       issueNumber: 7,
       pullRequestNumber: 8,
     }),
@@ -905,7 +905,7 @@ test('coding worker profile wires GitHub read context with a client and supports
     const context = JSON.parse(
       await readContext.execute({
         owner: 'dansasser',
-        repo: 'astro-flue-agent',
+        repo: 'sim-one-alpha',
         issueNumber: 7,
         pullRequestNumber: 8,
       }),
@@ -968,7 +968,7 @@ test('GitHub tools read extended PR context and gate PR updates through approval
   const context = JSON.parse(
     await readContext.execute({
       owner: 'dansasser',
-      repo: 'astro-flue-agent',
+      repo: 'sim-one-alpha',
       issueNumber: 7,
       pullRequestNumber: 13,
     }),
@@ -990,7 +990,7 @@ test('GitHub tools read extended PR context and gate PR updates through approval
     await updatePr.execute({
       taskId: 'task-gh-update',
       owner: 'dansasser',
-      repo: 'astro-flue-agent',
+      repo: 'sim-one-alpha',
       pullRequestNumber: 13,
       body: 'Updated body',
     }),
@@ -1016,7 +1016,7 @@ test('GitHub tools read extended PR context and gate PR updates through approval
     await updatePr.execute({
       taskId: 'task-gh-update',
       owner: 'dansasser',
-      repo: 'astro-flue-agent',
+      repo: 'sim-one-alpha',
       pullRequestNumber: 13,
       body: 'Updated body',
     }),
@@ -1056,7 +1056,7 @@ test('GitHub tools verify explicit PR base, head, draft status, and checks', asy
   const verified = JSON.parse(
     await verifyPr.execute({
       owner: 'dansasser',
-      repo: 'astro-flue-agent',
+      repo: 'sim-one-alpha',
       pullRequestNumber: 13,
       expectedBase: 'codex/coding-worker-agent-subsystem',
       expectedHead: 'codex/coding-worker-runtime-approvals',
@@ -1075,7 +1075,7 @@ test('GitHub tools verify explicit PR base, head, draft status, and checks', asy
   const mismatch = JSON.parse(
     await verifyPr.execute({
       owner: 'dansasser',
-      repo: 'astro-flue-agent',
+      repo: 'sim-one-alpha',
       pullRequestNumber: 13,
       expectedBase: 'main',
       expectedDraft: true,
@@ -2749,7 +2749,7 @@ test('coding worker end-to-end fixes bug, commits, pushes branch, and prepares a
         workspaceRoot: project.workspaceRoot,
         targetKind: 'project',
         projectRelativePath: project.projectRelativePath,
-        github: { owner: 'dansasser', repo: 'astro-flue-agent', issueNumber: 7 },
+        github: { owner: 'dansasser', repo: 'sim-one-alpha', issueNumber: 7 },
         verificationCommands: [
           {
             name: 'unit',
@@ -2973,7 +2973,7 @@ function createEndToEndDelegate(input: EndToEndDelegateInput): (
               action: 'create_pr',
               payload: {
                 owner: 'dansasser',
-                repo: 'astro-flue-agent',
+                repo: 'sim-one-alpha',
                 title: message,
                 body: 'Fixes the off-by-one bug in index.js.',
                 head: branch,

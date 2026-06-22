@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add native Telegram ingress and egress to **SIM-ONE Alpha** (the runtime product built in `astro-flue-agent`). A Telegram bot token and one or more approved user IDs are configured through the existing runtime config and environment variables. Unapproved users trigger a pairing flow. Approved Telegram messages reach the orchestrator agent through the same durable path that `/api/chat/events` already uses. The orchestrator replies through a model-callable tool.
+Add native Telegram ingress and egress to **SIM-ONE Alpha** (the runtime product built in `sim-one-alpha`). A Telegram bot token and one or more approved user IDs are configured through the existing runtime config and environment variables. Unapproved users trigger a pairing flow. Approved Telegram messages reach the orchestrator agent through the same durable path that `/api/chat/events` already uses. The orchestrator replies through a model-callable tool.
 
 ## First principle: use Flue before building our own
 

@@ -1,6 +1,6 @@
 ﻿# Coding Worker Gap Analysis
 
-*Repository:* `astro-flue-agent`
+*Repository:* `sim-one-alpha`
 *Branch context:* `codex/coding-worker-runtime-approvals` (PR #14)
 *Updated:* 2026-06-13
 

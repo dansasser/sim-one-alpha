@@ -1,6 +1,6 @@
 # SIM-ONE Alpha Schema Strategy
 
-This document describes how runtime schemas are organized in `astro-flue-agent`, why we chose Valibot, and when to promote a schema to a shared location.
+This document describes how runtime schemas are organized in `sim-one-alpha`, why we chose Valibot, and when to promote a schema to a shared location.
 
 ## Why we need a schema layer
 

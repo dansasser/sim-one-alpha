@@ -1,6 +1,6 @@
 # Coding Worker — Future Enhancements (Post-Finish)
 
-*Repository:* `astro-flue-agent`
+*Repository:* `sim-one-alpha`
 *Path:* `src/workers/coding-worker/`
 *Updated:* 2026-06-14
 
