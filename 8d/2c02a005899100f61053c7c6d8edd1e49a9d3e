@@ -1,0 +1,19 @@
+docs/agents/issue-tracker.md
+  s_9c13c6b9c9911e::t_370d0dca935f19 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "8d2c02a005899100f61053c7c6d8edd1e49a9d3e",
+  "prompts": {},
+  "sessions": {
+    "s_9c13c6b9c9911e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "64da1c8e-5860-412b-9aba-072f0b74ae2a",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
