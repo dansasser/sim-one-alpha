@@ -480,14 +480,19 @@ On first install, `sim-one install` (or the install script) will launch a wizard
 
 ### Developer prototype
 
-The current TUI prototype lives in `tui-proto/` at the repo top level. It is a throwaway test harness that will be replaced by the production `sim-one` binary. During development, it can be launched directly:
+The current TUI and CLI live in `sim-one-cli/` at the repo top level. This is the evolving production CLI package — it will become the `sim-one` binary when the install script ships. During development, it can be launched directly:
 
 ```sh
 # Against a running dev server
-pnpm --filter sim-one-alpha-tui-proto exec tsx src/cli.tsx --port 3583
+pnpm --filter sim-one-cli exec tsx src/cli.tsx --port 3583
 
 # One-command build + launch (developer workflow)
 pnpm run build:prod
+
+# Capability management subcommands
+pnpm --filter sim-one-cli exec tsx src/cli.tsx skill list
+pnpm --filter sim-one-cli exec tsx src/cli.tsx skill add /path/to/skill my-skill "My Skill" --enable
+pnpm --filter sim-one-cli exec tsx src/cli.tsx mcp add my-mcp "My MCP" --url http://localhost:8080 --enable
 ```
 
 See `docs/architecture/product-flow.md` for the full product install and launch flow.
@@ -618,6 +623,138 @@ node scripts/capability-admin.mjs remove skill my-skill
 ```
 
 These are dev-time tools. The product interface is `sim-one skill add ...`, not `pnpm` scripts or standalone `.mjs` files.
+
+### Source directory structure
+
+Each capability kind requires a specific directory structure. When you point `sim-one skill add <path>` or `sim-one tool add <path>` at a local directory or GitHub repo, the source must follow these shapes:
+
+#### Skill
+
+```text
+my-skill/
+  SKILL.md          # required — Agent Skills spec frontmatter + markdown body
+```
+
+`SKILL.md` frontmatter (per the [Agent Skills spec](https://agentskills.io/specification)):
+
+```yaml
+---
+name: my-skill             # must match the directory name
+description: Does X thing   # tells the agent when to use this skill
+---
+```
+
+Skills are markdown-only (no code execution). They auto-enable — no approval needed. The `SKILL.md` and any supporting files in the directory are materialized into `~/.gorombo/capabilities/skills/<id>/`.
+
+#### Tool
+
+```text
+my-tool/
+  index.mjs         # required — exports a defineTool(...) result
+```
+
+`index.mjs` shape:
+
+```js
+import { defineTool } from '@flue/runtime';
+import * as v from 'valibot';
+
+export default defineTool({
+  name: 'my_tool',
+  description: 'Does X thing.',
+  parameters: v.object({
+    input: v.pipe(v.string(), v.description('The input value')),
+  }),
+  execute: async ({ input }) => {
+    return `Result: ${input}`;
+  },
+});
+```
+
+Tools execute arbitrary code (in-process via dynamic `import()`). They require user approval before enabling. The `index.mjs` is materialized into `~/.gorombo/capabilities/tools/<id>/`.
+
+You can also export multiple tools (array or named exports):
+
+```js
+// Array export
+export default [toolA, toolB];
+
+// Named exports
+export const toolA = defineTool({ ... });
+export const toolB = defineTool({ ... });
+```
+
+#### Worker (subagent)
+
+```text
+my-worker/
+  index.mjs         # required — exports a defineAgentProfile(...) result
+  workspace/        # required — worker persona files (same as built-in workers)
+    USER.md          # worker identity, role, instructions
+    TOOLS.md         # available tools for this worker
+    ...other workspace files
+```
+
+`index.mjs` shape:
+
+```js
+import { defineAgentProfile } from '@flue/runtime';
+
+export default defineAgentProfile({
+  name: 'my-worker',
+  description: 'A specialized worker for X.',
+  instructions: 'Base instructions from the module.',
+});
+```
+
+Workers are subagents — the orchestrator delegates to them via the Flue `task` tool. They require user approval before enabling. The worker loader reads the `workspace/` directory and loads persona files via `composeWorkspaceInstructions()`, merging them into the profile's `instructions` field alongside any instructions declared in the module.
+
+If no `workspace/` directory exists, the worker loads with a warning — all workers should have workspace persona files.
+
+The `workspace/` directory follows the same file conventions as built-in workers:
+
+| File | Purpose |
+| --- | --- |
+| `USER.md` | Worker identity, role, behavior guidance |
+| `TOOLS.md` | Available tools for this worker |
+| `AGENTS.md` | System instructions (company-owned) |
+| `IDENTITY.md` | Detailed identity definition |
+| `SOUL.md` | Personality and tone |
+| `MEMORY.md` | Memory usage guidance |
+| `SECURITY.md` | Security boundaries |
+| `HEARTBEAT.md` | Health check guidance |
+
+Not all files are required — include the ones that make sense for the worker. `USER.md` is the minimum.
+
+#### MCP server
+
+MCP servers don't have a source directory — they're remote endpoints. You add them with connection details:
+
+```sh
+sim-one mcp add my-mcp "My MCP Server" "Description" \
+  --url https://mcp.example.com/mcp \
+  --transport streamable-http \
+  --token-env MY_MCP_TOKEN \
+  --enable
+```
+
+The `--token-env` flag names an environment variable (not the token value itself) that contains the auth token. The MCP broker reads it at runtime and passes it as a `Bearer` token in the `Authorization` header.
+
+### Built-in MCP
+
+SIM-ONE Alpha includes a built-in MCP connection to the Astro docs server (`https://mcp.docs.astro.build/mcp`). This gives the orchestrator access to `mcp__astro-docs__search_astro_docs` — a tool that searches Astro framework documentation. No setup required, always available.
+
+The `astro-docs` name is reserved — users and agents cannot add a capability with that name (collision detection blocks it).
+
+See `docs/architecture/astro-docs-mcp.md` for details and planned coding agent integration.
+
+### Naming collision detection
+
+When adding a capability, the system checks for name conflicts:
+- **Built-in names** — tools, subagents, skills, and MCP servers that ship with SIM-ONE Alpha (e.g. `load_protocols`, `coding-worker`, `astro-docs`). The full list is generated at build time in `dist/builtin-capabilities.json`.
+- **Existing capabilities** — any capability already registered in the SQLite store.
+
+If a collision is found, the add is refused with an error: `Name 'X' conflicts with a built-in capability. Choose a different name.` or `Name 'X' already exists as a <kind> capability. Choose a different name.` The user or agent must pick a different name — no auto-rename.
 
 See `docs/architecture/capability-system.md` for full architecture documentation and `docs/architecture/product-flow.md` for the product install and launch flow.
 
