@@ -1,0 +1,24 @@
+{
+  "name": "sim-one-alpha-tui-proto",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Throwaway interactive TUI prototype for testing the built SIM-ONE Alpha agent.",
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@flue/sdk": "1.0.0-beta.1",
+    "@flue/react": "1.0.0-beta.1",
+    "ink": "^7.1.0",
+    "react": "^19.2.0",
+    "commander": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.2.0",
+    "tsx": "^4.19.0",
+    "typescript": "^6.0.3"
+  }
+}
