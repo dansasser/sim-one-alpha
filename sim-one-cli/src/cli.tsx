@@ -2,6 +2,32 @@ import { Command } from 'commander';
 import { render } from 'ink';
 import React from 'react';
 import { App } from './App.js';
+import {
+  addSkill,
+  listSkills,
+  enableSkill,
+  disableSkill,
+  removeSkill,
+  updateSkill,
+  addTool,
+  listTools,
+  enableTool,
+  disableTool,
+  removeTool,
+  updateTool,
+  addWorker,
+  listWorkers,
+  enableWorker,
+  disableWorker,
+  removeWorker,
+  updateWorker,
+  addMcp,
+  listMcp,
+  enableMcp,
+  disableMcp,
+  removeMcp,
+  updateMcp,
+} from './commands/index.js';
 
 const program = new Command();
 
@@ -24,134 +50,62 @@ program
     render(<App baseUrl={baseUrl} session={session} token={token} />);
   });
 
-function createKindCommand(kind: string, description: string): Command {
-  return new Command(kind)
-    .description(description)
+function addKindCommands(program: Command, kind: 'skill' | 'tool' | 'worker'): void {
+  const fns = {
+    skill: { add: addSkill, list: listSkills, enable: enableSkill, disable: disableSkill, remove: removeSkill, update: updateSkill },
+    tool: { add: addTool, list: listTools, enable: enableTool, disable: disableTool, remove: removeTool, update: updateTool },
+    worker: { add: addWorker, list: listWorkers, enable: enableWorker, disable: disableWorker, remove: removeWorker, update: updateWorker },
+  }[kind];
+
+  const cmd = program.command(kind).description(`Manage ${kind}s${kind === 'worker' ? ' (subagents)' : ''}`);
+
+  cmd
     .command('add <source> <id> <name>')
     .description(`Add a ${kind} from a GitHub URL or local directory path`)
-    .option('--enable', `enable the ${kind} immediately`)
     .option('--description <text>', `${kind} description`)
+    .option('--enable', `enable the ${kind} immediately`)
     .option('--version <ver>', 'pin to a specific version or git ref')
-    .action(() => {
-      console.log(`sim-one ${kind} add — not yet implemented (Phase 2)`);
-      process.exit(1);
-    })
-    .parent as Command;
+    .action((source: string, id: string, name: string, opts: { description?: string; enable?: boolean; version?: string }) => {
+      fns.add(source, id, name, opts.description ?? '', opts.enable ?? false, opts.version);
+    });
+
+  cmd.command('list').description(`List all ${kind} capabilities`).action(() => fns.list());
+
+  cmd.command('enable <id>').description(`Enable a ${kind} capability`).action((id: string) => fns.enable(id));
+
+  cmd.command('disable <id>').description(`Disable a ${kind} capability`).action((id: string) => fns.disable(id));
+
+  cmd.command('remove <id>').description(`Remove a ${kind} capability and delete its files`).action((id: string) => fns.remove(id));
+
+  cmd.command('update <id>').description(`Re-fetch a ${kind} from its source`).action((id: string) => fns.update(id));
 }
 
-function createKindCommandGroup(kind: string, description: string): Command {
-  const group = new Command(kind).description(description);
+addKindCommands(program, 'skill');
+addKindCommands(program, 'tool');
+addKindCommands(program, 'worker');
 
-  group
-    .command('add <source> <id> <name>')
-    .description(`Add a ${kind} from a GitHub URL or local directory path`)
-    .option('--enable', `enable the ${kind} immediately`)
-    .option('--description <text>', `${kind} description`)
-    .option('--version <ver>', 'pin to a specific version or git ref')
-    .action(() => {
-      console.log(`sim-one ${kind} add — not yet implemented (Phase 2)`);
-      process.exit(1);
-    });
+const mcpCmd = program.command('mcp').description('Manage MCP servers');
 
-  group
-    .command('list')
-    .description(`List all ${kind} capabilities`)
-    .action(() => {
-      console.log(`sim-one ${kind} list — not yet implemented (Phase 2)`);
-      process.exit(1);
-    });
-
-  group
-    .command('enable <id>')
-    .description(`Enable a ${kind} capability`)
-    .action(() => {
-      console.log(`sim-one ${kind} enable — not yet implemented (Phase 2)`);
-      process.exit(1);
-    });
-
-  group
-    .command('disable <id>')
-    .description(`Disable a ${kind} capability`)
-    .action(() => {
-      console.log(`sim-one ${kind} disable — not yet implemented (Phase 2)`);
-      process.exit(1);
-    });
-
-  group
-    .command('remove <id>')
-    .description(`Remove a ${kind} capability and delete its files`)
-    .action(() => {
-      console.log(`sim-one ${kind} remove — not yet implemented (Phase 2)`);
-      process.exit(1);
-    });
-
-  group
-    .command('update <id>')
-    .description(`Re-fetch a ${kind} from its source`)
-    .action(() => {
-      console.log(`sim-one ${kind} update — not yet implemented (Phase 2)`);
-      process.exit(1);
-    });
-
-  return group;
-}
-
-const skillCmd = createKindCommandGroup('skill', 'Manage skills');
-const toolCmd = createKindCommandGroup('tool', 'Manage tools');
-const workerCmd = createKindCommandGroup('worker', 'Manage workers (subagents)');
-
-const mcpCmd = new Command('mcp').description('Manage MCP servers');
 mcpCmd
   .command('add <id> <name>')
   .description('Add an MCP server connection')
   .option('--url <url>', 'MCP server endpoint URL')
   .option('--transport <type>', 'transport type (streamable-http or sse)', 'streamable-http')
   .option('--token-env <env>', 'environment variable name containing the auth token')
-  .option('--enable', 'enable the MCP server immediately')
   .option('--description <text>', 'MCP server description')
-  .action(() => {
-    console.log('sim-one mcp add — not yet implemented (Phase 2)');
-    process.exit(1);
-  });
-mcpCmd
-  .command('list')
-  .description('List all MCP server capabilities')
-  .action(() => {
-    console.log('sim-one mcp list — not yet implemented (Phase 2)');
-    process.exit(1);
-  });
-mcpCmd
-  .command('enable <id>')
-  .description('Enable an MCP server capability')
-  .action(() => {
-    console.log('sim-one mcp enable — not yet implemented (Phase 2)');
-    process.exit(1);
-  });
-mcpCmd
-  .command('disable <id>')
-  .description('Disable an MCP server capability')
-  .action(() => {
-    console.log('sim-one mcp disable — not yet implemented (Phase 2)');
-    process.exit(1);
-  });
-mcpCmd
-  .command('remove <id>')
-  .description('Remove an MCP server capability')
-  .action(() => {
-    console.log('sim-one mcp remove — not yet implemented (Phase 2)');
-    process.exit(1);
-  });
-mcpCmd
-  .command('update <id>')
-  .description('Update an MCP server configuration')
-  .action(() => {
-    console.log('sim-one mcp update — not yet implemented (Phase 2)');
-    process.exit(1);
+  .option('--enable', 'enable the MCP server immediately')
+  .action((id: string, name: string, opts: { url?: string; transport?: 'streamable-http' | 'sse'; tokenEnv?: string; description?: string; enable?: boolean }) => {
+    if (!opts.url) {
+      console.error('Error: --url is required for mcp add');
+      process.exit(1);
+    }
+    addMcp(id, name, opts.url, opts.description ?? '', opts.transport ?? 'streamable-http', opts.tokenEnv, opts.enable ?? false);
   });
 
-program.addCommand(skillCmd);
-program.addCommand(toolCmd);
-program.addCommand(workerCmd);
-program.addCommand(mcpCmd);
+mcpCmd.command('list').description('List all MCP server capabilities').action(() => listMcp());
+mcpCmd.command('enable <id>').description('Enable an MCP server capability').action((id: string) => enableMcp(id));
+mcpCmd.command('disable <id>').description('Disable an MCP server capability').action((id: string) => disableMcp(id));
+mcpCmd.command('remove <id>').description('Remove an MCP server capability').action((id: string) => removeMcp(id));
+mcpCmd.command('update <id>').description('Update an MCP server configuration').action((id: string) => updateMcp(id));
 
 program.parse();
