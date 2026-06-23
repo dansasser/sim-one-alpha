@@ -1,0 +1,31 @@
+tui-proto/src/components/ApprovalList.tsx
+  s_2a85b2e1f110e1::t_72c4b2484cd4c7 1-25
+tui-proto/src/components/ApprovalPrompt.tsx
+  s_2a85b2e1f110e1::t_bdb53ab614a676 1-75
+tui-proto/src/lib/approvalClient.ts
+  s_2a85b2e1f110e1::t_a05859b3ef677c 36
+  s_2a85b2e1f110e1::t_b45eddf8eb509f 1-35,37-69
+tui-proto/src/hooks/usePendingApprovals.ts
+  s_2a85b2e1f110e1::t_dfaaf3f8a7a763 1-46
+tui-proto/src/components/ChatLayout.tsx
+  s_2a85b2e1f110e1::t_1e7fa4df20005f 2
+  s_2a85b2e1f110e1::t_3f4d355feaa502 3,8-11,16-17,20,24-34,47-51,56-71,77
+tui-proto/src/App.tsx
+  s_2a85b2e1f110e1::t_81e4e2b0620d70 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "760c9c4bbb8c2bdafdf0eb7ce5dca1352d8fe88a",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
