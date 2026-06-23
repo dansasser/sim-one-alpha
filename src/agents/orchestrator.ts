@@ -51,6 +51,8 @@ import { createCapabilityStore } from '../capabilities/capability-store.js';
 import { loadUserCapabilities } from '../capabilities/capability-loader.js';
 import { materializeCapability } from '../capabilities/skill-materializer.js';
 import { connectUserMcpServers } from '../capabilities/mcp-broker.js';
+import { loadUserTools } from '../capabilities/tool-loader.js';
+import { loadUserWorkers } from '../capabilities/worker-loader.js';
 
 export const route: AgentRouteHandler = async (_c, next) => next();
 
@@ -110,8 +112,10 @@ export default createAgent(async ({ env }) => {
 
   const userCapabilities = loadUserCapabilitiesFromStore(env);
   const mcpResult = await connectUserMcpServers(userCapabilities.mcp, env);
-  const userTools = [...mcpResult.tools];
-  const userSubagents: typeof builtInSubagents = [];
+  const toolResult = await loadUserTools(userCapabilities.tools, env);
+  const workerResult = await loadUserWorkers(userCapabilities.workers, env);
+  const userTools = [...mcpResult.tools, ...toolResult.tools];
+  const userSubagents: typeof builtInSubagents = [...workerResult.profiles];
 
   return {
     model: selectedModelCard.specifier,

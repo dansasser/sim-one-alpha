@@ -212,6 +212,8 @@ src/capabilities/
   discovery path; `mcp-broker.ts` connects MCP servers and returns tools.
   Loaded at `createAgent(...)` init in `src/agents/orchestrator.ts`. See
   `docs/architecture/capability-system.md` and `scripts/capability-admin.mjs`.
+  `tool-loader.ts` and `worker-loader.ts` dynamically `import()` user JS
+  modules that export `defineTool(...`/`defineAgentProfile(...)` results.
 
 scripts/capability-admin.mjs
   CLI admin script for capability CRUD (add/list/enable/disable/remove/update).

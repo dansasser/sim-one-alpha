@@ -18,3 +18,7 @@ export { materializeCapability } from './skill-materializer.js';
 export type { MaterializeOptions, MaterializeResult } from './skill-materializer.js';
 export { connectUserMcpServers } from './mcp-broker.js';
 export type { McpBrokerResult } from './mcp-broker.js';
+export { loadUserTools } from './tool-loader.js';
+export type { ToolLoaderResult } from './tool-loader.js';
+export { loadUserWorkers } from './worker-loader.js';
+export type { WorkerLoaderResult } from './worker-loader.js';
