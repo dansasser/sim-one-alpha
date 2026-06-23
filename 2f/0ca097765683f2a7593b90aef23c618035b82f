@@ -1,0 +1,23 @@
+src/capabilities/mcp-broker.ts
+  s_2a85b2e1f110e1::t_6dc69fd26b07a7 59-67
+  s_2a85b2e1f110e1::t_b8d1e77fb04b83 34-43,46
+  s_2a85b2e1f110e1::t_9e6e77144d57d5 13-16
+package.json
+  s_2a85b2e1f110e1::t_932782a29bf8d3 55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "2f0ca097765683f2a7593b90aef23c618035b82f",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
