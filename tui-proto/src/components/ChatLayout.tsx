@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { Header } from './Header.js';
 import { MessageList } from './MessageList.js';
 import { ChatInput } from './ChatInput.js';
-import { StatusLine } from './StatusLine.js';
+import { StatusBar } from './StatusBar.js';
 import { ApprovalList } from './ApprovalList.js';
 import { ApprovalPrompt } from './ApprovalPrompt.js';
 import { createApprovalClient } from '../lib/approvalClient.js';
@@ -69,7 +69,7 @@ export function ChatLayout({ baseUrl, session, token, decidedBy }: ChatLayoutPro
           onResolved={() => setActiveApprovalId(undefined)}
         />
       )}
-      <StatusLine status={agent.status} error={agent.error} />
+      <StatusBar messageCount={agent.messages.length} pendingApprovals={pending.length} agentStatus={agent.status} />
       <ChatInput
         value={input}
         onChange={setInput}

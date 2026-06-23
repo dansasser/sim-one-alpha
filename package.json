@@ -27,7 +27,7 @@
     "protocols:enable": "node scripts/protocol-admin.mjs enable",
     "protocols:disable": "node scripts/protocol-admin.mjs disable",
     "start": "node --env-file=.env dist/server.mjs",
-    "build:prod": "pnpm run build && pnpm --filter sim-one-alpha-tui-proto exec tsx src/cli.tsx",
+    "build:prod": "node scripts/build-prod.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm run test:unit && pnpm run build && pnpm run test:http",
     "fetch-embedding-model": "node scripts/fetch-embedding-model.mjs",
