@@ -1,0 +1,27 @@
+src/rag/indexers/background-indexer.ts
+  s_2a85b2e1f110e1::t_1178676d2312d5 51-55,64-82,84-91,95-99
+PROJECT-TRACKING.md
+  s_2a85b2e1f110e1::t_3c5086e97678a3 76-95
+  s_2a85b2e1f110e1::t_82b6f2fae0eac4 1-75,108-195
+  s_2a85b2e1f110e1::t_81289949118898 96-107
+package.json
+  s_2a85b2e1f110e1::t_e9bd69b5f9386c 53
+.gitignore
+  s_2a85b2e1f110e1::t_1e83e9fa5c3aef 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "01f9fe5699d029a47f0392c36d62360f41de9a5c",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
