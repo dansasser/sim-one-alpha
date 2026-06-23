@@ -1,0 +1,44 @@
+src/tests/fixtures/capabilities/test-worker/workspace/USER.md
+  s_2a85b2e1f110e1::t_4294158391e860 1
+src/tests/fixtures/capabilities/test-worker/workspace/TOOLS.md
+  s_2a85b2e1f110e1::t_aa5e02ddad2d24 1-2
+src/tests/collision-check.test.ts
+  s_2a85b2e1f110e1::t_e05e25205e3c88 1-9,14-41,45-57,61-98,100-107
+  s_2a85b2e1f110e1::t_33d7de15573733 99
+  s_2a85b2e1f110e1::t_e6b9cb33e6790a 42-44,58-60
+  s_2a85b2e1f110e1::t_0542fdfa336cff 10-13
+src/capabilities/worker-loader.ts
+  s_2a85b2e1f110e1::t_ee3596cf64464b 56-69
+src/tests/fixtures/capabilities/test-tool/index.mjs
+  s_2a85b2e1f110e1::t_6f30773065865a 1-15
+src/tests/capability-store.test.ts
+  s_2a85b2e1f110e1::t_a7a067094b9759 11-16
+  s_2a85b2e1f110e1::t_f4951fb05f6742 37,52,66,79,96,109,124,137
+  s_2a85b2e1f110e1::t_d129965e299cd2 1-10,17-36,38-51,53-65,67-78,80-95,97-108,110-123,125-136,138-161
+src/capabilities/collision-check.ts
+  s_2a85b2e1f110e1::t_e7777787471171 22-24
+src/tests/fixtures/capabilities/test-skill/SKILL.md
+  s_2a85b2e1f110e1::t_9d844cd9405de5 1-6
+src/tests/fixtures/capabilities/test-worker/index.mjs
+  s_2a85b2e1f110e1::t_dc83c743133705 1-7
+src/tests/builtin-registry.test.ts
+  s_2a85b2e1f110e1::t_3c417691eec8eb 1-54
+src/tests/worker-loader.test.ts
+  s_2a85b2e1f110e1::t_ff54949b816dfd 1-121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.11",
+  "base_commit_sha": "b4d84106b63d3a20c248cf20e9ad1abc1506a5b7",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
