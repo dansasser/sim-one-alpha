@@ -1,0 +1,25 @@
+src/tools/capability-tools.ts
+  s_2a85b2e1f110e1::t_abe9f785269d80 57
+src/capabilities/capability-store.ts
+  s_2a85b2e1f110e1::t_e9f31fc7fc042a 107-129
+sim-one-cli/src/commands/skill.ts
+  s_2a85b2e1f110e1::t_19368d64d5ee13 189
+src/capabilities/types.ts
+  s_2a85b2e1f110e1::t_c81a37af8237b3 37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.11",
+  "base_commit_sha": "29fe9d4819f452bf2a26b5d7bb75df29bb0e1c54",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
