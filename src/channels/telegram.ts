@@ -23,7 +23,8 @@ function isTestMode(): boolean {
 }
 
 function isTelegramConfigured(): boolean {
-  return Boolean(process.env.TELEGRAM_BOT_TOKEN) || isTestMode();
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  return (typeof token === 'string' && token.trim().length > 0) || isTestMode();
 }
 
 function getTelegramBotToken(): string {
@@ -133,13 +134,21 @@ import type { TelegramChannel } from '@flue/telegram';
 
 function getTelegramWebhookSecret(): string {
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN;
-  if (!secret) {
-    if (isTestMode()) {
-      return 'test-webhook-secret';
-    }
-    return 'telegram-not-configured';
+  if (secret) {
+    return secret;
   }
-  return secret;
+  if (isTestMode()) {
+    return 'test-webhook-secret';
+  }
+  if (isTelegramConfigured()) {
+    throw new Error(
+      'TELEGRAM_WEBHOOK_SECRET_TOKEN environment variable is required for webhook authentication when Telegram is configured. Set it to enable Telegram, or remove TELEGRAM_BOT_TOKEN to run without Telegram (TUI/HTTP only).',
+    );
+  }
+  // Telegram not configured: use a random non-deterministic secret so
+  // the channel can still be constructed (Flue requires it) but webhook
+  // requests will never authenticate even if they reach this instance.
+  return `disabled-${crypto.randomUUID()}`;
 }
 
 let cachedChannel: TelegramChannel | undefined;
@@ -173,7 +182,7 @@ function getOrCreateTelegramChannel(): TelegramChannel {
 }
 
 export function getTelegramChannel(): TelegramChannel | undefined {
-  return isTelegramConfigured() ? getOrCreateTelegramChannel() : getOrCreateTelegramChannel();
+  return isTelegramConfigured() ? getOrCreateTelegramChannel() : undefined;
 }
 
 export const channel: TelegramChannel = getOrCreateTelegramChannel();

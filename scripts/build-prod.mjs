@@ -44,8 +44,13 @@ if (buildResult.status !== 0) {
 }
 
 console.log(`Starting server on port ${port}...`);
-const serverEnv = { ...process.env, ...envVars, PORT: port };
-const server = spawn('node', ['--env-file=.env', 'dist/server.mjs'], {
+const serverEnv = { ...process.env, ...envVars, PORT: port, API_SECRET: apiKey };
+const serverArgs = [];
+if (existsSync(envPath)) {
+  serverArgs.push('--env-file=.env');
+}
+serverArgs.push('dist/server.mjs');
+const server = spawn('node', serverArgs, {
   cwd: repoRoot,
   stdio: ['ignore', 'pipe', 'pipe'],
   env: serverEnv,
@@ -62,13 +67,35 @@ server.stderr?.on('data', (data) => {
 });
 
 let serverReady = false;
+let serverExited = false;
+
+server.on('exit', (code, signal) => {
+  if (serverReady) return;
+  serverExited = true;
+  clearInterval(readinessCheck);
+  clearTimeout(readinessTimeout);
+  console.error(`Server exited before becoming ready (code=${code}, signal=${signal}).`);
+  cleanup(code ?? 1);
+});
+
+server.on('error', (err) => {
+  if (serverReady || serverExited) return;
+  serverExited = true;
+  clearInterval(readinessCheck);
+  clearTimeout(readinessTimeout);
+  console.error('Server failed to start:', err.message);
+  cleanup(1);
+});
+
 const readinessCheck = setInterval(() => {
+  if (serverExited) return;
   fetch(`http://127.0.0.1:${port}/health`)
     .then((r) => (r.ok ? r.json() : null))
     .then((data) => {
-      if (data?.ok) {
+      if (data?.ok && !serverReady) {
         serverReady = true;
         clearInterval(readinessCheck);
+        clearTimeout(readinessTimeout);
         console.log('Server ready. Launching TUI...');
         launchTui();
       }
@@ -78,9 +105,8 @@ const readinessCheck = setInterval(() => {
     });
 }, 2000);
 
-const startTime = Date.now();
 const readinessTimeout = setTimeout(() => {
-  if (!serverReady) {
+  if (!serverReady && !serverExited) {
     clearInterval(readinessCheck);
     console.error('Server did not become ready within 120 seconds.');
     cleanup(1);
@@ -88,15 +114,14 @@ const readinessTimeout = setTimeout(() => {
 }, 120000);
 
 function launchTui() {
-  clearTimeout(readinessTimeout);
   const baseUrl = `http://127.0.0.1:${port}`;
   const tui = spawn(
     'pnpm',
-    ['--filter', 'sim-one-alpha-tui-proto', 'exec', 'tsx', 'src/cli.tsx', '--base-url', baseUrl, '--token', apiKey],
+    ['--filter', 'sim-one-alpha-tui-proto', 'exec', 'tsx', 'src/cli.tsx', '--base-url', baseUrl],
     {
       cwd: repoRoot,
       stdio: 'inherit',
-      env: { ...process.env, ...envVars },
+      env: { ...process.env, ...envVars, API_SECRET: apiKey },
     },
   );
 

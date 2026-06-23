@@ -18,10 +18,12 @@ export function usePendingApprovals(client: ApprovalClient | undefined): UsePend
   const [configured, setConfigured] = useState(true);
   const clientRef = useRef(client);
   clientRef.current = client;
+  const inProgressRef = useRef(false);
 
   const refresh = async () => {
     const c = clientRef.current;
-    if (!c) return;
+    if (!c || inProgressRef.current) return;
+    inProgressRef.current = true;
     setLoading(true);
     try {
       const result = await c.listPending();
@@ -32,6 +34,7 @@ export function usePendingApprovals(client: ApprovalClient | undefined): UsePend
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setLoading(false);
+      inProgressRef.current = false;
     }
   };
 

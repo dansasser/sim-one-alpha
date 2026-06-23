@@ -29,15 +29,15 @@ export function ChatLayout({ baseUrl, session, token, decidedBy }: ChatLayoutPro
   const { pending, configured } = usePendingApprovals(approvalClient);
   const [activeApprovalId, setActiveApprovalId] = useState<string | undefined>();
 
-  const activeApproval = pending.find((p) => p.requestId === activeApprovalId) ?? pending[pending.length - 1];
+  const activeApproval = pending.find((p) => p.requestId === activeApprovalId);
   const hasActiveApproval = Boolean(activeApproval);
 
   const handleSubmit = async (value: string) => {
     const trimmed = value.trim();
     if (!trimmed || agent.status === 'streaming' || agent.status === 'submitted') return;
-    setInput('');
     try {
       await agent.sendMessage(trimmed);
+      setInput('');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error('sendMessage failed:', message);
@@ -63,6 +63,7 @@ export function ChatLayout({ baseUrl, session, token, decidedBy }: ChatLayoutPro
       )}
       {configured && activeApproval && (
         <ApprovalPrompt
+          key={activeApproval.requestId}
           approval={activeApproval}
           client={approvalClient}
           decidedBy={decidedBy}

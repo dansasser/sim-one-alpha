@@ -1,6 +1,6 @@
 import { Box, Text } from 'ink';
-import React, { useCallback } from 'react';
-import { useInput, useApp } from 'ink';
+import React, { useCallback, useRef } from 'react';
+import { useInput } from 'ink';
 import type { ApprovalClient, ApprovalRequest } from '../lib/approvalClient.js';
 
 export interface ApprovalPromptProps {
@@ -11,13 +11,14 @@ export interface ApprovalPromptProps {
 }
 
 export function ApprovalPrompt({ approval, client, decidedBy, onResolved }: ApprovalPromptProps) {
-  const { exit } = useApp();
   const [status, setStatus] = React.useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
   const [message, setMessage] = React.useState<string>('');
+  const submittingRef = useRef(false);
 
   const handleDecision = useCallback(
     async (approved: boolean) => {
-      if (status === 'submitting') return;
+      if (submittingRef.current) return;
+      submittingRef.current = true;
       setStatus('submitting');
       try {
         await client.decide({
@@ -32,9 +33,11 @@ export function ApprovalPrompt({ approval, client, decidedBy, onResolved }: Appr
       } catch (err) {
         setStatus('error');
         setMessage(err instanceof Error ? err.message : String(err));
+      } finally {
+        submittingRef.current = false;
       }
     },
-    [approval, client, decidedBy, onResolved, status],
+    [approval, client, decidedBy, onResolved],
   );
 
   useInput(

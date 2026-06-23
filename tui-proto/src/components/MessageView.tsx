@@ -20,41 +20,19 @@ const ROLE_LABEL: Record<string, string> = {
   system: 'system',
 };
 
-interface ToolPartBase {
-  toolName: string;
-  toolCallId: string;
-}
+type DynamicToolPart = Extract<UIMessagePart, { type: 'dynamic-tool' }>;
 
-interface ToolInputAvailable extends ToolPartBase {
-  state: 'input-available';
-  input: unknown;
-}
-
-interface ToolOutputAvailable extends ToolPartBase {
-  state: 'output-available';
-  input: unknown;
-  output: unknown;
-}
-
-interface ToolOutputError extends ToolPartBase {
-  state: 'output-error';
-  input: unknown;
-  errorText: string;
-}
-
-type ToolPart = ToolInputAvailable | ToolOutputAvailable | ToolOutputError;
-
-function isToolPart(part: UIMessagePart): part is Extract<UIMessagePart, { type: 'dynamic-tool' }> & ToolPart {
+function isToolPart(part: UIMessagePart): part is DynamicToolPart {
   return part.type === 'dynamic-tool';
 }
 
-function isSubagentDelegation(part: ToolPart): boolean {
+function isSubagentDelegation(part: DynamicToolPart): boolean {
   if (part.toolName !== 'task') return false;
   if (typeof part.input !== 'object' || part.input === null) return false;
   return 'agent' in part.input;
 }
 
-function getAgentName(part: ToolPart): string {
+function getAgentName(part: DynamicToolPart): string {
   const input = part.input as Record<string, unknown>;
   return typeof input.agent === 'string' ? input.agent : 'unknown';
 }

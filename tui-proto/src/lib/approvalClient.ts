@@ -22,6 +22,16 @@ export interface ApprovalClient {
   isConfigured(): boolean;
 }
 
+const FETCH_TIMEOUT_MS = 10000;
+
+function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort('timeout'), FETCH_TIMEOUT_MS);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() =>
+    clearTimeout(timeout),
+  );
+}
+
 export function createApprovalClient(baseUrl: string, token: string): ApprovalClient {
   const headers: Record<string, string> = {
     'x-api-secret': token,
@@ -32,8 +42,8 @@ export function createApprovalClient(baseUrl: string, token: string): ApprovalCl
 
   return {
     async listPending() {
-      const resp = await fetch(`${baseUrl}/api/approvals/pending`, { headers });
-      if (resp.status === 400 || resp.status === 500) {
+      const resp = await fetchWithTimeout(`${baseUrl}/api/approvals/pending`, { headers });
+      if (resp.status === 400) {
         configured = false;
         return [];
       }
@@ -46,7 +56,7 @@ export function createApprovalClient(baseUrl: string, token: string): ApprovalCl
     },
 
     async decide(decision: ApprovalDecision) {
-      const resp = await fetch(`${baseUrl}/api/approvals/${decision.requestId}/decision`, {
+      const resp = await fetchWithTimeout(`${baseUrl}/api/approvals/${decision.requestId}/decision`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -56,8 +66,7 @@ export function createApprovalClient(baseUrl: string, token: string): ApprovalCl
         }),
       });
       if (!resp.ok) {
-        const text = await resp.text().catch(() => 'unknown error');
-        throw new Error(`Approval decision failed: ${resp.status} ${text}`);
+        throw new Error(`Approval decision failed: ${resp.status}`);
       }
       return resp.json();
     },

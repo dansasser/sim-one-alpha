@@ -17,8 +17,12 @@ function truncate(text: string, max: number): string {
 
 function formatValue(value: unknown): string {
   if (value === undefined || value === null) return '';
-  const json = JSON.stringify(value);
-  return truncate(json, 200);
+  try {
+    const json = JSON.stringify(value);
+    return truncate(json, 200);
+  } catch {
+    return '[Unable to serialize value]';
+  }
 }
 
 const STATE_COLOR: Record<SubagentViewProps['state'], string> = {
