@@ -28,3 +28,5 @@ export { loadBuiltinRegistry, isBuiltinName, getBuiltinNames } from './builtin-r
 export type { BuiltinRegistry } from './builtin-registry.js';
 export { checkNameCollision } from './collision-check.js';
 export type { CollisionResult } from './collision-check.js';
+export { connectBuiltinMcpServers, getBuiltinMcpIds, BUILTIN_MCP_ASTRO_DOCS_ID } from './builtin-mcp.js';
+export type { BuiltinMcpResult } from './builtin-mcp.js';

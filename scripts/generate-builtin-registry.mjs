@@ -241,7 +241,7 @@ function main() {
     tools: uniqueSorted([...tools]),
     subagents: uniqueSorted([...subagents]),
     skills: uniqueSorted([...skills]),
-    mcpServers: [],
+    mcpServers: uniqueSorted(['astro-docs']),
   };
 
   const outputDir = resolve(repoRoot, 'dist');
@@ -250,7 +250,7 @@ function main() {
   writeFileSync(outputPath, JSON.stringify(payload, null, 2) + '\n', 'utf8');
 
   console.log(
-    `[builtin-registry] Generated: ${payload.tools.length} tools, ${payload.subagents.length} subagents, ${payload.skills.length} skills`,
+    `[builtin-registry] Generated: ${payload.tools.length} tools, ${payload.subagents.length} subagents, ${payload.skills.length} skills, ${payload.mcpServers.length} mcpServers`,
   );
 }
 

@@ -52,6 +52,7 @@ import { createCapabilityStore } from '../capabilities/capability-store.js';
 import { loadUserCapabilities } from '../capabilities/capability-loader.js';
 import { materializeCapability } from '../capabilities/skill-materializer.js';
 import { connectUserMcpServers } from '../capabilities/mcp-broker.js';
+import { connectBuiltinMcpServers } from '../capabilities/builtin-mcp.js';
 import { loadUserTools } from '../capabilities/tool-loader.js';
 import { loadUserWorkers } from '../capabilities/worker-loader.js';
 
@@ -113,10 +114,11 @@ export default createAgent(async ({ env }) => {
   const builtInSubagents = [codingWorker, researcher];
 
   const userCapabilities = loadUserCapabilitiesFromStore(env);
+  const builtinMcpResult = await connectBuiltinMcpServers();
   const mcpResult = await connectUserMcpServers(userCapabilities.mcp, env);
   const toolResult = await loadUserTools(userCapabilities.tools, env);
   const workerResult = await loadUserWorkers(userCapabilities.workers, env);
-  const userTools = [...mcpResult.tools, ...toolResult.tools];
+  const userTools = [...builtinMcpResult.tools, ...mcpResult.tools, ...toolResult.tools];
   const userSubagents: typeof builtInSubagents = [...workerResult.profiles];
 
   return {
@@ -212,6 +214,7 @@ The following capabilities are actually attached to this main agent at runtime:
 - Tool: \`schedule_create\` / \`schedule_pause\` / \`schedule_resume\` / \`schedule_update\` / \`schedule_delete\` / \`schedule_list\` / \`schedule_get\` / \`schedule_run_now\` / \`schedule_runs\` (scheduled/recurring/one-shot agent turns; ownerScope is derived from the trusted eventId and enforced on every non-create op)
 - Tool: \`telegram_reply\` (when TELEGRAM_BOT_TOKEN is configured)
 - Tool: \`add_skill\` / \`add_tool\` / \`add_worker\` / \`add_mcp_server\` / \`list_capabilities\` (user-defined capability management; skills auto-enable, tools/workers/MCP require user approval via CLI or TUI)
+- MCP: \`astro-docs\` (built-in — search Astro framework documentation via \`mcp__astro-docs__search_astro_docs\`)
 - Subagent: \`researcher\`
 - Subagent: \`coding-worker\`
 
