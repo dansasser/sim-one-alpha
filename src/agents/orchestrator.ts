@@ -47,6 +47,10 @@ import type { AgentModelCard } from '../models/types.js';
 import { telegramReplyTool } from '../channels/telegram.js';
 import { createCodingWorkerSubagent } from '../workers/coding-worker/coding-worker.js';
 import { createResearcherSubagent } from '../workers/researcher/researcher.js';
+import { createCapabilityStore } from '../capabilities/capability-store.js';
+import { loadUserCapabilities } from '../capabilities/capability-loader.js';
+import { materializeCapability } from '../capabilities/skill-materializer.js';
+import { connectUserMcpServers } from '../capabilities/mcp-broker.js';
 
 export const route: AgentRouteHandler = async (_c, next) => next();
 
@@ -67,46 +71,54 @@ export default createAgent(async ({ env }) => {
   });
   const researcher = createResearcherSubagent();
 
+  const builtInTools = [
+    loadProtocolsTool,
+    retrieveMemoryTool,
+    addKnowledgeTool,
+    createChecklistTool,
+    updateChecklistTool,
+    addChecklistItemTool,
+    updateChecklistItemTool,
+    moveChecklistItemTool,
+    archiveChecklistTool,
+    listChecklistsTool,
+    createTodoTool,
+    completeTodoTool,
+    updateTodoTool,
+    cancelTodoTool,
+    listTodosTool,
+    storeSessionNoteTool,
+    updateSessionNoteTool,
+    archiveSessionNoteTool,
+    listSessionNotesTool,
+    searchMemoryRecordsTool,
+    generateImageTool,
+    recordImageArtifactTool,
+    listImageArtifactsTool,
+    scheduleCreateTool,
+    schedulePauseTool,
+    scheduleResumeTool,
+    scheduleUpdateTool,
+    scheduleDeleteTool,
+    scheduleListTool,
+    scheduleGetTool,
+    scheduleRunNowTool,
+    scheduleRunsTool,
+    telegramReplyTool,
+  ];
+  const builtInSubagents = [codingWorker, researcher];
+
+  const userCapabilities = loadUserCapabilitiesFromStore(env);
+  const mcpResult = await connectUserMcpServers(userCapabilities.mcp, env);
+  const userTools = [...mcpResult.tools];
+  const userSubagents: typeof builtInSubagents = [];
+
   return {
     model: selectedModelCard.specifier,
     instructions: orchestratorInstructions,
     compaction: createFlueCompactionConfig(selectedModelCard),
-    tools: [
-      loadProtocolsTool,
-      retrieveMemoryTool,
-      addKnowledgeTool,
-      createChecklistTool,
-      updateChecklistTool,
-      addChecklistItemTool,
-      updateChecklistItemTool,
-      moveChecklistItemTool,
-      archiveChecklistTool,
-      listChecklistsTool,
-      createTodoTool,
-      completeTodoTool,
-      updateTodoTool,
-      cancelTodoTool,
-      listTodosTool,
-      storeSessionNoteTool,
-      updateSessionNoteTool,
-      archiveSessionNoteTool,
-      listSessionNotesTool,
-      searchMemoryRecordsTool,
-      generateImageTool,
-      recordImageArtifactTool,
-      listImageArtifactsTool,
-      scheduleCreateTool,
-      schedulePauseTool,
-      scheduleResumeTool,
-      scheduleUpdateTool,
-      scheduleDeleteTool,
-      scheduleListTool,
-      scheduleGetTool,
-      scheduleRunNowTool,
-      scheduleRunsTool,
-      telegramReplyTool,
-    ],
-    subagents: [codingWorker, researcher],
+    tools: [...builtInTools, ...userTools],
+    subagents: [...builtInSubagents, ...userSubagents],
   };
 });
 
@@ -152,9 +164,27 @@ function readOptionalEnv(env: Record<string, unknown>, key: string): string | un
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-/**
- * Describes the orchestrator capabilities that are actually wired at runtime.
- */
+function loadUserCapabilitiesFromStore(env: Record<string, unknown>) {
+  try {
+    const store = createCapabilityStore({});
+    const caps = loadUserCapabilities({ store });
+    for (const skill of caps.skills) {
+      try {
+        materializeCapability({ record: skill, env });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[capabilities] Failed to materialize skill ${skill.id}: ${message}`);
+      }
+    }
+    store.close();
+    return caps;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[capabilities] Failed to load user capabilities: ${message}`);
+    return { skills: [], tools: [], workers: [], mcp: [] };
+  }
+}
+
 function createOrchestratorRuntimeCapabilityBlock(): string {
   return `# Runtime Capabilities
 
