@@ -550,6 +550,53 @@ docs/architecture/worker-system.md
 
 Always run the relevant verification commands before calling work complete.
 
+### Build environment prerequisites (CRITICAL — read every session)
+
+```sh
+# Set PATH first or everything breaks (pnpm defaults to Node 20, too old for Flue)
+export PATH="/root/.nvm/versions/node/v22.22.3/bin:$PATH"
+source ~/.cargo/env 2>/dev/null
+```
+
+**Node.js:** v22.22.3 at `/root/.nvm/versions/node/v22.22.3/bin/node`. nvm: `source /root/.nvm/nvm.sh && nvm use 22`.
+
+**Rust / WASM:**
+- rustc 1.96.0, cargo 1.96.0, wasm-pack 0.13.1 — all at `/root/.cargo/bin/`
+- cargo env: `source ~/.cargo/env`
+- Toolchain: `rust-toolchain.toml` — stable, target `wasm32-unknown-unknown`
+- WASM crate: `crates/gorombo-memory/` → compiled to `crates/gorombo-memory/pkg/` via `wasm-pack`
+- **Build WASM:** `pnpm run wasm:build` (also runs as `prebuild` before `pnpm run build`)
+- **WASM artifact is gitignored** — each worktree must build it. Tests SKIP without it.
+- **`pnpm run test:unit` does NOT run `prebuild`.** You MUST run `pnpm run wasm:build` before tests if the WASM artifact doesn't exist. If tests show "WASM artifact not built" SKIP, run `pnpm run wasm:build` then re-run tests.
+
+**Embedding model (ONNX):**
+- `assets/models/embeddings/all-MiniLM-L6-v2/model.onnx` (90MB, gitignored)
+- Fetch: `pnpm fetch-embedding-model`
+- Each worktree must fetch it — gitignored, not shared across worktrees.
+- Server startup blocks ~30s for ONNX load (event loop blocked, HTTP doesn't respond until done).
+
+**.env file:**
+- Copy from main checkout: `cp /opt/ai/sim-one-alpha/.env .env`
+- Key vars: `OLLAMA_API_KEY`, `API_SECRET`, `CODEX_BRAIN_LOCAL_API_KEY`, `CODEX_BRAIN_LOCAL_API_URL`, `JINA_API_KEY`, `JUELS_API_KEY`, `RUNPOD_API_KEY`
+- No TELEGRAM_* — Telegram is optional. No GOROMBO_APPROVAL_ROOT — approval not configured.
+
+**Ports:** 3000 is nginx, 9300 is another node service. Use 3940-3960 for testing. Kill old servers before starting new ones.
+
+**curl 400 known issue:** `curl`/`wget` to Flue routes return 400 with empty body when `x-api-secret` header is long (48+ chars). This is a `@hono/node-server` issue, not our bug. Use Node's `fetch()` or `@flue/sdk` for testing agent endpoints.
+
+### Worktree setup checklist (do ALL before working)
+```sh
+export PATH="/root/.nvm/versions/node/v22.22.3/bin:$PATH"
+source ~/.cargo/env 2>/dev/null
+cp /opt/ai/sim-one-alpha/.env .env          # if missing
+pnpm install
+pnpm fetch-embedding-model                  # if ONNX model missing
+pnpm run wasm:build                         # if WASM artifact missing
+pnpm run typecheck                           # verify
+```
+
+### Running tests
+
 For TypeScript changes, run the project's configured checks from `package.json`. pnpm and npm are both supported in this repository. The Coding Worker resolves the package manager from lockfile presence (`pnpm-lock.yaml` → pnpm, `package-lock.json` → npm) via `src/workers/coding-worker/repo/package-manager.ts`.
 
 Do not invoke `corepack` to launch pnpm — the repo no longer wires corepack into the command builder. Contributors must have pnpm installed (via npm, standalone installer, or Corepack) before running pnpm commands. The `package.json#packageManager` field documents the required version but does not automatically install or shim the binary.
