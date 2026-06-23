@@ -14,6 +14,10 @@ const builtinRegistryFilename = 'builtin-capabilities.json';
 
 let cachedRegistry: BuiltinRegistry | undefined;
 
+export function resetBuiltinRegistryCache(): void {
+  cachedRegistry = undefined;
+}
+
 export function loadBuiltinRegistry(): BuiltinRegistry {
   if (cachedRegistry) {
     return cachedRegistry;

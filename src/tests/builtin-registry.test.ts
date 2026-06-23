@@ -3,6 +3,7 @@ import test from 'node:test';
 import { rmSync, mkdirSync, existsSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { loadBuiltinRegistry, isBuiltinName, getBuiltinNames, resetBuiltinRegistryCache } from '../capabilities/builtin-registry.js';
 
 const fixtureRegistry = {
   tools: ['load_protocols', 'retrieve_memory', 'add_knowledge', 'test_echo'],
@@ -24,6 +25,7 @@ function setupFixtureRegistry() {
 }
 
 test('builtin-registry: isBuiltinName detects builtin tools (cross-kind)', () => {
+  resetBuiltinRegistryCache();
   const result = isBuiltinName('skill', 'load_protocols');
   assert.equal(result, true, 'load_protocols is builtin even when checked as skill');
   assert.equal(isBuiltinName('tool', 'load_protocols'), true);
@@ -68,27 +70,29 @@ test('builtin-registry: getBuiltinNames filters by kind', () => {
   assert.ok(mcpServers.includes('astro-docs'));
 });
 
-test('builtin-registry: throws when registry file is missing', { skip: 'module-level cache prevents testing this in isolation' }, () => {
-  // loadBuiltinRegistry caches at module level, so once any test loads it,
-  // subsequent calls return the cached version. Testing the "missing" path
-  // would require a fresh module instance, which Node ESM doesn't support.
+test('builtin-registry: throws when registry file is missing', () => {
+  resetBuiltinRegistryCache();
+  const emptyDir = mkdtempSync(join(tmpdir(), 'builtin-empty-'));
+  const prevCwd = process.cwd();
+  try {
+    process.chdir(emptyDir);
+    assert.throws(() => loadBuiltinRegistry(), /not found|corrupted|unreadable/i);
+  } finally {
+    process.chdir(prevCwd);
+    resetBuiltinRegistryCache();
+    rmSync(emptyDir, { recursive: true, force: true });
+  }
 });
-
-// Import after setup so the module loads from the fixture
-import { loadBuiltinRegistry, isBuiltinName, getBuiltinNames } from '../capabilities/builtin-registry.js';
 
 test.before(() => {
   tempDir = mkdtempSync(join(tmpdir(), 'builtin-registry-test-'));
   originalCwd = process.cwd();
   setupFixtureRegistry();
   process.chdir(tempDir);
-  // Clear any cached registry
-  // Note: loadBuiltinRegistry uses a module-level cache, so we need to
-  // ensure the fixture is found on first load. The resolveBuiltinRegistryPath
-  // checks process.cwd()/dist/builtin-capabilities.json as a candidate.
 });
 
 test.after(() => {
+  resetBuiltinRegistryCache();
   process.chdir(originalCwd);
   if (existsSync(tempDir)) {
     rmSync(tempDir, { recursive: true, force: true });
