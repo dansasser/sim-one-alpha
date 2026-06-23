@@ -21,7 +21,8 @@ import { defineTool, type ToolDefinition } from '@flue/runtime';
 import * as v from 'valibot';
 
 import { getScheduleManager } from '../../../schedules/boot.js';
-import { scheduleInstanceId, type ScheduleRecord } from '../../../schedules/schedule-types.js';
+import { loadOwnedSchedule } from '../../../schedules/schedule-ownership.js';
+import { scheduleInstanceId } from '../../../schedules/schedule-types.js';
 import { emitScheduleProgress } from '../../../schedules/schedule-telemetry.js';
 
 export interface CodingScheduleToolsOptions {
@@ -51,29 +52,6 @@ function requireTrustedScope(projectId: string | undefined): string {
     );
   }
   return projectId;
-}
-
-type OwnedScheduleResult = { ok: true; record: ScheduleRecord } | { ok: false; error: string };
-
-/**
- * Fetch a schedule by slug and enforce that it belongs to the current project
- * scope. Cross-project access (a coding-worker on project A touching a schedule
- * owned by project B) is denied. Returns `{ok:false, error}` for not-found or
- * scope mismatch so the tool can return a JSON error without throwing.
- */
-function loadOwnedSchedule(
-  manager: ReturnType<typeof requireManager>,
-  slug: string,
-  ownerScope: string,
-): OwnedScheduleResult {
-  const record = manager.store.getBySlug(slug);
-  if (!record) {
-    return { ok: false, error: `schedule '${slug}' not found` };
-  }
-  if (record.ownerScope !== ownerScope) {
-    return { ok: false, error: `schedule '${slug}' does not belong to this project scope` };
-  }
-  return { ok: true, record };
 }
 
 export function createCodingScheduleTools(options: CodingScheduleToolsOptions): ToolDefinition[] {
@@ -120,7 +98,7 @@ export function createCodingScheduleTools(options: CodingScheduleToolsOptions): 
       execute: async ({ slug }) => {
         const manager = requireManager();
         const scope = requireTrustedScope(ownerScope);
-        const owned = loadOwnedSchedule(manager, String(slug), scope);
+        const owned = loadOwnedSchedule(manager.store, String(slug), scope);
         if (!owned.ok) {
           return JSON.stringify({ slug, error: owned.error });
         }
@@ -139,7 +117,7 @@ export function createCodingScheduleTools(options: CodingScheduleToolsOptions): 
       execute: async ({ slug }) => {
         const manager = requireManager();
         const scope = requireTrustedScope(ownerScope);
-        const owned = loadOwnedSchedule(manager, String(slug), scope);
+        const owned = loadOwnedSchedule(manager.store, String(slug), scope);
         if (!owned.ok) {
           return JSON.stringify({ slug, error: owned.error });
         }
@@ -165,7 +143,7 @@ export function createCodingScheduleTools(options: CodingScheduleToolsOptions): 
       execute: async ({ slug, schedule, prompt, payload, tz, enabled }) => {
         const manager = requireManager();
         const scope = requireTrustedScope(ownerScope);
-        const owned = loadOwnedSchedule(manager, String(slug), scope);
+        const owned = loadOwnedSchedule(manager.store, String(slug), scope);
         if (!owned.ok) {
           return JSON.stringify({ slug, error: owned.error });
         }
@@ -190,7 +168,7 @@ export function createCodingScheduleTools(options: CodingScheduleToolsOptions): 
       execute: async ({ slug }) => {
         const manager = requireManager();
         const scope = requireTrustedScope(ownerScope);
-        const owned = loadOwnedSchedule(manager, String(slug), scope);
+        const owned = loadOwnedSchedule(manager.store, String(slug), scope);
         if (!owned.ok) {
           return JSON.stringify({ slug, error: owned.error });
         }
@@ -215,7 +193,7 @@ export function createCodingScheduleTools(options: CodingScheduleToolsOptions): 
       execute: async ({ slug }) => {
         const manager = requireManager();
         const scope = requireTrustedScope(ownerScope);
-        const owned = loadOwnedSchedule(manager, String(slug), scope);
+        const owned = loadOwnedSchedule(manager.store, String(slug), scope);
         if (!owned.ok) {
           return JSON.stringify({ error: owned.error });
         }
@@ -229,7 +207,7 @@ export function createCodingScheduleTools(options: CodingScheduleToolsOptions): 
       execute: async ({ slug }) => {
         const manager = requireManager();
         const scope = requireTrustedScope(ownerScope);
-        const owned = loadOwnedSchedule(manager, String(slug), scope);
+        const owned = loadOwnedSchedule(manager.store, String(slug), scope);
         if (!owned.ok) {
           return JSON.stringify({ error: owned.error });
         }
@@ -250,7 +228,7 @@ export function createCodingScheduleTools(options: CodingScheduleToolsOptions): 
       execute: async ({ slug, limit }) => {
         const manager = requireManager();
         const scope = requireTrustedScope(ownerScope);
-        const owned = loadOwnedSchedule(manager, String(slug), scope);
+        const owned = loadOwnedSchedule(manager.store, String(slug), scope);
         if (!owned.ok) {
           return JSON.stringify({ error: owned.error });
         }

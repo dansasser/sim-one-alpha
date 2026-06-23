@@ -67,12 +67,12 @@ test('coding schedule tools enforce project scope (cross-project denied, list fi
     // get on projB's schedule -> scope error
     const getResult = toolByName(tools, 'coding_schedule_get');
     const getOut = JSON.parse(await getResult.execute({ slug: 'b-sched' }) as string) as { error?: string };
-    assert.match(getOut.error ?? '', /does not belong to this project scope/, 'get denied cross-project');
+    assert.match(getOut.error ?? '', /does not belong to this owner scope/, 'get denied cross-project');
 
     // delete on projB's schedule -> scope error, schedule still present
     const deleteTool = toolByName(tools, 'coding_schedule_delete');
     const delOut = JSON.parse(await deleteTool.execute({ slug: 'b-sched' }) as string) as { error?: string; deleted?: boolean };
-    assert.match(delOut.error ?? '', /does not belong to this project scope/, 'delete denied cross-project');
+    assert.match(delOut.error ?? '', /does not belong to this owner scope/, 'delete denied cross-project');
     assert.ok(manager.store.getBySlug('b-sched'), 'projB schedule not deleted by projA');
 
     // list (projA) -> does not include b-sched

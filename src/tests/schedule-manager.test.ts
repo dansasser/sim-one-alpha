@@ -338,3 +338,79 @@ test('manager fire: one-shot with transient error is NOT auto-deleted during ret
     rmSync(path, { force: true });
   }
 });
+
+test('manager fire: transient category not in config.retry.retryOn is not retried', async () => {
+  const fakeDispatch = async (args: DispatchScheduleArgs): Promise<ScheduleDispatchResult> => ({
+    dispatchId: 'd-' + args.instanceId, acceptedAt: new Date().toISOString(), instanceId: args.instanceId,
+  });
+  // makeManager config: retryOn: ['network'] only.
+  const { manager, emit, path } = makeManager({ dispatch: fakeDispatch });
+  try {
+    manager.store.upsert({ slug: 'server-err', kind: 'every', schedule: '10m', prompt: 'x' });
+    const { runId } = manager.fireNow('server-err')!;
+    await wait(50);
+    const instanceId = manager.store.getRun(runId)!.instanceId;
+    // server_error is transient but NOT in retryOn -> terminal error, no retry.
+    emit({ type: 'turn', isError: true, error: '500 server error', instanceId } as FlueEvent);
+    emit({ type: 'agent_end', instanceId } as FlueEvent);
+    await wait(90);
+    const done = manager.store.getRun(runId);
+    assert.equal(done?.status, 'error', 'server_error -> error terminal (transient)');
+    assert.equal(done?.attempt, 0, 'not retried (server_error not in retryOn)');
+  } finally {
+    manager.stop();
+    rmSync(path, { force: true });
+  }
+});
+
+test('manager fire: per-schedule maxAttempts override is respected', async () => {
+  const fakeDispatch = async (args: DispatchScheduleArgs): Promise<ScheduleDispatchResult> => ({
+    dispatchId: 'd-' + args.instanceId, acceptedAt: new Date().toISOString(), instanceId: args.instanceId,
+  });
+  // makeManager global maxAttempts: 2; override this schedule to 1.
+  const { manager, emit, path } = makeManager({ dispatch: fakeDispatch });
+  try {
+    manager.store.upsert({ slug: 'one-retry', kind: 'every', schedule: '10m', prompt: 'x', maxAttempts: 1 });
+    const { runId } = manager.fireNow('one-retry')!;
+    await wait(50);
+    // attempt 0: network error -> retry (0 < 1, network in retryOn)
+    let instanceId = manager.store.getRun(runId)!.instanceId;
+    emit({ type: 'turn', isError: true, error: 'fetch failed: network down', instanceId } as FlueEvent);
+    emit({ type: 'agent_end', instanceId } as FlueEvent);
+    await wait(90);
+    assert.equal(manager.store.getRun(runId)?.attempt, 1, 'retried once');
+    // attempt 1: network error again -> 1 < 1 is false -> no retry -> terminal error
+    instanceId = manager.store.getRun(runId)!.instanceId;
+    emit({ type: 'turn', isError: true, error: 'fetch failed: network down', instanceId } as FlueEvent);
+    emit({ type: 'agent_end', instanceId } as FlueEvent);
+    await wait(90);
+    const done = manager.store.getRun(runId);
+    assert.equal(done?.status, 'error', 'maxAttempts=1 reached -> terminal error');
+    assert.equal(done?.attempt, 1, 'no second retry');
+  } finally {
+    manager.stop();
+    rmSync(path, { force: true });
+  }
+});
+
+test('manager fire: null per-schedule maxAttempts falls back to global config', async () => {
+  const fakeDispatch = async (args: DispatchScheduleArgs): Promise<ScheduleDispatchResult> => ({
+    dispatchId: 'd-' + args.instanceId, acceptedAt: new Date().toISOString(), instanceId: args.instanceId,
+  });
+  // makeManager global maxAttempts: 2.
+  const { manager, emit, path } = makeManager({ dispatch: fakeDispatch });
+  try {
+    manager.store.upsert({ slug: 'global-fallback', kind: 'every', schedule: '10m', prompt: 'x' });
+    assert.equal(manager.store.getBySlug('global-fallback')?.maxAttempts, null, 'record maxAttempts is null');
+    const { runId } = manager.fireNow('global-fallback')!;
+    await wait(50);
+    const instanceId = manager.store.getRun(runId)!.instanceId;
+    emit({ type: 'turn', isError: true, error: 'fetch failed: network down', instanceId } as FlueEvent);
+    emit({ type: 'agent_end', instanceId } as FlueEvent);
+    await wait(90);
+    assert.equal(manager.store.getRun(runId)?.attempt, 1, 'global maxAttempts=2 allows retry 0->1');
+  } finally {
+    manager.stop();
+    rmSync(path, { force: true });
+  }
+});

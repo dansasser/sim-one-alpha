@@ -135,7 +135,7 @@ interface ScheduleRow {
   enabled: number;
   owner_scope: string | null;
   protect: number;
-  max_attempts: number;
+  max_attempts: number | null;
   delete_after_run: number;
   last_fired_at: number | null;
   next_fire_at: number | null;
@@ -195,7 +195,11 @@ export class ScheduleStore {
     mkdirSync(dirname(resolved), { recursive: true });
     this.database = new DatabaseSync(resolved, { timeout: 5_000 });
     this.runSql = this.database.exec.bind(this.database);
-    this.runSql('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL;');
+    // foreign_keys = ON is defense-in-depth: node:sqlite enables it by default,
+    // but set it explicitly so ON DELETE CASCADE (schedule_runs.schedule_id) is
+    // guaranteed regardless of Node's default, and deleting a schedule cascades
+    // its run history rather than orphaning it.
+    this.runSql('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
     this.migrate();
   }
 
@@ -218,7 +222,7 @@ export class ScheduleStore {
         enabled         INTEGER NOT NULL DEFAULT 1,
         owner_scope     TEXT,
         protect         INTEGER NOT NULL DEFAULT 1,
-        max_attempts    INTEGER NOT NULL DEFAULT 3,
+        max_attempts    INTEGER,
         delete_after_run INTEGER NOT NULL DEFAULT 0,
         last_fired_at   INTEGER,
         next_fire_at    INTEGER,
@@ -278,7 +282,7 @@ export class ScheduleStore {
     const payloadJson = def.payload ? JSON.stringify(def.payload) : null;
     const enabled = (def.enabled ?? true) ? 1 : 0;
     const protect = (def.protect ?? true) ? 1 : 0;
-    const maxAttempts = def.maxAttempts ?? 3;
+    const maxAttempts = def.maxAttempts ?? null;
     const deleteAfterRun = (def.deleteAfterRun ?? def.kind === 'at') ? 1 : 0;
 
     const existing = this.getBySlug(def.slug);

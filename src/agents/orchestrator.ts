@@ -171,6 +171,7 @@ The following capabilities are actually attached to this main agent at runtime:
 - Tool: \`generate_image\`
 - Tool: \`record_image_artifact\`
 - Tool: \`list_image_artifacts\`
+- Tool: \`schedule_create\` / \`schedule_pause\` / \`schedule_resume\` / \`schedule_update\` / \`schedule_delete\` / \`schedule_list\` / \`schedule_get\` / \`schedule_run_now\` / \`schedule_runs\` (scheduled/recurring/one-shot agent turns; ownerScope is derived from the trusted eventId and enforced on every non-create op)
 - Tool: \`telegram_reply\` (when TELEGRAM_BOT_TOKEN is configured)
 - Subagent: \`researcher\`
 - Subagent: \`coding-worker\`

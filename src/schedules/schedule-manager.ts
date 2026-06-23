@@ -301,7 +301,16 @@ export class ScheduleManager {
     } else {
       const category = classifyError(outcome.error);
       const maxAttempts = record.maxAttempts ?? this.config.retry.maxAttempts;
-      if (isTransientScheduleError(category) && attempt < maxAttempts) {
+      // Retry only transient categories that the operator configured as retryable
+      // (config.retry.retryOn). isTransientScheduleError classifies transient vs
+      // permanent (-> 'error' vs 'skipped' terminal status); retryOn gates which
+      // transient categories actually retry, so a customized retry policy has
+      // runtime effect.
+      if (
+        isTransientScheduleError(category) &&
+        this.config.retry.retryOn.includes(category) &&
+        attempt < maxAttempts
+      ) {
         // Retry with backoff. Unique per-attempt instanceId so delayed events
         // from a prior attempt cannot be misrouted to the retry's observation.
         const nextAttempt = attempt + 1;

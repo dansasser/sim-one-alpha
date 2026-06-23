@@ -20,6 +20,7 @@ import * as v from 'valibot';
 
 import { getScheduleManager } from '../schedules/boot.js';
 import { scheduleInstanceId } from '../schedules/schedule-types.js';
+import { loadOwnedSchedule } from '../schedules/schedule-ownership.js';
 import { emitScheduleProgress } from '../schedules/schedule-telemetry.js';
 import { getTrustedMemoryEvent } from './memory-tools-shared.js';
 
@@ -85,8 +86,12 @@ export const schedulePauseTool = defineTool({
     slug: SlugSchema,
   }),
   execute: async ({ eventId, slug }) => {
-    void eventId;
     const manager = requireManager();
+    const ownerScope = deriveOwnerScope(String(eventId));
+    const owned = loadOwnedSchedule(manager.store, String(slug), ownerScope);
+    if (!owned.ok) {
+      return JSON.stringify({ slug, error: owned.error });
+    }
     const record = manager.store.setEnabled(String(slug), false);
     if (record) {
       manager.syncCron(record);
@@ -104,8 +109,12 @@ export const scheduleResumeTool = defineTool({
     slug: SlugSchema,
   }),
   execute: async ({ eventId, slug }) => {
-    void eventId;
     const manager = requireManager();
+    const ownerScope = deriveOwnerScope(String(eventId));
+    const owned = loadOwnedSchedule(manager.store, String(slug), ownerScope);
+    if (!owned.ok) {
+      return JSON.stringify({ slug, error: owned.error });
+    }
     const record = manager.store.setEnabled(String(slug), true);
     if (record) {
       manager.syncCron(record);
@@ -128,8 +137,12 @@ export const scheduleUpdateTool = defineTool({
     enabled: v.optional(v.boolean()),
   }),
   execute: async ({ eventId, slug, schedule, prompt, payload, tz, enabled }) => {
-    void eventId;
     const manager = requireManager();
+    const ownerScope = deriveOwnerScope(String(eventId));
+    const owned = loadOwnedSchedule(manager.store, String(slug), ownerScope);
+    if (!owned.ok) {
+      return JSON.stringify({ slug, error: owned.error });
+    }
     const record = manager.store.updateFields(String(slug), {
       ...(schedule !== undefined ? { schedule: String(schedule) } : {}),
       ...(prompt !== undefined ? { prompt: String(prompt) } : {}),
@@ -153,8 +166,12 @@ export const scheduleDeleteTool = defineTool({
     slug: SlugSchema,
   }),
   execute: async ({ eventId, slug }) => {
-    void eventId;
     const manager = requireManager();
+    const ownerScope = deriveOwnerScope(String(eventId));
+    const owned = loadOwnedSchedule(manager.store, String(slug), ownerScope);
+    if (!owned.ok) {
+      return JSON.stringify({ slug, error: owned.error });
+    }
     const deleted = manager.deleteSchedule(String(slug));
     return JSON.stringify({ slug, deleted });
   },
@@ -162,50 +179,54 @@ export const scheduleDeleteTool = defineTool({
 
 export const scheduleListTool = defineTool({
   name: 'schedule_list',
-  description: 'List all schedules (compact rows: id, slug, kind, targetAgent, enabled, nextFireAt, lastFiredAt, lastRunStatus).',
+  description: 'List schedules owned by the current actor (compact rows: id, slug, kind, targetAgent, enabled, nextFireAt, lastFiredAt, lastRunStatus). ownerScope is derived from the trusted eventId.',
   parameters: v.object({
     eventId: v.string(),
   }),
   execute: async ({ eventId }) => {
-    void eventId;
     const manager = requireManager();
-    return JSON.stringify({ schedules: manager.store.list() });
+    const ownerScope = deriveOwnerScope(String(eventId));
+    return JSON.stringify({ schedules: manager.store.listForOwner(ownerScope) });
   },
 });
 
 export const scheduleGetTool = defineTool({
   name: 'schedule_get',
-  description: 'Get the full definition of one schedule by slug.',
+  description: 'Get the full definition of one schedule by slug (must be owned by the current actor).',
   parameters: v.object({
     eventId: v.string(),
     slug: SlugSchema,
   }),
   execute: async ({ eventId, slug }) => {
-    void eventId;
     const manager = requireManager();
-    const record = manager.store.getBySlug(String(slug));
-    if (!record) {
-      return JSON.stringify({ error: `schedule '${slug}' not found` });
+    const ownerScope = deriveOwnerScope(String(eventId));
+    const owned = loadOwnedSchedule(manager.store, String(slug), ownerScope);
+    if (!owned.ok) {
+      return JSON.stringify({ error: owned.error });
     }
-    return JSON.stringify({ schedule: record });
+    return JSON.stringify({ schedule: owned.record });
   },
 });
 
 export const scheduleRunNowTool = defineTool({
   name: 'schedule_run_now',
-  description: 'Force-fire a schedule now (manual trigger). Returns the runId. The run goes through the same dispatch + observe path as a Croner-triggered fire.',
+  description: 'Force-fire a schedule now (manual trigger). Returns the runId. The run goes through the same dispatch + observe path as a Croner-triggered fire (must be owned by the current actor).',
   parameters: v.object({
     eventId: v.string(),
     slug: SlugSchema,
   }),
   execute: async ({ eventId, slug }) => {
-    void eventId;
     const manager = requireManager();
+    const ownerScope = deriveOwnerScope(String(eventId));
+    const owned = loadOwnedSchedule(manager.store, String(slug), ownerScope);
+    if (!owned.ok) {
+      return JSON.stringify({ error: owned.error });
+    }
     const result = manager.fireNow(String(slug));
     if (!result) {
       return JSON.stringify({ error: `schedule '${slug}' not found` });
     }
-    return JSON.stringify({ slug, runId: result.runId, instanceId: scheduleInstanceId(manager.store.getBySlug(String(slug))?.id ?? '', result.runId) });
+    return JSON.stringify({ slug, runId: result.runId, instanceId: scheduleInstanceId(owned.record.id, result.runId) });
   },
 });
 
@@ -218,13 +239,13 @@ export const scheduleRunsTool = defineTool({
     limit: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(500))),
   }),
   execute: async ({ eventId, slug, limit }) => {
-    void eventId;
     const manager = requireManager();
-    const record = manager.store.getBySlug(String(slug));
-    if (!record) {
-      return JSON.stringify({ error: `schedule '${slug}' not found` });
+    const ownerScope = deriveOwnerScope(String(eventId));
+    const owned = loadOwnedSchedule(manager.store, String(slug), ownerScope);
+    if (!owned.ok) {
+      return JSON.stringify({ error: owned.error });
     }
-    const runs = manager.store.listRuns(record.id, typeof limit === 'number' ? limit : 50);
+    const runs = manager.store.listRuns(owned.record.id, typeof limit === 'number' ? limit : 50);
     return JSON.stringify({ slug, runs });
   },
 });

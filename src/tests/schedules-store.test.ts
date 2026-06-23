@@ -34,7 +34,7 @@ test('ScheduleStore upsert creates a row with generated id and defaults', () => 
     assert.equal(created.targetAgent, 'orchestrator');
     assert.equal(created.enabled, true);
     assert.equal(created.protect, true);
-    assert.equal(created.maxAttempts, 3);
+    assert.equal(created.maxAttempts, null, 'no explicit maxAttempts -> null (manager falls back to global config.retry.maxAttempts)');
     assert.equal(created.deleteAfterRun, false, 'cron kind defaults deleteAfterRun to false');
     assert.ok(created.createdAt > 0);
     assert.equal(created.createdAt, created.updatedAt);
@@ -285,6 +285,20 @@ test('ScheduleStore delete cascades run history (FK enforced)', () => {
     assert.equal(store.delete('daily-summary'), true);
     assert.equal(store.getBySlug('daily-summary'), null, 'schedule gone');
     assert.equal(store.listRuns(sched.id, 100).length, 0, 'run rows cascade-removed with the schedule');
+  } finally {
+    store.close();
+    rmSync(path, { force: true });
+  }
+});
+
+test('ScheduleStore preserves an explicit per-schedule maxAttempts (and defaults to null)', () => {
+  const path = tempDbPath();
+  const store = new ScheduleStore(path);
+  try {
+    const explicit = store.upsert({ ...validDef, slug: 'explicit-attempts', maxAttempts: 5 });
+    assert.equal(explicit.maxAttempts, 5, 'explicit maxAttempts preserved');
+    const defaulted = store.upsert({ ...validDef, slug: 'default-attempts' });
+    assert.equal(defaulted.maxAttempts, null, 'no explicit maxAttempts -> null (global fallback)');
   } finally {
     store.close();
     rmSync(path, { force: true });

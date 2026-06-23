@@ -144,7 +144,13 @@ export interface ScheduleRecord {
   enabled: boolean;
   ownerScope: string | null;
   protect: boolean;
-  maxAttempts: number;
+  /**
+   * Per-schedule retry budget override, or null when the caller did not set one
+   * (in which case the manager falls back to the global `config.retry.maxAttempts`).
+   * Stored nullable so the global config is actually consulted, not silently
+   * shadowed by a hardcoded per-row default.
+   */
+  maxAttempts: number | null;
   deleteAfterRun: boolean;
   lastFiredAt: number | null;
   nextFireAt: number | null;
