@@ -1,0 +1,23 @@
+src/channels/telegram.ts
+  s_2a85b2e1f110e1::t_dfea5fe2c6d436 236,238
+  s_2a85b2e1f110e1::t_bffee461d9bac4 235
+  s_2a85b2e1f110e1::t_a9ff2390dfc991 25-28,35-37,42,44-47,49-51
+  s_2a85b2e1f110e1::t_e7937d6afc08e4 134-138,141-143,145,148-150,152,157-172,177-178
+  s_2a85b2e1f110e1::t_6a6edd2d1ad308 140,147,153-156,173-176,179
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "38c19a860634456922961b6226c514dafe486b34",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
