@@ -1,0 +1,23 @@
+tui-proto/src/components/SubagentView.tsx
+  s_2a85b2e1f110e1::t_cf09deb0078c56 1-56
+tui-proto/src/components/ToolCallView.tsx
+  s_2a85b2e1f110e1::t_82e6495808f6d6 1-56
+tui-proto/src/components/MessageView.tsx
+  s_2a85b2e1f110e1::t_fa72137fca7c4f 4-5,23-61,66,71-125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "60c6ded509407e10dd8fdff2bdeecf8f53e4483a",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
