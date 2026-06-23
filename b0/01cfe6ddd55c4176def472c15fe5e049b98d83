@@ -1,0 +1,29 @@
+src/capabilities/builtin-mcp.ts
+  s_2a85b2e1f110e1::t_267f6e9dc89d6d 1-47
+docs/architecture/astro-docs-mcp.md
+  s_2a85b2e1f110e1::t_6dc790052cc151 1-45
+src/capabilities/index.ts
+  s_2a85b2e1f110e1::t_9a41066b1a721a 30-32
+scripts/generate-builtin-registry.mjs
+  s_2a85b2e1f110e1::t_f1a38a31669179 244
+src/agents/orchestrator.ts
+  s_2a85b2e1f110e1::t_7c56c5637d0b0b 217
+  s_2a85b2e1f110e1::t_3694b1aee08fe7 117,121
+  s_2a85b2e1f110e1::t_b95042150c8ece 55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.11",
+  "base_commit_sha": "b001cfe6ddd55c4176def472c15fe5e049b98d83",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
