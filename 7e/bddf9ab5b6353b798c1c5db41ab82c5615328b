@@ -1,0 +1,46 @@
+src/schedules/boot.ts
+  s_50c513bbdc400c::t_6bf4263200de7e 80-84,87-89
+  s_50c513bbdc400c::t_273cc835c2a283 85-86
+  s_50c513bbdc400c::t_4aa0ba1d0df5ef 48-55
+  s_50c513bbdc400c::t_5cbc6e5c83b3f7 1-47,56-79,90-91
+src/schedules/schedule-dispatch.ts
+  s_50c513bbdc400c::t_3a1d95f4beae7d 1-39,42-67
+  s_50c513bbdc400c::t_412fea47093a08 40-41
+src/schedules/schedule-telemetry.ts
+  s_50c513bbdc400c::t_afd0b4be1c69ec 1-159
+src/schedules/schedule-config.ts
+  s_50c513bbdc400c::t_8f8249cb0b5a8f 1-212
+src/schedules/schedule-manager.ts
+  s_50c513bbdc400c::t_9f0094ee5b5a6f 1-519
+src/config/gorombo-config.ts
+  s_50c513bbdc400c::t_9e272cad6acebc 24
+src/schedules/schedule-shutdown.ts
+  s_50c513bbdc400c::t_c7c7078b428fc1 1-56
+src/schedules/schedule-types.ts
+  s_50c513bbdc400c::t_5c083c715afe2f 1-89,96-213
+  s_50c513bbdc400c::t_04708775f5e425 90-95
+src/schedules/schedule-store.ts
+  s_50c513bbdc400c::t_1933658bcc093b 365,372
+  s_50c513bbdc400c::t_da83ba4e639f7e 389
+  s_50c513bbdc400c::t_074a96f8ad0f7f 400
+  s_50c513bbdc400c::t_16526d2ccb1bae 536,548
+  s_50c513bbdc400c::t_3b87a14085fcc8 571-575,578,584
+  s_50c513bbdc400c::t_caa279d697fdff 561
+  s_50c513bbdc400c::t_3085b02aa61ecc 1-364,366-371,373-388,390-399,401-535,537-547,549-560,562-570,576-577,579-583,585-600
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "7ebddf9ab5b6353b798c1c5db41ab82c5615328b",
+  "prompts": {},
+  "sessions": {
+    "s_50c513bbdc400c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed5d8559-9b53-4db5-9338-31382d2362d7",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
