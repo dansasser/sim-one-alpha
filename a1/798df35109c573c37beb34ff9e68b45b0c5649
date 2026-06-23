@@ -1,0 +1,37 @@
+package.json
+  s_2a85b2e1f110e1::t_51d2dcb80ae963 30
+tui-proto/src/components/StatusLine.tsx
+  s_2a85b2e1f110e1::t_243eb318840918 1-41
+tui-proto/src/components/Header.tsx
+  s_2a85b2e1f110e1::t_41265d924e544f 1-28
+tui-proto/src/components/MessageView.tsx
+  s_2a85b2e1f110e1::t_a94c0fd5409473 1-51
+tui-proto/src/components/ChatInput.tsx
+  s_2a85b2e1f110e1::t_a68a0896c52e7a 1-28
+tui-proto/src/App.tsx
+  s_2a85b2e1f110e1::t_96a5802dacc738 1-23
+tui-proto/src/components/MessageList.tsx
+  s_2a85b2e1f110e1::t_fddba7d0d26bce 1-18
+tui-proto/package.json
+  s_2a85b2e1f110e1::t_93a029034ff8ec 15-16
+  s_2a85b2e1f110e1::t_54f513557c058a 8
+tui-proto/src/components/ChatLayout.tsx
+  s_2a85b2e1f110e1::t_2ac47036d2e0ec 3,35-40
+  s_2a85b2e1f110e1::t_23f3c8fa806945 1-2,4-34,41-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "a1798df35109c573c37beb34ff9e68b45b0c5649",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
