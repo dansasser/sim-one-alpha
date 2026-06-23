@@ -482,7 +482,7 @@ See `docs/architecture/product-flow.md` for the full product install and launch 
 
 ## Capability Management
 
-The capability registry lets users and agents add skills, tools, workers (subagents), and MCP servers to a running SIM-ONE Alpha instance without rebuilding. Capabilities are stored in SQLite (`~/.gorombo/db/capabilities.sqlite`) and materialized into `~/.gorombo/capabilities/`. A service restart picks up changes — no rebuild needed.
+The capability registry lets users and agents add skills, tools, workers (subagents), and MCP servers to a running SIM-ONE Alpha instance without rebuilding. By default, capabilities are stored in SQLite (`.gorombo/db/capabilities.sqlite`) and materialized into `.gorombo/capabilities/` (both relative to the project root, unless overridden with env vars). A service restart picks up changes — no rebuild needed.
 
 ### Product CLI
 
