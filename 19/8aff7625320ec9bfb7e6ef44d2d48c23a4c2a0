@@ -1,0 +1,23 @@
+docs/architecture/product-flow.md
+  s_2a85b2e1f110e1::t_e7947f5b1dd259 1-175
+README.md
+  s_2a85b2e1f110e1::t_b307eb32a13d55 442,445,448,460-481,487-489,493,496,499,502,505,507-511,514-515,518,521,524,562-575
+docs/architecture/capability-system.md
+  s_2a85b2e1f110e1::t_b4d9064f940601 52,54-56,60,63,66,69-72,75-76,79,82-95,98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "198aff7625320ec9bfb7e6ef44d2d48c23a4c2a0",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
