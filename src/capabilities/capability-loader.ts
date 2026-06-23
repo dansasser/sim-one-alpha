@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 import { isAbsolute, resolve } from 'node:path';
 import type { CapabilityKind, CapabilityRecord, CapabilityStore } from './types.js';
 
@@ -33,7 +34,7 @@ export function resolveCapabilitiesDir(env: Record<string, unknown> = process.en
     return isAbsolute(configured) ? configured : resolve(process.cwd(), configured);
   }
 
-  return resolve(process.cwd(), '.gorombo', 'capabilities');
+  return resolve(homedir(), '.gorombo', 'capabilities');
 }
 
 export function resolveCapabilityPath(
@@ -41,7 +42,28 @@ export function resolveCapabilityPath(
   kind: CapabilityKind,
   id: string,
 ): string {
+  assertSafeCapabilityId(id);
   return resolve(resolveCapabilitiesDir(env), kind + 's', id);
+}
+
+/**
+ * Reject capability ids that could escape the capabilities root via path
+ * traversal or absolute paths. Capability ids are opaque slugs (e.g.
+ * "my-jira-skill"), never filesystem paths.
+ */
+export function assertSafeCapabilityId(id: string): void {
+  if (typeof id !== 'string' || id.length === 0) {
+    throw new Error(`Invalid capability id: empty`);
+  }
+  if (id.includes('/') || id.includes('\\') || id.includes('\0')) {
+    throw new Error(`Invalid capability id "${id}": must not contain path separators`);
+  }
+  if (id === '.' || id === '..' || id.includes('..')) {
+    throw new Error(`Invalid capability id "${id}": must not contain traversal sequences`);
+  }
+  if (isAbsolute(id)) {
+    throw new Error(`Invalid capability id "${id}": must not be an absolute path`);
+  }
 }
 
 function readEnv(env: Record<string, unknown>, key: string): string | undefined {

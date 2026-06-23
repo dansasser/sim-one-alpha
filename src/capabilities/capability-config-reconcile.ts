@@ -20,7 +20,7 @@ export function reconcileCapabilitiesFromConfig(
 
   try {
     for (const cap of configCapabilities) {
-      const existing = store.get(cap.id);
+      const existing = store.get(cap.kind, cap.id);
       if (existing) {
         skipped.push(cap.id);
         continue;
@@ -35,7 +35,7 @@ export function reconcileCapabilitiesFromConfig(
         source: cap.source,
         sourceRef: cap.sourceRef,
         version: cap.version ?? null,
-        enabled: cap.enabled ?? false,
+        enabled: cap.enabled ?? cap.kind === 'skill',
         config: cap.config ?? {},
         installedAt: now,
         updatedAt: now,

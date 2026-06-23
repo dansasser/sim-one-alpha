@@ -54,8 +54,10 @@ function materializeFromGithub(record: CapabilityRecord, targetPath: string): Ma
         stdio: 'pipe',
         timeout: 10_000,
       });
-    } catch {
-      // version pin failed — keep latest
+    } catch (error) {
+      rmSync(resolve(targetPath, '.git'), { recursive: true, force: true });
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to pin version "${record.version}" for capability "${record.id}": ${message}`);
     }
   }
 

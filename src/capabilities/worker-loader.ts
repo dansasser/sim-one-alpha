@@ -20,6 +20,7 @@ export async function loadUserWorkers(
     try {
       const mod = await dynamicImport(modulePath);
       const exported = mod?.default ?? mod;
+      const beforeCount = profiles.length;
       if (Array.isArray(exported)) {
         for (const item of exported) {
           if (isProfileLike(item)) {
@@ -28,6 +29,18 @@ export async function loadUserWorkers(
         }
       } else if (isProfileLike(exported)) {
         profiles.push(exported);
+      } else if (typeof mod === 'object' && mod !== null) {
+        for (const value of Object.values(mod)) {
+          if (isProfileLike(value)) {
+            profiles.push(value as AgentProfile);
+          }
+        }
+      }
+
+      if (profiles.length === beforeCount) {
+        const message = `No agent profiles found in worker module ${modulePath}. Expected a default export, array export, or named exports of defineAgentProfile(...) results.`;
+        errors.push({ id: record.id, error: message });
+        console.error(`[capabilities] Worker loader: ${message}`);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

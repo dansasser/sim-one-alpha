@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
+import { homedir } from 'node:os';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import type {
   CapabilityConfig,
@@ -12,7 +13,7 @@ import type {
 
 const schemaSql = `
 CREATE TABLE IF NOT EXISTS capabilities (
-  id TEXT PRIMARY KEY,
+  id TEXT NOT NULL,
   kind TEXT NOT NULL CHECK (kind IN ('skill', 'tool', 'worker', 'mcp')),
   name TEXT NOT NULL,
   description TEXT NOT NULL,
@@ -23,7 +24,8 @@ CREATE TABLE IF NOT EXISTS capabilities (
   config_json TEXT NOT NULL DEFAULT '{}',
   installed_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  installed_by TEXT NOT NULL DEFAULT 'cli'
+  installed_by TEXT NOT NULL DEFAULT 'cli',
+  PRIMARY KEY(kind, id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_capabilities_kind_enabled
@@ -35,7 +37,7 @@ export interface CreateCapabilityStoreOptions {
 }
 
 export function createCapabilityStore(options: CreateCapabilityStoreOptions = {}): CapabilityStore {
-  const rawPath = options.dbPath ?? process.env.GOROMBO_CAPABILITY_DB_PATH ?? '.gorombo/db/capabilities.sqlite';
+  const rawPath = options.dbPath ?? process.env.GOROMBO_CAPABILITY_DB_PATH ?? resolve(homedir(), '.gorombo', 'db', 'capabilities.sqlite');
   const dbPath = isAbsolute(rawPath) ? rawPath : resolve(process.cwd(), rawPath);
 
   mkdirSync(dirname(dbPath), { recursive: true });
@@ -63,8 +65,8 @@ export function createCapabilityStore(options: CreateCapabilityStoreOptions = {}
       return rows.map(rowToCapability);
     },
 
-    get(id) {
-      const row = database.prepare('SELECT * FROM capabilities WHERE id = ?').get(id);
+    get(kind, id) {
+      const row = database.prepare('SELECT * FROM capabilities WHERE kind = ? AND id = ?').get(kind, id);
       return row ? rowToCapability(row) : undefined;
     },
 
@@ -74,7 +76,7 @@ export function createCapabilityStore(options: CreateCapabilityStoreOptions = {}
           `INSERT INTO capabilities
            (id, kind, name, description, source, source_ref, version, enabled, config_json, installed_at, updated_at, installed_by)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET
+           ON CONFLICT(kind, id) DO UPDATE SET
              kind = excluded.kind,
              name = excluded.name,
              description = excluded.description,
@@ -102,8 +104,8 @@ export function createCapabilityStore(options: CreateCapabilityStoreOptions = {}
         );
     },
 
-    update(id, patch) {
-      const current = database.prepare('SELECT * FROM capabilities WHERE id = ?').get(id);
+    update(kind, id, patch) {
+      const current = database.prepare('SELECT * FROM capabilities WHERE kind = ? AND id = ?').get(kind, id);
       if (!current) return;
       const merged = rowToCapability(current);
       const updated: CapabilityRecord = {
@@ -116,7 +118,7 @@ export function createCapabilityStore(options: CreateCapabilityStoreOptions = {}
         .prepare(
           `UPDATE capabilities SET
             name = ?, description = ?, source = ?, source_ref = ?, version = ?, enabled = ?, config_json = ?, updated_at = ?
-           WHERE id = ?`,
+           WHERE kind = ? AND id = ?`,
         )
         .run(
           updated.name,
@@ -127,19 +129,20 @@ export function createCapabilityStore(options: CreateCapabilityStoreOptions = {}
           updated.enabled ? 1 : 0,
           JSON.stringify(updated.config),
           updated.updatedAt,
+          kind,
           id,
         );
     },
 
-    remove(id) {
-      const result = database.prepare('DELETE FROM capabilities WHERE id = ?').run(id);
+    remove(kind, id) {
+      const result = database.prepare('DELETE FROM capabilities WHERE kind = ? AND id = ?').run(kind, id);
       return result.changes > 0;
     },
 
-    setEnabled(id, enabled) {
+    setEnabled(kind, id, enabled) {
       database
-        .prepare('UPDATE capabilities SET enabled = ?, updated_at = ? WHERE id = ?')
-        .run(enabled ? 1 : 0, new Date().toISOString(), id);
+        .prepare('UPDATE capabilities SET enabled = ?, updated_at = ? WHERE kind = ? AND id = ?')
+        .run(enabled ? 1 : 0, new Date().toISOString(), kind, id);
     },
 
     close() {

@@ -11,8 +11,8 @@ Four capability kinds:
 | Kind | Flue ingress | Runtime loading path |
 | --- | --- | --- |
 | Skill | `skills: [...]` + auto-discovery of `<cwd>/.agents/skills/<name>/` | Materialize user skill dirs into the discovery path. Flue loads natively. |
-| Tool | `tools: ToolDefinition[]` | Dynamic `import()` of user JS modules exporting `defineTool(...)` results. (Phase 2) |
-| Worker (subagent) | `subagents: AgentProfile[]` | Dynamic `import()` of user JS modules exporting `defineAgentProfile(...)` results. (Phase 2) |
+| Tool | `tools: ToolDefinition[]` | Dynamic `import()` of user JS modules exporting `defineTool(...)` results. |
+| Worker (subagent) | `subagents: AgentProfile[]` | Dynamic `import()` of user JS modules exporting `defineAgentProfile(...)` results. |
 | MCP | `connectMcpServer(name, opts) -> { tools }` | `connectMcpServer(...)` per enabled row at init; tools spread into `tools`. |
 
 ## Architecture
@@ -102,8 +102,8 @@ This is a dev-time tool. The product interface is `sim-one skill add ...`, not p
 ```text
 .gorombo/capabilities/
   skills/<id>/SKILL.md + supporting files
-  tools/<id>/index.mjs         (Phase 2)
-  workers/<id>/index.mjs       (Phase 2)
+  tools/<id>/index.mjs
+  workers/<id>/index.mjs
 ```
 
 Capabilities live outside `dist/` and survive upgrades.

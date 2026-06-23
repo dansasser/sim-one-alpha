@@ -188,7 +188,7 @@ docs/architecture/gorombo-flue-map.md  — updated with capabilities dir
 
 ## Dependencies Added (not in original main)
 - `@modelcontextprotocol/sdk: ^1.29.0` — needed by Flue's `connectMcpServer` at runtime (dynamic import)
-- `@hono/node-server: ^2.0.3` — needed by Flue's built server for HTTP request handling (was in pnpm store but not hoisted)
+- `@hono/node-server: ^2.0.6` — needed by Flue's built server for HTTP request handling (was in pnpm store but not hoisted)
 
 ## Known Test Failures (pre-existing, not caused by this work)
 - 3 embedding tests fail with dimension mismatch (768 vs 384): `createEmbeddingClient truncates long input`, `createEmbeddingClient tries cloud first`, `createEmbeddingClient embedWithOutcome reports onnx-local`

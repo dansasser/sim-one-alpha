@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import { mkdirSync, existsSync, rmSync, cpSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
+import { homedir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { execSync } from 'node:child_process';
 
-const defaultDbPath = '.gorombo/db/capabilities.sqlite';
+const defaultDbPath = resolve(homedir(), '.gorombo', 'db', 'capabilities.sqlite');
 const dbPath = process.env.GOROMBO_CAPABILITY_DB_PATH ?? defaultDbPath;
 const resolvedDbPath = isAbsolute(dbPath) ? dbPath : resolve(process.cwd(), dbPath);
 
@@ -51,14 +52,31 @@ function getCapabilitiesDir() {
   if (configured) {
     return isAbsolute(configured) ? configured : resolve(process.cwd(), configured);
   }
-  return resolve(process.cwd(), '.gorombo', 'capabilities');
+  return resolve(homedir(), '.gorombo', 'capabilities');
+}
+
+function assertSafeCapabilityId(id) {
+  if (typeof id !== 'string' || id.length === 0) {
+    throw new Error(`Invalid capability id: empty`);
+  }
+  if (id.includes('/') || id.includes('\\') || id.includes('\0')) {
+    throw new Error(`Invalid capability id "${id}": must not contain path separators`);
+  }
+  if (id === '.' || id === '..' || id.includes('..')) {
+    throw new Error(`Invalid capability id "${id}": must not contain traversal sequences`);
+  }
+  if (isAbsolute(id)) {
+    throw new Error(`Invalid capability id "${id}": must not be an absolute path`);
+  }
 }
 
 function getCapabilityPath(kind, id) {
+  assertSafeCapabilityId(id);
   return resolve(getCapabilitiesDir(), kind + 's', id);
 }
 
 function fetchSource(sourceRef, kind, id) {
+  assertSafeCapabilityId(id);
   const targetPath = getCapabilityPath(kind, id);
   mkdirSync(dirname(targetPath), { recursive: true });
 
@@ -108,14 +126,17 @@ function addCapability(database, kind, args) {
     }
     configJson = JSON.stringify({ mcpUrl: urlArg, mcpTransport: transportArg, mcpTokenEnv: tokenEnvArg ?? undefined });
   } else {
-    // skill/tool/worker: add <kind> <github-url|local-path> <id> <name> [description] [--enable] [--version <ver>]
+    // skill/tool/worker: add <kind> <github-url|local-path> <id> <name> [description] [--enable] [--disable] [--version <ver>]
     [sourceRef, id, name] = args;
     const rest = args.slice(3);
-    description = rest.find(a => !a.startsWith('--')) ?? '';
-    enableFlag = args.includes('--enable');
-    versionArg = extractFlag(args, '--version');
+    const versionValue = extractFlag(args, '--version');
+    description = rest.find((a) => !a.startsWith('--') && a !== versionValue) ?? '';
+    const hasDisable = args.includes('--disable');
+    const hasEnable = args.includes('--enable');
+    enableFlag = kind === 'skill' ? !hasDisable : hasEnable;
+    versionArg = versionValue;
     if (!sourceRef || !id || !name) {
-      console.error(`Usage: capability-admin.mjs add ${kind} <github-url|local-path> <id> <name> [description] [--enable] [--version <ver>]`);
+      console.error(`Usage: capability-admin.mjs add ${kind} <github-url|local-path> <id> <name> [description] [--enable] [--disable] [--version <ver>]`);
       process.exit(1);
     }
     configJson = '{}';
@@ -221,16 +242,19 @@ function updateCapability(database, kind, args) {
   const sourceRef = String(row.source_ref);
   if (kind !== 'mcp') {
     const targetPath = getCapabilityPath(kind, id);
+    mkdirSync(dirname(targetPath), { recursive: true });
     if (existsSync(targetPath)) {
       rmSync(targetPath, { recursive: true, force: true });
     }
     if (sourceRef.startsWith('http') || sourceRef.startsWith('git@')) {
       execSync(`git clone --depth 1 ${shellQuote(sourceRef)} ${shellQuote(targetPath)}`, { stdio: 'pipe', timeout: 30_000 });
       rmSync(resolve(targetPath, '.git'), { recursive: true, force: true });
+      database.prepare('UPDATE capabilities SET updated_at = ? WHERE id = ? AND kind = ?').run(new Date().toISOString(), id, kind);
       console.log(`Updated ${kind} ${id} from GitHub.`);
     } else if (existsSync(sourceRef)) {
       const absSource = isAbsolute(sourceRef) ? sourceRef : resolve(process.cwd(), sourceRef);
       cpSync(absSource, targetPath, { recursive: true, force: true });
+      database.prepare('UPDATE capabilities SET updated_at = ? WHERE id = ? AND kind = ?').run(new Date().toISOString(), id, kind);
       console.log(`Updated ${kind} ${id} from local path.`);
     } else {
       console.log(`Source not found: ${sourceRef}`);

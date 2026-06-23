@@ -32,10 +32,10 @@ export interface CapabilityConfig {
 
 export interface CapabilityStore {
   list(options?: { enabledOnly?: boolean; kind?: CapabilityKind }): CapabilityRecord[];
-  get(id: string): CapabilityRecord | undefined;
+  get(kind: CapabilityKind, id: string): CapabilityRecord | undefined;
   insert(record: CapabilityRecord): void;
-  update(id: string, patch: Partial<Omit<CapabilityRecord, 'id' | 'kind'>>): void;
-  remove(id: string): boolean;
-  setEnabled(id: string, enabled: boolean): void;
+  update(kind: CapabilityKind, id: string, patch: Partial<Omit<CapabilityRecord, 'id' | 'kind'>>): void;
+  remove(kind: CapabilityKind, id: string): boolean;
+  setEnabled(kind: CapabilityKind, id: string, enabled: boolean): void;
   close(): void;
 }

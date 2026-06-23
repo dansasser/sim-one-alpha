@@ -25,6 +25,7 @@ function insertCapability(
   sourceRef: string,
   config: Record<string, unknown>,
   autoEnable: boolean,
+  materialize = false,
 ): string {
   const store = createCapabilityStore({});
   try {
@@ -44,12 +45,12 @@ function insertCapability(
     };
     store.insert(record);
 
-    if (autoEnable && kind === 'skill') {
+    if (autoEnable || materialize) {
       try {
         materializeCapability({ record });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return `Skill ${id} added and enabled, but materialization failed: ${message}. The skill directory may not be ready until the next restart.`;
+        return `${kind} ${id} added${autoEnable ? ' and enabled' : ''}, but source materialization failed: ${message}. The capability directory may not be ready until the next restart.`;
       }
     }
 
@@ -89,7 +90,7 @@ export const addToolCapabilityTool = defineTool({
     description: v.pipe(v.string(), v.description('Short description of what the tool does')),
   }),
   execute: async ({ sourceRef, id, name, description }) => {
-    return insertCapability('tool', id, name, description, sourceRef, {}, false);
+    return insertCapability('tool', id, name, description, sourceRef, {}, false, true);
   },
 });
 
@@ -104,7 +105,7 @@ export const addWorkerTool = defineTool({
     description: v.pipe(v.string(), v.description('Short description of what the worker does')),
   }),
   execute: async ({ sourceRef, id, name, description }) => {
-    return insertCapability('worker', id, name, description, sourceRef, {}, false);
+    return insertCapability('worker', id, name, description, sourceRef, {}, false, true);
   },
 });
 
@@ -147,12 +148,28 @@ export const listCapabilitiesTool = defineTool({
         enabledOnly: enabledOnly ?? false,
         kind: kind as CapabilityKind | undefined,
       });
-      return JSON.stringify(records, null, 2);
+      const safe = records.map(redactCapabilityRecord);
+      return JSON.stringify(safe, null, 2);
     } finally {
       store.close();
     }
   },
 });
+
+function redactCapabilityRecord(record: CapabilityRecord) {
+  return {
+    id: record.id,
+    kind: record.kind,
+    name: record.name,
+    description: record.description,
+    source: record.source,
+    version: record.version,
+    enabled: record.enabled,
+    installedAt: record.installedAt,
+    updatedAt: record.updatedAt,
+    installedBy: record.installedBy,
+  };
+}
 
 export const capabilityTools = [
   addSkillTool,

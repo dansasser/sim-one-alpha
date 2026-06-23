@@ -171,23 +171,25 @@ function readOptionalEnv(env: Record<string, unknown>, key: string): string | un
 }
 
 function loadUserCapabilitiesFromStore(env: Record<string, unknown>) {
+  let store;
   try {
-    const store = createCapabilityStore({});
+    store = createCapabilityStore({});
     const caps = loadUserCapabilities({ store });
-    for (const skill of caps.skills) {
+    for (const capability of [...caps.skills, ...caps.tools, ...caps.workers]) {
       try {
-        materializeCapability({ record: skill, env });
+        materializeCapability({ record: capability, env });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        console.error(`[capabilities] Failed to materialize skill ${skill.id}: ${message}`);
+        console.error(`[capabilities] Failed to materialize ${capability.kind} ${capability.id}: ${message}`);
       }
     }
-    store.close();
     return caps;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[capabilities] Failed to load user capabilities: ${message}`);
     return { skills: [], tools: [], workers: [], mcp: [] };
+  } finally {
+    store?.close();
   }
 }
 
