@@ -1,0 +1,19 @@
+.gitignore
+  s_2a32831ed9b5ea::t_208f498e425b9f 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "fa75ed85e608d6a6561442e543280da106d3f4e3",
+  "prompts": {},
+  "sessions": {
+    "s_2a32831ed9b5ea": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10a36f13effe9SN8QhAWqs1XZM",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
