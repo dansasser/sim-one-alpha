@@ -21,6 +21,7 @@ export interface GoromboConfig {
   rag?: Record<string, unknown>;
   memory?: Record<string, unknown>;
   protocols?: Record<string, unknown>;
+  schedules?: Record<string, unknown>;
   gateway?: Record<string, unknown>;
   observability?: Record<string, unknown>;
 }
