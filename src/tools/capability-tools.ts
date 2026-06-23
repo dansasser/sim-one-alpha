@@ -54,7 +54,7 @@ function insertCapability(
       installedBy: 'agent',
     };
     try {
-      store.insert(record);
+      store.insertStrict(record);
     } catch {
       return `Name '${id}' already exists as a capability. Choose a different name.`;
     }

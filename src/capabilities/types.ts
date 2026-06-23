@@ -34,6 +34,7 @@ export interface CapabilityStore {
   list(options?: { enabledOnly?: boolean; kind?: CapabilityKind }): CapabilityRecord[];
   get(kind: CapabilityKind, id: string): CapabilityRecord | undefined;
   insert(record: CapabilityRecord): void;
+  insertStrict(record: CapabilityRecord): void;
   update(kind: CapabilityKind, id: string, patch: Partial<Omit<CapabilityRecord, 'id' | 'kind'>>): void;
   remove(kind: CapabilityKind, id: string): boolean;
   setEnabled(kind: CapabilityKind, id: string, enabled: boolean): void;

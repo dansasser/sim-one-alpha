@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
-  resolveCapabilityPath,
   checkNameCollision,
 } from '../../../src/capabilities/index.js';
 import type { CapabilityRecord, CapabilitySource, CapabilityStore } from '../../../src/capabilities/index.js';
@@ -187,7 +186,7 @@ export function refetchCapability(
   record: CapabilityRecord,
 ): void {
   const { id, sourceRef } = record;
-  const targetPath = resolveCapabilityPath(process.env, kind, id);
+  const targetPath = getCapabilityPath(kind, id);
   mkdirSync(dirname(targetPath), { recursive: true });
 
   const isGithub =

@@ -104,6 +104,29 @@ export function createCapabilityStore(options: CreateCapabilityStoreOptions = {}
         );
     },
 
+    insertStrict(record) {
+      database
+        .prepare(
+          `INSERT INTO capabilities
+           (id, kind, name, description, source, source_ref, version, enabled, config_json, installed_at, updated_at, installed_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          record.id,
+          record.kind,
+          record.name,
+          record.description,
+          record.source,
+          record.sourceRef,
+          record.version,
+          record.enabled ? 1 : 0,
+          JSON.stringify(record.config ?? {}),
+          record.installedAt,
+          record.updatedAt,
+          record.installedBy,
+        );
+    },
+
     update(kind, id, patch) {
       const current = database.prepare('SELECT * FROM capabilities WHERE kind = ? AND id = ?').get(kind, id);
       if (!current) return;
