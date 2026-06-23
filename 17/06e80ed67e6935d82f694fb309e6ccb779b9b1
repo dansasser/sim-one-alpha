@@ -1,0 +1,29 @@
+src/tools/capability-tools.ts
+  s_2a85b2e1f110e1::t_b0345125c06eb3 1-27,29-51,53-56,58-59,61-120,122-139,142-163
+  s_2a85b2e1f110e1::t_8d119f43651032 121
+  s_2a85b2e1f110e1::t_5cbf31e24a15a3 140-141
+  s_2a85b2e1f110e1::t_fd486846229858 28
+  s_2a85b2e1f110e1::t_3f4082440ed288 52,57,60
+src/agents/orchestrator.ts
+  s_2a85b2e1f110e1::t_1ffcc42d8bdd0a 111
+  s_2a85b2e1f110e1::t_1b4a8fec9dbadd 45
+  s_2a85b2e1f110e1::t_37903a7ae35681 212
+src/tools/index.ts
+  s_2a85b2e1f110e1::t_3d060183183d10 43-50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "1706e80ed67e6935d82f694fb309e6ccb779b9b1",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
