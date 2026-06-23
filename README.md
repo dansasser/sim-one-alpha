@@ -439,13 +439,7 @@ pnpm run typecheck # TypeScript type checking
 
 ## Interactive TUI
 
-SIM-ONE Alpha includes an interactive terminal UI for chatting with the agent, viewing tool calls and subagent delegations, and managing approvals. After install, launch it with the product command:
-
-```sh
-sim-one
-```
-
-This connects to the running gateway service over HTTP and drops you into the interactive interface — equivalent to launching `opencode`, `claude`, or `codex`.
+SIM-ONE Alpha includes an interactive terminal UI for chatting with the agent, viewing tool calls and subagent delegations, and managing approvals. The production `sim-one` binary is the target interface, but is not yet shipped from this repo. The current runnable TUI is the developer prototype (see below).
 
 ### What the TUI shows
 
@@ -457,14 +451,16 @@ This connects to the running gateway service over HTTP and drops you into the in
 - **Status bar** — message count, pending approvals count, agent status
 - **Chat input** — text input with Enter to send, disabled during streaming and approval prompts
 
-### First run — the wizard
+### First run — the wizard (planned)
 
-On first install, `sim-one install` (or the install script) launches a wizard TUI that walks through:
+On first install, `sim-one install` (or the install script) will launch a wizard TUI that walks through:
 - Model selection and API key entry
 - Optional channel setup (Telegram, Discord, etc.)
 - Optional initial capabilities (skills, tools, MCP servers)
 - Persona/workspace configuration
 - Gateway service launch (always-on background process)
+
+> **Status:** The wizard is part of the production `sim-one` binary, which is not yet shipped. Use the developer prototype below for now.
 
 ### Developer prototype
 
@@ -487,6 +483,8 @@ The capability registry lets users and agents add skills, tools, workers (subage
 ### Product CLI
 
 After install, manage capabilities with the `sim-one` binary:
+
+> **Status:** The `sim-one` binary is the planned product interface and is not yet shipped from this repo. During development, use the developer-only script (`scripts/capability-admin.mjs`) shown below each command block. See `docs/architecture/product-flow.md` for the full product flow.
 
 ```sh
 # Add a skill from GitHub
@@ -522,6 +520,39 @@ sim-one skill remove my-skill
 ```
 
 After adding or enabling a capability, restart the service for it to take effect: `sim-one restart`
+
+#### Developer-only tool (before `sim-one` binary ships)
+
+During development, a standalone script provides the same CRUD operations:
+
+```sh
+# Add a skill from GitHub
+node scripts/capability-admin.mjs add skill https://github.com/user/my-skill my-skill "My Skill" "Description" --enable
+
+# Add a skill from a local directory (skills auto-enable by default)
+node scripts/capability-admin.mjs add skill /path/to/skill-dir my-skill "My Skill"
+
+# Add a tool (requires --enable to activate)
+node scripts/capability-admin.mjs add tool https://github.com/user/my-tool my-tool "My Tool" "Description"
+
+# Add an MCP server
+node scripts/capability-admin.mjs add mcp my-mcp "My MCP Server" "Description" --url http://localhost:8080 --enable
+
+# List capabilities
+node scripts/capability-admin.mjs list
+
+# Enable/disable
+node scripts/capability-admin.mjs enable tool my-tool
+node scripts/capability-admin.mjs disable tool my-tool
+
+# Update (re-fetch from source)
+node scripts/capability-admin.mjs update skill my-skill
+
+# Remove
+node scripts/capability-admin.mjs remove skill my-skill
+```
+
+This is a dev-time tool. The product interface is `sim-one skill add ...`, not pnpm scripts or standalone `.mjs` files.
 
 ### Agent tools
 
