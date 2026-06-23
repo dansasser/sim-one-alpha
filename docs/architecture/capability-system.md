@@ -49,40 +49,53 @@ CREATE TABLE capabilities (
 );
 ```
 
-SQLite is authoritative. A config-file mirror (`gorombo.config.json` `capabilities` section) reconciles into SQLite on boot. (Phase 4)
+SQLite is authoritative. A config-file mirror (`gorombo.config.json` `capabilities` section) reconciles into SQLite on boot.
 
-## CLI
+## Product CLI
+
+The `sim-one` binary is the product interface for capability management. After install, users manage capabilities with:
 
 ```sh
 # Add a skill from GitHub
-pnpm capabilities:add skill https://github.com/user/my-skill my-skill "My Skill" "Does X" --enable
+sim-one skill add https://github.com/user/my-skill my-skill "My Skill" "Does X" --enable
 
 # Add a skill from local path
-pnpm capabilities:add skill /path/to/skill-dir my-skill "My Skill" --enable
+sim-one skill add /path/to/skill-dir my-skill "My Skill" --enable
 
 # Add an MCP server
-pnpm capabilities:add mcp my-mcp "My MCP Server" "Description" --url http://localhost:8080 --enable
+sim-one mcp add my-mcp "My MCP Server" "Description" --url http://localhost:8080 --enable
 
 # List all capabilities
-pnpm capabilities:list
-
-# List by kind
-pnpm capabilities:list skill
+sim-one skill list
+sim-one tool list
+sim-one mcp list
+sim-one worker list
 
 # Enable/disable
-pnpm capabilities:enable skill my-skill
-pnpm capabilities:disable skill my-skill
+sim-one skill enable my-skill
+sim-one skill disable my-skill
 
 # Update (re-fetch from source)
-pnpm capabilities:update skill my-skill
+sim-one skill update my-skill
 
 # Remove
-pnpm capabilities:remove skill my-skill
+sim-one skill remove my-skill
 ```
 
-Environment variables:
-- `GOROMBO_CAPABILITY_DB_PATH` — SQLite path (default: `.gorombo/db/capabilities.sqlite`)
-- `GOROMBO_CAPABILITIES_DIR` — capability files root (default: `.gorombo/capabilities/`)
+After adding or enabling a capability, restart the service: `sim-one restart`
+
+### Developer-only tool (before `sim-one` binary ships)
+
+During development, a standalone script provides the same CRUD operations:
+
+```sh
+node scripts/capability-admin.mjs add skill /path/to/skill my-skill "My Skill" --enable
+node scripts/capability-admin.mjs list
+node scripts/capability-admin.mjs enable tool my-tool
+node scripts/capability-admin.mjs remove skill my-skill
+```
+
+This is a dev-time tool. The product interface is `sim-one skill add ...`, not pnpm scripts or standalone `.mjs` files. See `docs/architecture/product-flow.md` for the full product flow.
 
 ## Directory Layout
 

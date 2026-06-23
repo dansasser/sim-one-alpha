@@ -439,36 +439,13 @@ pnpm run typecheck # TypeScript type checking
 
 ## Interactive TUI
 
-An interactive terminal UI (built with Ink + `@flue/react`) is available for testing and interacting with the agent from the terminal. The TUI connects to the running agent service over HTTP using `@flue/sdk`.
-
-### One-command build + launch
+SIM-ONE Alpha includes an interactive terminal UI for chatting with the agent, viewing tool calls and subagent delegations, and managing approvals. After install, launch it with the product command:
 
 ```sh
-pnpm run build:prod
+sim-one
 ```
 
-This builds the runtime, starts the built server, waits for it to be ready (handles the ~30s ONNX model load), then launches the interactive TUI. When the TUI exits, the server is shut down automatically.
-
-### Against a running server
-
-If the server is already running (via `pnpm run dev` or `node dist/server.mjs`), launch the TUI directly:
-
-```sh
-# Against flue dev (default port 3583)
-pnpm --filter sim-one-alpha-tui-proto exec tsx src/cli.tsx --port 3583
-
-# Against built server on a custom port
-pnpm --filter sim-one-alpha-tui-proto exec tsx src/cli.tsx --port 3960
-```
-
-### CLI flags
-
-```
---port <number>     Server port (default: 3000)
---base-url <url>    Full base URL (overrides --port)
---session <id>      Agent instance id (default: proto)
---token <secret>    API secret (defaults to API_SECRET env)
-```
+This connects to the running gateway service over HTTP and drops you into the interactive interface — equivalent to launching `opencode`, `claude`, or `codex`.
 
 ### What the TUI shows
 
@@ -480,48 +457,71 @@ pnpm --filter sim-one-alpha-tui-proto exec tsx src/cli.tsx --port 3960
 - **Status bar** — message count, pending approvals count, agent status
 - **Chat input** — text input with Enter to send, disabled during streaming and approval prompts
 
-The TUI prototype lives in `tui-proto/` at the repo top level. It is a throwaway test harness that will be replaced by the production TUI per the agent-tui plan.
+### First run — the wizard
+
+On first install, `sim-one install` (or the install script) launches a wizard TUI that walks through:
+- Model selection and API key entry
+- Optional channel setup (Telegram, Discord, etc.)
+- Optional initial capabilities (skills, tools, MCP servers)
+- Persona/workspace configuration
+- Gateway service launch (always-on background process)
+
+### Developer prototype
+
+The current TUI prototype lives in `tui-proto/` at the repo top level. It is a throwaway test harness that will be replaced by the production `sim-one` binary. During development, it can be launched directly:
+
+```sh
+# Against a running dev server
+pnpm --filter sim-one-alpha-tui-proto exec tsx src/cli.tsx --port 3583
+
+# One-command build + launch (developer workflow)
+pnpm run build:prod
+```
+
+See `docs/architecture/product-flow.md` for the full product install and launch flow.
 
 ## Capability Management
 
 The capability registry lets users and agents add skills, tools, workers (subagents), and MCP servers to a running SIM-ONE Alpha instance without rebuilding. Capabilities are stored in SQLite (`~/.gorombo/db/capabilities.sqlite`) and materialized into `~/.gorombo/capabilities/`. A service restart picks up changes — no rebuild needed.
 
-### CLI
+### Product CLI
+
+After install, manage capabilities with the `sim-one` binary:
 
 ```sh
 # Add a skill from GitHub
-pnpm capabilities:add skill https://github.com/user/my-skill my-skill "My Skill" "Description" --enable
+sim-one skill add https://github.com/user/my-skill my-skill "My Skill" "Description" --enable
 
 # Add a skill from a local directory
-pnpm capabilities:add skill /path/to/skill-dir my-skill "My Skill" --enable
+sim-one skill add /path/to/skill-dir my-skill "My Skill" --enable
 
 # Add a tool (requires approval before enabling)
-pnpm capabilities:add tool https://github.com/user/my-tool my-tool "My Tool" "Description"
+sim-one tool add https://github.com/user/my-tool my-tool "My Tool" "Description"
 
 # Add a worker (requires approval before enabling)
-pnpm capabilities:add worker https://github.com/user/my-worker my-worker "My Worker" "Description"
+sim-one worker add https://github.com/user/my-worker my-worker "My Worker" "Description"
 
 # Add an MCP server
-pnpm capabilities:add mcp my-mcp "My MCP Server" "Description" --url http://localhost:8080 --enable
+sim-one mcp add my-mcp "My MCP Server" "Description" --url http://localhost:8080 --enable
 
-# List all capabilities
-pnpm capabilities:list
-
-# List by kind
-pnpm capabilities:list skill
+# List capabilities
+sim-one skill list
+sim-one tool list
+sim-one mcp list
+sim-one worker list
 
 # Enable/disable (for tools/workers/MCP that require approval)
-pnpm capabilities:enable tool my-tool
-pnpm capabilities:disable tool my-tool
+sim-one tool enable my-tool
+sim-one tool disable my-tool
 
 # Update (re-fetch from source — git pull or local copy)
-pnpm capabilities:update skill my-skill
+sim-one skill update my-skill
 
 # Remove (deletes SQLite row and capability files)
-pnpm capabilities:remove skill my-skill
+sim-one skill remove my-skill
 ```
 
-After adding or enabling a capability, restart the service for it to take effect.
+After adding or enabling a capability, restart the service for it to take effect: `sim-one restart`
 
 ### Agent tools
 
@@ -559,7 +559,20 @@ The orchestrator has model-callable tools for managing capabilities:
 - `GOROMBO_CAPABILITY_DB_PATH` — SQLite path (default: `.gorombo/db/capabilities.sqlite`)
 - `GOROMBO_CAPABILITIES_DIR` — capability files root (default: `.gorombo/capabilities/`)
 
-See `docs/architecture/capability-system.md` for full architecture documentation.
+### Developer-only tools (not the product interface)
+
+During development, before the `sim-one` binary ships, capability management is available via a standalone script:
+
+```sh
+node scripts/capability-admin.mjs add skill /path/to/skill my-skill "My Skill" --enable
+node scripts/capability-admin.mjs list
+node scripts/capability-admin.mjs enable tool my-tool
+node scripts/capability-admin.mjs remove skill my-skill
+```
+
+These are dev-time tools. The product interface is `sim-one skill add ...`, not `pnpm` scripts or standalone `.mjs` files.
+
+See `docs/architecture/capability-system.md` for full architecture documentation and `docs/architecture/product-flow.md` for the product install and launch flow.
 
 ## Local Chat
 
