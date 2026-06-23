@@ -358,9 +358,25 @@ crates/
 
 ### Prerequisites
 
+There are two distinct requirement sets depending on how you obtain SIM-ONE Alpha:
+
+#### Runtime requirements (running a finished install)
+
+These apply to end users running a packaged install (the eventual `sim-one` install package, or a pre-built `dist/` artifact):
+
+- **Node.js >= 22.18.0** — required by Flue (native TypeScript config support). Use `nvm use 22` or set `PATH` to the Node 22 binary.
+
+That's it. The structured-memory WASM engine ships pre-compiled inside `dist/`, so no Rust toolchain, no `wasm-pack`, and no build step is needed at runtime.
+
+#### Build-from-source requirements (cloning and building this repo)
+
+These apply to developers cloning this repository to build from source:
+
 - **Node.js >= 22.18.0** — required by Flue (native TypeScript config support). Use `nvm use 22` or set `PATH` to the Node 22 binary.
 - **pnpm 10.x** — the repo uses pnpm (declared in `packageManager`). Install via `npm install -g pnpm` or Corepack.
-- **Rust toolchain + wasm-pack** — required for building the structured-memory WASM engine. Install via [rustup](https://rustup.rs/) and `cargo install wasm-pack --version 0.13.1`. The `prebuild` script runs `wasm-build.mjs` which needs `wasm-pack` on `PATH`.
+- **Rust toolchain + wasm-pack** — required for building the structured-memory WASM engine from source. Install via [rustup](https://rustup.rs/) and `cargo install wasm-pack --version 0.13.1`. The `prebuild` script runs `wasm-build.mjs` which needs `wasm-pack` on `PATH`.
+
+> **Why Rust is a build-time dependency only:** The structured-memory engine is a Rust crate (`crates/gorombo-memory/`) compiled to WebAssembly via `wasm-pack`. Once built, the resulting `.wasm` artifact lives in `dist/memory/` and is loaded by Node at runtime — no Rust compiler, `cargo`, or `wasm-pack` needed on the host running the server. The `prebuild` script only invokes the Rust toolchain to produce the `.wasm`; the finished `dist/` is self-contained and can be copied to a machine without Rust installed and run there.
 
 ### Setup
 
@@ -406,7 +422,7 @@ After downloading, RAG works without Ollama running and without any API keys. Th
 pnpm run build
 ```
 
-This compiles the WASM memory engine, builds the Flue Node server (`dist/server.mjs`), copies the runtime config, and copies the WASM artifact into `dist/`.
+This compiles the WASM memory engine (the `prebuild` step invokes `wasm-pack` — this is what requires the Rust toolchain), builds the Flue Node server (`dist/server.mjs`), copies the runtime config, and copies the WASM artifact into `dist/`. The resulting `dist/` is self-contained: you can copy it to a machine without Rust installed and run the server from there. Only rebuilding the WASM from source requires the toolchain.
 
 ### Start the server
 
@@ -1029,6 +1045,8 @@ Build the WASM artifact and run the Memory Helper smoke:
 pnpm run wasm:build
 pnpm run smoke:memory
 ```
+
+`pnpm run wasm:build` rebuilds the Rust crate to WASM and requires the Rust toolchain + `wasm-pack`. This is only needed when modifying the structured-memory engine; the shipped `dist/memory/` artifact is already compiled and runs without Rust.
 
 The default smoke drives the real Memory Helper tools, WASM engine, SQLite, `retrieve_memory`, and the coding-worker path end-to-end with a durability restart check (no live model required). To run the real-model smoke that boots the server and lets a live model drive the orchestrator memory tools, set `GOROMBO_SMOKE_REAL_MODEL=1` (requires a `.env` with model API creds and a built `dist`): `GOROMBO_SMOKE_REAL_MODEL=1 pnpm run smoke:memory`.
 
