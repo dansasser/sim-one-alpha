@@ -1,0 +1,42 @@
+src/tests/coding-schedule-tools.test.ts
+  s_50c513bbdc400c::t_5a3c693d3b1016 75
+  s_50c513bbdc400c::t_8b7fdb5e116aa8 70
+src/tools/schedule-tools.ts
+  s_50c513bbdc400c::t_a8a084e1b68e2a 243-246,248
+  s_50c513bbdc400c::t_1f3952e324a225 23
+  s_50c513bbdc400c::t_20c563532e0b41 90-94,113-117,141-145,170-174,182,188-189,195,202-205,207,213,220-224,229
+src/agents/orchestrator.ts
+  s_50c513bbdc400c::t_22ceb5fff9a073 174
+src/tests/schedules-store.test.ts
+  s_50c513bbdc400c::t_983e64efb21ef4 37
+src/schedules/schedule-manager.ts
+  s_50c513bbdc400c::t_cf64ca87226125 304-313
+src/workers/coding-worker/tools/coding-schedule-tools.ts
+  s_50c513bbdc400c::t_8ec700149897a0 24-25
+  s_50c513bbdc400c::t_e940c602c7d2e1 101,120,146,171,196,210,231
+src/schedules/schedule-store.ts
+  s_50c513bbdc400c::t_87116d5840ba1c 138
+  s_50c513bbdc400c::t_e56acc15f21573 225
+  s_50c513bbdc400c::t_ce5615ea3d79e5 198-202
+  s_50c513bbdc400c::t_cae3f138226d22 285
+src/schedules/schedule-types.ts
+  s_50c513bbdc400c::t_e45d38792e6496 147-153
+src/schedules/schedule-ownership.ts
+  s_50c513bbdc400c::t_8df2a6ef53fa98 1-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "225e9d7800d9b4a194b0a04a1854ce3265cff838",
+  "prompts": {},
+  "sessions": {
+    "s_50c513bbdc400c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed5d8559-9b53-4db5-9338-31382d2362d7",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
