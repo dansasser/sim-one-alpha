@@ -1,9 +1,9 @@
 {
-  "name": "sim-one-alpha-tui-proto",
+  "name": "sim-one-cli",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Throwaway interactive TUI prototype for testing the built SIM-ONE Alpha agent.",
+  "description": "SIM-ONE Alpha CLI — interactive TUI coding interface + capability management subcommands.",
   "scripts": {
     "dev": "tsx src/cli.tsx",
     "typecheck": "tsc --noEmit"
