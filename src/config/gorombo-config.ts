@@ -24,6 +24,7 @@ export interface GoromboConfig {
   schedules?: Record<string, unknown>;
   gateway?: Record<string, unknown>;
   observability?: Record<string, unknown>;
+  capabilities?: GoromboCapabilityConfig[];
 }
 
 export interface GoromboModelConfig {
@@ -35,6 +36,18 @@ export interface GoromboStorageConfig {
   flueDatabasePath?: string;
   sessionDatabasePath?: string;
   vectorStorePath?: string;
+}
+
+export interface GoromboCapabilityConfig {
+  id: string;
+  kind: 'skill' | 'tool' | 'worker' | 'mcp';
+  name: string;
+  description: string;
+  source: 'github' | 'local' | 'npm' | 'builtin';
+  sourceRef: string;
+  version?: string | null;
+  enabled?: boolean;
+  config?: Record<string, unknown>;
 }
 
 export interface LoadGoromboConfigOptions {

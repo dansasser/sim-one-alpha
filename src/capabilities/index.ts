@@ -22,3 +22,5 @@ export { loadUserTools } from './tool-loader.js';
 export type { ToolLoaderResult } from './tool-loader.js';
 export { loadUserWorkers } from './worker-loader.js';
 export type { WorkerLoaderResult } from './worker-loader.js';
+export { reconcileCapabilitiesFromConfig } from './capability-config-reconcile.js';
+export type { ReconcileResult } from './capability-config-reconcile.js';

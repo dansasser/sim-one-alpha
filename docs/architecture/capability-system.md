@@ -122,6 +122,24 @@ Adding a capability writes to SQLite. The user restarts the running service (`no
 
 Agent-initiated additions of code-exec kinds (tool, worker, MCP) will go through the existing approval service (fail-closed). Skill additions skip approval (markdown only, no code exec). CLI additions skip approval (user is the principal).
 
-## Config-File Mirror (Phase 4)
+## Config-File Mirror
 
-`gorombo.config.json` gains a `capabilities` array that reconciles into SQLite on boot. Config is additive — entries in config but missing from SQLite get inserted; entries in SQLite but missing from config stay. Removal is a CLI/db operation.
+`gorombo.config.json` has a `capabilities` array that reconciles into SQLite on boot (in `src/db.ts`, at server startup — before any agent request). Config is additive: entries in config but missing from SQLite get inserted with `installedBy: "seed"`; entries already in SQLite are skipped (idempotent). Removal is a CLI/db operation, not a config edit.
+
+```json
+{
+  "version": 1,
+  "models": { "primary": "..." },
+  "capabilities": [
+    {
+      "id": "my-skill",
+      "kind": "skill",
+      "name": "My Skill",
+      "description": "...",
+      "source": "github",
+      "sourceRef": "https://github.com/user/my-skill",
+      "enabled": true
+    }
+  ]
+}
+```
