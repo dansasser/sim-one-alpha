@@ -1,0 +1,39 @@
+sim-one-cli/src/commands/store.ts
+  s_24f358be6de8fb::t_f7f606b97890de 1-92
+sim-one-cli/src/commands/mcp.ts
+  s_24f358be6de8fb::t_c3601ba7339eb7 1-117
+sim-one-cli/src/cli.tsx
+  s_2a85b2e1f110e1::t_938a0c02204e74 5-30,53-58,60,62,66,68-69,72,74,76,78,80,83-87,96-102,105-109
+sim-one-cli/src/commands/index.ts
+  s_24f358be6de8fb::t_72a755fcec0b7b 1-46
+sim-one-cli/src/commands/tool.ts
+  s_24f358be6de8fb::t_1c4ba6d0c40376 1-117
+sim-one-cli/src/commands/worker.ts
+  s_24f358be6de8fb::t_4d8e90af855c55 1-117
+sim-one-cli/src/commands/skill.ts
+  s_24f358be6de8fb::t_66f7b672ef5a6d 1-208
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "99ed99fd4d8a3220a10b3a290b51d5860ec76f96",
+  "prompts": {},
+  "sessions": {
+    "s_24f358be6de8fb": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10a11beb5ffeFdxAFTOf3WIjS0",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    },
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
