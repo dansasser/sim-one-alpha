@@ -20,7 +20,7 @@
  * which is the substantive part.
  */
 
-import { setScheduleProgressEmitter } from './schedule-manager.js';
+import { scheduleProgressEmitter, setScheduleProgressEmitter } from './schedule-manager.js';
 
 export type ScheduleProgressEventType =
   | 'schedule.fired'
@@ -89,13 +89,32 @@ export function createScheduleEvent(
   type: ScheduleProgressEventType,
   payload: Record<string, unknown>,
 ): ScheduleProgressEvent {
+  // Spread payload FIRST so the canonical type/timestamp fields are set last
+  // and cannot be overwritten by payload contents.
   const event = {
+    ...payload,
     type,
     timestamp: new Date().toISOString(),
-    ...payload,
   } as ScheduleProgressEvent;
   assertPublicScheduleEvent(event);
   return event;
+}
+
+/**
+ * Emit a structured schedule progress event (CRUD side-effects and other
+ * transitions) through the manager's pluggable emitter. Used by the schedule
+ * tools to surface schedule.created/paused/resumed/updated/deleted (plan §11).
+ * Telemetry must never throw into the caller; failures are swallowed.
+ */
+export function emitScheduleProgress(
+  type: ScheduleProgressEventType,
+  payload: Record<string, unknown>,
+): void {
+  try {
+    scheduleProgressEmitter(type, payload);
+  } catch {
+    // telemetry must not break the tool path
+  }
 }
 
 export interface ScheduleProgressReporter {

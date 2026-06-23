@@ -109,3 +109,42 @@ test('backoffForAttempt reuses the last value for attempts beyond the array leng
   assert.equal(backoffForAttempt(retry as never, 2), 3_000);
   assert.equal(backoffForAttempt(retry as never, 5), 3_000, 'later attempts reuse last value');
 });
+test('partial env override preserves non-overridden nested config (merge fix)', () => {
+  // JSON configures retry.backoffMs and retry.retryOn; env sets ONLY keepRuns.
+  // The merge must preserve retry.backoffMs / retry.retryOn from JSON.
+  const c = resolveScheduleConfig(
+    {
+      retry: { maxAttempts: 5, backoffMs: [1_000, 2_000, 3_000], retryOn: ['network', 'server_error'] },
+      runLog: { keepRuns: 99 },
+    },
+    { GOROMBO_SCHEDULES_KEEP_RUNS: '10' },
+  );
+  assert.equal(c.runLog.keepRuns, 10, 'env overrode keepRuns');
+  assert.deepEqual(c.retry.backoffMs, [1_000, 2_000, 3_000], 'JSON retry.backoffMs preserved');
+  assert.deepEqual(c.retry.retryOn, ['network', 'server_error'], 'JSON retry.retryOn preserved');
+  assert.equal(c.retry.maxAttempts, 5, 'JSON retry.maxAttempts preserved (env did not set it)');
+});
+
+test('partial env override: maxAttempts alone does not reset runLog from JSON', () => {
+  const c = resolveScheduleConfig(
+    { runLog: { keepRuns: 42 }, retry: { backoffMs: [500] } },
+    { GOROMBO_SCHEDULES_MAX_ATTEMPTS: '7' },
+  );
+  assert.equal(c.retry.maxAttempts, 7, 'env overrode maxAttempts');
+  assert.equal(c.runLog.keepRuns, 42, 'JSON runLog.keepRuns preserved');
+  assert.deepEqual(c.retry.backoffMs, [500], 'JSON retry.backoffMs preserved');
+});
+
+test('maxConcurrentRuns=0 (or negative) is clamped to prevent concurrency deadlock', () => {
+  assert.ok(resolveScheduleConfig({ maxConcurrentRuns: 0 }, {}).maxConcurrentRuns >= 1, '0 clamped to >=1');
+  assert.ok(resolveScheduleConfig({ maxConcurrentRuns: -5 }, {}).maxConcurrentRuns >= 1, 'negative clamped to >=1');
+  const envClamped = resolveScheduleConfig({}, { GOROMBO_SCHEDULES_MAX_CONCURRENT_RUNS: '0' });
+  assert.ok(envClamped.maxConcurrentRuns >= 1, 'env 0 clamped to >=1');
+  // valid values pass through
+  assert.equal(resolveScheduleConfig({ maxConcurrentRuns: 4 }, {}).maxConcurrentRuns, 4);
+});
+
+test('retry.maxAttempts<1 is clamped to >=1', () => {
+  assert.ok(resolveScheduleConfig({ retry: { maxAttempts: 0 } }, {}).retry.maxAttempts >= 1, '0 clamped');
+  assert.ok(resolveScheduleConfig({ retry: { maxAttempts: -2 } }, {}).retry.maxAttempts >= 1, 'negative clamped');
+});

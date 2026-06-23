@@ -20,6 +20,7 @@ import * as v from 'valibot';
 
 import { getScheduleManager } from '../schedules/boot.js';
 import { scheduleInstanceId } from '../schedules/schedule-types.js';
+import { emitScheduleProgress } from '../schedules/schedule-telemetry.js';
 import { getTrustedMemoryEvent } from './memory-tools-shared.js';
 
 const SlugSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(128));
@@ -71,6 +72,7 @@ export const scheduleCreateTool = defineTool({
       ownerScope,
     });
     manager.syncCron(record);
+    emitScheduleProgress('schedule.created', { scheduleId: record.id, slug: record.slug, ownerScope });
     return JSON.stringify({ schedule: { id: record.id, slug: record.slug, kind: record.kind, schedule: record.schedule, enabled: record.enabled, nextFireAt: record.nextFireAt } });
   },
 });
@@ -88,6 +90,7 @@ export const schedulePauseTool = defineTool({
     const record = manager.store.setEnabled(String(slug), false);
     if (record) {
       manager.syncCron(record);
+      emitScheduleProgress('schedule.paused', { scheduleId: record.id, slug: record.slug });
     }
     return JSON.stringify({ slug, paused: record !== null });
   },
@@ -106,6 +109,7 @@ export const scheduleResumeTool = defineTool({
     const record = manager.store.setEnabled(String(slug), true);
     if (record) {
       manager.syncCron(record);
+      emitScheduleProgress('schedule.resumed', { scheduleId: record.id, slug: record.slug });
     }
     return JSON.stringify({ slug, resumed: record !== null, nextFireAt: record?.nextFireAt ?? null });
   },
@@ -135,6 +139,7 @@ export const scheduleUpdateTool = defineTool({
     });
     if (record) {
       manager.syncCron(record);
+      emitScheduleProgress('schedule.updated', { scheduleId: record.id, slug: record.slug });
     }
     return JSON.stringify({ slug, updated: record !== null, nextFireAt: record?.nextFireAt ?? null });
   },
@@ -142,7 +147,7 @@ export const scheduleUpdateTool = defineTool({
 
 export const scheduleDeleteTool = defineTool({
   name: 'schedule_delete',
-  description: 'Delete a schedule and its run history.',
+  description: 'Delete a schedule and its run history. Stops the in-memory Croner job immediately.',
   parameters: v.object({
     eventId: v.string(),
     slug: SlugSchema,
@@ -150,7 +155,7 @@ export const scheduleDeleteTool = defineTool({
   execute: async ({ eventId, slug }) => {
     void eventId;
     const manager = requireManager();
-    const deleted = manager.store.delete(String(slug));
+    const deleted = manager.deleteSchedule(String(slug));
     return JSON.stringify({ slug, deleted });
   },
 });

@@ -366,6 +366,17 @@ export class ScheduleStore {
     return rows.map(rowToSummary);
   }
 
+  /** List schedules scoped to one owner (used by coding-worker project-scoped tools). */
+  listForOwner(ownerScope: string): ScheduleSummaryRow[] {
+    const rows = this.database
+      .prepare(
+        `SELECT id, slug, kind, target_agent, enabled, next_fire_at, last_fired_at, last_run_status
+         FROM schedules WHERE owner_scope = ? ORDER BY slug ASC`,
+      )
+      .all(ownerScope) as unknown as ScheduleSummaryRowDb[];
+    return rows.map(rowToSummary);
+  }
+
   listEnabled(): ScheduleRecord[] {
     const rows = this.database
       .prepare(`SELECT * FROM schedules WHERE enabled = 1 ORDER BY slug ASC`)

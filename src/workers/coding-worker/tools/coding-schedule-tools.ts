@@ -21,7 +21,8 @@ import { defineTool, type ToolDefinition } from '@flue/runtime';
 import * as v from 'valibot';
 
 import { getScheduleManager } from '../../../schedules/boot.js';
-import { scheduleInstanceId } from '../../../schedules/schedule-types.js';
+import { scheduleInstanceId, type ScheduleRecord } from '../../../schedules/schedule-types.js';
+import { emitScheduleProgress } from '../../../schedules/schedule-telemetry.js';
 
 export interface CodingScheduleToolsOptions {
   /** Project scope injected from CodingWorkspaceTargetInput.projectId. The model cannot set this. */
@@ -50,6 +51,29 @@ function requireTrustedScope(projectId: string | undefined): string {
     );
   }
   return projectId;
+}
+
+type OwnedScheduleResult = { ok: true; record: ScheduleRecord } | { ok: false; error: string };
+
+/**
+ * Fetch a schedule by slug and enforce that it belongs to the current project
+ * scope. Cross-project access (a coding-worker on project A touching a schedule
+ * owned by project B) is denied. Returns `{ok:false, error}` for not-found or
+ * scope mismatch so the tool can return a JSON error without throwing.
+ */
+function loadOwnedSchedule(
+  manager: ReturnType<typeof requireManager>,
+  slug: string,
+  ownerScope: string,
+): OwnedScheduleResult {
+  const record = manager.store.getBySlug(slug);
+  if (!record) {
+    return { ok: false, error: `schedule '${slug}' not found` };
+  }
+  if (record.ownerScope !== ownerScope) {
+    return { ok: false, error: `schedule '${slug}' does not belong to this project scope` };
+  }
+  return { ok: true, record };
 }
 
 export function createCodingScheduleTools(options: CodingScheduleToolsOptions): ToolDefinition[] {
@@ -85,40 +109,51 @@ export function createCodingScheduleTools(options: CodingScheduleToolsOptions): 
           ownerScope: scope,
         });
         manager.syncCron(record);
+        emitScheduleProgress('schedule.created', { scheduleId: record.id, slug: record.slug, ownerScope: scope });
         return JSON.stringify({ schedule: { id: record.id, slug: record.slug, kind: record.kind, schedule: record.schedule, enabled: record.enabled, nextFireAt: record.nextFireAt } });
       },
     }),
     defineTool({
       name: 'coding_schedule_pause',
-      description: 'Pause a coding-worker schedule.',
+      description: 'Pause a coding-worker schedule (must belong to this project).',
       parameters: v.object({ slug: SlugSchema }),
       execute: async ({ slug }) => {
         const manager = requireManager();
-        requireTrustedScope(ownerScope);
+        const scope = requireTrustedScope(ownerScope);
+        const owned = loadOwnedSchedule(manager, String(slug), scope);
+        if (!owned.ok) {
+          return JSON.stringify({ slug, error: owned.error });
+        }
         const record = manager.store.setEnabled(String(slug), false);
         if (record) {
           manager.syncCron(record);
+          emitScheduleProgress('schedule.paused', { scheduleId: record.id, slug: record.slug });
         }
         return JSON.stringify({ slug, paused: record !== null });
       },
     }),
     defineTool({
       name: 'coding_schedule_resume',
-      description: 'Resume a paused coding-worker schedule.',
+      description: 'Resume a paused coding-worker schedule (must belong to this project).',
       parameters: v.object({ slug: SlugSchema }),
       execute: async ({ slug }) => {
         const manager = requireManager();
-        requireTrustedScope(ownerScope);
+        const scope = requireTrustedScope(ownerScope);
+        const owned = loadOwnedSchedule(manager, String(slug), scope);
+        if (!owned.ok) {
+          return JSON.stringify({ slug, error: owned.error });
+        }
         const record = manager.store.setEnabled(String(slug), true);
         if (record) {
           manager.syncCron(record);
+          emitScheduleProgress('schedule.resumed', { scheduleId: record.id, slug: record.slug });
         }
         return JSON.stringify({ slug, resumed: record !== null, nextFireAt: record?.nextFireAt ?? null });
       },
     }),
     defineTool({
       name: 'coding_schedule_update',
-      description: 'Update a coding-worker schedule\'s expression, prompt, payload, timezone, or enabled flag.',
+      description: 'Update a coding-worker schedule\'s expression, prompt, payload, timezone, or enabled flag (must belong to this project).',
       parameters: v.object({
         slug: SlugSchema,
         schedule: v.optional(ScheduleExprSchema),
@@ -129,7 +164,11 @@ export function createCodingScheduleTools(options: CodingScheduleToolsOptions): 
       }),
       execute: async ({ slug, schedule, prompt, payload, tz, enabled }) => {
         const manager = requireManager();
-        requireTrustedScope(ownerScope);
+        const scope = requireTrustedScope(ownerScope);
+        const owned = loadOwnedSchedule(manager, String(slug), scope);
+        if (!owned.ok) {
+          return JSON.stringify({ slug, error: owned.error });
+        }
         const record = manager.store.updateFields(String(slug), {
           ...(schedule !== undefined ? { schedule: String(schedule) } : {}),
           ...(prompt !== undefined ? { prompt: String(prompt) } : {}),
@@ -139,74 +178,83 @@ export function createCodingScheduleTools(options: CodingScheduleToolsOptions): 
         });
         if (record) {
           manager.syncCron(record);
+          emitScheduleProgress('schedule.updated', { scheduleId: record.id, slug: record.slug });
         }
         return JSON.stringify({ slug, updated: record !== null, nextFireAt: record?.nextFireAt ?? null });
       },
     }),
     defineTool({
       name: 'coding_schedule_delete',
-      description: 'Delete a coding-worker schedule and its run history.',
+      description: 'Delete a coding-worker schedule and its run history; stops the in-memory Croner job immediately (must belong to this project).',
       parameters: v.object({ slug: SlugSchema }),
       execute: async ({ slug }) => {
         const manager = requireManager();
-        requireTrustedScope(ownerScope);
-        const deleted = manager.store.delete(String(slug));
+        const scope = requireTrustedScope(ownerScope);
+        const owned = loadOwnedSchedule(manager, String(slug), scope);
+        if (!owned.ok) {
+          return JSON.stringify({ slug, error: owned.error });
+        }
+        const deleted = manager.deleteSchedule(String(slug));
         return JSON.stringify({ slug, deleted });
       },
     }),
     defineTool({
       name: 'coding_schedule_list',
-      description: 'List all schedules (compact rows).',
+      description: 'List schedules belonging to this project (compact rows).',
       parameters: v.object({}),
       execute: async () => {
         const manager = requireManager();
-        requireTrustedScope(ownerScope);
-        return JSON.stringify({ schedules: manager.store.list() });
+        const scope = requireTrustedScope(ownerScope);
+        return JSON.stringify({ schedules: manager.store.listForOwner(scope) });
       },
     }),
     defineTool({
       name: 'coding_schedule_get',
-      description: 'Get the full definition of one coding-worker schedule by slug.',
+      description: 'Get the full definition of one coding-worker schedule by slug (must belong to this project).',
       parameters: v.object({ slug: SlugSchema }),
       execute: async ({ slug }) => {
         const manager = requireManager();
-        requireTrustedScope(ownerScope);
-        const record = manager.store.getBySlug(String(slug));
-        if (!record) {
-          return JSON.stringify({ error: `schedule '${slug}' not found` });
+        const scope = requireTrustedScope(ownerScope);
+        const owned = loadOwnedSchedule(manager, String(slug), scope);
+        if (!owned.ok) {
+          return JSON.stringify({ error: owned.error });
         }
-        return JSON.stringify({ schedule: record });
+        return JSON.stringify({ schedule: owned.record });
       },
     }),
     defineTool({
       name: 'coding_schedule_run_now',
-      description: 'Force-fire a coding-worker schedule now. Returns the runId.',
+      description: 'Force-fire a coding-worker schedule now. Returns the runId (must belong to this project).',
       parameters: v.object({ slug: SlugSchema }),
       execute: async ({ slug }) => {
         const manager = requireManager();
-        requireTrustedScope(ownerScope);
+        const scope = requireTrustedScope(ownerScope);
+        const owned = loadOwnedSchedule(manager, String(slug), scope);
+        if (!owned.ok) {
+          return JSON.stringify({ error: owned.error });
+        }
         const result = manager.fireNow(String(slug));
         if (!result) {
           return JSON.stringify({ error: `schedule '${slug}' not found` });
         }
-        return JSON.stringify({ slug, runId: result.runId, instanceId: scheduleInstanceId(manager.store.getBySlug(String(slug))?.id ?? '', result.runId) });
+        return JSON.stringify({ slug, runId: result.runId, instanceId: scheduleInstanceId(owned.record.id, result.runId) });
       },
     }),
     defineTool({
       name: 'coding_schedule_runs',
-      description: 'List recent run history for one coding-worker schedule by slug.',
+      description: 'List recent run history for one coding-worker schedule by slug (must belong to this project).',
       parameters: v.object({
         slug: SlugSchema,
         limit: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(500))),
       }),
       execute: async ({ slug, limit }) => {
         const manager = requireManager();
-        requireTrustedScope(ownerScope);
-        const record = manager.store.getBySlug(String(slug));
-        if (!record) {
-          return JSON.stringify({ error: `schedule '${slug}' not found` });
+        const scope = requireTrustedScope(ownerScope);
+        const owned = loadOwnedSchedule(manager, String(slug), scope);
+        if (!owned.ok) {
+          return JSON.stringify({ error: owned.error });
         }
-        const runs = manager.store.listRuns(record.id, typeof limit === 'number' ? limit : 50);
+        const runs = manager.store.listRuns(owned.record.id, typeof limit === 'number' ? limit : 50);
         return JSON.stringify({ slug, runs });
       },
     }),

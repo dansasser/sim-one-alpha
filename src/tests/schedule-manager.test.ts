@@ -266,3 +266,75 @@ test('manager syncCron rehydrates enabled schedules on start and respects enable
     rmSync(path, { force: true });
   }
 });
+test('manager fire: dispatch admission failure records terminal error (not stuck queued)', async () => {
+  const failingDispatch = async (): Promise<ScheduleDispatchResult> => {
+    throw new Error('dispatch admission failed');
+  };
+  const { manager, path } = makeManager({ dispatch: failingDispatch });
+  try {
+    manager.store.upsert({ slug: 'fail-test', kind: 'every', schedule: '10m', prompt: 'x' });
+    const { runId } = manager.fireNow('fail-test')!;
+    await wait(60);
+    const run = manager.store.getRun(runId);
+    assert.equal(run?.status, 'error', 'dispatch failure -> terminal error, not stuck queued');
+    assert.ok(run?.error?.includes('dispatch admission failed'), 'error message recorded');
+  } finally {
+    manager.stop();
+    rmSync(path, { force: true });
+  }
+});
+
+test('manager fire: agent_end emitted during dispatch admission is captured (race fix)', async () => {
+  // Simulate a fast-completing turn: the fake dispatch emits agent_end BEFORE
+  // resolving the receipt. With the race fix (observation registered before
+  // dispatch), the event is captured -> ok. Without the fix it would be dropped
+  // and the run would time out.
+  let earlyEmit: (event: FlueEvent) => void = () => {};
+  const earlyDispatch = async (args: DispatchScheduleArgs): Promise<ScheduleDispatchResult> => {
+    earlyEmit({ type: 'agent_end', instanceId: args.instanceId } as FlueEvent);
+    return { dispatchId: 'd-' + args.instanceId, acceptedAt: new Date().toISOString(), instanceId: args.instanceId };
+  };
+  const { manager, emit, path } = makeManager({ dispatch: earlyDispatch });
+  earlyEmit = emit;
+  try {
+    manager.store.upsert({ slug: 'early-test', kind: 'every', schedule: '10m', prompt: 'x' });
+    const { runId } = manager.fireNow('early-test')!;
+    await wait(60);
+    const run = manager.store.getRun(runId);
+    assert.equal(run?.status, 'ok', 'early agent_end captured (not timed out)');
+  } finally {
+    manager.stop();
+    rmSync(path, { force: true });
+  }
+});
+
+test('manager fire: one-shot with transient error is NOT auto-deleted during retry', async () => {
+  const fakeDispatch = async (args: DispatchScheduleArgs): Promise<ScheduleDispatchResult> => ({
+    dispatchId: 'd-' + args.instanceId,
+    acceptedAt: new Date().toISOString(),
+    instanceId: args.instanceId,
+  });
+  const { manager, emit, path } = makeManager({ dispatch: fakeDispatch });
+  try {
+    manager.store.upsert({ slug: 'oneshot-retry', kind: 'at', schedule: '2026-06-23T10:00:00Z', prompt: 'x' });
+    const { runId } = manager.fireNow('oneshot-retry')!;
+    await wait(50);
+    // attempt 0: transient network error -> retry scheduled; schedule must survive.
+    const instanceId0 = manager.store.getRun(runId)!.instanceId;
+    emit({ type: 'turn', isError: true, error: 'fetch failed: network down', instanceId: instanceId0 } as FlueEvent);
+    emit({ type: 'agent_end', instanceId: instanceId0 } as FlueEvent);
+    await wait(90); // backoff 10ms -> retry attempt 1 admitted
+    assert.ok(manager.store.getBySlug('oneshot-retry'), 'one-shot NOT auto-deleted while a retry is pending');
+    // attempt 1: ok -> NOW auto-delete (terminal, no retry pending).
+    const instanceId1 = manager.store.getRun(runId)!.instanceId;
+    emit({ type: 'agent_end', instanceId: instanceId1 } as FlueEvent);
+    await wait(60);
+    // maybeAutoDelete runs only after a terminal outcome; the schedule being
+    // gone proves the retry reached terminal (ok). The run row is cascade-
+    // removed with the deleted one-shot schedule, so it is no longer present.
+    assert.equal(manager.store.getBySlug('oneshot-retry'), null, 'one-shot auto-deleted after terminal ok');
+  } finally {
+    manager.stop();
+    rmSync(path, { force: true });
+  }
+});

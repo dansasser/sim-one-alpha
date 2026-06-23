@@ -190,26 +190,153 @@ export class ScheduleManager {
     return { runId };
   }
 
-  /** The core fire callback. Admit dispatch, observe to terminal, record outcome. */
+  /**
+   * Delete a schedule: stop its in-memory Croner job AND remove the row. Used by
+   * the delete tool + admin route so a deleted schedule stops firing immediately
+   * (not only after a process restart).
+   */
+  deleteSchedule(slug: string): boolean {
+    const record = this.store.getBySlug(slug);
+    if (!record) {
+      return false;
+    }
+    const cron = this.cronJobs.get(record.id);
+    if (cron) {
+      cron.stop();
+    }
+    this.cronJobs.delete(record.id);
+    const deleted = this.store.delete(slug);
+    this.emitEvent('schedule.deleted', { scheduleId: record.id, slug });
+    return deleted;
+  }
+
+  /** Acquire the concurrency gate; returns false if shutdown interrupted the wait. */
+  private async acquireConcurrency(): Promise<boolean> {
+    if (this.inFlight >= this.config.maxConcurrentRuns) {
+      await new Promise<void>((resolve) => this.fireQueue.push(resolve));
+      if (this.shuttingDown) {
+        return false;
+      }
+    }
+    this.inFlight += 1;
+    return true;
+  }
+
+  private releaseConcurrency(): void {
+    this.inFlight -= 1;
+    const next = this.fireQueue.shift();
+    if (next) {
+      next();
+    }
+  }
+
+  /** Cancel a pending observation (clear timer + remove + resolve) — used when dispatch admission fails. */
+  private cancelObservation(instanceId: string): void {
+    const pending = this.pending.get(instanceId);
+    if (pending) {
+      clearTimeout(pending.timer);
+      this.pending.delete(instanceId);
+      pending.resolve({ status: 'timeout', error: 'cancelled' });
+    }
+  }
+
+  /**
+   * Run one dispatch attempt. Shared by fire() (attempt 0) and retryFire()
+   * (attempt N). The pending observation is registered BEFORE dispatch so a
+   * fast-completing turn's terminal event is not dropped (race fix). Dispatch
+   * admission failures are caught and recorded terminal. maybeAutoDelete runs
+   * only on a final terminal outcome (not when a retry is pending).
+   */
+  private async runAttempt(
+    record: ScheduleRecord,
+    runId: string,
+    instanceId: string,
+    attempt: number,
+    startedAtMs: number,
+  ): Promise<void> {
+    const scheduledAt = new Date().toISOString();
+
+    // Register the observation BEFORE dispatch so agent_end emitted by a
+    // fast-completing turn is captured, not dropped (race fix).
+    const outcomePromise = this.observeUntilTerminal(runId, record.id, instanceId, attempt);
+
+    let receipt: { dispatchId: string; acceptedAt: string };
+    try {
+      receipt = await this.dispatchImpl({
+        instanceId,
+        targetAgent: record.targetAgent,
+        input: {
+          prompt: record.prompt,
+          scheduledAt,
+          scheduleId: record.id,
+          slug: record.slug,
+          runId,
+          payload: record.payload ?? undefined,
+        },
+      });
+    } catch (error) {
+      // Dispatch admission failed -> terminal error (no retry; this is a
+      // dispatch infra failure, not a transient model error). Cancel the
+      // observation we registered so it does not linger and time out later.
+      this.cancelObservation(instanceId);
+      const reason = errorMessage(error);
+      this.store.recordRunTerminal(runId, 'error', { error: reason, firedAtMs: startedAtMs, nextFireAt: this.nextFireFor(record.id) });
+      this.emitEvent('schedule.error', { scheduleId: record.id, runId, instanceId, attempt, reason });
+      this.maybeAutoDelete(record);
+      return;
+    }
+
+    this.store.recordRunAdmitted(runId, receipt.dispatchId, receipt.acceptedAt);
+    this.emitEvent('schedule.dispatched', { scheduleId: record.id, runId, instanceId, dispatchId: receipt.dispatchId, attempt });
+
+    const outcome = await outcomePromise;
+    if (outcome.status === 'ok') {
+      this.store.recordRunTerminal(runId, 'ok', { firedAtMs: startedAtMs, nextFireAt: this.nextFireFor(record.id) });
+      this.emitEvent('schedule.completed', { scheduleId: record.id, runId, instanceId, attempt });
+      this.maybeAutoDelete(record);
+    } else if (outcome.status === 'timeout') {
+      this.store.recordRunTerminal(runId, 'timeout', { error: outcome.error ?? 'observe timeout', firedAtMs: startedAtMs, nextFireAt: this.nextFireFor(record.id) });
+      this.emitEvent('schedule.error', { scheduleId: record.id, runId, instanceId, attempt, reason: outcome.error ?? 'observe timeout' });
+      this.maybeAutoDelete(record);
+    } else {
+      const category = classifyError(outcome.error);
+      const maxAttempts = record.maxAttempts ?? this.config.retry.maxAttempts;
+      if (isTransientScheduleError(category) && attempt < maxAttempts) {
+        // Retry with backoff. Unique per-attempt instanceId so delayed events
+        // from a prior attempt cannot be misrouted to the retry's observation.
+        const nextAttempt = attempt + 1;
+        const retryInstanceId = `schedule:${record.id}:${runId}:${nextAttempt}`;
+        this.store.recordRunRetry(runId, retryInstanceId);
+        this.emitEvent('schedule.error', { scheduleId: record.id, runId, instanceId, attempt, reason: outcome.error ?? 'transient error', retrying: true });
+        const delay = backoffForAttempt(this.config.retry, attempt);
+        setTimeout(() => {
+          this.retryFire(record, runId, retryInstanceId, nextAttempt).catch((error) => {
+            this.emitScheduleError(record, `retry fire error: ${errorMessage(error)}`);
+          });
+        }, delay);
+        // No maybeAutoDelete here — a retry is pending; auto-deleting now would
+        // cascade-delete run history and lose retry tracking (esp. for `at`).
+      } else {
+        const status: ScheduleRunStatus = isTransientScheduleError(category) ? 'error' : 'skipped';
+        this.store.recordRunTerminal(runId, status, { error: outcome.error ?? category, firedAtMs: startedAtMs, nextFireAt: this.nextFireFor(record.id) });
+        this.emitEvent(status === 'skipped' ? 'schedule.skipped' : 'schedule.error', { scheduleId: record.id, runId, instanceId, attempt, reason: outcome.error ?? category });
+        this.maybeAutoDelete(record);
+      }
+    }
+  }
+
+  /** The core fire callback: record run start, preflight, then run the first attempt. */
   private async fire(record: ScheduleRecord, explicitRunId?: string): Promise<void> {
     if (this.shuttingDown) {
       return;
     }
-
-    // Concurrency gate.
-    if (this.inFlight >= this.config.maxConcurrentRuns) {
-      await new Promise<void>((resolve) => this.fireQueue.push(resolve));
-      if (this.shuttingDown) {
-        return;
-      }
+    if (!(await this.acquireConcurrency())) {
+      return;
     }
-    this.inFlight += 1;
-
     const runId = explicitRunId ?? ulid();
     const instanceId = scheduleInstanceId(record.id, runId);
     const scheduledAt = new Date().toISOString();
     const startedAtMs = Date.now();
-
     try {
       this.store.recordRunStart(record.id, runId);
       this.emitEvent('schedule.fired', { scheduleId: record.id, slug: record.slug, scheduledAt, runId, instanceId });
@@ -229,112 +356,25 @@ export class ScheduleManager {
         }
       }
 
-      // Admit dispatch (ADMISSION ONLY — does not await turn completion).
-      const receipt = await this.dispatchImpl({
-        instanceId,
-        targetAgent: record.targetAgent,
-        input: {
-          prompt: record.prompt,
-          scheduledAt,
-          scheduleId: record.id,
-          slug: record.slug,
-          runId,
-          payload: record.payload ?? undefined,
-        },
-      });
-      this.store.recordRunAdmitted(runId, receipt.dispatchId, receipt.acceptedAt);
-      this.emitEvent('schedule.dispatched', { scheduleId: record.id, runId, instanceId, dispatchId: receipt.dispatchId });
-
-      // Observe the turn to terminal.
-      const outcome = await this.observeUntilTerminal(runId, record.id, instanceId, 0);
-
-      if (outcome.status === 'ok') {
-        this.store.recordRunTerminal(runId, 'ok', { firedAtMs: startedAtMs, nextFireAt: this.nextFireFor(record.id) });
-        this.emitEvent('schedule.completed', { scheduleId: record.id, runId, instanceId });
-      } else if (outcome.status === 'timeout') {
-        this.store.recordRunTerminal(runId, 'timeout', { error: outcome.error ?? 'observe timeout', firedAtMs: startedAtMs, nextFireAt: this.nextFireFor(record.id) });
-        this.emitEvent('schedule.error', { scheduleId: record.id, runId, reason: outcome.error ?? 'observe timeout' });
-      } else {
-        // error: classify transient vs permanent for retry.
-        const category = classifyError(outcome.error);
-        const attempt = this.store.getRun(runId)?.attempt ?? 0;
-        if (isTransientScheduleError(category) && attempt < this.config.retry.maxAttempts) {
-          // Retry with backoff: same runId, new instanceId.
-          const newInstanceId = scheduleInstanceId(record.id, runId);
-          this.store.recordRunRetry(runId, newInstanceId);
-          this.emitEvent('schedule.error', { scheduleId: record.id, runId, reason: outcome.error ?? 'transient error', retrying: true });
-          const delay = backoffForAttempt(this.config.retry, attempt);
-          setTimeout(() => {
-            this.retryFire(record, runId, newInstanceId).catch((error) => {
-              this.emitScheduleError(record, `retry fire error: ${errorMessage(error)}`);
-            });
-          }, delay);
-        } else {
-          const status: ScheduleRunStatus = isTransientScheduleError(category) ? 'error' : 'skipped';
-          this.store.recordRunTerminal(runId, status, { error: outcome.error ?? category, firedAtMs: startedAtMs, nextFireAt: this.nextFireFor(record.id) });
-          this.emitEvent(status === 'skipped' ? 'schedule.skipped' : 'schedule.error', { scheduleId: record.id, runId, reason: outcome.error ?? category });
-        }
-      }
-
-      this.maybeAutoDelete(record);
+      await this.runAttempt(record, runId, instanceId, 0, startedAtMs);
     } finally {
-      this.inFlight -= 1;
-      const next = this.fireQueue.shift();
-      if (next) {
-        next();
-      }
+      this.releaseConcurrency();
     }
   }
 
-  /** Retry fire: re-admit dispatch with the retried instanceId and observe again. */
-  private async retryFire(record: ScheduleRecord, runId: string, instanceId: string): Promise<void> {
+  /** Retry fire: re-admit dispatch with a unique retry instanceId, through the concurrency gate. */
+  private async retryFire(record: ScheduleRecord, runId: string, instanceId: string, attempt: number): Promise<void> {
     if (this.shuttingDown) {
       return;
     }
-    const scheduledAt = new Date().toISOString();
+    if (!(await this.acquireConcurrency())) {
+      return;
+    }
     const startedAtMs = Date.now();
-    const attempt = this.store.getRun(runId)?.attempt ?? 0;
     try {
-      const receipt = await this.dispatchImpl({
-        instanceId,
-        targetAgent: record.targetAgent,
-        input: {
-          prompt: record.prompt,
-          scheduledAt,
-          scheduleId: record.id,
-          slug: record.slug,
-          runId,
-          payload: record.payload ?? undefined,
-        },
-      });
-      this.store.recordRunAdmitted(runId, receipt.dispatchId, receipt.acceptedAt);
-      this.emitEvent('schedule.dispatched', { scheduleId: record.id, runId, instanceId, dispatchId: receipt.dispatchId, attempt });
-      const outcome = await this.observeUntilTerminal(runId, record.id, instanceId, attempt);
-      if (outcome.status === 'ok') {
-        this.store.recordRunTerminal(runId, 'ok', { firedAtMs: startedAtMs, nextFireAt: this.nextFireFor(record.id) });
-        this.emitEvent('schedule.completed', { scheduleId: record.id, runId, instanceId, attempt });
-      } else if (outcome.status === 'timeout') {
-        this.store.recordRunTerminal(runId, 'timeout', { error: outcome.error ?? 'observe timeout', firedAtMs: startedAtMs, nextFireAt: this.nextFireFor(record.id) });
-      } else {
-        const category = classifyError(outcome.error);
-        if (isTransientScheduleError(category) && attempt < this.config.retry.maxAttempts) {
-          const newInstanceId = scheduleInstanceId(record.id, runId);
-          this.store.recordRunRetry(runId, newInstanceId);
-          const delay = backoffForAttempt(this.config.retry, attempt);
-          setTimeout(() => {
-            this.retryFire(record, runId, newInstanceId).catch((error) => {
-              this.emitScheduleError(record, `retry fire error: ${errorMessage(error)}`);
-            });
-          }, delay);
-        } else {
-          const status: ScheduleRunStatus = isTransientScheduleError(category) ? 'error' : 'skipped';
-          this.store.recordRunTerminal(runId, status, { error: outcome.error ?? category, firedAtMs: startedAtMs, nextFireAt: this.nextFireFor(record.id) });
-        }
-      }
-      this.maybeAutoDelete(record);
-    } catch (error) {
-      this.store.recordRunTerminal(runId, 'error', { error: errorMessage(error), firedAtMs: startedAtMs, nextFireAt: this.nextFireFor(record.id) });
-      this.emitScheduleError(record, `retry dispatch error: ${errorMessage(error)}`);
+      await this.runAttempt(record, runId, instanceId, attempt, startedAtMs);
+    } finally {
+      this.releaseConcurrency();
     }
   }
 

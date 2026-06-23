@@ -274,3 +274,19 @@ test('ScheduleStore survives a reopen (persistence across manager restart)', () 
     rmSync(path, { force: true });
   }
 });
+test('ScheduleStore delete cascades run history (FK enforced)', () => {
+  const path = tempDbPath();
+  const store = new ScheduleStore(path);
+  try {
+    const sched = store.upsert(validDef);
+    store.recordRunStart(sched.id, 'run-cascade-1');
+    store.recordRunStart(sched.id, 'run-cascade-2');
+    assert.equal(store.listRuns(sched.id, 100).length, 2, 'two runs exist before delete');
+    assert.equal(store.delete('daily-summary'), true);
+    assert.equal(store.getBySlug('daily-summary'), null, 'schedule gone');
+    assert.equal(store.listRuns(sched.id, 100).length, 0, 'run rows cascade-removed with the schedule');
+  } finally {
+    store.close();
+    rmSync(path, { force: true });
+  }
+});

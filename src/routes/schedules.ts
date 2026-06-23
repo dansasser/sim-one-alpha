@@ -204,7 +204,9 @@ export function registerSchedulesRoutes(app: Hono): void {
       return c.json(m.body, m.status as 503);
     }
     const slug = c.req.param('slug');
-    const deleted = m.manager.store.delete(slug);
+    // deleteSchedule stops the in-memory Croner job AND removes the row, so a
+    // deleted schedule stops firing immediately (not only after restart).
+    const deleted = m.manager.deleteSchedule(slug);
     if (!deleted) {
       return c.json({ error: `schedule '${slug}' not found` }, 404);
     }
@@ -237,6 +239,11 @@ export function registerSchedulesRoutes(app: Hono): void {
     }
     if (!run) {
       return c.json({ slug, runId: result.runId, status: 'lost' }, 504);
+    }
+    // If the deadline was hit before the run reached a terminal state, that is a
+    // timeout (504), distinct from a run that completed with an error (502).
+    if (!(TERMINAL_STATUSES as readonly string[]).includes(run.status)) {
+      return c.json({ slug, runId: result.runId, status: run.status, error: 'wait deadline exceeded before terminal status' }, 504);
     }
     const ok = run.status === 'ok';
     return c.json({ slug, runId: result.runId, status: run.status, error: run.error }, ok ? 200 : 502);
