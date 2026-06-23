@@ -1,0 +1,31 @@
+tui-proto/src/cli.ts
+  s_2a85b2e1f110e1::t_f804fd75249b6f 1-18
+tui-proto/package.json
+  s_2a85b2e1f110e1::t_05ab2291715340 1-18,20-24
+  s_2a85b2e1f110e1::t_022bfaf94a60c8 19
+tui-proto/tsconfig.json
+  s_2a85b2e1f110e1::t_56c1d11e67c915 1-6,8-18
+  s_2a85b2e1f110e1::t_6750cb1453a918 7
+pnpm-workspace.yaml
+  s_2a85b2e1f110e1::t_df8f334dde2fc1 9
+  s_2a85b2e1f110e1::t_ee3e667c7e14c8 2
+  s_2a85b2e1f110e1::t_c2c50183978075 3
+package.json
+  s_2a85b2e1f110e1::t_67f380f2c91b19 30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "d7831be1f9d63231ec453948bb234b5a5da8db94",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
