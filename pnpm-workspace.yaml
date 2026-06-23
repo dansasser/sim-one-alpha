@@ -1,10 +1,12 @@
 packages:
-  - '.'
+  - .
+  - ./tui-proto
 allowBuilds:
   '@google/genai': true
   '@mongodb-js/zstd': true
   esbuild: true
   node-liblzma: true
+  onnxruntime-node: true
   protobufjs: true
   sharp: true
   workerd: true

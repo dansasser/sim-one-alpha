@@ -22,29 +22,34 @@ function isTestMode(): boolean {
   return process.env.NODE_ENV === 'test' || process.env.GOROMBO_TEST_MODE === '1';
 }
 
+function isTelegramConfigured(): boolean {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  return (typeof token === 'string' && token.trim().length > 0) || isTestMode();
+}
+
 function getTelegramBotToken(): string {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
     if (isTestMode()) {
       return 'placeholder-token';
     }
-    throw new Error('TELEGRAM_BOT_TOKEN environment variable is required');
+    throw new Error(
+      'TELEGRAM_BOT_TOKEN environment variable is required. Set it to enable Telegram, or omit it to run without Telegram (TUI/HTTP only).',
+    );
   }
   return token;
 }
 
-export const client = new Api(getTelegramBotToken());
+let cachedClient: Api | undefined;
 
-function getTelegramWebhookSecret(): string {
-  const secret = process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN;
-  if (!secret) {
-    if (isTestMode()) {
-      return 'test-webhook-secret';
+export const client = new Proxy({} as Api, {
+  get(_target, prop, receiver) {
+    if (!cachedClient) {
+      cachedClient = new Api(getTelegramBotToken());
     }
-    throw new Error('TELEGRAM_WEBHOOK_SECRET_TOKEN environment variable is required for webhook authentication');
-  }
-  return secret;
-}
+    return Reflect.get(cachedClient, prop, receiver);
+  },
+});
 
 type DmPolicy = 'disabled' | 'allowlist' | 'pairing';
 
@@ -127,25 +132,60 @@ function shouldProcessUpdate(message: Message): { allowed: true } | { allowed: f
 
 import type { TelegramChannel } from '@flue/telegram';
 
-export const channel: TelegramChannel = createTelegramChannel({
-  secretToken: getTelegramWebhookSecret(),
+function getTelegramWebhookSecret(): string {
+  const secret = process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN;
+  if (secret) {
+    return secret;
+  }
+  if (isTestMode()) {
+    return 'test-webhook-secret';
+  }
+  if (isTelegramConfigured()) {
+    throw new Error(
+      'TELEGRAM_WEBHOOK_SECRET_TOKEN environment variable is required for webhook authentication when Telegram is configured. Set it to enable Telegram, or remove TELEGRAM_BOT_TOKEN to run without Telegram (TUI/HTTP only).',
+    );
+  }
+  // Telegram not configured: use a random non-deterministic secret so
+  // the channel can still be constructed (Flue requires it) but webhook
+  // requests will never authenticate even if they reach this instance.
+  return `disabled-${crypto.randomUUID()}`;
+}
 
-  // Path: /channels/telegram/webhook
-  async webhook({ c, update }) {
-    markTelegramUpdateReceived();
+let cachedChannel: TelegramChannel | undefined;
 
-    const incoming = update.message ?? update.channel_post ?? update.business_message;
-    if (incoming) {
-      await handleIncomingMessage(incoming, update);
-      return;
-    }
+function getOrCreateTelegramChannel(): TelegramChannel {
+  if (!cachedChannel) {
+    cachedChannel = createTelegramChannel({
+      secretToken: getTelegramWebhookSecret(),
 
-    if (update.callback_query) {
-      await handleCallbackQuery(update.callback_query, update);
-      return;
-    }
-  },
-});
+      async webhook({ c, update }) {
+        if (!isTelegramConfigured()) {
+          return c.json({ error: 'Telegram is not configured. Set TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET_TOKEN to enable it.' }, 503);
+        }
+
+        markTelegramUpdateReceived();
+
+        const incoming = update.message ?? update.channel_post ?? update.business_message;
+        if (incoming) {
+          await handleIncomingMessage(incoming, update);
+          return;
+        }
+
+        if (update.callback_query) {
+          await handleCallbackQuery(update.callback_query, update);
+          return;
+        }
+      },
+    });
+  }
+  return cachedChannel;
+}
+
+export function getTelegramChannel(): TelegramChannel | undefined {
+  return isTelegramConfigured() ? getOrCreateTelegramChannel() : undefined;
+}
+
+export const channel: TelegramChannel = getOrCreateTelegramChannel();
 
 /**
  * Project-owned outbound Telegram reply tool. The channel owns inbound ingress;
@@ -201,8 +241,10 @@ async function handleIncomingMessage(incoming: Message, update: Update) {
     deliveryKind: 'direct-agent',
   });
 
+  const activeChannel = getOrCreateTelegramChannel();
+
   const harness = await dispatch(orchestratorAgent, {
-    id: channel.conversationKey(conversationFromMessage(incoming)),
+    id: activeChannel.conversationKey(conversationFromMessage(incoming)),
     input: {
       type: 'telegram.message',
       updateId: update.update_id,
