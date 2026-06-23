@@ -1,0 +1,57 @@
+src/capabilities/capability-config-reconcile.ts
+  s_2a32831ed9b5ea::t_f9f7669e0b626e 23,38
+src/db.ts
+  s_2a32831ed9b5ea::t_850dd19dd0fcd2 5-7,10
+docs/architecture/capability-system.md
+  s_2a32831ed9b5ea::t_b8a1fe8239c595 14-15
+  s_2a32831ed9b5ea::t_0cf5fd59222d01 105-106
+src/capabilities/skill-materializer.ts
+  s_2a32831ed9b5ea::t_ce7a9883f960bb 57-60
+src/tools/capability-tools.ts
+  s_2a32831ed9b5ea::t_6d81daad49e8e8 93,108
+  s_2a32831ed9b5ea::t_6abc6969d3574c 28,48,53
+  s_2a32831ed9b5ea::t_e1b7739e684d50 151-152,159-172
+src/capabilities/worker-loader.ts
+  s_2a32831ed9b5ea::t_52f282672a4a48 23,32-43
+src/agents/orchestrator.ts
+  s_2a32831ed9b5ea::t_9936b3f0afa02e 174,176,178,180,183,191-192
+src/capabilities/capability-store.ts
+  s_2a32831ed9b5ea::t_30988a8c1cec36 40
+  s_2a32831ed9b5ea::t_4b2cd2608ba922 3,16,27-28
+  s_2a32831ed9b5ea::t_67d2973efe40e6 68-69,79,107-108,121,132,137-138,142,144-145
+src/capabilities/types.ts
+  s_2a32831ed9b5ea::t_aee6982218cec3 35,37-39
+src/config/gorombo-config.ts
+  s_2a32831ed9b5ea::t_d1d23e7e2b3eac 100,110,114-193
+src/capabilities/mcp-broker.ts
+  s_2a32831ed9b5ea::t_9e0bbbb9ca3fc1 76-90
+  s_2a32831ed9b5ea::t_47e9f56d11f12c 7,10-15,21,26,35-39,62,67
+PROJECT-TRACKING.md
+  s_2a32831ed9b5ea::t_de8133f50c8ac2 191
+src/capabilities/capability-loader.ts
+  s_2a32831ed9b5ea::t_ffde2784e70e8e 1
+  s_2a32831ed9b5ea::t_f76546cbf85af9 37,45,49-66
+src/rag/indexers/background-indexer.ts
+  s_2a32831ed9b5ea::t_3147a4c697f188 51-53,55,62-72,79-82,84,90,92,100
+scripts/capability-admin.mjs
+  s_2a32831ed9b5ea::t_85a15e80f24847 55-70,74,79
+  s_2a32831ed9b5ea::t_8036b08b342666 129,132-137,139
+  s_2a32831ed9b5ea::t_53656c229c76e8 4,8
+  s_2a32831ed9b5ea::t_e9dd5d309ff937 245,252,257
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "6dd3ed523ba5b622d48fb740c5db59465c2ccc15",
+  "prompts": {},
+  "sessions": {
+    "s_2a32831ed9b5ea": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10a36f13effe9SN8QhAWqs1XZM",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
