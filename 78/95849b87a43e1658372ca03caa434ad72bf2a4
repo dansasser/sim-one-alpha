@@ -1,0 +1,23 @@
+src/tests/builtin-registry.test.ts
+  s_2a85b2e1f110e1::t_3b62f669d86087 6,28,73-84,95
+src/capabilities/index.ts
+  s_2a85b2e1f110e1::t_4e02adf98806c8 28
+src/capabilities/builtin-registry.ts
+  s_2a85b2e1f110e1::t_f5f69cb726ad62 17-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.11",
+  "base_commit_sha": "7895849b87a43e1658372ca03caa434ad72bf2a4",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
