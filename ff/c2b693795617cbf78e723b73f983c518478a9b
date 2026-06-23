@@ -1,0 +1,33 @@
+src/tools/schedule-tools.ts
+  s_50c513bbdc400c::t_085bc384690e11 1-225
+src/app.ts
+  s_50c513bbdc400c::t_85b0bf7b272b07 9
+  s_50c513bbdc400c::t_4b37150ec76954 4
+  s_50c513bbdc400c::t_26c0d2d860688d 25
+src/workers/coding-worker/tools/coding-schedule-tools.ts
+  s_50c513bbdc400c::t_69d7bc50b65fba 1-214
+src/routes/schedules.ts
+  s_50c513bbdc400c::t_b8df59022f29f9 20,35
+  s_50c513bbdc400c::t_b97a5714d9c580 1-19,21-34,36-277
+src/workers/coding-worker/coding-worker.ts
+  s_50c513bbdc400c::t_f26b06a6e0f31d 26
+  s_50c513bbdc400c::t_61b3bb12d5ee09 158-159
+src/tools/index.ts
+  s_50c513bbdc400c::t_ede7ae5f2983a0 32-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "ffc2b693795617cbf78e723b73f983c518478a9b",
+  "prompts": {},
+  "sessions": {
+    "s_50c513bbdc400c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed5d8559-9b53-4db5-9338-31382d2362d7",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
