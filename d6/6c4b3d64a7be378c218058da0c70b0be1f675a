@@ -1,0 +1,65 @@
+sim-one-cli/src/commands/mcp.ts
+  s_2a85b2e1f110e1::t_efe4203d968773 30-41
+src/capabilities/builtin-registry.ts
+  s_2a85b2e1f110e1::t_203e3759b3f7f9 25-27,40-42
+src/capabilities/index.ts
+  s_2a85b2e1f110e1::t_d3b5ed33c3e5df 15
+sim-one-cli/src/commands/store.ts
+  s_2a85b2e1f110e1::t_f381d0a7147ecc 4,47-48,50,58
+AGENTS.md
+  s_2a85b2e1f110e1::t_d28fb80700a8bf 588
+src/tests/collision-check.test.ts
+  s_2a85b2e1f110e1::t_11edd684ddad95 3-5,11,14,36-49,51,58,87,90-91,93-95,98-99,101-103,106-107,109-111,115-118,123
+src/capabilities/worker-loader.ts
+  s_2a85b2e1f110e1::t_51c02cf22ae38b 6,54-67,69-78,82-87
+sim-one-cli/src/commands/skill.ts
+  s_411ec73c57a8d9::t_0b017d0ed5b122 193-220,222-229
+  s_411ec73c57a8d9::t_933eca00aa2ded 1-2,4
+  s_411ec73c57a8d9::t_6d8714fe4c30b1 163
+src/capabilities/capability-config-reconcile.ts
+  s_2a85b2e1f110e1::t_6045c0632060c3 26-27,35
+src/tests/builtin-registry.test.ts
+  s_2a85b2e1f110e1::t_893649e82ad514 3-12,14,17-30,33-55,58-70,75-95
+  s_2a85b2e1f110e1::t_fc1ec22965f239 71-74
+README.md
+  s_2a85b2e1f110e1::t_3614f68e6911f3 737
+src/capabilities/builtin-mcp.ts
+  s_2a85b2e1f110e1::t_bd972655b9f93b 41-45
+sim-one-cli/src/cli.tsx
+  s_2a85b2e1f110e1::t_8179f5caeada85 69
+scripts/generate-builtin-registry.mjs
+  s_2a85b2e1f110e1::t_c3077688ccef54 194
+  s_2a85b2e1f110e1::t_e71ea0f57d65d2 136
+src/tools/capability-tools.ts
+  s_2a85b2e1f110e1::t_e02cbb1d8ec602 31-34,56-60
+src/tests/worker-loader.test.ts
+  s_2a85b2e1f110e1::t_1957dcdc2f788b 63,82-84
+src/agents/orchestrator.ts
+  s_2a85b2e1f110e1::t_161621e2db248b 117-122
+sim-one-cli/src/commands/worker.ts
+  s_2a85b2e1f110e1::t_7f073d626971aa 102-106,111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.11",
+  "base_commit_sha": "d66c4b3d64a7be378c218058da0c70b0be1f675a",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    },
+    "s_411ec73c57a8d9": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1095036d5ffeseCmzIQDJ3gYIU",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
