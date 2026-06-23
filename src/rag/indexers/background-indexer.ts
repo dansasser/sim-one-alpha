@@ -48,45 +48,57 @@ export async function runBackgroundIndexing(options: BackgroundIndexerOptions): 
         return;
       }
 
-      const contents = records.map((record) => record.content);
-      const outcome = await options.embeddingClient.embedBatchWithOutcome(contents);
+      // Embed and upsert in batches to avoid OOM from native ONNX tensor arena + LanceDB Arrow buffers.
+      // Each batch is embedded then immediately upserted, so peak memory is bounded by BATCH_SIZE,
+      // not by corpus size.
+      const BATCH_SIZE = 32;
+      let observedDimensions: number | undefined = undefined;
 
-      let vectorRecords: Array<{
-        id: string;
-        chunk_key?: string;
-        source: string;
-        title: string;
-        content: string;
-        vector: number[];
-        metadata: Record<string, unknown>;
-        updated_at: string;
-      }>;
-      if (outcome.ok) {
-        if (outcome.result.vectors.length !== records.length) {
-          throw new Error(
-            `Embedding provider returned ${outcome.result.vectors.length} vectors for ${records.length} records`,
+      for (let offset = 0; offset < records.length; offset += BATCH_SIZE) {
+        const batch = records.slice(offset, offset + BATCH_SIZE);
+        const batchContents = batch.map((record) => record.content);
+        const outcome = await options.embeddingClient.embedBatchWithOutcome(batchContents);
+
+        const batchVectorRecords: Array<{
+          id: string;
+          chunk_key?: string;
+          source: string;
+          title: string;
+          content: string;
+          vector: number[];
+          metadata: Record<string, unknown>;
+          updated_at: string;
+        }> = [];
+
+        if (outcome.ok) {
+          if (outcome.result.vectors.length !== batch.length) {
+            throw new Error(
+              `Embedding provider returned ${outcome.result.vectors.length} vectors for ${batch.length} records (batch at offset ${offset})`,
+            );
+          }
+          const firstVector = outcome.result.vectors[0];
+          if (firstVector && observedDimensions === undefined) {
+            observedDimensions = firstVector.length;
+          }
+          for (let i = 0; i < batch.length; i++) {
+            batchVectorRecords.push({ ...batch[i], vector: outcome.result.vectors[i] });
+          }
+        } else {
+          console.error(
+            `[WARN] Background indexing embedding failed for ${collection} (batch at offset ${offset}): ${outcome.error}`,
           );
+          const dimensions = observedDimensions ?? (await getOnnxEmbeddingDimensions());
+          for (const record of batch) {
+            batchVectorRecords.push({
+              ...record,
+              vector: new Array(dimensions).fill(0),
+              metadata: { ...record.metadata, embeddingError: outcome.error },
+            });
+          }
         }
-        vectorRecords = records.map((record, index) => ({
-          ...record,
-          vector: outcome.result.vectors[index],
-        }));
-      } else {
-        console.error(
-          `[WARN] Background indexing embedding failed for ${collection}: ${outcome.error}`,
-        );
-        const dimensions = await getOnnxEmbeddingDimensions();
-        vectorRecords = records.map((record) => ({
-          ...record,
-          vector: new Array(dimensions).fill(0),
-          metadata: {
-            ...record.metadata,
-            embeddingError: outcome.error,
-          },
-        }));
-      }
 
-      await options.vectorStore.upsert(collection, vectorRecords);
+        await options.vectorStore.upsert(collection, batchVectorRecords);
+      }
 
       const existingIds = await options.vectorStore.listIds(collection);
       const staleIds = existingIds.filter((id) => !idsToKeep.has(id));

@@ -17,5 +17,6 @@
     "retentionDays": 30,
     "archiveDeleteDays": 365,
     "maxChecklistDepth": 5
-  }
+  },
+  "capabilities": []
 }

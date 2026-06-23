@@ -25,6 +25,32 @@ Keep company, product, framework, agent, worker, workspace, and repository names
 
 Workers are subsystems of SIM-ONE Alpha, not standalone products or public endpoints.
 
+## Naming Conventions
+
+### Product CLI binary
+
+- The product binary is `sim-one` (lowercase, hyphenated).
+- Hyphens in CLI binary names are safe for shell commands, global npm install, and subcommands (`sim-one skill add ...`).
+- When deriving environment variable prefixes from the product name, use underscores: `SIM_ONE_API_KEY`, `SIM_ONE_CONFIG_PATH`, etc. Hyphens are invalid in env var names.
+
+### File and directory naming
+
+- **Runtime data root:** `~/.gorombo/` — uses the company name (Gorombo). This is intentional and matches industry convention (other companies name their runtime dirs after the company, not the product).
+- **SQLite databases:** `.gorombo/db/*.sqlite` — e.g. `capabilities.sqlite`, `protocols.sqlite`, `sessions.sqlite`.
+- **Capability directories:** `.gorombo/capabilities/{skills,tools,workers,mcp}/<id>/`.
+- **Config file:** `gorombo.config.json` — company-prefixed, shipped in `dist/`.
+- **Environment variables:** `GOROMBO_*` prefix for runtime config (e.g. `GOROMBO_CAPABILITY_DB_PATH`, `GOROMBO_CAPABILITIES_DIR`, `GOROMBO_APPROVAL_ROOT`). Use `SIM_ONE_*` prefix for product-CLI-specific env vars if needed in the future.
+- **Source code:** `src/` directories use lowercase kebab-case (`src/capabilities/`, `src/rag/`). TypeScript files use kebab-case (`capability-store.ts`, `mcp-broker.ts`).
+- **Scripts:** `scripts/` uses kebab-case (`capability-admin.mjs`, `protocol-admin.mjs`, `build-prod.mjs`).
+- **Docs:** `docs/architecture/` uses kebab-case (`capability-system.md`, `product-flow.md`).
+
+### What NOT to name things
+
+- Do not prefix product-facing names with "Gorombo" — the product is SIM-ONE Alpha, not Gorombo Alpha.
+- Do not use "Ollie" in file paths or architecture names — persona names belong inside workspace file contents, not in paths.
+- Do not use camelCase or PascalCase for files or directories — use kebab-case consistently.
+- Do not create env vars with hyphens — use underscores.
+
 
 ## Flue Architecture Contract
 

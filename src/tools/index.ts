@@ -40,3 +40,11 @@ export {
   scheduleRunNowTool,
   scheduleRunsTool,
 } from './schedule-tools.js';
+export {
+  addSkillTool,
+  addToolCapabilityTool,
+  addWorkerTool,
+  addMcpServerTool,
+  listCapabilitiesTool,
+  capabilityTools,
+} from './capability-tools.js';

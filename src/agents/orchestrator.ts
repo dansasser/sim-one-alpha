@@ -42,11 +42,18 @@ import {
   scheduleGetTool,
   scheduleRunNowTool,
   scheduleRunsTool,
+  capabilityTools,
 } from '../tools/index.js';
 import type { AgentModelCard } from '../models/types.js';
 import { telegramReplyTool } from '../channels/telegram.js';
 import { createCodingWorkerSubagent } from '../workers/coding-worker/coding-worker.js';
 import { createResearcherSubagent } from '../workers/researcher/researcher.js';
+import { createCapabilityStore } from '../capabilities/capability-store.js';
+import { loadUserCapabilities } from '../capabilities/capability-loader.js';
+import { materializeCapability } from '../capabilities/skill-materializer.js';
+import { connectUserMcpServers } from '../capabilities/mcp-broker.js';
+import { loadUserTools } from '../capabilities/tool-loader.js';
+import { loadUserWorkers } from '../capabilities/worker-loader.js';
 
 export const route: AgentRouteHandler = async (_c, next) => next();
 
@@ -67,46 +74,57 @@ export default createAgent(async ({ env }) => {
   });
   const researcher = createResearcherSubagent();
 
+  const builtInTools = [
+    loadProtocolsTool,
+    retrieveMemoryTool,
+    addKnowledgeTool,
+    createChecklistTool,
+    updateChecklistTool,
+    addChecklistItemTool,
+    updateChecklistItemTool,
+    moveChecklistItemTool,
+    archiveChecklistTool,
+    listChecklistsTool,
+    createTodoTool,
+    completeTodoTool,
+    updateTodoTool,
+    cancelTodoTool,
+    listTodosTool,
+    storeSessionNoteTool,
+    updateSessionNoteTool,
+    archiveSessionNoteTool,
+    listSessionNotesTool,
+    searchMemoryRecordsTool,
+    generateImageTool,
+    recordImageArtifactTool,
+    listImageArtifactsTool,
+    scheduleCreateTool,
+    schedulePauseTool,
+    scheduleResumeTool,
+    scheduleUpdateTool,
+    scheduleDeleteTool,
+    scheduleListTool,
+    scheduleGetTool,
+    scheduleRunNowTool,
+    scheduleRunsTool,
+    telegramReplyTool,
+    ...capabilityTools,
+  ];
+  const builtInSubagents = [codingWorker, researcher];
+
+  const userCapabilities = loadUserCapabilitiesFromStore(env);
+  const mcpResult = await connectUserMcpServers(userCapabilities.mcp, env);
+  const toolResult = await loadUserTools(userCapabilities.tools, env);
+  const workerResult = await loadUserWorkers(userCapabilities.workers, env);
+  const userTools = [...mcpResult.tools, ...toolResult.tools];
+  const userSubagents: typeof builtInSubagents = [...workerResult.profiles];
+
   return {
     model: selectedModelCard.specifier,
     instructions: orchestratorInstructions,
     compaction: createFlueCompactionConfig(selectedModelCard),
-    tools: [
-      loadProtocolsTool,
-      retrieveMemoryTool,
-      addKnowledgeTool,
-      createChecklistTool,
-      updateChecklistTool,
-      addChecklistItemTool,
-      updateChecklistItemTool,
-      moveChecklistItemTool,
-      archiveChecklistTool,
-      listChecklistsTool,
-      createTodoTool,
-      completeTodoTool,
-      updateTodoTool,
-      cancelTodoTool,
-      listTodosTool,
-      storeSessionNoteTool,
-      updateSessionNoteTool,
-      archiveSessionNoteTool,
-      listSessionNotesTool,
-      searchMemoryRecordsTool,
-      generateImageTool,
-      recordImageArtifactTool,
-      listImageArtifactsTool,
-      scheduleCreateTool,
-      schedulePauseTool,
-      scheduleResumeTool,
-      scheduleUpdateTool,
-      scheduleDeleteTool,
-      scheduleListTool,
-      scheduleGetTool,
-      scheduleRunNowTool,
-      scheduleRunsTool,
-      telegramReplyTool,
-    ],
-    subagents: [codingWorker, researcher],
+    tools: [...builtInTools, ...userTools],
+    subagents: [...builtInSubagents, ...userSubagents],
   };
 });
 
@@ -152,9 +170,29 @@ function readOptionalEnv(env: Record<string, unknown>, key: string): string | un
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-/**
- * Describes the orchestrator capabilities that are actually wired at runtime.
- */
+function loadUserCapabilitiesFromStore(env: Record<string, unknown>) {
+  let store;
+  try {
+    store = createCapabilityStore({});
+    const caps = loadUserCapabilities({ store });
+    for (const capability of [...caps.skills, ...caps.tools, ...caps.workers]) {
+      try {
+        materializeCapability({ record: capability, env });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[capabilities] Failed to materialize ${capability.kind} ${capability.id}: ${message}`);
+      }
+    }
+    return caps;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[capabilities] Failed to load user capabilities: ${message}`);
+    return { skills: [], tools: [], workers: [], mcp: [] };
+  } finally {
+    store?.close();
+  }
+}
+
 function createOrchestratorRuntimeCapabilityBlock(): string {
   return `# Runtime Capabilities
 
@@ -173,6 +211,7 @@ The following capabilities are actually attached to this main agent at runtime:
 - Tool: \`list_image_artifacts\`
 - Tool: \`schedule_create\` / \`schedule_pause\` / \`schedule_resume\` / \`schedule_update\` / \`schedule_delete\` / \`schedule_list\` / \`schedule_get\` / \`schedule_run_now\` / \`schedule_runs\` (scheduled/recurring/one-shot agent turns; ownerScope is derived from the trusted eventId and enforced on every non-create op)
 - Tool: \`telegram_reply\` (when TELEGRAM_BOT_TOKEN is configured)
+- Tool: \`add_skill\` / \`add_tool\` / \`add_worker\` / \`add_mcp_server\` / \`list_capabilities\` (user-defined capability management; skills auto-enable, tools/workers/MCP require user approval via CLI or TUI)
 - Subagent: \`researcher\`
 - Subagent: \`coding-worker\`
 

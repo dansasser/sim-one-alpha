@@ -3,6 +3,7 @@ dist/
 dist-flue/
 .env
 .env.*
+.claude/
 !.env.example
 coverage/
 .tmp/

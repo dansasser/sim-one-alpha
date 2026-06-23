@@ -24,6 +24,7 @@ export interface GoromboConfig {
   schedules?: Record<string, unknown>;
   gateway?: Record<string, unknown>;
   observability?: Record<string, unknown>;
+  capabilities?: GoromboCapabilityConfig[];
 }
 
 export interface GoromboModelConfig {
@@ -35,6 +36,18 @@ export interface GoromboStorageConfig {
   flueDatabasePath?: string;
   sessionDatabasePath?: string;
   vectorStorePath?: string;
+}
+
+export interface GoromboCapabilityConfig {
+  id: string;
+  kind: 'skill' | 'tool' | 'worker' | 'mcp';
+  name: string;
+  description: string;
+  source: 'github' | 'local' | 'npm' | 'builtin';
+  sourceRef: string;
+  version?: string | null;
+  enabled?: boolean;
+  config?: Record<string, unknown>;
 }
 
 export interface LoadGoromboConfigOptions {
@@ -84,6 +97,7 @@ export function validateGoromboConfig(value: unknown, source = 'GOROMBO config')
 
   const backup = readString(value.models.backup);
   const storage = validateStorageConfig(value.storage, source);
+  const capabilities = validateCapabilitiesConfig(value.capabilities, source);
 
   return {
     ...value,
@@ -93,7 +107,90 @@ export function validateGoromboConfig(value: unknown, source = 'GOROMBO config')
       ...(backup ? { backup } : {}),
     },
     ...(storage ? { storage } : {}),
+    ...(capabilities ? { capabilities } : {}),
   } as GoromboConfig;
+}
+
+const VALID_CAPABILITY_KINDS = new Set(['skill', 'tool', 'worker', 'mcp']);
+const VALID_CAPABILITY_SOURCES = new Set(['github', 'local', 'npm', 'builtin']);
+
+function validateCapabilitiesConfig(
+  value: unknown,
+  source: string,
+): GoromboCapabilityConfig[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error(`${source} capabilities must be an array when provided.`);
+  }
+
+  const result: GoromboCapabilityConfig[] = [];
+  for (let i = 0; i < value.length; i++) {
+    const entry = value[i];
+    if (!isRecord(entry)) {
+      throw new Error(`${source} capabilities[${i}] must be a JSON object.`);
+    }
+
+    const id = readString(entry.id);
+    if (!id) {
+      throw new Error(`${source} capabilities[${i}].id must be a non-empty string.`);
+    }
+
+    const kind = readString(entry.kind);
+    if (!kind || !VALID_CAPABILITY_KINDS.has(kind)) {
+      throw new Error(
+        `${source} capabilities[${i}].kind must be one of: ${[...VALID_CAPABILITY_KINDS].join(', ')}`,
+      );
+    }
+
+    const name = readString(entry.name);
+    if (!name) {
+      throw new Error(`${source} capabilities[${i}].name must be a non-empty string.`);
+    }
+
+    const description = readString(entry.description);
+    if (!description) {
+      throw new Error(`${source} capabilities[${i}].description must be a non-empty string.`);
+    }
+
+    const capabilitySource = readString(entry.source);
+    if (!capabilitySource || !VALID_CAPABILITY_SOURCES.has(capabilitySource)) {
+      throw new Error(
+        `${source} capabilities[${i}].source must be one of: ${[...VALID_CAPABILITY_SOURCES].join(', ')}`,
+      );
+    }
+
+    const sourceRef = readString(entry.sourceRef);
+    if (!sourceRef) {
+      throw new Error(`${source} capabilities[${i}].sourceRef must be a non-empty string.`);
+    }
+
+    const version = entry.version === undefined || entry.version === null
+      ? null
+      : readString(entry.version);
+
+    const enabled =
+      entry.enabled === undefined ? undefined : Boolean(entry.enabled);
+
+    const config =
+      entry.config === undefined ? {} : (isRecord(entry.config) ? entry.config : {});
+
+    result.push({
+      id,
+      kind: kind as GoromboCapabilityConfig['kind'],
+      name,
+      description,
+      source: capabilitySource as GoromboCapabilityConfig['source'],
+      sourceRef,
+      ...(version !== null ? { version } : {}),
+      ...(enabled !== undefined ? { enabled } : {}),
+      config,
+    });
+  }
+
+  return result;
 }
 
 function validateStorageConfig(value: unknown, source: string): GoromboStorageConfig | undefined {

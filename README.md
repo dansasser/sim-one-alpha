@@ -356,56 +356,254 @@ crates/
 
 ## Installation
 
-This project is currently in early development.
+### Prerequisites
 
-Clone the repository:
+- **Node.js >= 22.18.0** — required by Flue (native TypeScript config support). Use `nvm use 22` or set `PATH` to the Node 22 binary.
+- **pnpm 10.x** — the repo uses pnpm (declared in `packageManager`). Install via `npm install -g pnpm` or Corepack.
+- **Rust toolchain + wasm-pack** — required for building the structured-memory WASM engine. Install via [rustup](https://rustup.rs/) and `cargo install wasm-pack --version 0.13.1`. The `prebuild` script runs `wasm-build.mjs` which needs `wasm-pack` on `PATH`.
 
-```sh
-git clone <repository-url>
-cd <repository-name>
-```
-
-Install dependencies using the package manager used by the repo:
+### Setup
 
 ```sh
+git clone https://github.com/dansasser/sim-one-alpha.git
+cd sim-one-alpha
 pnpm install
 ```
 
-Run the development server or local workflow command defined in `package.json`:
+### Environment
+
+Copy the example env file and set provider secrets:
 
 ```sh
-pnpm run dev
+cp .env.example .env
 ```
 
-Run tests:
+Key environment variables (see `.env.example` for the full list):
 
-```sh
-pnpm test
-```
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `API_SECRET` | Yes | Shared secret for HTTP API auth (`x-api-secret` header). Set to any strong random string. |
+| `OLLAMA_API_KEY` | No | Ollama Cloud API key. Enables cloud embeddings and web search. Without it, the bundled local ONNX model is used for embeddings. |
+| `RUNPOD_API_KEY` | No | Runpod Public Endpoints API key. Enables image generation tools. |
+| `TELEGRAM_BOT_TOKEN` | No | Telegram bot token. Enables the Telegram connector. Without it, the server runs in TUI/HTTP-only mode. |
+| `GOROMBO_APPROVAL_ROOT` | No | Directory for approval persistence. Required for coding-worker side-effect approvals. |
 
-Run type checks:
+All other env vars are optional and documented in `.env.example`.
 
-```sh
-pnpm run typecheck
-```
+### Embedding model (one-time)
 
-Build the project:
-
-```sh
-pnpm run build
-```
-
-Download the bundled local embedding model (required for local RAG out of the box):
+Download the bundled local embedding model (90MB, gitignored — required for local RAG without an Ollama API key):
 
 ```sh
 pnpm fetch-embedding-model
 ```
 
-After downloading the model, RAG works without Ollama running and without any API keys. The system tries the cloud provider first when `OLLAMA_API_KEY` is configured, and falls back to the bundled `all-MiniLM-L6-v2` ONNX model automatically.
+After downloading, RAG works without Ollama running and without any API keys. The system tries the cloud provider first when `OLLAMA_API_KEY` is configured, and falls back to the bundled `all-MiniLM-L6-v2` ONNX model automatically.
 
-Use the actual scripts defined in `package.json`.
+### Build
 
-Do not assume a command exists unless it is configured in the project.
+```sh
+pnpm run build
+```
+
+This compiles the WASM memory engine, builds the Flue Node server (`dist/server.mjs`), copies the runtime config, and copies the WASM artifact into `dist/`.
+
+### Start the server
+
+```sh
+# Using the built artifact
+pnpm start
+# or: node --env-file=.env dist/server.mjs
+
+# Custom port (default: 3000)
+PORT=3960 node --env-file=.env dist/server.mjs
+```
+
+The server takes ~30 seconds to start (ONNX model load blocks the event loop). Wait for `[flue] Server listening` in the log before sending requests.
+
+### Development mode
+
+```sh
+pnpm run dev
+```
+
+Starts `flue dev --target node` which watches source files, rebuilds on changes, and restarts the server automatically. Default port is 3583.
+
+### Run tests
+
+```sh
+pnpm test          # unit tests + build + HTTP smoke tests
+pnpm run test:unit # unit tests only
+pnpm run typecheck # TypeScript type checking
+```
+
+## Interactive TUI
+
+SIM-ONE Alpha includes an interactive terminal UI for chatting with the agent, viewing tool calls and subagent delegations, and managing approvals. The production `sim-one` binary is the target interface, but is not yet shipped from this repo. The current runnable TUI is the developer prototype (see below).
+
+### What the TUI shows
+
+- **Header** — product name, base URL, session id, live agent status
+- **Message list** — agent messages with text, reasoning (dimmed), tool calls, and subagent delegations
+- **Tool calls** — tool name, input, output/error with state indicators (running/done/error)
+- **Subagent delegations** — rendered as "→ delegated to <agent>" when the orchestrator delegates to a worker
+- **Approval surface** — pending approvals shown inline with [y] approve / [n] deny keypress
+- **Status bar** — message count, pending approvals count, agent status
+- **Chat input** — text input with Enter to send, disabled during streaming and approval prompts
+
+### First run — the wizard (planned)
+
+On first install, `sim-one install` (or the install script) will launch a wizard TUI that walks through:
+- Model selection and API key entry
+- Optional channel setup (Telegram, Discord, etc.)
+- Optional initial capabilities (skills, tools, MCP servers)
+- Persona/workspace configuration
+- Gateway service launch (always-on background process)
+
+> **Status:** The wizard is part of the production `sim-one` binary, which is not yet shipped. Use the developer prototype below for now.
+
+### Developer prototype
+
+The current TUI prototype lives in `tui-proto/` at the repo top level. It is a throwaway test harness that will be replaced by the production `sim-one` binary. During development, it can be launched directly:
+
+```sh
+# Against a running dev server
+pnpm --filter sim-one-alpha-tui-proto exec tsx src/cli.tsx --port 3583
+
+# One-command build + launch (developer workflow)
+pnpm run build:prod
+```
+
+See `docs/architecture/product-flow.md` for the full product install and launch flow.
+
+## Capability Management
+
+The capability registry lets users and agents add skills, tools, workers (subagents), and MCP servers to a running SIM-ONE Alpha instance without rebuilding. By default, capabilities are stored in SQLite (`.gorombo/db/capabilities.sqlite`) and materialized into `.gorombo/capabilities/` (both relative to the project root, unless overridden with env vars). A service restart picks up changes — no rebuild needed.
+
+### Product CLI
+
+After install, manage capabilities with the `sim-one` binary:
+
+> **Status:** The `sim-one` binary is the planned product interface and is not yet shipped from this repo. During development, use the developer-only script (`scripts/capability-admin.mjs`) shown below each command block. See `docs/architecture/product-flow.md` for the full product flow.
+
+```sh
+# Add a skill from GitHub
+sim-one skill add https://github.com/user/my-skill my-skill "My Skill" "Description" --enable
+
+# Add a skill from a local directory
+sim-one skill add /path/to/skill-dir my-skill "My Skill" --enable
+
+# Add a tool (requires approval before enabling)
+sim-one tool add https://github.com/user/my-tool my-tool "My Tool" "Description"
+
+# Add a worker (requires approval before enabling)
+sim-one worker add https://github.com/user/my-worker my-worker "My Worker" "Description"
+
+# Add an MCP server
+sim-one mcp add my-mcp "My MCP Server" "Description" --url http://localhost:8080 --enable
+
+# List capabilities
+sim-one skill list
+sim-one tool list
+sim-one mcp list
+sim-one worker list
+
+# Enable/disable (for tools/workers/MCP that require approval)
+sim-one tool enable my-tool
+sim-one tool disable my-tool
+
+# Update (re-fetch from source — git pull or local copy)
+sim-one skill update my-skill
+
+# Remove (deletes SQLite row and capability files)
+sim-one skill remove my-skill
+```
+
+After adding or enabling a capability, restart the service for it to take effect: `sim-one restart`
+
+#### Developer-only tool (before `sim-one` binary ships)
+
+During development, a standalone script provides the same CRUD operations:
+
+```sh
+# Add a skill from GitHub
+node scripts/capability-admin.mjs add skill https://github.com/user/my-skill my-skill "My Skill" "Description" --enable
+
+# Add a skill from a local directory (skills auto-enable by default)
+node scripts/capability-admin.mjs add skill /path/to/skill-dir my-skill "My Skill"
+
+# Add a tool (requires --enable to activate)
+node scripts/capability-admin.mjs add tool https://github.com/user/my-tool my-tool "My Tool" "Description"
+
+# Add an MCP server
+node scripts/capability-admin.mjs add mcp my-mcp "My MCP Server" "Description" --url http://localhost:8080 --enable
+
+# List capabilities
+node scripts/capability-admin.mjs list
+
+# Enable/disable
+node scripts/capability-admin.mjs enable tool my-tool
+node scripts/capability-admin.mjs disable tool my-tool
+
+# Update (re-fetch from source)
+node scripts/capability-admin.mjs update skill my-skill
+
+# Remove
+node scripts/capability-admin.mjs remove skill my-skill
+```
+
+This is a dev-time tool. The product interface is `sim-one skill add ...`, not pnpm scripts or standalone `.mjs` files.
+
+### Agent tools
+
+The orchestrator has model-callable tools for managing capabilities:
+- `add_skill` — adds a skill (auto-enables, no approval needed)
+- `add_tool` — adds a tool (requires user approval via CLI or TUI)
+- `add_worker` — adds a worker (requires approval)
+- `add_mcp_server` — adds an MCP server (requires approval)
+- `list_capabilities` — lists all registered capabilities with status
+
+### Config file mirror
+
+`gorombo.config.json` supports a `capabilities` array that reconciles into SQLite at boot. This is additive — entries in config but missing from SQLite get inserted; existing entries are not overwritten.
+
+```json
+{
+  "version": 1,
+  "models": { "primary": "..." },
+  "capabilities": [
+    {
+      "id": "my-skill",
+      "kind": "skill",
+      "name": "My Skill",
+      "description": "...",
+      "source": "github",
+      "sourceRef": "https://github.com/user/my-skill",
+      "enabled": true
+    }
+  ]
+}
+```
+
+### Environment variables
+
+- `GOROMBO_CAPABILITY_DB_PATH` — SQLite path (default: `.gorombo/db/capabilities.sqlite`)
+- `GOROMBO_CAPABILITIES_DIR` — capability files root (default: `.gorombo/capabilities/`)
+
+### Developer-only tools (not the product interface)
+
+During development, before the `sim-one` binary ships, capability management is available via a standalone script:
+
+```sh
+node scripts/capability-admin.mjs add skill /path/to/skill my-skill "My Skill" --enable
+node scripts/capability-admin.mjs list
+node scripts/capability-admin.mjs enable tool my-tool
+node scripts/capability-admin.mjs remove skill my-skill
+```
+
+These are dev-time tools. The product interface is `sim-one skill add ...`, not `pnpm` scripts or standalone `.mjs` files.
+
+See `docs/architecture/capability-system.md` for full architecture documentation and `docs/architecture/product-flow.md` for the product install and launch flow.
 
 ## Local Chat
 

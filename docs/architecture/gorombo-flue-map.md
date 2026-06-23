@@ -11,6 +11,7 @@ Every top-level `src/` directory should fit one of these categories. If a new di
 | `src/embeddings/` | Bundled local embedding model | In-process ONNX + tokenizer path used by the RAG embedding fallback. |
 | `src/agents/` | Flue agent entrypoints | Main `createAgent(...)` files discovered by Flue. |
 | `src/approvals/` | Shared approval subsystem | Approval service factory and ingress types shared by the coding worker and connectors/HTTP/CLI surfaces. |
+| `src/capabilities/` | Runtime capability registry subsystem | SQLite-backed user/agent-added capability store (skills, tools, workers, MCP). `capability-store.ts` owns CRUD; `capability-loader.ts` reads enabled rows at orchestrator init; `skill-materializer.ts` copies/github-clones user skill dirs into Flue's discovery path; `mcp-broker.ts` connects MCP servers and returns tools. Loaded at `createAgent(...)` init in `src/agents/orchestrator.ts`. See `scripts/capability-admin.mjs` for CLI admin. |
 | `src/commands/` | Pre-LLM command parsing | Slash command definitions and parsing that run before prompts reach the LLM. |
 | `src/config/` | Runtime configuration | Typed config loaders and shipped runtime config source files. |
 | `src/ingress/` | Application ingress modules | Cross-cutting ingress logic that turns internal worker events and storage into HTTP/connector-facing surfaces. Example: the approval ingress bridges `CodingApprovalService` to HTTP routes, CLI, and connectors. |
@@ -202,6 +203,23 @@ src/workflows/web-research.ts
 
 src/tools/protocol-tool.ts
   Orchestrator-safe protocol loading tool.
+
+src/capabilities/
+  Runtime capability registry subsystem. SQLite-backed user/agent-added
+  capability store (skills, tools, workers, MCP). `capability-store.ts`
+  owns CRUD; `capability-loader.ts` reads enabled rows at orchestrator init;
+  `skill-materializer.ts` copies/github-clones user skill dirs into Flue's
+  discovery path; `mcp-broker.ts` connects MCP servers and returns tools.
+  Loaded at `createAgent(...)` init in `src/agents/orchestrator.ts`. See
+  `docs/architecture/capability-system.md` and `scripts/capability-admin.mjs`.
+  `tool-loader.ts` and `worker-loader.ts` dynamically `import()` user JS
+  modules that export `defineTool(...`/`defineAgentProfile(...)` results.
+
+scripts/capability-admin.mjs
+  CLI admin script for capability CRUD (add/list/enable/disable/remove/update).
+  Follows the `protocol-admin.mjs` pattern. Writes to SQLite at
+  `.gorombo/db/capabilities.sqlite` and materializes skill/tool/worker
+  files under `.gorombo/capabilities/`.
 
 src/tools/memory-tool.ts
   Orchestrator-safe memory lookup tool.
