@@ -26,6 +26,7 @@ Every top-level `src/` directory should fit one of these categories. If a new di
 | `src/schemas/` | Shared runtime schemas | Valibot schemas for structured-output contracts and cross-subsystem data shapes. Each domain owns a file here when its schemas are reused outside a single file. `memory.ts` is the source of truth for the Rust Memory Helper record/input shapes. Imported by `src/types/` and worker type contracts; kept separate so type-only consumers do not pull in schema runtime code. |
 | `src/session/` | Session/context subsystem | Flue session persistence, compaction policy, context budget, and usage tracking. |
 | `src/services/` | Shared service modules | Non-tool persistence helpers used by both routes and tools, such as `knowledge-service.ts`. Kept separate from `src/tools/` so routes do not import tool modules and tools do not import route modules. |
+| `src/schedules/` | Scheduled execution subsystem | Standalone scheduled/recurring/one-shot agent execution: schedule definitions + run history durable in SQLite (`node:sqlite`, `.gorombo/db/schedules.sqlite`), firing via Croner in-process, rehydrated on restart. Dispatch is admission-only (`dispatch(...)` to the orchestrator); terminal status observed in-process via `observe()`. Exposed via orchestrator `schedule_*` tools, coding-worker `coding_schedule_*` aliases (lead-only), and the `/api/schedules/*` admin route. See `docs/architecture/schedules-system.md`. |
 | `src/skills/` | Imported/bundled skills | Reusable workflow knowledge for the main orchestrator and shared subagents. |
 | `src/telemetry/` | Observability subsystem | Sanitized Flue event capture and run summaries. |
 | `src/tests/` | Test suite | Node test files compiled to `.tmp/tsc/tests`. |
@@ -86,6 +87,14 @@ src/routes/chat-events.ts
 src/routes/knowledge.ts
   App-owned /api/knowledge and /api/knowledge/reindex routes.
   Accepts API-secret-authenticated knowledge entries, persists them to the vector knowledge base, and triggers background re-indexing of project files and knowledge docs.
+
+src/schedules/boot.ts
+  Side-effect boot target imported by src/app.ts (mirrors ./models/runtime.js).
+  Loads the schedules config block, installs schedule telemetry, constructs + starts the ScheduleManager singleton (schema, cleanup, observe subscription, rehydrate enabled Croner jobs), and registers SIGTERM/SIGINT drain. Skips when disabled or in test mode; a start failure logs and leaves the manager unset so the rest of the app runs. Schedules are app-owned business data in their own node:sqlite file, NOT the Flue sqlite() adapter.
+
+src/routes/schedules.ts
+  App-owned /api/schedules/* admin route (full v1), behind requireApiSecret.
+  CRUD + pause/resume + force-fire + run history; forwards into the Flue agent dispatch path (create/update/delete/pause/resume mutate the row + syncCron; run calls fireNow which dispatches). ?wait=1 polls the runId to terminal.
 
 src/db.ts
   Flue persistence adapter entrypoint.

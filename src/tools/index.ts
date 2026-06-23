@@ -29,3 +29,14 @@ export {
   listSessionNotesTool,
 } from './memory-note-tools.js';
 export { searchMemoryRecordsTool } from './memory-search-tools.js';
+export {
+  scheduleCreateTool,
+  schedulePauseTool,
+  scheduleResumeTool,
+  scheduleUpdateTool,
+  scheduleDeleteTool,
+  scheduleListTool,
+  scheduleGetTool,
+  scheduleRunNowTool,
+  scheduleRunsTool,
+} from './schedule-tools.js';

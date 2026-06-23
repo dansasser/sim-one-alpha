@@ -33,6 +33,15 @@ import {
   archiveSessionNoteTool,
   listSessionNotesTool,
   searchMemoryRecordsTool,
+  scheduleCreateTool,
+  schedulePauseTool,
+  scheduleResumeTool,
+  scheduleUpdateTool,
+  scheduleDeleteTool,
+  scheduleListTool,
+  scheduleGetTool,
+  scheduleRunNowTool,
+  scheduleRunsTool,
 } from '../tools/index.js';
 import type { AgentModelCard } from '../models/types.js';
 import { telegramReplyTool } from '../channels/telegram.js';
@@ -86,6 +95,15 @@ export default createAgent(async ({ env }) => {
       generateImageTool,
       recordImageArtifactTool,
       listImageArtifactsTool,
+      scheduleCreateTool,
+      schedulePauseTool,
+      scheduleResumeTool,
+      scheduleUpdateTool,
+      scheduleDeleteTool,
+      scheduleListTool,
+      scheduleGetTool,
+      scheduleRunNowTool,
+      scheduleRunsTool,
       telegramReplyTool,
     ],
     subagents: [codingWorker, researcher],
@@ -153,6 +171,7 @@ The following capabilities are actually attached to this main agent at runtime:
 - Tool: \`generate_image\`
 - Tool: \`record_image_artifact\`
 - Tool: \`list_image_artifacts\`
+- Tool: \`schedule_create\` / \`schedule_pause\` / \`schedule_resume\` / \`schedule_update\` / \`schedule_delete\` / \`schedule_list\` / \`schedule_get\` / \`schedule_run_now\` / \`schedule_runs\` (scheduled/recurring/one-shot agent turns; ownerScope is derived from the trusted eventId and enforced on every non-create op)
 - Tool: \`telegram_reply\` (when TELEGRAM_BOT_TOKEN is configured)
 - Subagent: \`researcher\`
 - Subagent: \`coding-worker\`
