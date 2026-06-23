@@ -17,7 +17,7 @@ export function App({ baseUrl, session, token }: AppProps) {
 
   return (
     <FlueProvider client={client}>
-      <ChatLayout baseUrl={baseUrl} session={session} />
+      <ChatLayout baseUrl={baseUrl} session={session} token={token} decidedBy={session} />
     </FlueProvider>
   );
 }
