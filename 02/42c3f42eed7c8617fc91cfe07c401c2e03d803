@@ -1,0 +1,38 @@
+scripts/build-prod.mjs
+  s_2a85b2e1f110e1::t_a5ba2727e39e6c 47-53,70-89,91,95,98,109,120,124
+src/channels/telegram.ts
+  s_2a85b2e1f110e1::t_008d1433d51d9c 144-146
+  s_2a85b2e1f110e1::t_e33c3c53f99041 185
+  s_2a85b2e1f110e1::t_fced66df7407e0 137-143,148-151
+  s_2a85b2e1f110e1::t_0ab8f6eb25504f 26-27
+tui-proto/src/components/SubagentView.tsx
+  s_2a85b2e1f110e1::t_5ec56d2058a1e2 20-25
+tui-proto/src/hooks/usePendingApprovals.ts
+  s_2a85b2e1f110e1::t_a89a4eed503767 21,25-26,37
+tui-proto/src/components/MessageView.tsx
+  s_2a85b2e1f110e1::t_6e25e7b1144d75 23,25,29,35
+tui-proto/src/lib/approvalClient.ts
+  s_2a85b2e1f110e1::t_d65c0b10106b33 25-34,45-46,59,69
+tui-proto/src/components/ApprovalPrompt.tsx
+  s_2a85b2e1f110e1::t_be749542838ea6 2-3,16,20-21,36-37,40
+tui-proto/src/components/ChatLayout.tsx
+  s_2a85b2e1f110e1::t_f2c726ba81c701 32,40,66
+tui-proto/src/components/ToolCallView.tsx
+  s_2a85b2e1f110e1::t_c383024cedbebe 20-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "0242c3f42eed7c8617fc91cfe07c401c2e03d803",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
