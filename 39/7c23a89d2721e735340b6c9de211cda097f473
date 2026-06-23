@@ -1,0 +1,29 @@
+src/tests/schedule-manager.test.ts
+  s_50c513bbdc400c::t_09e73ba280f211 31-32,36-37,49
+src/schedules/schedule-manager.ts
+  s_50c513bbdc400c::t_4006d6ba750e6f 215-217
+  s_50c513bbdc400c::t_8fce56f4aa86b7 258-278
+  s_50c513bbdc400c::t_8f0c5628a74794 124-131
+  s_50c513bbdc400c::t_ec4b5cd534f620 357-359,364
+  s_50c513bbdc400c::t_2386c3754178b5 153-155
+  s_50c513bbdc400c::t_603d8aec8b284f 85
+  s_50c513bbdc400c::t_bf73aca3a2162c 418-423
+src/routes/schedules.ts
+  s_50c513bbdc400c::t_26f1d4b8b67e55 85-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "397c23a89d2721e735340b6c9de211cda097f473",
+  "prompts": {},
+  "sessions": {
+    "s_50c513bbdc400c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed5d8559-9b53-4db5-9338-31382d2362d7",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
