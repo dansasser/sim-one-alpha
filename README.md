@@ -356,56 +356,210 @@ crates/
 
 ## Installation
 
-This project is currently in early development.
+### Prerequisites
 
-Clone the repository:
+- **Node.js >= 22.18.0** — required by Flue (native TypeScript config support). Use `nvm use 22` or set `PATH` to the Node 22 binary.
+- **pnpm 10.x** — the repo uses pnpm (declared in `packageManager`). Install via `npm install -g pnpm` or Corepack.
+- **Rust toolchain + wasm-pack** — required for building the structured-memory WASM engine. Install via [rustup](https://rustup.rs/) and `cargo install wasm-pack --version 0.13.1`. The `prebuild` script runs `wasm-build.mjs` which needs `wasm-pack` on `PATH`.
 
-```sh
-git clone <repository-url>
-cd <repository-name>
-```
-
-Install dependencies using the package manager used by the repo:
+### Setup
 
 ```sh
+git clone https://github.com/dansasser/sim-one-alpha.git
+cd sim-one-alpha
 pnpm install
 ```
 
-Run the development server or local workflow command defined in `package.json`:
+### Environment
+
+Copy the example env file and set provider secrets:
 
 ```sh
-pnpm run dev
+cp .env.example .env
 ```
 
-Run tests:
+Key environment variables (see `.env.example` for the full list):
 
-```sh
-pnpm test
-```
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `API_SECRET` | Yes | Shared secret for HTTP API auth (`x-api-secret` header). Set to any strong random string. |
+| `OLLAMA_API_KEY` | No | Ollama Cloud API key. Enables cloud embeddings and web search. Without it, the bundled local ONNX model is used for embeddings. |
+| `RUNPOD_API_KEY` | No | Runpod Public Endpoints API key. Enables image generation tools. |
+| `TELEGRAM_BOT_TOKEN` | No | Telegram bot token. Enables the Telegram connector. Without it, the server runs in TUI/HTTP-only mode. |
+| `GOROMBO_APPROVAL_ROOT` | No | Directory for approval persistence. Required for coding-worker side-effect approvals. |
 
-Run type checks:
+All other env vars are optional and documented in `.env.example`.
 
-```sh
-pnpm run typecheck
-```
+### Embedding model (one-time)
 
-Build the project:
-
-```sh
-pnpm run build
-```
-
-Download the bundled local embedding model (required for local RAG out of the box):
+Download the bundled local embedding model (90MB, gitignored — required for local RAG without an Ollama API key):
 
 ```sh
 pnpm fetch-embedding-model
 ```
 
-After downloading the model, RAG works without Ollama running and without any API keys. The system tries the cloud provider first when `OLLAMA_API_KEY` is configured, and falls back to the bundled `all-MiniLM-L6-v2` ONNX model automatically.
+After downloading, RAG works without Ollama running and without any API keys. The system tries the cloud provider first when `OLLAMA_API_KEY` is configured, and falls back to the bundled `all-MiniLM-L6-v2` ONNX model automatically.
 
-Use the actual scripts defined in `package.json`.
+### Build
 
-Do not assume a command exists unless it is configured in the project.
+```sh
+pnpm run build
+```
+
+This compiles the WASM memory engine, builds the Flue Node server (`dist/server.mjs`), copies the runtime config, and copies the WASM artifact into `dist/`.
+
+### Start the server
+
+```sh
+# Using the built artifact
+pnpm start
+# or: node --env-file=.env dist/server.mjs
+
+# Custom port (default: 3000)
+PORT=3960 node --env-file=.env dist/server.mjs
+```
+
+The server takes ~30 seconds to start (ONNX model load blocks the event loop). Wait for `[flue] Server listening` in the log before sending requests.
+
+### Development mode
+
+```sh
+pnpm run dev
+```
+
+Starts `flue dev --target node` which watches source files, rebuilds on changes, and restarts the server automatically. Default port is 3583.
+
+### Run tests
+
+```sh
+pnpm test          # unit tests + build + HTTP smoke tests
+pnpm run test:unit # unit tests only
+pnpm run typecheck # TypeScript type checking
+```
+
+## Interactive TUI
+
+An interactive terminal UI (built with Ink + `@flue/react`) is available for testing and interacting with the agent from the terminal. The TUI connects to the running agent service over HTTP using `@flue/sdk`.
+
+### One-command build + launch
+
+```sh
+pnpm run build:prod
+```
+
+This builds the runtime, starts the built server, waits for it to be ready (handles the ~30s ONNX model load), then launches the interactive TUI. When the TUI exits, the server is shut down automatically.
+
+### Against a running server
+
+If the server is already running (via `pnpm run dev` or `node dist/server.mjs`), launch the TUI directly:
+
+```sh
+# Against flue dev (default port 3583)
+pnpm --filter sim-one-alpha-tui-proto exec tsx src/cli.tsx --port 3583
+
+# Against built server on a custom port
+pnpm --filter sim-one-alpha-tui-proto exec tsx src/cli.tsx --port 3960
+```
+
+### CLI flags
+
+```
+--port <number>     Server port (default: 3000)
+--base-url <url>    Full base URL (overrides --port)
+--session <id>      Agent instance id (default: proto)
+--token <secret>    API secret (defaults to API_SECRET env)
+```
+
+### What the TUI shows
+
+- **Header** — product name, base URL, session id, live agent status
+- **Message list** — agent messages with text, reasoning (dimmed), tool calls, and subagent delegations
+- **Tool calls** — tool name, input, output/error with state indicators (running/done/error)
+- **Subagent delegations** — rendered as "→ delegated to <agent>" when the orchestrator delegates to a worker
+- **Approval surface** — pending approvals shown inline with [y] approve / [n] deny keypress
+- **Status bar** — message count, pending approvals count, agent status
+- **Chat input** — text input with Enter to send, disabled during streaming and approval prompts
+
+The TUI prototype lives in `tui-proto/` at the repo top level. It is a throwaway test harness that will be replaced by the production TUI per the agent-tui plan.
+
+## Capability Management
+
+The capability registry lets users and agents add skills, tools, workers (subagents), and MCP servers to a running SIM-ONE Alpha instance without rebuilding. Capabilities are stored in SQLite (`~/.gorombo/db/capabilities.sqlite`) and materialized into `~/.gorombo/capabilities/`. A service restart picks up changes — no rebuild needed.
+
+### CLI
+
+```sh
+# Add a skill from GitHub
+pnpm capabilities:add skill https://github.com/user/my-skill my-skill "My Skill" "Description" --enable
+
+# Add a skill from a local directory
+pnpm capabilities:add skill /path/to/skill-dir my-skill "My Skill" --enable
+
+# Add a tool (requires approval before enabling)
+pnpm capabilities:add tool https://github.com/user/my-tool my-tool "My Tool" "Description"
+
+# Add a worker (requires approval before enabling)
+pnpm capabilities:add worker https://github.com/user/my-worker my-worker "My Worker" "Description"
+
+# Add an MCP server
+pnpm capabilities:add mcp my-mcp "My MCP Server" "Description" --url http://localhost:8080 --enable
+
+# List all capabilities
+pnpm capabilities:list
+
+# List by kind
+pnpm capabilities:list skill
+
+# Enable/disable (for tools/workers/MCP that require approval)
+pnpm capabilities:enable tool my-tool
+pnpm capabilities:disable tool my-tool
+
+# Update (re-fetch from source — git pull or local copy)
+pnpm capabilities:update skill my-skill
+
+# Remove (deletes SQLite row and capability files)
+pnpm capabilities:remove skill my-skill
+```
+
+After adding or enabling a capability, restart the service for it to take effect.
+
+### Agent tools
+
+The orchestrator has model-callable tools for managing capabilities:
+- `add_skill` — adds a skill (auto-enables, no approval needed)
+- `add_tool` — adds a tool (requires user approval via CLI or TUI)
+- `add_worker` — adds a worker (requires approval)
+- `add_mcp_server` — adds an MCP server (requires approval)
+- `list_capabilities` — lists all registered capabilities with status
+
+### Config file mirror
+
+`gorombo.config.json` supports a `capabilities` array that reconciles into SQLite at boot. This is additive — entries in config but missing from SQLite get inserted; existing entries are not overwritten.
+
+```json
+{
+  "version": 1,
+  "models": { "primary": "..." },
+  "capabilities": [
+    {
+      "id": "my-skill",
+      "kind": "skill",
+      "name": "My Skill",
+      "description": "...",
+      "source": "github",
+      "sourceRef": "https://github.com/user/my-skill",
+      "enabled": true
+    }
+  ]
+}
+```
+
+### Environment variables
+
+- `GOROMBO_CAPABILITY_DB_PATH` — SQLite path (default: `.gorombo/db/capabilities.sqlite`)
+- `GOROMBO_CAPABILITIES_DIR` — capability files root (default: `.gorombo/capabilities/`)
+
+See `docs/architecture/capability-system.md` for full architecture documentation.
 
 ## Local Chat
 
