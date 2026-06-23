@@ -1,0 +1,21 @@
+README.md
+  s_2a32831ed9b5ea::t_6fcb44a5f69635 361-374,377-379
+  s_2a32831ed9b5ea::t_ab28dcc1fc4ce8 425
+  s_2a32831ed9b5ea::t_be8d8e1d93d566 1049-1050
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "057ac8945c471ef5e15e1e1db863f8e9a9ef53a8",
+  "prompts": {},
+  "sessions": {
+    "s_2a32831ed9b5ea": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10a36f13effe9SN8QhAWqs1XZM",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
