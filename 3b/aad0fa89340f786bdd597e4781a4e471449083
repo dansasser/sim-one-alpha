@@ -1,0 +1,25 @@
+pnpm-workspace.yaml
+  s_2a85b2e1f110e1::t_5de7711ae36219 3
+sim-one-cli/package.json
+  s_2a85b2e1f110e1::t_b6795a1325dc61 2-6
+scripts/build-prod.mjs
+  s_2a85b2e1f110e1::t_7a13e77234a97f 120
+sim-one-cli/src/cli.tsx
+  s_2a85b2e1f110e1::t_3616ef78164fd5 9-155
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "3baad0fa89340f786bdd597e4781a4e471449083",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
