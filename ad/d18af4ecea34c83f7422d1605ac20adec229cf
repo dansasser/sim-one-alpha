@@ -1,0 +1,46 @@
+src/capabilities/skill-materializer.ts
+  s_2a85b2e1f110e1::t_d2a06a18eabe27 1-85
+src/capabilities/types.ts
+  s_2a85b2e1f110e1::t_472e2762064c2c 1-41
+package.json
+  s_2a85b2e1f110e1::t_f2d3b5fa1d14f5 29-34
+docs/architecture/gorombo-flue-map.md
+  s_2a85b2e1f110e1::t_01572559a525ae 207-221
+  s_2a85b2e1f110e1::t_c52bf67e76783e 14
+src/capabilities/index.ts
+  s_2a85b2e1f110e1::t_5120f034bdfaf2 1-20
+src/capabilities/mcp-broker.ts
+  s_2a85b2e1f110e1::t_36041fad3fed24 1-49
+src/capabilities/capability-store.ts
+  s_2a85b2e1f110e1::t_42a56813cde5cf 3
+  s_2a85b2e1f110e1::t_d17ea908556d96 1-2,4-49,51-176
+  s_2a85b2e1f110e1::t_a3e343da340161 50
+src/agents/orchestrator.ts
+  s_2a85b2e1f110e1::t_fc2da90d3ee504 50-53
+  s_2a85b2e1f110e1::t_8e5c7d6f6c954a 74-115,120-121
+  s_2a85b2e1f110e1::t_a7e01d4903c3c3 167-187
+docs/architecture/capability-system.md
+  s_2a85b2e1f110e1::t_f9f68980e8acf6 1-127
+scripts/capability-admin.mjs
+  s_2a85b2e1f110e1::t_0ca352506cb6c6 92,95-106,111-121,137-140,142-146
+  s_2a85b2e1f110e1::t_3973de4d710144 1,3-91,93-94,107-110,122-136,141,147-326
+  s_2a85b2e1f110e1::t_791833ee0ae5ea 2
+src/capabilities/capability-loader.ts
+  s_2a85b2e1f110e1::t_a2ce6b84434946 1-50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "add18af4ecea34c83f7422d1605ac20adec229cf",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
