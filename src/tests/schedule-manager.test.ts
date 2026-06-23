@@ -28,9 +28,13 @@ function tempDbPath(): string {
 function makeManager({
   dispatch,
   observeTimeoutMs = 5000,
+  backoffMs = [10, 20],
+  maxAttempts = 2,
 }: {
   dispatch: (args: DispatchScheduleArgs) => Promise<ScheduleDispatchResult>;
   observeTimeoutMs?: number;
+  backoffMs?: number[];
+  maxAttempts?: number;
 }): { manager: ScheduleManager; emit: (event: FlueEvent) => void; path: string } {
   const path = tempDbPath();
   const store = new ScheduleStore(path);
@@ -42,7 +46,7 @@ function makeManager({
     };
   };
   const config = resolveScheduleConfig(
-    { maxConcurrentRuns: 2, retry: { maxAttempts: 2, backoffMs: [10, 20], retryOn: ['network'] } },
+    { maxConcurrentRuns: 2, retry: { maxAttempts, backoffMs, retryOn: ['network'] } },
     {},
   );
   const manager = new ScheduleManager({
@@ -409,6 +413,91 @@ test('manager fire: null per-schedule maxAttempts falls back to global config', 
     emit({ type: 'agent_end', instanceId } as FlueEvent);
     await wait(90);
     assert.equal(manager.store.getRun(runId)?.attempt, 1, 'global maxAttempts=2 allows retry 0->1');
+  } finally {
+    manager.stop();
+    rmSync(path, { force: true });
+  }
+});
+
+test('manager: deleting a schedule cancels its pending retry (no orphaned retry dispatch)', async () => {
+  let dispatchCount = 0;
+  const fakeDispatch = async (args: DispatchScheduleArgs): Promise<ScheduleDispatchResult> => {
+    dispatchCount += 1;
+    return { dispatchId: `d-${dispatchCount}`, acceptedAt: new Date().toISOString(), instanceId: args.instanceId };
+  };
+  // long backoff so the retry timer is still pending when we delete
+  const { manager, emit, path } = makeManager({ dispatch: fakeDispatch, backoffMs: [1000, 1000], maxAttempts: 3 });
+  try {
+    manager.store.upsert({ slug: 'del-retry', kind: 'every', schedule: '10m', prompt: 'x' });
+    const { runId } = manager.fireNow('del-retry')!;
+    await wait(50);
+    const instanceId = manager.store.getRun(runId)!.instanceId;
+    // transient network error -> retry scheduled with a 1000ms backoff
+    emit({ type: 'turn', isError: true, error: 'fetch failed: network down', instanceId } as FlueEvent);
+    emit({ type: 'agent_end', instanceId } as FlueEvent);
+    await wait(30);
+    assert.equal(dispatchCount, 1, 'only the initial dispatch so far');
+    assert.ok(manager['cronJobs'] !== undefined, 'sanity');
+    // delete the schedule while the retry backoff timer is still pending
+    assert.equal(manager.deleteSchedule('del-retry'), true);
+    assert.equal(manager.store.getBySlug('del-retry'), null, 'schedule deleted');
+    // wait well past the 1000ms backoff; the cancelled retry must NOT dispatch
+    await wait(1150);
+    assert.equal(dispatchCount, 1, 'no orphaned retry dispatch after delete');
+  } finally {
+    manager.stop();
+    rmSync(path, { force: true });
+  }
+});
+
+test('manager: pausing a schedule cancels its pending retry', async () => {
+  let dispatchCount = 0;
+  const fakeDispatch = async (args: DispatchScheduleArgs): Promise<ScheduleDispatchResult> => {
+    dispatchCount += 1;
+    return { dispatchId: `d-${dispatchCount}`, acceptedAt: new Date().toISOString(), instanceId: args.instanceId };
+  };
+  const { manager, emit, path } = makeManager({ dispatch: fakeDispatch, backoffMs: [1000, 1000], maxAttempts: 3 });
+  try {
+    manager.store.upsert({ slug: 'pause-retry', kind: 'every', schedule: '10m', prompt: 'x' });
+    const { runId } = manager.fireNow('pause-retry')!;
+    await wait(50);
+    const instanceId = manager.store.getRun(runId)!.instanceId;
+    emit({ type: 'turn', isError: true, error: 'fetch failed: network down', instanceId } as FlueEvent);
+    emit({ type: 'agent_end', instanceId } as FlueEvent);
+    await wait(30);
+    assert.equal(dispatchCount, 1);
+    // pause (disable + syncCron) while the retry backoff is pending
+    const paused = manager.store.setEnabled('pause-retry', false);
+    manager.syncCron(paused!);
+    await wait(1150);
+    assert.equal(dispatchCount, 1, 'no orphaned retry dispatch after pause');
+    // schedule row still present (paused, not deleted)
+    assert.ok(manager.store.getBySlug('pause-retry'), 'paused schedule row retained');
+  } finally {
+    manager.stop();
+    rmSync(path, { force: true });
+  }
+});
+
+test('manager: stop() cancels pending retry timers (no retry after shutdown)', async () => {
+  let dispatchCount = 0;
+  const fakeDispatch = async (args: DispatchScheduleArgs): Promise<ScheduleDispatchResult> => {
+    dispatchCount += 1;
+    return { dispatchId: `d-${dispatchCount}`, acceptedAt: new Date().toISOString(), instanceId: args.instanceId };
+  };
+  const { manager, emit, path } = makeManager({ dispatch: fakeDispatch, backoffMs: [1000, 1000], maxAttempts: 3 });
+  try {
+    manager.store.upsert({ slug: 'stop-retry', kind: 'every', schedule: '10m', prompt: 'x' });
+    const { runId } = manager.fireNow('stop-retry')!;
+    await wait(50);
+    const instanceId = manager.store.getRun(runId)!.instanceId;
+    emit({ type: 'turn', isError: true, error: 'fetch failed: network down', instanceId } as FlueEvent);
+    emit({ type: 'agent_end', instanceId } as FlueEvent);
+    await wait(30);
+    assert.equal(dispatchCount, 1);
+    manager.stop(); // shutdown while retry backoff is pending
+    await wait(1150);
+    assert.equal(dispatchCount, 1, 'no orphaned retry dispatch after stop');
   } finally {
     manager.stop();
     rmSync(path, { force: true });

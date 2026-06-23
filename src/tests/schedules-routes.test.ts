@@ -263,3 +263,27 @@ test('schedules route: runs history + one-run detail + 404s', async () => {
     }
   });
 });
+test('schedules route: maxAttempts must be a positive integer', async () => {
+  await withApiSecret(SECRET, async () => {
+    const { app, cleanup } = makeAppWithManager();
+    try {
+      for (const bad of [0, -1, 2.5, 1.5]) {
+        const res = await app.request('/api/schedules', {
+          method: 'POST',
+          headers: headers(),
+          body: JSON.stringify({ slug: 'm', kind: 'cron', schedule: '0 9 * * *', prompt: 'p', maxAttempts: bad }),
+        });
+        assert.equal(res.status, 400, `maxAttempts=${bad} rejected with 400`);
+      }
+      // valid positive integer accepted
+      const ok = await app.request('/api/schedules', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ slug: 'good-max', kind: 'cron', schedule: '0 9 * * *', prompt: 'p', maxAttempts: 3 }),
+      });
+      assert.equal(ok.status, 201, 'maxAttempts=3 accepted');
+    } finally {
+      cleanup();
+    }
+  });
+});

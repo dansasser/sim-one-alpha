@@ -82,7 +82,10 @@ function parseDefinition(body: unknown): { ok: true; def: ScheduleDefinition } |
   if (typeof body.deleteAfterRun === 'boolean') {
     def.deleteAfterRun = body.deleteAfterRun;
   }
-  if (typeof body.maxAttempts === 'number') {
+  if (body.maxAttempts !== undefined) {
+    if (typeof body.maxAttempts !== 'number' || !Number.isInteger(body.maxAttempts) || body.maxAttempts < 1) {
+      return { ok: false, status: 400, body: { error: 'maxAttempts must be a positive integer.' } };
+    }
     def.maxAttempts = body.maxAttempts;
   }
   return { ok: true, def };

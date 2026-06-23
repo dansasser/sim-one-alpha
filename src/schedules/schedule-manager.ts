@@ -82,6 +82,7 @@ export class ScheduleManager {
 
   private readonly cronJobs = new Map<string, Cron>(); // scheduleId -> Cron
   private readonly pending = new Map<string, PendingObservation>(); // instanceId -> pending
+  private readonly retryTimers = new Map<string, Set<ReturnType<typeof setTimeout>>>(); // scheduleId -> pending retry timers
   private readonly fireQueue: Array<() => void> = [];
   private inFlight = 0;
   private unsubscribeObserve?: () => void;
@@ -120,6 +121,14 @@ export class ScheduleManager {
       cron.stop();
     }
     this.cronJobs.clear();
+    // Clear all pending retry backoff timers so the process does not stay alive
+    // or wake on an orphaned retry after shutdown.
+    for (const set of this.retryTimers.values()) {
+      for (const timer of set) {
+        clearTimeout(timer);
+      }
+    }
+    this.retryTimers.clear();
     this.unsubscribeObserve?.();
     this.unsubscribeObserve = undefined;
     // Terminal any still-pending observations as 'timeout' (the underlying Flue
@@ -141,6 +150,9 @@ export class ScheduleManager {
         existing.stop();
         this.cronJobs.delete(record.id);
       }
+      // Pausing/disabling also cancels pending retries so a backoff timer does
+      // not fire a retry for a schedule that is no longer enabled.
+      this.cancelRetriesFor(record.id);
       this.store.setNextFire(record.slug, null);
       return;
     }
@@ -200,6 +212,9 @@ export class ScheduleManager {
     if (!record) {
       return false;
     }
+    // Cancel any pending retry backoff timers so an orphaned retry does not
+    // dispatch a turn for a schedule that has just been deleted.
+    this.cancelRetriesFor(record.id);
     const cron = this.cronJobs.get(record.id);
     if (cron) {
       cron.stop();
@@ -237,6 +252,27 @@ export class ScheduleManager {
       clearTimeout(pending.timer);
       this.pending.delete(instanceId);
       pending.resolve({ status: 'timeout', error: 'cancelled' });
+    }
+  }
+
+  /** Track a pending retry backoff timer so it can be cancelled on delete/pause/shutdown. */
+  private addRetryTimer(scheduleId: string, timer: ReturnType<typeof setTimeout>): void {
+    let set = this.retryTimers.get(scheduleId);
+    if (!set) {
+      set = new Set();
+      this.retryTimers.set(scheduleId, set);
+    }
+    set.add(timer);
+  }
+
+  /** Cancel all pending retry timers for a schedule (delete/pause). */
+  private cancelRetriesFor(scheduleId: string): void {
+    const set = this.retryTimers.get(scheduleId);
+    if (set) {
+      for (const timer of set) {
+        clearTimeout(timer);
+      }
+      this.retryTimers.delete(scheduleId);
     }
   }
 
@@ -318,11 +354,14 @@ export class ScheduleManager {
         this.store.recordRunRetry(runId, retryInstanceId);
         this.emitEvent('schedule.error', { scheduleId: record.id, runId, instanceId, attempt, reason: outcome.error ?? 'transient error', retrying: true });
         const delay = backoffForAttempt(this.config.retry, attempt);
-        setTimeout(() => {
+        const timer: ReturnType<typeof setTimeout> = setTimeout(() => {
+          // Remove the fired timer from the tracked set, then retry.
+          this.retryTimers.get(record.id)?.delete(timer);
           this.retryFire(record, runId, retryInstanceId, nextAttempt).catch((error) => {
             this.emitScheduleError(record, `retry fire error: ${errorMessage(error)}`);
           });
         }, delay);
+        this.addRetryTimer(record.id, timer);
         // No maybeAutoDelete here — a retry is pending; auto-deleting now would
         // cascade-delete run history and lose retry tracking (esp. for `at`).
       } else {
@@ -374,6 +413,12 @@ export class ScheduleManager {
   /** Retry fire: re-admit dispatch with a unique retry instanceId, through the concurrency gate. */
   private async retryFire(record: ScheduleRecord, runId: string, instanceId: string, attempt: number): Promise<void> {
     if (this.shuttingDown) {
+      return;
+    }
+    // Defense-in-depth: if the schedule was deleted (or its run cascaded away)
+    // while the retry backoff timer was pending, do not dispatch a turn for it.
+    if (!this.store.getById(record.id)) {
+      this.cancelRetriesFor(record.id);
       return;
     }
     if (!(await this.acquireConcurrency())) {
