@@ -1,0 +1,30 @@
+src/db.ts
+  s_2a85b2e1f110e1::t_6f38450550e246 3,7-17
+src/config/gorombo-config.ts
+  s_2a85b2e1f110e1::t_73bed4c934872d 27
+  s_2a85b2e1f110e1::t_8dca510fe94737 41-52
+src/capabilities/capability-config-reconcile.ts
+  s_2a85b2e1f110e1::t_0035f268ed2172 1-52
+src/config/gorombo.config.json
+  s_2a85b2e1f110e1::t_5dcb8237b69b29 20-21
+src/capabilities/index.ts
+  s_2a85b2e1f110e1::t_db366af7ab1169 24-26
+docs/architecture/capability-system.md
+  s_2a85b2e1f110e1::t_1e10aedd54402d 125-145
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "6af4fcf8e39d446751dc6e95bc79732e2c1194f4",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
