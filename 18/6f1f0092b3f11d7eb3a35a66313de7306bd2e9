@@ -1,0 +1,24 @@
+docs/architecture/gorombo-flue-map.md
+  s_50c513bbdc400c::t_23f5cbba6f429e 29
+  s_50c513bbdc400c::t_3e59253f0ad4d4 91-97
+src/workspace/HEARTBEAT.md
+  s_50c513bbdc400c::t_7ebb829bd01a3c 9,15,17,19-32
+docs/architecture/schedules-system.md
+  s_50c513bbdc400c::t_4d3de256585c09 1-110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "186f1f0092b3f11d7eb3a35a66313de7306bd2e9",
+  "prompts": {},
+  "sessions": {
+    "s_50c513bbdc400c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed5d8559-9b53-4db5-9338-31382d2362d7",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
