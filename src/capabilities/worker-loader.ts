@@ -53,10 +53,20 @@ export async function loadUserWorkers(
 
       if (existsSync(workspaceDir)) {
         try {
-          workspaceInstructions = composeWorkspaceInstructions({
-            workspaceDir,
-            title: `Worker ${record.id} Workspace`,
-          });
+          // Only load workspace files that actually exist — composeWorkspaceInstructions
+          // throws on missing files, so we filter to existing ones first.
+          const allWorkspaceFiles = [
+            'SECURITY.md', 'AGENTS.md', 'IDENTITY.md', 'SOUL.md',
+            'USER.md', 'TOOLS.md', 'MEMORY.md', 'HEARTBEAT.md',
+          ] as const;
+          const existingFiles = allWorkspaceFiles.filter((f) => existsSync(resolve(workspaceDir, f)));
+          if (existingFiles.length > 0) {
+            workspaceInstructions = composeWorkspaceInstructions({
+              workspaceDir,
+              title: `Worker ${record.id} Workspace`,
+              files: existingFiles,
+            });
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           console.error(`[capabilities] Worker ${record.id}: failed to load workspace files: ${message}`);

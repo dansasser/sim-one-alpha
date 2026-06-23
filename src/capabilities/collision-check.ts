@@ -19,7 +19,9 @@ export function checkNameCollision(kind: CapabilityKind, id: string): CollisionR
 
   const store = createCapabilityStore({});
   try {
-    const existing = store.get(kind, id);
+    // Check for existing capability with the same id (any kind — cross-kind collision)
+    const all = store.list();
+    const existing = all.find((cap) => cap.id === id);
     if (existing) {
       return {
         collision: true,
