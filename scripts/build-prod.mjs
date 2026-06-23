@@ -75,7 +75,7 @@ server.on('exit', (code, signal) => {
   clearInterval(readinessCheck);
   clearTimeout(readinessTimeout);
   console.error(`Server exited before becoming ready (code=${code}, signal=${signal}).`);
-  cleanup(code ?? 1);
+  cleanup(code === 0 ? 1 : (code ?? 1));
 });
 
 server.on('error', (err) => {
