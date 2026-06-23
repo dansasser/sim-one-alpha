@@ -1,0 +1,31 @@
+src/tests/schedules.test.ts
+  s_50c513bbdc400c::t_1d8c945a52052d 1-9,11-169
+  s_50c513bbdc400c::t_3164d34f4c9f12 10
+src/tests/schedules-config.test.ts
+  s_50c513bbdc400c::t_60c3df7da72291 1-111
+src/tests/schedules-routes.test.ts
+  s_50c513bbdc400c::t_4e007db31f3f43 1-265
+src/tests/schedules-store.test.ts
+  s_50c513bbdc400c::t_e3cc65348a5c8f 1-120,122-230,233,239-276
+  s_50c513bbdc400c::t_8288db025140d2 121
+  s_50c513bbdc400c::t_ab5dda2595b99f 231-232,234-238
+src/tests/schedule-manager.test.ts
+  s_50c513bbdc400c::t_6e730df8492850 1-231,234,236-268
+  s_50c513bbdc400c::t_e1c054025ff69b 232-233,235
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "554872e5740b3ab6928de0929c05d7485a6384a0",
+  "prompts": {},
+  "sessions": {
+    "s_50c513bbdc400c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed5d8559-9b53-4db5-9338-31382d2362d7",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
