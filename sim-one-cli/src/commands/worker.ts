@@ -1,4 +1,5 @@
 import { existsSync, rmSync } from 'node:fs';
+import { checkNameCollision } from '../../../src/capabilities/index.js';
 import type { CapabilityRecord } from '../../../src/capabilities/index.js';
 import {
   assertSafeCapabilityId,
@@ -25,6 +26,12 @@ export function addWorker(
   version?: string,
 ): void {
   assertSafeCapabilityId(id);
+
+  const collision = checkNameCollision(KIND, id);
+  if (collision.collision) {
+    console.error(`Error: ${collision.message}`);
+    process.exit(1);
+  }
 
   const { fetchedSource, sourceRef } = fetchSource(source, KIND, id);
   const now = new Date().toISOString();

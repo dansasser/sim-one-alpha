@@ -24,3 +24,7 @@ export { loadUserWorkers } from './worker-loader.js';
 export type { WorkerLoaderResult } from './worker-loader.js';
 export { reconcileCapabilitiesFromConfig } from './capability-config-reconcile.js';
 export type { ReconcileResult } from './capability-config-reconcile.js';
+export { loadBuiltinRegistry, isBuiltinName, getBuiltinNames } from './builtin-registry.js';
+export type { BuiltinRegistry } from './builtin-registry.js';
+export { checkNameCollision } from './collision-check.js';
+export type { CollisionResult } from './collision-check.js';

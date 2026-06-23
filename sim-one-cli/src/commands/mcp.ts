@@ -1,3 +1,6 @@
+import {
+  checkNameCollision,
+} from '../../../src/capabilities/index.js';
 import type {
   CapabilityConfig,
   CapabilityRecord,
@@ -23,6 +26,12 @@ export function addMcp(
   enable = false,
 ): void {
   assertSafeCapabilityId(id);
+
+  const collision = checkNameCollision(KIND, id);
+  if (collision.collision) {
+    console.error(`Error: ${collision.message}`);
+    process.exit(1);
+  }
 
   const config: CapabilityConfig = {
     mcpUrl: url,

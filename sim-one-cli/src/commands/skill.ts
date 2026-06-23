@@ -3,6 +3,7 @@ import { dirname, isAbsolute, resolve } from 'node:path';
 import { execSync } from 'node:child_process';
 import {
   resolveCapabilityPath,
+  checkNameCollision,
 } from '../../../src/capabilities/index.js';
 import type { CapabilityRecord, CapabilitySource, CapabilityStore } from '../../../src/capabilities/index.js';
 import {
@@ -29,6 +30,12 @@ export function addSkill(
   version?: string,
 ): void {
   assertSafeCapabilityId(id);
+
+  const collision = checkNameCollision(KIND, id);
+  if (collision.collision) {
+    console.error(`Error: ${collision.message}`);
+    process.exit(1);
+  }
 
   const { fetchedSource, sourceRef } = fetchSource(source, KIND, id);
   const now = new Date().toISOString();

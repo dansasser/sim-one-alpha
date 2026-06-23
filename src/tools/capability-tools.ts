@@ -2,6 +2,7 @@ import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { createCapabilityStore } from '../capabilities/capability-store.js';
 import { materializeCapability } from '../capabilities/skill-materializer.js';
+import { checkNameCollision } from '../capabilities/collision-check.js';
 import type { CapabilityKind, CapabilityRecord, CapabilitySource } from '../capabilities/types.js';
 
 const CAPABILITY_KIND_VALUES = ['skill', 'tool', 'worker', 'mcp'] as const;
@@ -27,6 +28,11 @@ function insertCapability(
   autoEnable: boolean,
   materialize = false,
 ): string {
+  const collision = checkNameCollision(kind, id);
+  if (collision.collision) {
+    return collision.message ?? `Name '${id}' conflicts with an existing capability.`;
+  }
+
   const store = createCapabilityStore({});
   try {
     const record: CapabilityRecord = {

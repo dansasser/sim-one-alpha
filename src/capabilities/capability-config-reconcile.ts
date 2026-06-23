@@ -1,28 +1,37 @@
 import type { GoromboCapabilityConfig } from '../config/gorombo-config.js';
 import { createCapabilityStore } from './capability-store.js';
+import { isBuiltinName } from './builtin-registry.js';
 import type { CapabilityRecord } from './types.js';
 
 export interface ReconcileResult {
   inserted: string[];
   skipped: string[];
+  conflicts: string[];
 }
 
 export function reconcileCapabilitiesFromConfig(
   configCapabilities: GoromboCapabilityConfig[] | undefined,
 ): ReconcileResult {
   if (!configCapabilities || !Array.isArray(configCapabilities) || configCapabilities.length === 0) {
-    return { inserted: [], skipped: [] };
+    return { inserted: [], skipped: [], conflicts: [] };
   }
 
   const store = createCapabilityStore({});
   const inserted: string[] = [];
   const skipped: string[] = [];
+  const conflicts: string[] = [];
 
   try {
     for (const cap of configCapabilities) {
       const existing = store.get(cap.kind, cap.id);
       if (existing) {
         skipped.push(cap.id);
+        continue;
+      }
+
+      if (isBuiltinName(cap.kind, cap.id)) {
+        conflicts.push(cap.id);
+        console.warn(`[capabilities] Config entry '${cap.id}' conflicts with built-in ${cap.kind} — skipped.`);
         continue;
       }
 
@@ -48,5 +57,5 @@ export function reconcileCapabilitiesFromConfig(
     store.close();
   }
 
-  return { inserted, skipped };
+  return { inserted, skipped, conflicts };
 }
