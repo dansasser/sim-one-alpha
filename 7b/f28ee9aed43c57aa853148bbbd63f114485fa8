@@ -1,0 +1,19 @@
+src/capabilities/worker-loader.ts
+  s_2a85b2e1f110e1::t_73dc60411d700b 2-3,6,26-27,31,35,39,44,48-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.11",
+  "base_commit_sha": "7bf28ee9aed43c57aa853148bbbd63f114485fa8",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
