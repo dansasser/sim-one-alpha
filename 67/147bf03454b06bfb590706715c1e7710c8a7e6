@@ -1,0 +1,47 @@
+src/tests/schedule-manager.test.ts
+  s_50c513bbdc400c::t_0622042f9dcb9c 332-334
+src/workers/coding-worker/tools/coding-schedule-tools.ts
+  s_50c513bbdc400c::t_caee68db2d2685 24-25
+  s_50c513bbdc400c::t_793b8fdfc11c29 56-78
+  s_50c513bbdc400c::t_6780b9a8904cee 112,118,122-126,130,137,141-145,149,156,167-171,181,188,192-197,203,207-208,213,217-220,222,227,231-235,240,245,252-255,257
+src/schedules/schedule-config.ts
+  s_50c513bbdc400c::t_f42c0e2ce1d65f 132-148,152-153,164-165,167-169,171-172,174,190-197,204-230,232-250,252-255
+src/schedules/schedule-telemetry.ts
+  s_50c513bbdc400c::t_678f4ee0956a51 23
+  s_50c513bbdc400c::t_74ac2cb10cf7ba 92-93,95,103-117
+src/tests/coding-schedule-tools.test.ts
+  s_50c513bbdc400c::t_8f05a907c5ae37 1-122
+src/schedules/schedule-manager.ts
+  s_50c513bbdc400c::t_199915e52b869a 193-205,207-211,213-214,218,222-326,328
+  s_50c513bbdc400c::t_0b0f337c703872 331-335,359,361,365-366,370-372,375-377
+src/tools/schedule-tools.ts
+  s_50c513bbdc400c::t_736b4c1602e132 23
+  s_50c513bbdc400c::t_81fca818b6fb17 75
+  s_50c513bbdc400c::t_a183f207047d84 93,112,142,150,158
+src/schedules/schedule-store.ts
+  s_50c513bbdc400c::t_29474b8cd9c2fd 369-379
+src/app.ts
+  s_50c513bbdc400c::t_36971a67ef1a29 23
+src/routes/schedules.ts
+  s_50c513bbdc400c::t_18ad3b5b4d62f3 207-209
+  s_50c513bbdc400c::t_f1c53d2adda837 243-247
+src/agents/orchestrator.ts
+  s_50c513bbdc400c::t_63e13d5f001c03 36-44
+  s_50c513bbdc400c::t_41a18f604a0e80 98-106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "67147bf03454b06bfb590706715c1e7710c8a7e6",
+  "prompts": {},
+  "sessions": {
+    "s_50c513bbdc400c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed5d8559-9b53-4db5-9338-31382d2362d7",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
