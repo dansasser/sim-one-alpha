@@ -133,7 +133,7 @@ function extractRegistryIds(content) {
  */
 function extractImportedSkills(content) {
   const skills = [];
-  const importRegex = /import\s+[^;]*?with\s*\{\s*type:\s*['"]skill['"]\s*\}[^;]*?from\s*['"]([^'"]+)['"]/g;
+  const importRegex = /import\s+[^;]*?from\s*['"]([^'"]+)['"]\s*with\s*\{\s*type:\s*['"]skill['"]\s*\}/g;
   let match;
   while ((match = importRegex.exec(content)) !== null) {
     const importPath = match[1];
@@ -191,7 +191,7 @@ function main() {
       const workerDir = join(WORKER_ROOT, entry.name);
       for (const file of collectTsFiles(workerDir)) {
         const relative = file.slice(workerDir.length + 1);
-        if (relative.startsWith('subagents/')) continue;
+        if (relative.split('/').includes('subagents')) continue;
         const content = safeReadFile(file);
         if (!content) continue;
         for (const name of extractAgentProfileNames(content)) {

@@ -12,6 +12,7 @@ export {
   loadUserCapabilities,
   resolveCapabilitiesDir,
   resolveCapabilityPath,
+  assertSafeCapabilityId,
 } from './capability-loader.js';
 export type { LoadedUserCapabilities, CapabilityLoaderOptions } from './capability-loader.js';
 export { materializeCapability } from './skill-materializer.js';

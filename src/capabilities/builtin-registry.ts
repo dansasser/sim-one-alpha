@@ -22,9 +22,9 @@ export function loadBuiltinRegistry(): BuiltinRegistry {
   const registryPath = resolveBuiltinRegistryPath();
 
   if (!existsSync(registryPath)) {
-    console.warn(`[capabilities] Builtin registry not found at ${registryPath} — collision detection disabled until build runs generate-builtin-registry.mjs`);
-    cachedRegistry = { tools: [], subagents: [], skills: [], mcpServers: [] };
-    return cachedRegistry;
+    throw new Error(
+      `Builtin registry not found at ${registryPath}. Run 'pnpm run build' (which includes generate-builtin-registry.mjs) to generate it. Collision detection cannot work without the registry.`,
+    );
   }
 
   try {
@@ -37,9 +37,9 @@ export function loadBuiltinRegistry(): BuiltinRegistry {
       mcpServers: Array.isArray(parsed.mcpServers) ? parsed.mcpServers : [],
     };
     return cachedRegistry;
-  } catch {
-    cachedRegistry = { tools: [], subagents: [], skills: [], mcpServers: [] };
-    return cachedRegistry;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Builtin registry at ${registryPath} is corrupted or unreadable: ${message}`);
   }
 }
 

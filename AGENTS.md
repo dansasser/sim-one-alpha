@@ -585,6 +585,7 @@ source ~/.cargo/env 2>/dev/null
 **curl 400 known issue:** `curl`/`wget` to Flue routes return 400 with empty body when `x-api-secret` header is long (48+ chars). This is a `@hono/node-server` issue, not our bug. Use Node's `fetch()` or `@flue/sdk` for testing agent endpoints.
 
 ### Worktree setup checklist (do ALL before working)
+
 ```sh
 export PATH="/root/.nvm/versions/node/v22.22.3/bin:$PATH"
 source ~/.cargo/env 2>/dev/null

@@ -23,7 +23,8 @@ export function reconcileCapabilitiesFromConfig(
 
   try {
     for (const cap of configCapabilities) {
-      const existing = store.get(cap.kind, cap.id);
+      const allExisting = store.list();
+      const existing = allExisting.find((c) => c.id === cap.id);
       if (existing) {
         skipped.push(cap.id);
         continue;
@@ -31,7 +32,7 @@ export function reconcileCapabilitiesFromConfig(
 
       if (isBuiltinName(cap.kind, cap.id)) {
         conflicts.push(cap.id);
-        console.warn(`[capabilities] Config entry '${cap.id}' conflicts with built-in ${cap.kind} — skipped.`);
+        console.warn(`[capabilities] Config entry '${cap.id}' conflicts with a built-in capability — skipped.`);
         continue;
       }
 

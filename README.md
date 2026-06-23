@@ -734,7 +734,7 @@ MCP servers don't have a source directory — they're remote endpoints. You add 
 sim-one mcp add my-mcp "My MCP Server" "Description" \
   --url https://mcp.example.com/mcp \
   --transport streamable-http \
-  --token-env MY_MCP_TOKEN \
+  --token-env MCP_TOKEN \
   --enable
 ```
 

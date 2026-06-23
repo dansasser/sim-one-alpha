@@ -114,10 +114,12 @@ export default createAgent(async ({ env }) => {
   const builtInSubagents = [codingWorker, researcher];
 
   const userCapabilities = loadUserCapabilitiesFromStore(env);
-  const builtinMcpResult = await connectBuiltinMcpServers();
-  const mcpResult = await connectUserMcpServers(userCapabilities.mcp, env);
-  const toolResult = await loadUserTools(userCapabilities.tools, env);
-  const workerResult = await loadUserWorkers(userCapabilities.workers, env);
+  const [builtinMcpResult, mcpResult, toolResult, workerResult] = await Promise.all([
+    connectBuiltinMcpServers(),
+    connectUserMcpServers(userCapabilities.mcp, env),
+    loadUserTools(userCapabilities.tools, env),
+    loadUserWorkers(userCapabilities.workers, env),
+  ]);
   const userTools = [...builtinMcpResult.tools, ...mcpResult.tools, ...toolResult.tools];
   const userSubagents: typeof builtInSubagents = [...workerResult.profiles];
 

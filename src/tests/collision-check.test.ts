@@ -1,15 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { rmSync, mkdirSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { rmSync, mkdirSync, mkdtempSync, existsSync, writeFileSync } from 'node:fs';
+import { resolve, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { checkNameCollision } from '../capabilities/collision-check.js';
 import { createCapabilityStore } from '../capabilities/capability-store.js';
 import type { CapabilityRecord } from '../capabilities/types.js';
 
 let tempDir: string;
+let originalCwd: string;
 
 function freshDbPath(): string {
-  return resolve(tempDir, `collision-test-${Date.now()}-${Math.random().toString(36).slice(2)}.sqlite`);
+  return resolve(tempDir, `collision-${Date.now()}-${Math.random().toString(36).slice(2)}.sqlite`);
 }
 
 function makeRecord(overrides: Partial<CapabilityRecord> = {}): CapabilityRecord {
@@ -31,14 +33,29 @@ function makeRecord(overrides: Partial<CapabilityRecord> = {}): CapabilityRecord
   };
 }
 
+function setupFixtureRegistry() {
+  const distDir = resolve(tempDir, 'dist');
+  mkdirSync(distDir, { recursive: true });
+  writeFileSync(
+    resolve(distDir, 'builtin-capabilities.json'),
+    JSON.stringify({
+      tools: ['load_protocols', 'retrieve_memory', 'test_echo'],
+      subagents: ['coding-worker', 'researcher'],
+      skills: ['chat.route-basic'],
+      mcpServers: ['astro-docs'],
+    }),
+  );
+}
+
 test('collision-check: no collision for a new valid name', () => {
+  process.env.GOROMBO_CAPABILITY_DB_PATH = freshDbPath();
   const result = checkNameCollision('skill', 'totally-new-name-xyz');
   assert.equal(result.collision, false);
   assert.equal(result.source, null);
   assert.equal(result.message, undefined);
 });
 
-test('collision-check: detects existing capability in SQLite', () => {
+test('collision-check: detects existing capability in SQLite (same kind)', () => {
   const dbPath = freshDbPath();
   process.env.GOROMBO_CAPABILITY_DB_PATH = dbPath;
   const store = createCapabilityStore({ dbPath });
@@ -64,43 +81,46 @@ test('collision-check: detects cross-kind existing capability', () => {
     store.close();
   }
 
-  // Adding as skill should still collide because id is the same
   const result = checkNameCollision('skill', 'cross-kind-test');
   assert.equal(result.collision, true);
   assert.equal(result.source, 'existing');
+  assert.ok(result.message?.includes('already exists'), `message should include 'already exists'`);
 });
 
-test('collision-check: detects builtin name (when registry is available)', () => {
+test('collision-check: detects builtin tool name (load_protocols)', () => {
+  process.env.GOROMBO_CAPABILITY_DB_PATH = freshDbPath();
   const result = checkNameCollision('skill', 'load_protocols');
-  // If builtin registry exists from a build, this should collide
-  // If not (no build run), it won't collide — both are acceptable in test env
-  if (result.collision && result.source === 'builtin') {
-    assert.ok(result.message?.includes('built-in'), `message should mention 'built-in', got: ${result.message}`);
-  }
+  assert.equal(result.collision, true);
+  assert.equal(result.source, 'builtin');
+  assert.ok(result.message?.includes('built-in'), `message should mention 'built-in', got: ${result.message}`);
 });
 
-test('collision-check: detects builtin subagent name (when registry is available)', () => {
+test('collision-check: detects builtin subagent name (coding-worker)', () => {
+  process.env.GOROMBO_CAPABILITY_DB_PATH = freshDbPath();
   const result = checkNameCollision('skill', 'coding-worker');
-  if (result.collision && result.source === 'builtin') {
-    assert.ok(result.message?.includes('built-in'), `message should mention 'built-in', got: ${result.message}`);
-  }
+  assert.equal(result.collision, true);
+  assert.equal(result.source, 'builtin');
+  assert.ok(result.message?.includes('built-in'), `message should mention 'built-in'`);
 });
 
-test('collision-check: detects builtin MCP name (when registry is available)', () => {
+test('collision-check: detects builtin MCP name (astro-docs)', () => {
+  process.env.GOROMBO_CAPABILITY_DB_PATH = freshDbPath();
   const result = checkNameCollision('mcp', 'astro-docs');
-  if (result.collision && result.source === 'builtin') {
-    assert.ok(result.message?.includes('built-in'), `message should mention 'built-in', got: ${result.message}`);
-  }
+  assert.equal(result.collision, true);
+  assert.equal(result.source, 'builtin');
+  assert.ok(result.message?.includes('built-in'), `message should mention 'built-in'`);
 });
 
 test.before(() => {
-  tempDir = resolve(process.cwd(), '.tmp', 'test-collision-check');
-  mkdirSync(tempDir, { recursive: true });
-  process.env.GOROMBO_CAPABILITY_DB_PATH = freshDbPath();
+  tempDir = mkdtempSync(join(tmpdir(), 'collision-check-test-'));
+  originalCwd = process.cwd();
+  setupFixtureRegistry();
+  process.chdir(tempDir);
 });
 
 test.after(() => {
   delete process.env.GOROMBO_CAPABILITY_DB_PATH;
+  process.chdir(originalCwd);
   if (existsSync(tempDir)) {
     rmSync(tempDir, { recursive: true, force: true });
   }

@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { resolveCapabilityPath } from './capability-loader.js';
 import { dynamicImport } from './dynamic-import.js';
-import { composeWorkspaceInstructions } from '../workspace-loader.js';
+import { composeWorkspaceInstructions, workspaceFileOrder } from '../workspace-loader.js';
 import type { CapabilityRecord } from './types.js';
 
 export interface WorkerLoaderResult {
@@ -51,36 +51,40 @@ export async function loadUserWorkers(
       const workspaceDir = resolve(dirname(modulePath), 'workspace');
       let workspaceInstructions: string | undefined;
 
-      if (existsSync(workspaceDir)) {
-        try {
-          // Only load workspace files that actually exist — composeWorkspaceInstructions
-          // throws on missing files, so we filter to existing ones first.
-          const allWorkspaceFiles = [
-            'SECURITY.md', 'AGENTS.md', 'IDENTITY.md', 'SOUL.md',
-            'USER.md', 'TOOLS.md', 'MEMORY.md', 'HEARTBEAT.md',
-          ] as const;
-          const existingFiles = allWorkspaceFiles.filter((f) => existsSync(resolve(workspaceDir, f)));
-          if (existingFiles.length > 0) {
-            workspaceInstructions = composeWorkspaceInstructions({
-              workspaceDir,
-              title: `Worker ${record.id} Workspace`,
-              files: existingFiles,
-            });
-          }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          console.error(`[capabilities] Worker ${record.id}: failed to load workspace files: ${message}`);
+      if (!existsSync(workspaceDir)) {
+        const message = `Worker ${record.id} has no workspace/ directory — all workers must have workspace persona files`;
+        errors.push({ id: record.id, error: message });
+        console.error(`[capabilities] Worker loader: ${message}`);
+        continue;
+      }
+
+      try {
+        const existingFiles = workspaceFileOrder.filter((f) => existsSync(resolve(workspaceDir, f)));
+        if (existingFiles.length === 0) {
+          const message = `Worker ${record.id} workspace/ directory exists but contains no recognized persona files`;
+          errors.push({ id: record.id, error: message });
+          console.error(`[capabilities] Worker loader: ${message}`);
+          continue;
         }
-      } else {
-        console.warn(`[capabilities] Worker ${record.id} has no workspace/ directory — all workers should have workspace persona files`);
+        workspaceInstructions = composeWorkspaceInstructions({
+          workspaceDir,
+          title: `Worker ${record.id} Workspace`,
+          files: existingFiles,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push({ id: record.id, error: `Failed to load workspace files: ${message}` });
+        console.error(`[capabilities] Worker ${record.id}: failed to load workspace files: ${message}`);
+        continue;
       }
 
       for (const profile of loadedProfiles) {
-        if (workspaceInstructions) {
-          const existingInstructions = profile.instructions ?? '';
-          profile.instructions = [workspaceInstructions, existingInstructions].filter(Boolean).join('\n\n');
-        }
-        profiles.push(profile);
+        const existingInstructions = profile.instructions ?? '';
+        const mergedInstructions = [workspaceInstructions, existingInstructions].filter(Boolean).join('\n\n');
+        profiles.push({
+          ...profile,
+          instructions: mergedInstructions,
+        });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

@@ -60,7 +60,7 @@ test('worker-loader: loads worker with workspace files', async () => {
   assert.equal(result.errors.length, 0, 'should have no errors');
 });
 
-test('worker-loader: loads worker without workspace (with warning)', async () => {
+test('worker-loader: fails closed when workspace is missing', async () => {
   const workerId = 'test-worker-no-ws';
   const workerDir = resolve(tempCapabilitiesDir, 'workers', workerId);
   mkdirSync(workerDir, { recursive: true });
@@ -79,9 +79,9 @@ test('worker-loader: loads worker without workspace (with warning)', async () =>
   const records = [makeWorkerRecord(workerId)];
   const result = await loadUserWorkers(records, { GOROMBO_CAPABILITIES_DIR: tempCapabilitiesDir });
 
-  assert.equal(result.profiles.length, 1, 'should still load 1 profile');
-  assert.equal(result.profiles[0].name, 'test-worker', 'profile name should match');
-  assert.equal(result.errors.length, 0, 'should have no errors (missing workspace is a warning, not an error)');
+  assert.equal(result.profiles.length, 0, 'should load 0 profiles (fail closed)');
+  assert.equal(result.errors.length, 1, 'should report 1 error');
+  assert.ok(result.errors[0].error.includes('workspace'), `error should mention workspace, got: ${result.errors[0].error}`);
 });
 
 test('worker-loader: reports error for invalid module', async () => {

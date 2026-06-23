@@ -66,7 +66,7 @@ function addKindCommands(program: Command, kind: 'skill' | 'tool' | 'worker'): v
     .option('--enable', `enable the ${kind} immediately`)
     .option('--version <ver>', 'pin to a specific version or git ref')
     .action((source: string, id: string, name: string, opts: { description?: string; enable?: boolean; version?: string }) => {
-      fns.add(source, id, name, opts.description ?? '', opts.enable ?? false, opts.version);
+      fns.add(source, id, name, opts.description ?? '', kind === 'skill' ? (opts.enable ?? true) : (opts.enable ?? false), opts.version);
     });
 
   cmd.command('list').description(`List all ${kind} capabilities`).action(() => fns.list());

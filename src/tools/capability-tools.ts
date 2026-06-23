@@ -28,6 +28,10 @@ function insertCapability(
   autoEnable: boolean,
   materialize = false,
 ): string {
+  if (!id || typeof id !== 'string' || id.trim().length === 0 || id.length > 128 || !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(id)) {
+    return `Invalid capability id '${id}'. Must be 1-128 chars, alphanumeric + underscore/hyphen, starting with alphanumeric.`;
+  }
+
   const collision = checkNameCollision(kind, id);
   if (collision.collision) {
     return collision.message ?? `Name '${id}' conflicts with an existing capability.`;
@@ -49,7 +53,11 @@ function insertCapability(
       updatedAt: now(),
       installedBy: 'agent',
     };
-    store.insert(record);
+    try {
+      store.insert(record);
+    } catch {
+      return `Name '${id}' already exists as a capability. Choose a different name.`;
+    }
 
     if (autoEnable || materialize) {
       try {

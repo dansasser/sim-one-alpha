@@ -1,6 +1,7 @@
-import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, resolve } from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import {
   resolveCapabilityPath,
   checkNameCollision,
@@ -159,7 +160,7 @@ export function fetchSource(
     sourceRef.startsWith('https://') ||
     sourceRef.startsWith('git@')
   ) {
-    execSync(`git clone --depth 1 ${shellQuote(sourceRef)} ${shellQuote(targetPath)}`, {
+    execFileSync('git', ['clone', '--depth', '1', sourceRef, targetPath], {
       stdio: 'pipe',
       timeout: 30_000,
     });
@@ -188,28 +189,43 @@ export function refetchCapability(
   const { id, sourceRef } = record;
   const targetPath = resolveCapabilityPath(process.env, kind, id);
   mkdirSync(dirname(targetPath), { recursive: true });
-  if (existsSync(targetPath)) {
-    rmSync(targetPath, { recursive: true, force: true });
-  }
 
-  if (sourceRef.startsWith('http') || sourceRef.startsWith('git@')) {
-    execSync(`git clone --depth 1 ${shellQuote(sourceRef)} ${shellQuote(targetPath)}`, {
-      stdio: 'pipe',
-      timeout: 30_000,
-    });
-    rmSync(resolve(targetPath, '.git'), { recursive: true, force: true });
-    store.update(kind, id, {});
-    console.log(`Updated ${kind} ${id} from GitHub.`);
-  } else if (existsSync(sourceRef)) {
-    const absSource = isAbsolute(sourceRef) ? sourceRef : resolve(process.cwd(), sourceRef);
-    cpSync(absSource, targetPath, { recursive: true, force: true });
-    store.update(kind, id, {});
-    console.log(`Updated ${kind} ${id} from local path.`);
-  } else {
-    console.log(`Source not found: ${sourceRef}`);
-  }
-}
+  const isGithub =
+    sourceRef.startsWith('http://') ||
+    sourceRef.startsWith('https://') ||
+    sourceRef.startsWith('git@');
 
-function shellQuote(value: string): string {
-  return "'" + String(value).replace(/'/g, "'\\''") + "'";
+  const stagingDir = mkdtempSync(resolve(tmpdir(), `sim-one-${kind}-`));
+  try {
+    const stagedPath = resolve(stagingDir, id);
+
+    if (isGithub) {
+      execFileSync('git', ['clone', '--depth', '1', sourceRef, stagedPath], {
+        stdio: 'pipe',
+        timeout: 30_000,
+      });
+      rmSync(resolve(stagedPath, '.git'), { recursive: true, force: true });
+    } else if (existsSync(sourceRef)) {
+      const absSource = isAbsolute(sourceRef) ? sourceRef : resolve(process.cwd(), sourceRef);
+      cpSync(absSource, stagedPath, { recursive: true, force: true });
+    } else {
+      throw new Error(`Source not found: ${sourceRef}`);
+    }
+
+    if (existsSync(targetPath)) {
+      rmSync(targetPath, { recursive: true, force: true });
+    }
+    renameSync(stagedPath, targetPath);
+    rmSync(stagingDir, { recursive: true, force: true });
+
+    store.update(kind, id, {});
+    if (isGithub) {
+      console.log(`Updated ${kind} ${id} from GitHub.`);
+    } else {
+      console.log(`Updated ${kind} ${id} from local path.`);
+    }
+  } catch (err) {
+    rmSync(stagingDir, { recursive: true, force: true });
+    throw err;
+  }
 }

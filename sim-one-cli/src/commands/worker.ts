@@ -99,12 +99,16 @@ export function disableWorker(id: string): void {
 export function removeWorker(id: string): void {
   assertSafeCapabilityId(id);
   withStore((store) => {
+    const removed = store.remove(KIND, id);
+    if (!removed) {
+      console.log(`No worker capability found for ${id}.`);
+      return;
+    }
     const capPath = getCapabilityPath(KIND, id);
     if (existsSync(capPath)) {
       rmSync(capPath, { recursive: true, force: true });
     }
-    const removed = store.remove(KIND, id);
-    console.log(removed ? `Removed worker ${id}.` : `No worker capability found for ${id}.`);
+    console.log(`Removed worker ${id}.`);
   });
 }
 

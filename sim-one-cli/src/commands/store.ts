@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { isAbsolute, resolve } from 'node:path';
 import { createCapabilityStore } from '../../../src/capabilities/index.js';
+import { resolveCapabilitiesDir, assertSafeCapabilityId } from '../../../src/capabilities/index.js';
 import type { CapabilityKind, CapabilityStore } from '../../../src/capabilities/index.js';
 
 /**
@@ -43,39 +44,10 @@ export function withStore<T>(fn: (store: CapabilityStore) => T): T {
 }
 
 /**
- * Resolve the capabilities root directory using the same rules as
- * `capability-loader.ts`: honor `GOROMBO_CAPABILITIES_DIR` /
- * `GOROMBO_CAPABILITY_DIR` (default `~/.gorombo/capabilities`), resolving
- * relative to `process.cwd()` when not absolute.
+ * Re-exported from the runtime capability-loader.ts to avoid duplication.
+ * Single source of truth for capabilities directory resolution.
  */
-export function getCapabilitiesDir(env: Record<string, unknown> = process.env): string {
-  const configured =
-    readEnv(env, 'GOROMBO_CAPABILITIES_DIR') ?? readEnv(env, 'GOROMBO_CAPABILITY_DIR');
-  if (configured) {
-    return isAbsolute(configured) ? configured : resolve(process.cwd(), configured);
-  }
-  return resolve(homedir(), '.gorombo', 'capabilities');
-}
-
-/**
- * Reject capability ids that could escape the capabilities root via path
- * traversal or absolute paths. Capability ids are opaque slugs, never
- * filesystem paths.
- */
-export function assertSafeCapabilityId(id: string): void {
-  if (typeof id !== 'string' || id.length === 0) {
-    throw new Error('Invalid capability id: empty');
-  }
-  if (id.includes('/') || id.includes('\\') || id.includes('\0')) {
-    throw new Error(`Invalid capability id "${id}": must not contain path separators`);
-  }
-  if (id === '.' || id === '..' || id.includes('..')) {
-    throw new Error(`Invalid capability id "${id}": must not contain traversal sequences`);
-  }
-  if (isAbsolute(id)) {
-    throw new Error(`Invalid capability id "${id}": must not be an absolute path`);
-  }
-}
+export { resolveCapabilitiesDir as getCapabilitiesDir, assertSafeCapabilityId };
 
 /**
  * Resolve the on-disk path for a capability under the capabilities root.
@@ -83,10 +55,5 @@ export function assertSafeCapabilityId(id: string): void {
  */
 export function getCapabilityPath(kind: CapabilityKind, id: string): string {
   assertSafeCapabilityId(id);
-  return resolve(getCapabilitiesDir(), kind + 's', id);
-}
-
-function readEnv(env: Record<string, unknown>, key: string): string | undefined {
-  const value = env[key];
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+  return resolve(resolveCapabilitiesDir(), kind + 's', id);
 }

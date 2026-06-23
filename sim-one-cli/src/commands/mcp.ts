@@ -27,6 +27,18 @@ export function addMcp(
 ): void {
   assertSafeCapabilityId(id);
 
+  try {
+    new URL(url);
+  } catch {
+    console.error(`Error: Invalid URL '${url}'. Must be a valid HTTP(S) URL.`);
+    process.exit(1);
+  }
+
+  if (transport !== 'streamable-http' && transport !== 'sse') {
+    console.error(`Error: Invalid transport '${transport}'. Must be 'streamable-http' or 'sse'.`);
+    process.exit(1);
+  }
+
   const collision = checkNameCollision(KIND, id);
   if (collision.collision) {
     console.error(`Error: ${collision.message}`);
