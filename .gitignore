@@ -4,6 +4,7 @@ dist-flue/
 .env
 .env.*
 .claude/
+.opencode/
 !.env.example
 coverage/
 .tmp/
