@@ -1,0 +1,27 @@
+sim-one-cli/src/cli.tsx
+  s_38452e3b10f10f::t_41c3902ce583cd 5,38,41-45,47-58
+src/config/gorombo-config.ts
+  s_38452e3b10f10f::t_f8c91c741305ac 25
+  s_38452e3b10f10f::t_fc1a72546832b6 41-45
+src/config/gorombo.config.json
+  s_38452e3b10f10f::t_b7d05c39179bce 21-25
+sim-one-cli/src/launcher/server-manager.ts
+  s_38452e3b10f10f::t_680a40fc1b2925 1-39,41-188
+  s_38452e3b10f10f::t_b7d0a5018494ea 40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "a440b1be1c0df007e5fb5519e61cf06e6127d2b6",
+  "prompts": {},
+  "sessions": {
+    "s_38452e3b10f10f": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10508c1efffeDMyPAsvTtRZdLR",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
