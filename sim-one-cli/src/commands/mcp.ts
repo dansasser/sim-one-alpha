@@ -28,7 +28,11 @@ export function addMcp(
   assertSafeCapabilityId(id);
 
   try {
-    new URL(url);
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      console.error(`Error: Invalid URL '${url}'. Must be a valid HTTP(S) URL.`);
+      process.exit(1);
+    }
   } catch {
     console.error(`Error: Invalid URL '${url}'. Must be a valid HTTP(S) URL.`);
     process.exit(1);
