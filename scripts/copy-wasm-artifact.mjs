@@ -12,7 +12,7 @@ const sourceDir = resolve('crates', 'gorombo-memory', 'pkg');
 const files = ['gorombo_memory_bg.wasm', 'gorombo_memory.js', 'gorombo_memory.d.ts'];
 const targets = includeTscOutput
   ? [resolve('.tmp/tsc/memory')]
-  : [resolve('dist/memory')];
+  : [resolve('.gorombo/sim-one-alpha/memory')];
 
 if (!existsSync(sourceDir)) {
   throw new Error(`WASM artifact source missing: ${sourceDir}. Run \`pnpm run wasm:build\` first.`);

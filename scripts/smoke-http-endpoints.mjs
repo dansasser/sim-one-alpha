@@ -6,7 +6,7 @@ const liveChat = process.argv.includes('--live-chat');
 
 const envFileValues = parseEnvFile('.env');
 const requestSecret = process.env.GOROMBO_HTTP_SMOKE_API_SECRET || envFileValues.API_SECRET || 'http-smoke-secret';
-const nodeArgs = existsSync('.env') ? ['--env-file=.env', 'dist/server.mjs'] : ['dist/server.mjs'];
+const nodeArgs = existsSync('.env') ? ['--env-file=.env', '.gorombo/sim-one-alpha/server.mjs'] : ['.gorombo/sim-one-alpha/server.mjs'];
 
 const child = spawn(process.execPath, nodeArgs, {
   cwd: process.cwd(),

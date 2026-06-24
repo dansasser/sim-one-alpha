@@ -67,9 +67,14 @@ function resolveCatalogPath(override?: string): string {
     return sourceCandidate;
   }
 
-  const bundleCandidate = resolve(process.cwd(), 'dist/tools/runpod-image/models.yaml');
+  const bundleCandidate = resolve(process.cwd(), '.gorombo/sim-one-alpha/tools/runpod-image/models.yaml');
   if (existsSync(bundleCandidate)) {
     return bundleCandidate;
+  }
+
+  const distCandidate = resolve(process.cwd(), 'dist/tools/runpod-image/models.yaml');
+  if (existsSync(distCandidate)) {
+    return distCandidate;
   }
 
   const tscCandidate = resolve(process.cwd(), '.tmp/tsc/tools/runpod-image/models.yaml');

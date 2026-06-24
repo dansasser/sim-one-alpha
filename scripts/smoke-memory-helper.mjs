@@ -68,8 +68,8 @@ async function realModelSmoke() {
   if (!existsSync('.env')) {
     throw new Error('real-model smoke requires a .env with model + API creds');
   }
-  if (!existsSync(join(process.cwd(), 'dist', 'server.mjs'))) {
-    throw new Error('real-model smoke requires `pnpm run build` first (dist/server.mjs)');
+  if (!existsSync(join(process.cwd(), '.gorombo', 'sim-one-alpha', 'server.mjs'))) {
+    throw new Error('real-model smoke requires `pnpm run build` first (.gorombo/sim-one-alpha/server.mjs)');
   }
   const port = Number(process.env.GOROMBO_SMOKE_PORT || 3997);
   const apiSecret = process.env.GOROMBO_SMOKE_API_SECRET || 'smoke-secret';
@@ -91,7 +91,7 @@ async function realModelSmoke() {
     PATH: process.env.PATH,
   };
 
-  const child = spawn(process.execPath, ['--env-file=.env', 'dist/server.mjs'], {
+  const child = spawn(process.execPath, ['--env-file=.env', '.gorombo/sim-one-alpha/server.mjs'], {
     cwd: process.cwd(),
     env,
     stdio: ['ignore', 'pipe', 'pipe'],

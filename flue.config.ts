@@ -1,5 +1,5 @@
 import { defineConfig } from '@flue/cli/config';
 
 export default defineConfig({
-  output: './dist',
+  output: './.gorombo/sim-one-alpha',
 });

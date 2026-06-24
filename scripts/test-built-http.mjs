@@ -4,15 +4,15 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-if (!existsSync('dist/server.mjs')) {
-  throw new Error('dist/server.mjs does not exist. Run pnpm run build before the built HTTP test.');
+if (!existsSync('.gorombo/sim-one-alpha/server.mjs')) {
+  throw new Error('.gorombo/sim-one-alpha/server.mjs does not exist. Run pnpm run build before the built HTTP test.');
 }
 
 const port = await getFreePort();
 const baseUrl = `http://127.0.0.1:${port}`;
 const envFileValues = parseEnvFile('.env');
 const requestSecret = process.env.GOROMBO_HTTP_TEST_API_SECRET || envFileValues.API_SECRET || 'built-http-test-secret';
-const nodeArgs = existsSync('.env') ? ['--env-file=.env', 'dist/server.mjs'] : ['dist/server.mjs'];
+const nodeArgs = existsSync('.env') ? ['--env-file=.env', '.gorombo/sim-one-alpha/server.mjs'] : ['.gorombo/sim-one-alpha/server.mjs'];
 const codingWorkspaceRoot = mkdtempSync(join(tmpdir(), 'built-http-coding-workspace-'));
 const modelEnv = {
   OLLAMA_API_KEY: process.env.OLLAMA_API_KEY || envFileValues.OLLAMA_API_KEY || 'built-http-test-key',
