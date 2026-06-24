@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 import { resolve as resolvePath } from 'node:path';
 import { createFileCodingApprovalService, type CodingApprovalService } from '../workers/coding-worker/approvals/approval-service.js';
 
@@ -11,24 +12,20 @@ export interface SharedCodingApprovalServiceEnv {
  *
  * Order of resolution:
  * 1. `env.GOROMBO_APPROVAL_ROOT`
- * 2. Sibling path next to the coding-worker workspace root: `<workspaceRoot>/../.gorombo-approvals`
+ * 2. `~/.gorombo/approvals` (unified runtime data root)
  *
- * Throws if neither a configured root nor a workspace root is available.
+ * Throws if GOROMBO_APPROVAL_ROOT is not set and the home directory
+ * cannot be resolved.
  */
 export function resolveCodingApprovalRoot(
   env: SharedCodingApprovalServiceEnv,
-  workspaceRoot?: string,
+  _workspaceRoot?: string,
 ): string {
   const configuredRoot = env.GOROMBO_APPROVAL_ROOT;
   if (typeof configuredRoot === 'string' && configuredRoot.length > 0) {
     return resolvePath(configuredRoot);
   }
-  if (workspaceRoot) {
-    return resolvePath(workspaceRoot, '..', '.gorombo-approvals');
-  }
-  throw new Error(
-    'Missing approval storage root. Set GOROMBO_APPROVAL_ROOT or provide a workspace root for the fallback sibling path.',
-  );
+  return resolvePath(homedir(), '.gorombo', 'approvals');
 }
 
 /**

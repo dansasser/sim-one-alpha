@@ -6,6 +6,7 @@
 } from '@flue/runtime';
 import { local } from '@flue/runtime/node';
 import { realpath } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { resolve as resolvePath, sep } from 'node:path';
 import { configureRuntimeModels } from '../../models/index.js';
 import {
@@ -217,10 +218,7 @@ function resolveApprovalRoot(
   if (options.approvalRoot) {
     return resolvePath(options.approvalRoot);
   }
-  if (workspaceRoot) {
-    return resolvePath(workspaceRoot, '..', '.gorombo-approvals');
-  }
-  return options.repoPath ? resolvePath(options.repoPath, '..', '.gorombo-approvals') : undefined;
+  return resolvePath(homedir(), '.gorombo', 'approvals');
 }
 
 async function assertApprovalRootOutsideWorkspace(approvalRoot: string, workspaceRoot: string | undefined): Promise<void> {

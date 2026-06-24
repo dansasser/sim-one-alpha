@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join, resolve as resolvePath } from 'node:path';
 import { describe, it } from 'node:test';
 import {
@@ -27,33 +27,19 @@ describe('shared approval service', () => {
     }
   });
 
-  it('falls back to a sibling of the workspace root when env is not set', () => {
-    const workspaceRoot = makeTempDir('gorombo-workspace-');
-    try {
-      const resolved = resolveCodingApprovalRoot({}, workspaceRoot);
-      assert.equal(resolved, resolvePath(workspaceRoot, '..', '.gorombo-approvals'));
-    } finally {
-      cleanup(workspaceRoot);
-    }
+  it('falls back to ~/.gorombo/approvals when env is not set', () => {
+    const resolved = resolveCodingApprovalRoot({});
+    assert.equal(resolved, resolvePath(homedir(), '.gorombo', 'approvals'));
   });
 
-  it('prefers the env root over the workspace fallback', () => {
+  it('prefers the env root over the default fallback', () => {
     const envRoot = makeTempDir('gorombo-approval-root-');
-    const workspaceRoot = makeTempDir('gorombo-workspace-');
     try {
-      const resolved = resolveCodingApprovalRoot({ GOROMBO_APPROVAL_ROOT: envRoot }, workspaceRoot);
+      const resolved = resolveCodingApprovalRoot({ GOROMBO_APPROVAL_ROOT: envRoot });
       assert.equal(resolved, resolvePath(envRoot));
     } finally {
       cleanup(envRoot);
-      cleanup(workspaceRoot);
     }
-  });
-
-  it('throws when neither env nor workspace root is provided', () => {
-    assert.throws(
-      () => resolveCodingApprovalRoot({}),
-      /Missing approval storage root/,
-    );
   });
 
   it('two callers with the same root see the same pending record', async () => {
