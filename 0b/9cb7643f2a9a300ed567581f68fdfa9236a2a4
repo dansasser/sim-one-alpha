@@ -1,0 +1,27 @@
+src/middleware/api-secret.ts
+  s_38452e3b10f10f::t_cbb3b6e61f30e8 5-6,8-12,26-32
+sim-one-cli/src/App.tsx
+  s_38452e3b10f10f::t_4f5f8b73de77bd 11,13-14,19
+sim-one-cli/src/cli.tsx
+  s_38452e3b10f10f::t_3d166f788e7724 41,43
+sim-one-cli/src/lib/approvalClient.ts
+  s_38452e3b10f10f::t_207e6b29951c4e 35
+sim-one-cli/src/components/ChatLayout.tsx
+  s_38452e3b10f10f::t_cc6b6f1ae55df0 19,24-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "0b9cb7643f2a9a300ed567581f68fdfa9236a2a4",
+  "prompts": {},
+  "sessions": {
+    "s_38452e3b10f10f": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10508c1efffeDMyPAsvTtRZdLR",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
