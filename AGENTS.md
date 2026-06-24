@@ -578,7 +578,8 @@ Always run the relevant verification commands before calling work complete.
 ```sh
 nvm use 22                                  # Node >= 22.18 required
 source ~/.cargo/env 2>/dev/null             # Rust/wasm-pack on PATH
-cp .env.example .env && edit .env           # if .env missing
+cp .env.example .env           # if .env missing
+$EDITOR .env                  # or: nano .env, vim .env, etc.
 pnpm install
 pnpm fetch-embedding-model                  # if ONNX model missing
 pnpm run wasm:build                         # if WASM artifact missing
