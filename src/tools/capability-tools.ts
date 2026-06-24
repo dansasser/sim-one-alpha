@@ -60,7 +60,7 @@ function insertCapability(
       if (/UNIQUE constraint failed|constraint/i.test(message)) {
         return `Name '${id}' already exists as a capability. Choose a different name.`;
       }
-      return `Failed to add ${kind} ${id}: ${message}`;
+      return `Failed to add ${kind} ${id}: an internal error occurred.`;
     }
 
     if (autoEnable || materialize) {
