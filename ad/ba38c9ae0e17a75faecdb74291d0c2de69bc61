@@ -1,0 +1,26 @@
+src/workers/coding-worker/runtime-capabilities.ts
+  s_38452e3b10f10f::t_6f29d969c8ddf0 18
+src/tests/shared-approval-service.test.ts
+  s_38452e3b10f10f::t_e311d3561caba0 3,30-32,35,38
+src/workers/coding-worker/coding-worker.ts
+  s_38452e3b10f10f::t_01e7e7e59348d2 221
+  s_38452e3b10f10f::t_4f6921ef3d876e 9
+src/approvals/shared-approval-service.ts
+  s_38452e3b10f10f::t_01077e20f910fb 1,15,17-18,22,28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "adba38c9ae0e17a75faecdb74291d0c2de69bc61",
+  "prompts": {},
+  "sessions": {
+    "s_38452e3b10f10f": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10508c1efffeDMyPAsvTtRZdLR",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
