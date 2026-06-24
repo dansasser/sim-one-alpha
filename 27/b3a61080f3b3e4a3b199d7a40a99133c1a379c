@@ -1,0 +1,19 @@
+src/tests/api-secret-loopback.test.ts
+  s_38452e3b10f10f::t_9a4e20f58607bd 1-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "27b3a61080f3b3e4a3b199d7a40a99133c1a379c",
+  "prompts": {},
+  "sessions": {
+    "s_38452e3b10f10f": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10508c1efffeDMyPAsvTtRZdLR",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
