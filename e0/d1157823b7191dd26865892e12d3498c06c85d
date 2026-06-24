@@ -1,0 +1,21 @@
+scripts/smoke-http-endpoints.mjs
+  s_38452e3b10f10f::t_25558e3290763b 33-34,40,50,56,64
+scripts/test-built-http.mjs
+  s_38452e3b10f10f::t_3c41258a62ed55 51-52,61,73,83,89,102,114,144,174,201,228,252,257,267,277
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "e0d1157823b7191dd26865892e12d3498c06c85d",
+  "prompts": {},
+  "sessions": {
+    "s_38452e3b10f10f": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10508c1efffeDMyPAsvTtRZdLR",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
