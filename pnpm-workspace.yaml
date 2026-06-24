@@ -1,6 +1,6 @@
 packages:
   - .
-  - ./tui-proto
+  - ./sim-one-cli
 allowBuilds:
   '@google/genai': true
   '@mongodb-js/zstd': true

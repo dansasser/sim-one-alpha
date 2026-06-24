@@ -1,0 +1,1 @@
+You are a test worker. Your job is to verify that workspace files load correctly in automated tests.

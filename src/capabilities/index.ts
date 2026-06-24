@@ -12,6 +12,7 @@ export {
   loadUserCapabilities,
   resolveCapabilitiesDir,
   resolveCapabilityPath,
+  assertSafeCapabilityId,
 } from './capability-loader.js';
 export type { LoadedUserCapabilities, CapabilityLoaderOptions } from './capability-loader.js';
 export { materializeCapability } from './skill-materializer.js';
@@ -24,3 +25,9 @@ export { loadUserWorkers } from './worker-loader.js';
 export type { WorkerLoaderResult } from './worker-loader.js';
 export { reconcileCapabilitiesFromConfig } from './capability-config-reconcile.js';
 export type { ReconcileResult } from './capability-config-reconcile.js';
+export { loadBuiltinRegistry, isBuiltinName, getBuiltinNames, resetBuiltinRegistryCache } from './builtin-registry.js';
+export type { BuiltinRegistry } from './builtin-registry.js';
+export { checkNameCollision } from './collision-check.js';
+export type { CollisionResult } from './collision-check.js';
+export { connectBuiltinMcpServers, getBuiltinMcpIds, BUILTIN_MCP_ASTRO_DOCS_ID } from './builtin-mcp.js';
+export type { BuiltinMcpResult } from './builtin-mcp.js';

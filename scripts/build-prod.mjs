@@ -117,7 +117,7 @@ function launchTui() {
   const baseUrl = `http://127.0.0.1:${port}`;
   const tui = spawn(
     'pnpm',
-    ['--filter', 'sim-one-alpha-tui-proto', 'exec', 'tsx', 'src/cli.tsx', '--base-url', baseUrl],
+    ['--filter', 'sim-one-cli', 'exec', 'tsx', 'src/cli.tsx', '--base-url', baseUrl],
     {
       cwd: repoRoot,
       stdio: 'inherit',

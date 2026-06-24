@@ -550,6 +550,44 @@ docs/architecture/worker-system.md
 
 Always run the relevant verification commands before calling work complete.
 
+### Build environment prerequisites (CRITICAL — read every session)
+
+**Node.js:** Use nvm to select Node >= 22.18 (per `engines` in package.json and `rust-toolchain.toml` for the WASM target). Run `nvm use 22` before any pnpm/npx command — older Node versions will fail Flue's build.
+
+**Rust / WASM:**
+- Toolchain: `rust-toolchain.toml` — stable, target `wasm32-unknown-unknown`. Run `source ~/.cargo/env` or ensure `cargo` and `wasm-pack` are on PATH.
+- WASM crate: `crates/gorombo-memory/` → compiled to `crates/gorombo-memory/pkg/` via `wasm-pack`
+- **Build WASM:** `pnpm run wasm:build` (also runs as `prebuild` before `pnpm run build`)
+- **WASM artifact is gitignored** — each worktree must build it. Tests SKIP without it.
+- **`pnpm run test:unit` does NOT run `prebuild`.** You MUST run `pnpm run wasm:build` before tests if the WASM artifact doesn't exist. If tests show "WASM artifact not built" SKIP, run `pnpm run wasm:build` then re-run tests.
+
+**Embedding model (ONNX):**
+- `assets/models/embeddings/all-MiniLM-L6-v2/model.onnx` (90MB, gitignored)
+- Fetch: `pnpm fetch-embedding-model`
+- Each worktree must fetch it — gitignored, not shared across worktrees.
+- Server startup blocks ~30s for ONNX load (event loop blocked, HTTP doesn't respond until done).
+
+**.env file:**
+- Copy from `.env.example` and fill in provider secrets. Required: `API_SECRET`. Optional: `OLLAMA_API_KEY`, `RUNPOD_API_KEY`, `CODEX_BRAIN_LOCAL_API_KEY`, `JINA_API_KEY`, etc.
+- No TELEGRAM_* — Telegram is optional. No GOROMBO_APPROVAL_ROOT — approval not configured.
+
+**curl 400 known issue:** `curl`/`wget` to Flue routes return 400 with empty body when `x-api-secret` header is long (48+ chars). This is a `@hono/node-server` issue, not our bug. Use Node's `fetch()` or `@flue/sdk` for testing agent endpoints.
+
+### Worktree setup checklist (do ALL before working)
+
+```sh
+nvm use 22                                  # Node >= 22.18 required
+source ~/.cargo/env 2>/dev/null             # Rust/wasm-pack on PATH
+cp .env.example .env           # if .env missing
+$EDITOR .env                  # or: nano .env, vim .env, etc.
+pnpm install
+pnpm fetch-embedding-model                  # if ONNX model missing
+pnpm run wasm:build                         # if WASM artifact missing
+pnpm run typecheck                           # verify
+```
+
+### Running tests
+
 For TypeScript changes, run the project's configured checks from `package.json`. pnpm and npm are both supported in this repository. The Coding Worker resolves the package manager from lockfile presence (`pnpm-lock.yaml` → pnpm, `package-lock.json` → npm) via `src/workers/coding-worker/repo/package-manager.ts`.
 
 Do not invoke `corepack` to launch pnpm — the repo no longer wires corepack into the command builder. Contributors must have pnpm installed (via npm, standalone installer, or Corepack) before running pnpm commands. The `package.json#packageManager` field documents the required version but does not automatically install or shim the binary.

@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS capabilities (
 
 CREATE INDEX IF NOT EXISTS idx_capabilities_kind_enabled
   ON capabilities(kind, enabled);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_capabilities_id_unique
+  ON capabilities(id);
 `;
 
 export interface CreateCapabilityStoreOptions {
@@ -87,6 +90,29 @@ export function createCapabilityStore(options: CreateCapabilityStoreOptions = {}
              config_json = excluded.config_json,
              updated_at = excluded.updated_at,
              installed_by = excluded.installed_by`,
+        )
+        .run(
+          record.id,
+          record.kind,
+          record.name,
+          record.description,
+          record.source,
+          record.sourceRef,
+          record.version,
+          record.enabled ? 1 : 0,
+          JSON.stringify(record.config ?? {}),
+          record.installedAt,
+          record.updatedAt,
+          record.installedBy,
+        );
+    },
+
+    insertStrict(record) {
+      database
+        .prepare(
+          `INSERT INTO capabilities
+           (id, kind, name, description, source, source_ref, version, enabled, config_json, installed_at, updated_at, installed_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           record.id,

@@ -2,6 +2,7 @@ import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { createCapabilityStore } from '../capabilities/capability-store.js';
 import { materializeCapability } from '../capabilities/skill-materializer.js';
+import { checkNameCollision } from '../capabilities/collision-check.js';
 import type { CapabilityKind, CapabilityRecord, CapabilitySource } from '../capabilities/types.js';
 
 const CAPABILITY_KIND_VALUES = ['skill', 'tool', 'worker', 'mcp'] as const;
@@ -27,6 +28,15 @@ function insertCapability(
   autoEnable: boolean,
   materialize = false,
 ): string {
+  if (!id || typeof id !== 'string' || id.trim().length === 0 || id.length > 128 || !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(id)) {
+    return `Invalid capability id '${id}'. Must be 1-128 chars, alphanumeric + underscore/hyphen, starting with alphanumeric.`;
+  }
+
+  const collision = checkNameCollision(kind, id);
+  if (collision.collision) {
+    return collision.message ?? `Name '${id}' conflicts with an existing capability.`;
+  }
+
   const store = createCapabilityStore({});
   try {
     const record: CapabilityRecord = {
@@ -43,7 +53,15 @@ function insertCapability(
       updatedAt: now(),
       installedBy: 'agent',
     };
-    store.insert(record);
+    try {
+      store.insertStrict(record);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/UNIQUE constraint failed|constraint/i.test(message)) {
+        return `Name '${id}' already exists as a capability. Choose a different name.`;
+      }
+      return `Failed to add ${kind} ${id}: an internal error occurred.`;
+    }
 
     if (autoEnable || materialize) {
       try {
