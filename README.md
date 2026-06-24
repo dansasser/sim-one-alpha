@@ -521,7 +521,7 @@ sim-one tool add https://github.com/user/my-tool my-tool "My Tool" "Description"
 sim-one worker add https://github.com/user/my-worker my-worker "My Worker" "Description"
 
 # Add an MCP server
-sim-one mcp add my-mcp "My MCP Server" "Description" --url http://localhost:8080 --enable
+sim-one mcp add my-mcp "My MCP Server" --url http://localhost:8080 --description "Description" --enable
 
 # List capabilities
 sim-one skill list
@@ -731,10 +731,11 @@ Not all files are required — include the ones that make sense for the worker. 
 MCP servers don't have a source directory — they're remote endpoints. You add them with connection details:
 
 ```sh
-sim-one mcp add my-mcp "My MCP Server" "Description" \
+sim-one mcp add my-mcp "My MCP Server" \
   --url https://mcp.example.com/mcp \
   --transport streamable-http \
   --token-env MCP_TOKEN \
+  --description "Description" \
   --enable
 ```
 

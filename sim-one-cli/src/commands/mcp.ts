@@ -43,6 +43,13 @@ export function addMcp(
     process.exit(1);
   }
 
+  if (tokenEnv !== undefined && tokenEnv !== '') {
+    if (!/^[A-Z_][A-Z0-9_]*$/i.test(tokenEnv)) {
+      console.error(`Error: Invalid --token-env '${tokenEnv}'. Must be a valid environment variable name (uppercase letters, digits, underscores, starting with a letter or underscore).`);
+      process.exit(1);
+    }
+  }
+
   const collision = checkNameCollision(KIND, id);
   if (collision.collision) {
     console.error(`Error: ${collision.message}`);

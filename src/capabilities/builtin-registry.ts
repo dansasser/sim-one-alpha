@@ -34,11 +34,22 @@ export function loadBuiltinRegistry(): BuiltinRegistry {
   try {
     const content = readFileSync(registryPath, 'utf8');
     const parsed = JSON.parse(content) as BuiltinRegistry;
+
+    const requiredKeys: (keyof BuiltinRegistry)[] = ['tools', 'subagents', 'skills', 'mcpServers'];
+    for (const key of requiredKeys) {
+      if (!Array.isArray(parsed[key])) {
+        throw new Error(`Builtin registry missing or invalid array for '${key}'`);
+      }
+      if (!parsed[key].every((v) => typeof v === 'string')) {
+        throw new Error(`Builtin registry '${key}' contains non-string entries`);
+      }
+    }
+
     cachedRegistry = {
-      tools: Array.isArray(parsed.tools) ? parsed.tools : [],
-      subagents: Array.isArray(parsed.subagents) ? parsed.subagents : [],
-      skills: Array.isArray(parsed.skills) ? parsed.skills : [],
-      mcpServers: Array.isArray(parsed.mcpServers) ? parsed.mcpServers : [],
+      tools: parsed.tools,
+      subagents: parsed.subagents,
+      skills: parsed.skills,
+      mcpServers: parsed.mcpServers,
     };
     return cachedRegistry;
   } catch (error) {

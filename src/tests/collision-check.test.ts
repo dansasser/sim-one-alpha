@@ -4,6 +4,7 @@ import { rmSync, mkdirSync, mkdtempSync, existsSync, writeFileSync } from 'node:
 import { resolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { checkNameCollision } from '../capabilities/collision-check.js';
+import { resetBuiltinRegistryCache } from '../capabilities/builtin-registry.js';
 import { createCapabilityStore } from '../capabilities/capability-store.js';
 import type { CapabilityRecord } from '../capabilities/types.js';
 
@@ -112,6 +113,7 @@ test('collision-check: detects builtin MCP name (astro-docs)', () => {
 });
 
 test.before(() => {
+  resetBuiltinRegistryCache();
   tempDir = mkdtempSync(join(tmpdir(), 'collision-check-test-'));
   originalCwd = process.cwd();
   setupFixtureRegistry();
@@ -120,6 +122,7 @@ test.before(() => {
 
 test.after(() => {
   delete process.env.GOROMBO_CAPABILITY_DB_PATH;
+  resetBuiltinRegistryCache();
   process.chdir(originalCwd);
   if (existsSync(tempDir)) {
     rmSync(tempDir, { recursive: true, force: true });

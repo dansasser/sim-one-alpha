@@ -37,7 +37,7 @@ export function addSkill(
     process.exit(1);
   }
 
-  const { fetchedSource, sourceRef } = fetchSource(source, KIND, id);
+  const { fetchedSource, sourceRef } = fetchSource(source, KIND, id, version);
   const now = new Date().toISOString();
   const record: CapabilityRecord = {
     id,
@@ -145,6 +145,7 @@ export function fetchSource(
   sourceRef: string,
   kind: 'skill' | 'tool' | 'worker',
   id: string,
+  version?: string | null,
 ): { fetchedSource: CapabilitySource; sourceRef: string } {
   assertSafeCapabilityId(id);
   const targetPath = getCapabilityPath(kind, id);
@@ -159,7 +160,12 @@ export function fetchSource(
     sourceRef.startsWith('https://') ||
     sourceRef.startsWith('git@')
   ) {
-    execFileSync('git', ['clone', '--depth', '1', sourceRef, targetPath], {
+    const gitArgs = ['clone', '--depth', '1'];
+    if (version && version !== 'latest') {
+      gitArgs.push('--branch', version);
+    }
+    gitArgs.push(sourceRef, targetPath);
+    execFileSync('git', gitArgs, {
       stdio: 'pipe',
       timeout: 30_000,
     });
@@ -199,7 +205,12 @@ export function refetchCapability(
     const stagedPath = resolve(stagingDir, id);
 
     if (isGithub) {
-      execFileSync('git', ['clone', '--depth', '1', sourceRef, stagedPath], {
+      const gitArgs = ['clone', '--depth', '1'];
+      if (record.version && record.version !== 'latest') {
+        gitArgs.push('--branch', record.version);
+      }
+      gitArgs.push(sourceRef, stagedPath);
+      execFileSync('git', gitArgs, {
         stdio: 'pipe',
         timeout: 30_000,
       });

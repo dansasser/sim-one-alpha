@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS capabilities (
 
 CREATE INDEX IF NOT EXISTS idx_capabilities_kind_enabled
   ON capabilities(kind, enabled);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_capabilities_id_unique
+  ON capabilities(id);
 `;
 
 export interface CreateCapabilityStoreOptions {

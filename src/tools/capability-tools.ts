@@ -55,8 +55,12 @@ function insertCapability(
     };
     try {
       store.insertStrict(record);
-    } catch {
-      return `Name '${id}' already exists as a capability. Choose a different name.`;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/UNIQUE constraint failed|constraint/i.test(message)) {
+        return `Name '${id}' already exists as a capability. Choose a different name.`;
+      }
+      return `Failed to add ${kind} ${id}: ${message}`;
     }
 
     if (autoEnable || materialize) {

@@ -33,7 +33,7 @@ export function addWorker(
     process.exit(1);
   }
 
-  const { fetchedSource, sourceRef } = fetchSource(source, KIND, id);
+  const { fetchedSource, sourceRef } = fetchSource(source, KIND, id, version);
   const now = new Date().toISOString();
   const record: CapabilityRecord = {
     id,

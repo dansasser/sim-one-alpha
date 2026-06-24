@@ -191,7 +191,7 @@ function main() {
       const workerDir = join(WORKER_ROOT, entry.name);
       for (const file of collectTsFiles(workerDir)) {
         const relative = file.slice(workerDir.length + 1);
-        if (relative.split('/').includes('subagents')) continue;
+        if (relative.split(/[/\\]/).includes('subagents')) continue;
         const content = safeReadFile(file);
         if (!content) continue;
         for (const name of extractAgentProfileNames(content)) {

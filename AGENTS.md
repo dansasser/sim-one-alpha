@@ -552,18 +552,10 @@ Always run the relevant verification commands before calling work complete.
 
 ### Build environment prerequisites (CRITICAL — read every session)
 
-```sh
-# Set PATH first or everything breaks (pnpm defaults to Node 20, too old for Flue)
-export PATH="/root/.nvm/versions/node/v22.22.3/bin:$PATH"
-source ~/.cargo/env 2>/dev/null
-```
-
-**Node.js:** v22.22.3 at `/root/.nvm/versions/node/v22.22.3/bin/node`. nvm: `source /root/.nvm/nvm.sh && nvm use 22`.
+**Node.js:** Use nvm to select Node >= 22.18 (per `engines` in package.json and `rust-toolchain.toml` for the WASM target). Run `nvm use 22` before any pnpm/npx command — older Node versions will fail Flue's build.
 
 **Rust / WASM:**
-- rustc 1.96.0, cargo 1.96.0, wasm-pack 0.13.1 — all at `/root/.cargo/bin/`
-- cargo env: `source ~/.cargo/env`
-- Toolchain: `rust-toolchain.toml` — stable, target `wasm32-unknown-unknown`
+- Toolchain: `rust-toolchain.toml` — stable, target `wasm32-unknown-unknown`. Run `source ~/.cargo/env` or ensure `cargo` and `wasm-pack` are on PATH.
 - WASM crate: `crates/gorombo-memory/` → compiled to `crates/gorombo-memory/pkg/` via `wasm-pack`
 - **Build WASM:** `pnpm run wasm:build` (also runs as `prebuild` before `pnpm run build`)
 - **WASM artifact is gitignored** — each worktree must build it. Tests SKIP without it.
@@ -576,20 +568,17 @@ source ~/.cargo/env 2>/dev/null
 - Server startup blocks ~30s for ONNX load (event loop blocked, HTTP doesn't respond until done).
 
 **.env file:**
-- Copy from main checkout: `cp /opt/ai/sim-one-alpha/.env .env`
-- Key vars: `OLLAMA_API_KEY`, `API_SECRET`, `CODEX_BRAIN_LOCAL_API_KEY`, `CODEX_BRAIN_LOCAL_API_URL`, `JINA_API_KEY`, `JUELS_API_KEY`, `RUNPOD_API_KEY`
+- Copy from `.env.example` and fill in provider secrets. Required: `API_SECRET`. Optional: `OLLAMA_API_KEY`, `RUNPOD_API_KEY`, `CODEX_BRAIN_LOCAL_API_KEY`, `JINA_API_KEY`, etc.
 - No TELEGRAM_* — Telegram is optional. No GOROMBO_APPROVAL_ROOT — approval not configured.
-
-**Ports:** 3000 is nginx, 9300 is another node service. Use 3940-3960 for testing. Kill old servers before starting new ones.
 
 **curl 400 known issue:** `curl`/`wget` to Flue routes return 400 with empty body when `x-api-secret` header is long (48+ chars). This is a `@hono/node-server` issue, not our bug. Use Node's `fetch()` or `@flue/sdk` for testing agent endpoints.
 
 ### Worktree setup checklist (do ALL before working)
 
 ```sh
-export PATH="/root/.nvm/versions/node/v22.22.3/bin:$PATH"
-source ~/.cargo/env 2>/dev/null
-cp /opt/ai/sim-one-alpha/.env .env          # if missing
+nvm use 22                                  # Node >= 22.18 required
+source ~/.cargo/env 2>/dev/null             # Rust/wasm-pack on PATH
+cp .env.example .env && edit .env           # if .env missing
 pnpm install
 pnpm fetch-embedding-model                  # if ONNX model missing
 pnpm run wasm:build                         # if WASM artifact missing
