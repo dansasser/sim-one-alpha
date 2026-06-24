@@ -13,17 +13,16 @@ import { usePendingApprovals } from '../hooks/usePendingApprovals.js';
 export interface ChatLayoutProps {
   baseUrl: string;
   session: string;
-  token: string;
   decidedBy: string;
 }
 
-export function ChatLayout({ baseUrl, session, token, decidedBy }: ChatLayoutProps) {
+export function ChatLayout({ baseUrl, session, decidedBy }: ChatLayoutProps) {
   const agent = useFlueAgent({ name: 'orchestrator', id: session });
   const [input, setInput] = useState('');
 
   const approvalClient = useMemo(
-    () => createApprovalClient(baseUrl, token),
-    [baseUrl, token],
+    () => createApprovalClient(baseUrl),
+    [baseUrl],
   );
 
   const { pending, configured } = usePendingApprovals(approvalClient);

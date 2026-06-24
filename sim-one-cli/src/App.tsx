@@ -6,18 +6,17 @@ import { ChatLayout } from './components/ChatLayout.js';
 export interface AppProps {
   baseUrl: string;
   session: string;
-  token: string;
 }
 
-export function App({ baseUrl, session, token }: AppProps) {
+export function App({ baseUrl, session }: AppProps) {
   const client = useMemo(
-    () => createFlueClient({ baseUrl, headers: { 'x-api-secret': token } }),
-    [baseUrl, token],
+    () => createFlueClient({ baseUrl }),
+    [baseUrl],
   );
 
   return (
     <FlueProvider client={client}>
-      <ChatLayout baseUrl={baseUrl} session={session} token={token} decidedBy={session} />
+      <ChatLayout baseUrl={baseUrl} session={session} decidedBy={session} />
     </FlueProvider>
   );
 }

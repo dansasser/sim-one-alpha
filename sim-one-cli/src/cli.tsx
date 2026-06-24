@@ -37,17 +37,10 @@ program
   .option('--port <number>', 'server port (when launching TUI)', '3000')
   .option('--base-url <url>', 'full base url (overrides --port, when launching TUI)')
   .option('--session <id>', 'agent instance id (when launching TUI)', 'proto')
-  .option('--token <secret>', 'API secret (defaults to API_SECRET env, when launching TUI)')
   .action((opts) => {
-    const baseUrl = opts.baseUrl ?? `http://localhost:${opts.port}`;
-    const token = opts.token ?? process.env.API_SECRET;
-    if (!token) {
-      console.error('API_SECRET required: pass --token <secret> or set API_SECRET in env.');
-      process.exit(1);
-    }
-
+    const baseUrl = opts.baseUrl ?? `http://127.0.0.1:${opts.port}`;
     const session = opts.session;
-    render(<App baseUrl={baseUrl} session={session} token={token} />);
+    render(<App baseUrl={baseUrl} session={session} />);
   });
 
 function addKindCommands(program: Command, kind: 'skill' | 'tool' | 'worker'): void {
