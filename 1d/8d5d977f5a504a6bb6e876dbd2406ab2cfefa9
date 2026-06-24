@@ -1,0 +1,44 @@
+docs/architecture/flue-architecture.md
+  s_38452e3b10f10f::t_06a459bb6b5491 41
+docs/operations/telegram-connector.md
+  s_38452e3b10f10f::t_7ba05a07c8d258 58
+README.md
+  s_38452e3b10f10f::t_ad2dccc3bfed7a 365,369,379,425,432,435,755,773,1063,1096,1187
+  s_38452e3b10f10f::t_240e627b2ab1ce 401
+  s_38452e3b10f10f::t_0df54c62af3f64 875
+  s_38452e3b10f10f::t_420968ba931f55 1238
+AGENTS.md
+  s_38452e3b10f10f::t_beff2ecd4124b4 574
+  s_38452e3b10f10f::t_6a2836dc8f721e 41
+  s_38452e3b10f10f::t_ebf1b9820bed1a 571
+docs/architecture/product-flow.md
+  s_38452e3b10f10f::t_0cb8dd44ddb9d8 18,44,137,140,144,158,170-171
+  s_38452e3b10f10f::t_2477b1bfce714e 175-176
+docs/architecture/gorombo-flue-map.md
+  s_38452e3b10f10f::t_329e4124d2d7bd 133
+  s_38452e3b10f10f::t_61b7c88782ff05 187
+  s_38452e3b10f10f::t_f8f453d9d20a32 81
+PROJECT-TRACKING.md
+  s_38452e3b10f10f::t_6cb9947971099f 155
+  s_38452e3b10f10f::t_a6d17a8a99b614 38
+  s_38452e3b10f10f::t_2c440b2c8a4f86 61
+  s_38452e3b10f10f::t_3da9ab3919a8fa 33
+  s_38452e3b10f10f::t_22063b382e6c89 140
+  s_38452e3b10f10f::t_8fafc887cf524f 64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "1d8d5d977f5a504a6bb6e876dbd2406ab2cfefa9",
+  "prompts": {},
+  "sessions": {
+    "s_38452e3b10f10f": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10508c1efffeDMyPAsvTtRZdLR",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
