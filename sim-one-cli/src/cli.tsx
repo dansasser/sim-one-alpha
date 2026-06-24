@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { render } from 'ink';
 import React from 'react';
 import { App } from './App.js';
+import { ensureServerRunning, setServerChild, cleanupServer } from './launcher/server-manager.js';
 import {
   addSkill,
   listSkills,
@@ -34,13 +35,27 @@ const program = new Command();
 program
   .name('sim-one')
   .description('SIM-ONE Alpha — interactive TUI coding interface + capability management.')
-  .option('--port <number>', 'server port (when launching TUI)', '3000')
+  .option('--port <number>', 'server port (when launching TUI)')
   .option('--base-url <url>', 'full base url (overrides --port, when launching TUI)')
   .option('--session <id>', 'agent instance id (when launching TUI)', 'proto')
-  .action((opts) => {
-    const baseUrl = opts.baseUrl ?? `http://127.0.0.1:${opts.port}`;
+  .action(async (opts) => {
+    const port = opts.port ? parseInt(opts.port, 10) : undefined;
+    const result = await ensureServerRunning({ port });
+
+    const baseUrl = opts.baseUrl ?? result.baseUrl;
     const session = opts.session;
-    render(<App baseUrl={baseUrl} session={session} />);
+    const { started } = result;
+
+    const instance = render(<App baseUrl={baseUrl} session={session} />, {
+      exitOnCtrlC: true,
+    });
+
+    instance.waitUntilExit().then(async () => {
+      if (started) {
+        await cleanupServer();
+      }
+      process.exit(0);
+    });
   });
 
 function addKindCommands(program: Command, kind: 'skill' | 'tool' | 'worker'): void {

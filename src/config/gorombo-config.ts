@@ -22,7 +22,7 @@ export interface GoromboConfig {
   memory?: Record<string, unknown>;
   protocols?: Record<string, unknown>;
   schedules?: Record<string, unknown>;
-  gateway?: Record<string, unknown>;
+  gateway?: GatewayConfig;
   observability?: Record<string, unknown>;
   capabilities?: GoromboCapabilityConfig[];
 }
@@ -36,6 +36,11 @@ export interface GoromboStorageConfig {
   flueDatabasePath?: string;
   sessionDatabasePath?: string;
   vectorStorePath?: string;
+}
+
+export interface GatewayConfig {
+  mode?: 'dev' | 'terminal' | 'service';
+  port?: number;
 }
 
 export interface GoromboCapabilityConfig {

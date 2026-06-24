@@ -18,5 +18,9 @@
     "archiveDeleteDays": 365,
     "maxChecklistDepth": 5
   },
-  "capabilities": []
+  "capabilities": [],
+  "gateway": {
+    "mode": "dev",
+    "port": 3000
+  }
 }
