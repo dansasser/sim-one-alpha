@@ -30,12 +30,14 @@ try {
   const baseUrl = `http://127.0.0.1:${port}`;
   await waitForHealth(baseUrl);
 
+  const externalHeaders = { 'x-forwarded-for': '10.0.0.1' };
+
   await expectStatus(`${baseUrl}/health`, { method: 'GET' }, 200, 'health');
   await expectStatus(
     `${baseUrl}/api/chat/events`,
     {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { ...externalHeaders, 'content-type': 'application/json' },
       body: JSON.stringify({ text: 'auth check' }),
     },
     401,
@@ -45,13 +47,13 @@ try {
     `${baseUrl}/workflows/not-real`,
     {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { ...externalHeaders, 'content-type': 'application/json' },
       body: JSON.stringify({ text: 'auth check' }),
     },
     401,
     'workflow route without secret',
   );
-  await expectStatus(`${baseUrl}/runs/not-real`, { method: 'GET' }, 401, 'run inspection without secret');
+  await expectStatus(`${baseUrl}/runs/not-real`, { method: 'GET', headers: externalHeaders }, 401, 'run inspection without secret');
 
   if (liveChat) {
     const agentResult = await expectJsonStatus(
@@ -59,6 +61,7 @@ try {
       {
         method: 'POST',
         headers: {
+          ...externalHeaders,
           'content-type': 'application/json',
           'x-api-secret': requestSecret,
         },
