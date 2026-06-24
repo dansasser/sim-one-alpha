@@ -95,6 +95,7 @@ function resolveBuiltinRegistryPath(): string {
     resolve(moduleDirectory, '..', '..', builtinRegistryFilename),
     resolve(moduleDirectory, '..', '..', 'dist', builtinRegistryFilename),
     resolve(moduleDirectory, '..', '..', '.gorombo', 'sim-one-alpha', builtinRegistryFilename),
+    resolve(moduleDirectory, '..', 'sim-one-alpha', builtinRegistryFilename),
     resolve(process.cwd(), '.gorombo', 'sim-one-alpha', builtinRegistryFilename),
     resolve(process.cwd(), 'dist', builtinRegistryFilename),
   ];
