@@ -137,6 +137,30 @@ export function updateSkill(id: string): void {
 }
 
 /**
+ * Build git clone arguments with optional version/branch pinning.
+ * Shared by fetchSource and refetchCapability so clone semantics stay consistent.
+ */
+function buildGitCloneArgs(version: string | null | undefined, sourceRef: string, targetPath: string): string[] {
+  const args = ['clone', '--depth', '1'];
+  if (version && version !== 'latest') {
+    args.push('--branch', version);
+  }
+  args.push(sourceRef, targetPath);
+  return args;
+}
+
+/**
+ * Check if a sourceRef is a git remote (URL or git@ protocol).
+ */
+function isGitRemote(sourceRef: string): boolean {
+  return (
+    sourceRef.startsWith('http://') ||
+    sourceRef.startsWith('https://') ||
+    sourceRef.startsWith('git@')
+  );
+}
+
+/**
  * Shared source fetch used by skill/tool/worker `add`. Returns the
  * {@link CapabilitySource} ("github" | "local") and the normalized
  * `sourceRef` to persist.
@@ -155,17 +179,8 @@ export function fetchSource(
     rmSync(targetPath, { recursive: true, force: true });
   }
 
-  if (
-    sourceRef.startsWith('http://') ||
-    sourceRef.startsWith('https://') ||
-    sourceRef.startsWith('git@')
-  ) {
-    const gitArgs = ['clone', '--depth', '1'];
-    if (version && version !== 'latest') {
-      gitArgs.push('--branch', version);
-    }
-    gitArgs.push(sourceRef, targetPath);
-    execFileSync('git', gitArgs, {
+  if (isGitRemote(sourceRef)) {
+    execFileSync('git', buildGitCloneArgs(version, sourceRef, targetPath), {
       stdio: 'pipe',
       timeout: 30_000,
     });
@@ -174,6 +189,9 @@ export function fetchSource(
   }
 
   if (existsSync(sourceRef)) {
+    if (version && version !== 'latest') {
+      console.warn(`Warning: version '${version}' is ignored for local path sources. Version only applies to GitHub sources.`);
+    }
     const absSource = isAbsolute(sourceRef) ? sourceRef : resolve(process.cwd(), sourceRef);
     cpSync(absSource, targetPath, { recursive: true, force: true });
     return { fetchedSource: 'local', sourceRef: absSource };
@@ -195,27 +213,20 @@ export function refetchCapability(
   const targetPath = getCapabilityPath(kind, id);
   mkdirSync(dirname(targetPath), { recursive: true });
 
-  const isGithub =
-    sourceRef.startsWith('http://') ||
-    sourceRef.startsWith('https://') ||
-    sourceRef.startsWith('git@');
-
   const stagingDir = mkdtempSync(resolve(tmpdir(), `sim-one-${kind}-`));
   try {
     const stagedPath = resolve(stagingDir, id);
 
-    if (isGithub) {
-      const gitArgs = ['clone', '--depth', '1'];
-      if (record.version && record.version !== 'latest') {
-        gitArgs.push('--branch', record.version);
-      }
-      gitArgs.push(sourceRef, stagedPath);
-      execFileSync('git', gitArgs, {
+    if (isGitRemote(sourceRef)) {
+      execFileSync('git', buildGitCloneArgs(record.version, sourceRef, stagedPath), {
         stdio: 'pipe',
         timeout: 30_000,
       });
       rmSync(resolve(stagedPath, '.git'), { recursive: true, force: true });
     } else if (existsSync(sourceRef)) {
+      if (record.version && record.version !== 'latest') {
+        console.warn(`Warning: version '${record.version}' is ignored for local path sources. Version only applies to GitHub sources.`);
+      }
       const absSource = isAbsolute(sourceRef) ? sourceRef : resolve(process.cwd(), sourceRef);
       cpSync(absSource, stagedPath, { recursive: true, force: true });
     } else {
@@ -229,7 +240,7 @@ export function refetchCapability(
     rmSync(stagingDir, { recursive: true, force: true });
 
     store.update(kind, id, {});
-    if (isGithub) {
+    if (isGitRemote(sourceRef)) {
       console.log(`Updated ${kind} ${id} from GitHub.`);
     } else {
       console.log(`Updated ${kind} ${id} from local path.`);
