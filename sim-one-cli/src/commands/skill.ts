@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -214,7 +214,7 @@ export function refetchCapability(
     if (existsSync(targetPath)) {
       rmSync(targetPath, { recursive: true, force: true });
     }
-    renameSync(stagedPath, targetPath);
+    cpSync(stagedPath, targetPath, { recursive: true, force: true });
     rmSync(stagingDir, { recursive: true, force: true });
 
     store.update(kind, id, {});
