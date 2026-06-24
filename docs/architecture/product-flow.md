@@ -15,7 +15,7 @@ This document defines the end-to-end product flow for SIM-ONE Alpha. It is the a
 
 The user installs SIM-ONE Alpha via a shell script (`sim-one.sh`). This script:
 
-- Installs the runtime artifact (`dist/` — the built Flue Node server)
+- Installs the runtime artifact (`.gorombo/sim-one-alpha/` — the built Flue Node server)
 - Installs the two TUI interfaces (wizard + coding interface)
 - Installs the `sim-one` binary on the user's PATH
 - Installs to `~/.gorombo/` (runtime data, SQLite, capabilities, config)
@@ -41,7 +41,7 @@ The wizard writes:
 
 ### 3. The gateway — always-on service
 
-After the wizard completes, the `dist/server.mjs` Node process is running as a persistent background service (systemd, pm2, or equivalent). This is the **gateway** — the always-on agent runtime, equivalent to OpenClaw's gateway.
+After the wizard completes, the `.gorombo/sim-one-alpha/server.mjs` Node process is running as a persistent background service (systemd, pm2, or equivalent). This is the **gateway** — the always-on agent runtime, equivalent to OpenClaw's gateway.
 
 The gateway:
 - Runs the Flue agent runtime (orchestrator, workers, tools, skills, protocols, memory, RAG)
@@ -134,14 +134,14 @@ sim-one stop           # Stop the gateway service
 
 ```
 sim-one-alpha/                    # repository (development)
-  src/                            # runtime source (compiled to dist/)
+  src/                            # runtime source (compiled to .gorombo/sim-one-alpha/)
   tui-proto/                      # throwaway TUI prototype (deleted when production TUI ships)
   scripts/                        # dev-time scripts (capability-admin.mjs, build-prod.mjs, etc.)
-  dist/                           # built runtime artifact (what gets installed)
+  .gorombo/sim-one-alpha/                           # built runtime artifact (what gets installed)
 
 # Install package (what sim-one.sh installs):
   sim-one                         # the unified binary (wizard + TUI + admin subcommands)
-  dist/                           # the runtime gateway
+  .gorombo/sim-one-alpha/                           # the runtime gateway
   ~/.gorombo/                     # runtime data (SQLite, capabilities, config, .env)
 ```
 
@@ -155,7 +155,7 @@ The `sim-one` binary is the production TUI package from the agent-tui plan (`sim
 
 | Component | Current state | Target |
 | --- | --- | --- |
-| Runtime gateway (`dist/server.mjs`) | ✅ Working — Flue agent, HTTP API, connectors | Production-ready |
+| Runtime gateway (`.gorombo/sim-one-alpha/server.mjs`) | ✅ Working — Flue agent, HTTP API, connectors | Production-ready |
 | Capability store + merge layer | ✅ Working — SQLite, CLI, agent tools, MCP broker | Wired into `sim-one` subcommands |
 | Wizard TUI | ❌ Not built | `sim-one install` launches wizard |
 | Coding interface TUI | ✅ Prototype (`tui-proto/`) | Production `sim-one` (no args) |
@@ -167,9 +167,10 @@ The `sim-one` binary is the production TUI package from the agent-tui plan (`sim
 
 ## Key principles
 
-1. **The product is `dist/` + the `sim-one` binary.** Users don't need pnpm, Node, or Rust. They install via `sim-one.sh` and use `sim-one`.
-2. **The gateway is always on.** After install, `dist/server.mjs` runs as a background service. Connectors (Telegram, etc.) and interfaces (TUI, Web UI) connect to it.
+1. **The product is `.gorombo/sim-one-alpha/` + the `sim-one` binary.** Users don't need pnpm, Node, or Rust. They install via `sim-one.sh` and use `sim-one`.
+2. **The gateway is always on.** After install, `.gorombo/sim-one-alpha/server.mjs` runs as a background service. Connectors (Telegram, etc.) and interfaces (TUI, Web UI) connect to it.
 3. **The `sim-one` binary is the only command.** It launches the TUI, runs the wizard, manages capabilities, manages config, and manages the service. No `pnpm` commands in the product interface.
 4. **Capabilities are runtime-extensible.** Users add skills/tools/workers/MCP via `sim-one` subcommands. A service restart picks them up. No rebuild needed.
 5. **The TUI is React via Ink.** The Web UI is React via `react-dom`. Both use `@flue/react` hooks. Shared logic lives in a shared package; presentation is authored per target.
-6. **`~/.gorombo/` is the runtime data root.** SQLite, capabilities, config, .env all live here. It survives `dist/` upgrades.
+6. **`~/.gorombo/` is the runtime data root.** SQLite, capabilities, config, .env all live here. It survives `.gorombo/sim-one-alpha/` upgrades.
+7. **Local auth is loopback-based, not token-based.** The TUI connects to the server over `127.0.0.1` with no secret. The server middleware bypasses auth for loopback origins. External connectors (Telegram, web, Discord) require `API_SECRET` via `x-api-secret` header. The wizard never generates a SIM-ONE-internal secret.
