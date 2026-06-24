@@ -1,0 +1,45 @@
+src/capabilities/capability-store.ts
+  s_2a85b2e1f110e1::t_f4ffb9a94718f4 33-35
+sim-one-cli/src/commands/mcp.ts
+  s_2a85b2e1f110e1::t_0a7fe0f3da67b4 46-52
+src/tools/capability-tools.ts
+  s_2a85b2e1f110e1::t_59fec665bb4e1f 58-63
+AGENTS.md
+  s_2a85b2e1f110e1::t_0f9dc4da11fe1b 555,558,571,579-581
+src/tests/collision-check.test.ts
+  s_2a85b2e1f110e1::t_5d7f2b83de8f9b 116,125
+  s_2a85b2e1f110e1::t_2f1e3d7948cc9e 7
+src/capabilities/capability-config-reconcile.ts
+  s_2a85b2e1f110e1::t_b5dd02d61a3064 26-31
+sim-one-cli/src/commands/skill.ts
+  s_2a85b2e1f110e1::t_72f3b7d87475d0 208-213
+  s_2a85b2e1f110e1::t_e12430c83dd939 40
+  s_2a85b2e1f110e1::t_6fae336c850a0c 148,163-168
+src/capabilities/builtin-registry.ts
+  s_2a85b2e1f110e1::t_1b141644a8b10b 37-47,49-52
+sim-one-cli/src/commands/tool.ts
+  s_2a85b2e1f110e1::t_2fa368ced6fbcd 36
+sim-one-cli/src/commands/worker.ts
+  s_2a85b2e1f110e1::t_fb9c9fe5a2d87c 36
+README.md
+  s_2a85b2e1f110e1::t_dafd060bd8a640 524
+  s_2a85b2e1f110e1::t_e6b3dabb9cfe2b 734,738
+scripts/generate-builtin-registry.mjs
+  s_2a85b2e1f110e1::t_197bbff655aa08 194
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.11",
+  "base_commit_sha": "f39107979a8003a71a6b51080828bdf9cee7c324",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
