@@ -1,0 +1,20 @@
+sim-one-cli/src/commands/skill.ts
+  s_2a85b2e1f110e1::t_5c53d85c8f4aec 217
+  s_2a85b2e1f110e1::t_8ec9a82a977f74 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.11",
+  "base_commit_sha": "ce78d7b515fde8d536ca92479f5afa62df921665",
+  "prompts": {},
+  "sessions": {
+    "s_2a85b2e1f110e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10dc5d869ffe2w20S6Fk1BQMYE",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
