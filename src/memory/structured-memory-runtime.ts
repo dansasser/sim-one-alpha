@@ -66,7 +66,7 @@ const DEV_WASM_MODULE_PATH = resolve(
   'pkg',
   'gorombo_memory.js',
 );
-const DIST_WASM_MODULE_PATH = resolve(process.cwd(), 'dist', 'memory', 'gorombo_memory.js');
+const DIST_WASM_MODULE_PATH = resolve(process.cwd(), '.gorombo', 'sim-one-alpha', 'memory', 'gorombo_memory.js');
 
 export interface StructuredMemoryRuntime {
   engine: MemoryEngine;
