@@ -4,7 +4,7 @@ This file maps Flue architecture to this repository.
 
 ## Top-Level Source Directory Map
 
-Every top-level `src/` entry should fit one of these categories: Flue-contract files (`src/agents/`, `src/workflows/`, `src/channels/`, `src/db.ts`, `src/app.ts`), or one of the consolidation buckets (`src/core/`, `src/api/`, `src/engine/`, `src/workspace/`, `src/tests/`). If a new directory is added, update this map in the same change.
+Every top-level `src/` entry should fit one of these categories: Flue-contract files (`src/agents/`, `src/workflows/`, `src/channels/`, `src/db.ts`, `src/app.ts`), root support files (`src/index.ts`, `src/workspace-loader.ts`, `src/AGENTS.md`), or one of the consolidation buckets (`src/core/`, `src/api/`, `src/engine/`, `src/workspace/`, `src/tests/`). If a new directory is added, update this map in the same change.
 
 ### Flue-contract top-level files and directories
 
