@@ -60,6 +60,16 @@ Every top-level `src/` directory should fit one of these five buckets: `src/core
 | --- | --- | --- |
 | `src/tests/` | Test suite | Node test files compiled to `.tmp/tsc/tests`. |
 
+### Flue discovery shims
+
+Flue hardcodes discovery at `src/agents/`, `src/workflows/`, and `src/channels/` with no config override. These directories contain thin re-export shims that point to the real implementations under `src/engine/` and `src/api/`. Each shim is a single `export *` line.
+
+| Path | Type | Ownership rule |
+| --- | --- | --- |
+| `src/agents/` | Flue agent discovery shim | Re-exports from `src/engine/agents/`. Flue requires agent files at this path for name-based discovery. |
+| `src/workflows/` | Flue workflow discovery shim | Re-exports from `src/engine/workflows/`. Flue requires workflow files at this path for name-based discovery. |
+| `src/channels/` | Flue channel discovery shim | Re-exports from `src/api/channels/`. Flue requires channel files at this path for name-based discovery. |
+
 Top-level non-`src/` directories:
 
 | `crates/gorombo-memory/` | Rust engine compiled to WebAssembly via `wasm-pack`. Owns the structured-memory data model, validation (scope non-empty, slug uniqueness, checklist cycle/depth), the in-memory inverted index, and the query planner. Never exposed to the model or agents directly — only via `src/engine/memory/rust-memory-engine.ts`. The TypeScript shim generates ids/timestamps/audit fields (Rust owns no clock/RNG in the WASM target) and passes fully-formed records to the WASM exports. The WASM module keeps a `thread_local` store hydrated by `reconcile_index` from the durable SQLite store on cold start. |
