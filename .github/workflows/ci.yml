@@ -57,8 +57,19 @@ jobs:
       - name: Build
         run: pnpm run build
 
+      - name: Build CLI
+        run: pnpm run build:cli
+
+      - name: Verify CLI binary
+        run: test -f .gorombo/sim-one-cli/cli.js
+
       - name: Integration tests
         run: pnpm run test:http
+        env:
+          GOROMBO_TEST_MODE: '1'
+
+      - name: TUI end-to-end test
+        run: pnpm run test:tui
         env:
           GOROMBO_TEST_MODE: '1'
 
