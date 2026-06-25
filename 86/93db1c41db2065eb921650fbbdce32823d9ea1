@@ -1,0 +1,29 @@
+src/tests/web-research-tool.test.ts
+  s_c53b0d1ca1404e::t_483e795a4f20f6 79-96,100-117
+package.json
+  s_c53b0d1ca1404e::t_30943ca52e0f6a 22
+.github/workflows/ci.yml
+  s_c53b0d1ca1404e::t_5b019125722e51 60-65,71-72
+src/engine/tools/web-research-tool.ts
+  s_c53b0d1ca1404e::t_4c8a7b4ddfa099 16,20-21,35-36,48-49,55-56
+scripts/test-tui-e2e.mjs
+  s_c53b0d1ca1404e::t_651038cb86d1a1 76
+  s_c53b0d1ca1404e::t_89d8938fd83281 1-66,68,70-75,77-213
+  s_c53b0d1ca1404e::t_e99f30e0a95276 67,69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "8693db1c41db2065eb921650fbbdce32823d9ea1",
+  "prompts": {},
+  "sessions": {
+    "s_c53b0d1ca1404e": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_100dc175bffe3o1xoz3L9SPLYT",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
