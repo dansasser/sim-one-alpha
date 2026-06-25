@@ -3,10 +3,10 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import orchestratorAgent from '../engine/agents/orchestrator.js';
+import orchestratorAgent from '../agents/orchestrator.js';
 import { createCodingWorkerSubagent } from '../engine/workers/coding-worker/coding-worker.js';
 import { createResearcherSubagent } from '../engine/workers/researcher/researcher.js';
-import { resolveCodingWorkerWorkspaceRoot as resolveCodingWorkerWorkspaceRootFromOrchestrator } from '../engine/agents/orchestrator.js';
+import { resolveCodingWorkerWorkspaceRoot as resolveCodingWorkerWorkspaceRootFromOrchestrator } from '../agents/orchestrator.js';
 
 test('root and architecture docs preserve the Flue component contract', () => {
   const agents = readText('AGENTS.md');
@@ -17,7 +17,7 @@ test('root and architecture docs preserve the Flue component contract', () => {
   assert.match(agents, /docs\/architecture\/gorombo-flue-map\.md/);
   assert.match(flueArchitecture, /workflows/);
   assert.match(flueArchitecture, /The orchestrator must not directly call web search/);
-  assert.match(goromboMap, /src\/engine\/workflows\/web-research\.ts/);
+  assert.match(goromboMap, /src\/workflows\/web-research\.ts/);
   assert.match(goromboMap, /`src\/app\.ts` must stay close/);
 });
 
@@ -66,8 +66,8 @@ test('GOROMBO Flue map documents every top-level source directory', () => {
 });
 
 test('low-level web retrieval workflows are internal machinery, not public routes', () => {
-  assert.doesNotMatch(readText('src/engine/workflows/retrieval.ts'), /export const route/);
-  assert.doesNotMatch(readText('src/engine/workflows/web-research.ts'), /export const route/);
+  assert.doesNotMatch(readText('src/workflows/retrieval.ts'), /export const route/);
+  assert.doesNotMatch(readText('src/workflows/web-research.ts'), /export const route/);
 });
 
 test('Flue orchestrator routes research to the researcher instead of owning web tools', async () => {
@@ -179,8 +179,8 @@ test('coding worker owns its workspace-backed lead profile', async () => {
     true,
   );
   assert.equal(subagent.skills?.some((skill) => skill.name === 'coding-worker.code-change-loop'), true);
-  assert.equal(existsSync('src/engine/workflows/coding-task.ts'), false);
-  assert.equal(existsSync('src/engine/agents/coding-worker.ts'), false);
+  assert.equal(existsSync('src/workflows/coding-task.ts'), false);
+  assert.equal(existsSync('src/agents/coding-worker.ts'), false);
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
     rmSync(approvalRoot, { recursive: true, force: true });

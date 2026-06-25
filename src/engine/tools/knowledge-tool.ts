@@ -1,6 +1,6 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { goromboPersistenceRuntime } from '../../core/db.js';
+import { goromboPersistenceRuntime } from '../../db.js';
 import { sharedKnowledgeStore } from '../memory/knowledge-service.js';
 import type { NormalizedMessageEvent } from '../../core/types/index.js';
 

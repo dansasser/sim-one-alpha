@@ -153,7 +153,7 @@ kill $(pgrep -f "node.*<port>")
 
 ## Server Startup Sequence
 1. `node --env-file=.env .gorombo/sim-one-alpha/server.mjs` starts
-2. `src/core/db.ts` loads → config reconcile runs → `[capabilities] Reconciled N capability(ies)` if config has capabilities
+2. `src/db.ts` loads → config reconcile runs → `[capabilities] Reconciled N capability(ies)` if config has capabilities
 3. ONNX model loads (~30 seconds, blocks event loop) → `[INFO] embeddings.onnx-loaded`
 4. `[flue] Server listening on http://localhost:<port>`
 5. Health endpoint starts responding (`GET /health` → `{"ok":true}`)
@@ -176,8 +176,8 @@ src/engine/capabilities/
   index.ts                      — barrel exports
 
 src/engine/tools/capability-tools.ts   — add_skill, add_tool, add_worker, add_mcp_server, list_capabilities
-src/engine/agents/orchestrator.ts      — merge layer (loadUserCapabilitiesFromStore at init)
-src/core/db.ts                       — config reconcile at boot
+src/agents/orchestrator.ts      — merge layer (loadUserCapabilitiesFromStore at init)
+src/db.ts                       — config reconcile at boot
 src/core/config/gorombo-config.ts    — GoromboCapabilityConfig type
 src/core/config/gorombo.config.json  — capabilities: [] array
 

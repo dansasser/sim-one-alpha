@@ -36,7 +36,7 @@ Croner fire (dispatch is ADMISSION-ONLY — dispatch resolves = admitted, not co
 
 - **`dispatch()` is admission-only.** It returns `DispatchReceipt { dispatchId, acceptedAt }` — `dispatchId` is "not a workflow runId." The agent turn runs asynchronously in the agent's continuing durable queue. The terminal status is observed in-process via `observe()` (the same API `src/core/telemetry/flue-telemetry.ts` uses) filtered by `event.dispatchId`/`event.instanceId`. A dispatch promise resolving is NOT the turn completing.
 - **Only `orchestrator` is dispatchable.** `coding-worker` is a subagent profile of the orchestrator ("not a separately addressable agent endpoint"). Schedules always dispatch to `orchestrator`; `targetAgent: 'coding-worker'` is carried in the input and the orchestrator delegates to the coding-worker subagent via its `task` tool per its workspace instructions. Direct subagent dispatch is a Flue constraint; the Flue-native way to run a specific subagent on a schedule without an orchestrator turn is workflow-target schedules (deferred, see below).
-- **`node:sqlite`, not `better-sqlite3`.** The Flue `sqlite()` adapter in `src/core/db.ts` stores only Flue-runtime state (sessions, submissions, runs); schedule definitions + run history are application-owned business data (per the Flue database guide) and live in their own `node:sqlite` file, mirroring `GoromboSessionDatabase`.
+- **`node:sqlite`, not `better-sqlite3`.** The Flue `sqlite()` adapter in `src/db.ts` stores only Flue-runtime state (sessions, submissions, runs); schedule definitions + run history are application-owned business data (per the Flue database guide) and live in their own `node:sqlite` file, mirroring `GoromboSessionDatabase`.
 
 ### Schedule kinds
 
@@ -50,7 +50,7 @@ Timezone: Croner `timezone` option (default UTC). Day-of-month/day-of-week use C
 
 ## Surfaces
 
-- **Orchestrator tools** (`src/engine/tools/schedule-tools.ts`, attached to `src/engine/agents/orchestrator.ts`): `schedule_create`, `schedule_pause`, `schedule_resume`, `schedule_update`, `schedule_delete`, `schedule_list`, `schedule_get`, `schedule_run_now`, `schedule_runs`. Auth boundary: `ownerScope` is derived from the trusted chat `eventId` (never model-selected).
+- **Orchestrator tools** (`src/engine/tools/schedule-tools.ts`, attached to `src/agents/orchestrator.ts`): `schedule_create`, `schedule_pause`, `schedule_resume`, `schedule_update`, `schedule_delete`, `schedule_list`, `schedule_get`, `schedule_run_now`, `schedule_runs`. Auth boundary: `ownerScope` is derived from the trusted chat `eventId` (never model-selected).
 - **Coding-worker aliases** (`src/engine/workers/coding-worker/tools/coding-schedule-tools.ts`, lead-only): `coding_schedule_*` scoped to the worker's `projectId`, `targetAgent` defaults to `coding-worker`. Never exposed to internal coding subagents.
 - **Admin HTTP route** (`src/api/routes/schedules.ts`, behind `requireApiSecret`): `GET/POST /api/schedules`, `GET/PATCH/DELETE /api/schedules/:slug`, `POST /api/schedules/:slug/pause|resume|run`, `GET /api/schedules/:slug/runs[/:runId]`. `?wait=1` on run polls the runId to terminal.
 

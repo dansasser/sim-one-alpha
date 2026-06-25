@@ -8,7 +8,7 @@ import { loadRunpodImageCatalog, getRunpodImageModel, getDefaultRunpodImageModel
 import { normalizeWebApiMessage } from '../api/connectors/web-api.js';
 import { persistImageArtifact } from '../engine/tools/runpod-image/artifact-store.js';
 import { recordImageArtifactTool } from '../engine/tools/runpod-image/record-image-artifact-tool.js';
-import { goromboPersistenceRuntime } from '../core/db.js';
+import { goromboPersistenceRuntime } from '../db.js';
 
 test('catalog loads and validates', () => {
   const catalog = loadRunpodImageCatalog();

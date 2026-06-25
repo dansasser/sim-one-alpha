@@ -1,6 +1,6 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { goromboPersistenceRuntime } from '../../core/db.js';
+import { goromboPersistenceRuntime } from '../../db.js';
 import {
   SqliteProtocolProvider,
   defaultProtocolDatabasePath,

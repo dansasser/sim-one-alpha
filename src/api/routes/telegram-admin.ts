@@ -2,7 +2,7 @@ import type { Hono } from 'hono';
 import { TelegramApiClient } from '../../api/connectors/telegram/telegram-api.js';
 import { telegramConnectorState } from '../../api/connectors/telegram/telegram-state.js';
 import { requireApiSecret } from '../../api/middleware/api-secret.js';
-import { goromboPersistenceRuntime } from '../../core/db.js';
+import { goromboPersistenceRuntime } from '../../db.js';
 
 const DM_POLICIES = ['disabled', 'allowlist', 'pairing'] as const;
 type DmPolicy = (typeof DM_POLICIES)[number];

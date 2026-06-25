@@ -17,10 +17,10 @@ const repoRoot = resolve(__dirname, '..');
 
 const TOOL_DIRS = [
   resolve(repoRoot, 'src/engine/tools'),
-  resolve(repoRoot, 'src/api/channels'),
+  resolve(repoRoot, 'src/channels'),
 ];
 const WORKER_ROOT = resolve(repoRoot, 'src/engine/workers');
-const ORCHESTRATOR_FILE = resolve(repoRoot, 'src/engine/agents/orchestrator.ts');
+const ORCHESTRATOR_FILE = resolve(repoRoot, 'src/agents/orchestrator.ts');
 const REGISTRY_FILE = resolve(repoRoot, 'src/engine/registries/default-registries.ts');
 
 /**
@@ -164,7 +164,7 @@ function main() {
   const subagents = new Set();
   const skills = new Set();
 
-  // 1. Tools: scan src/engine/tools/ (recursive) and src/api/channels/ for defineTool.
+  // 1. Tools: scan src/engine/tools/ (recursive) and src/channels/ for defineTool.
   for (const toolDir of TOOL_DIRS) {
     for (const file of collectTsFiles(toolDir)) {
       const content = safeReadFile(file);
@@ -224,7 +224,7 @@ function main() {
 
   // 4. Imported skills scan across agents and workers.
   const scanDirsForSkills = [
-    resolve(repoRoot, 'src/engine/agents'),
+    resolve(repoRoot, 'src/agents'),
     resolve(repoRoot, 'src/engine/workers'),
   ];
   for (const dir of scanDirsForSkills) {

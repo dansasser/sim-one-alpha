@@ -3,7 +3,7 @@ import * as v from 'valibot';
 import { loadRunpodImageCatalog, getRunpodImageModel } from '../../../engine/tools/runpod-image/catalog.js';
 import { persistImageArtifact } from '../../../engine/tools/runpod-image/artifact-store.js';
 import { resolveImageArtifactFilePath } from '../../../engine/tools/runpod-image/paths.js';
-import { goromboPersistenceRuntime } from '../../../core/db.js';
+import { goromboPersistenceRuntime } from '../../../db.js';
 
 export const recordImageArtifactTool = defineTool({
   name: 'record_image_artifact',

@@ -6,8 +6,8 @@ import {
   createFlueContext,
   resolveModel,
 } from '@flue/runtime/internal';
-import orchestratorAgent from '../../engine/agents/orchestrator.js';
-import { goromboPersistenceRuntime } from '../../core/db.js';
+import orchestratorAgent from '../../agents/orchestrator.js';
+import { goromboPersistenceRuntime } from '../../db.js';
 export { directAgentHarnessName, directAgentSessionName } from '../../engine/session/direct-agent-session.js';
 
 export interface DurableOrchestratorSessionInput {

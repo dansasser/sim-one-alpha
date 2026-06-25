@@ -1,8 +1,8 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { goromboPersistenceRuntime } from '../../core/db.js';
+import { goromboPersistenceRuntime } from '../../db.js';
 import { readNonNegativeInteger, readPositiveInteger, readWebFetchMode } from '../../core/utils/input.js';
-import { retrieveContext } from '../../engine/workflows/retrieval.js';
+import { retrieveContext } from '../../workflows/retrieval.js';
 
 export const retrieveContextTool = defineTool({
   name: 'retrieve_context',

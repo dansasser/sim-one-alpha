@@ -1,5 +1,5 @@
-import type { WebFetchMode } from '../../engine/workflows/retrieval.js';
-import type { ResearchDepth, ResearchFreshness } from '../../engine/workflows/web-research.js';
+import type { WebFetchMode } from '../../workflows/retrieval.js';
+import type { ResearchDepth, ResearchFreshness } from '../../workflows/web-research.js';
 
 /**
  * Reads a positive integer from a number or numeric string.

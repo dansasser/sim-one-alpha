@@ -8,7 +8,7 @@ import type { RagProvider, WebFetchResult } from '../engine/rag/providers.js';
 import { GoromboSessionDatabase } from '../engine/session/session-database.js';
 import { estimateTextTokens } from '../engine/session/context-budget.js';
 import type { RagQuery, RetrievedContext } from '../core/types/index.js';
-import { retrieveContext } from '../engine/workflows/retrieval.js';
+import { retrieveContext } from '../workflows/retrieval.js';
 
 let eventCounter = 0;
 function seedEvent() {
@@ -478,7 +478,7 @@ test('retrieval workflow rejects web search outside the researcher boundary', as
 });
 
 test('retrieval workflow default document-index provider is vector-backed', async () => {
-  const module = await import(`../engine/workflows/retrieval.js?doc-index=${Date.now()}`) as typeof import("../engine/workflows/retrieval.js");
+  const module = await import(`../workflows/retrieval.js?doc-index=${Date.now()}`) as typeof import("../workflows/retrieval.js");
   const providers = module.createDefaultRetrievalProviders({});
   const documentIndexProvider = providers.find((provider) => provider.id === 'document-index');
 

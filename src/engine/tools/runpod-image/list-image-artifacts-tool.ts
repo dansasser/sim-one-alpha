@@ -1,6 +1,6 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { goromboPersistenceRuntime } from '../../../core/db.js';
+import { goromboPersistenceRuntime } from '../../../db.js';
 import type { ImageArtifactRecord } from '../../../core/schemas/runpod-image.js';
 
 export const listImageArtifactsTool = defineTool({

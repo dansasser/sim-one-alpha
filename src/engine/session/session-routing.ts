@@ -1,4 +1,4 @@
-import { goromboPersistenceRuntime } from '../../core/db.js';
+import { goromboPersistenceRuntime } from '../../db.js';
 import type { ConnectorKind, NormalizedMessageEvent } from '../../core/types/index.js';
 import type { ChatSessionRecord } from '../../engine/session/session-database.js';
 

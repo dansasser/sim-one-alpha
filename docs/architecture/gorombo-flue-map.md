@@ -4,7 +4,19 @@ This file maps Flue architecture to this repository.
 
 ## Top-Level Source Directory Map
 
-Every top-level `src/` directory should fit one of these five buckets: `src/core/`, `src/api/`, `src/engine/`, `src/workspace/`, and `src/tests/`. If a new directory is added, update this map in the same change.
+Every top-level `src/` entry should fit one of these categories: Flue-contract files (`src/agents/`, `src/workflows/`, `src/channels/`, `src/db.ts`, `src/app.ts`), or one of the consolidation buckets (`src/core/`, `src/api/`, `src/engine/`, `src/workspace/`, `src/tests/`). If a new directory is added, update this map in the same change.
+
+### Flue-contract top-level files and directories
+
+Flue discovers these at the `src/` root. They cannot be moved into buckets.
+
+| Path | Type | Ownership rule |
+| --- | --- | --- |
+| `src/agents/` | Flue agent entrypoints | Main `createAgent(...)` files discovered by Flue. Each immediate file defines one agent; its filename becomes the agent name. |
+| `src/workflows/` | Flue workflows | Finite Flue operations that can initialize agents, manage bounded loops, and return structured results. Each immediate file defines one discovered workflow. |
+| `src/channels/` | Flue-native channel handlers | First-party provider ingress (e.g. Telegram) discovered by Flue under `/channels/<name>/...`. |
+| `src/db.ts` | Flue persistence adapter entrypoint | Flue Node persistence adapter entrypoint discovered by Flue at build time. Exports the SIM-ONE Alpha persistence adapter wrapper around Flue's sqlite() adapter. |
+| `src/app.ts` | Application entrypoint | Hono application shell and Flue route mount. |
 
 ### `src/core/` — cross-cutting foundations
 
@@ -17,14 +29,12 @@ Every top-level `src/` directory should fit one of these five buckets: `src/core
 | `src/core/telemetry/` | Observability subsystem | Sanitized Flue event capture and run summaries. |
 | `src/core/types/` | Shared TypeScript contracts | Public/common interfaces used across subsystems. |
 | `src/core/utils/` | Generic helpers | Small cross-cutting helpers only; domain subsystems do not belong here. |
-| `src/core/db.ts` | Flue persistence adapter entrypoint | Flue Node persistence adapter entrypoint discovered by Flue at build time. Exports the SIM-ONE Alpha persistence adapter wrapper around Flue's sqlite() adapter. |
 
 ### `src/api/` — HTTP/connector ingress surface
 
 | Path | Type | Ownership rule |
 | --- | --- | --- |
-| `src/api/channels/` | Flue-native channel handlers | First-party provider ingress (e.g. Telegram) discovered by Flue under `/channels/<name>/...`. |
-| `src/api/connectors/` | Connector normalization | External-source adapters that normalize input into internal message shapes. Legacy Telegram ingress moved to `src/api/channels/telegram.ts`. |
+| `src/api/connectors/` | Connector normalization | External-source adapters that normalize input into internal message shapes. Legacy Telegram ingress moved to `src/channels/telegram.ts`. |
 | `src/api/ingress/` | Application ingress modules | Cross-cutting ingress logic that turns internal worker events and storage into HTTP/connector-facing surfaces. Example: the approval ingress bridges `CodingApprovalService` to HTTP routes, CLI, and connectors. |
 | `src/api/middleware/` | HTTP middleware | Reusable Hono middleware such as API-secret auth. |
 | `src/api/routes/` | HTTP route modules | Concrete app-owned Hono route registration modules. |
@@ -33,9 +43,8 @@ Every top-level `src/` directory should fit one of these five buckets: `src/core
 
 | Path | Type | Ownership rule |
 | --- | --- | --- |
-| `src/engine/agents/` | Flue agent entrypoints | Main `createAgent(...)` files discovered by Flue. |
 | `src/engine/approvals/` | Shared approval subsystem | Approval service factory and ingress types shared by the coding worker and connectors/HTTP/CLI surfaces. |
-| `src/engine/capabilities/` | Runtime capability registry subsystem | SQLite-backed user/agent-added capability store (skills, tools, workers, MCP). `capability-store.ts` owns CRUD; `capability-loader.ts` reads enabled rows at orchestrator init; `skill-materializer.ts` copies/github-clones user skill dirs into Flue's discovery path; `mcp-broker.ts` connects MCP servers and returns tools. Loaded at `createAgent(...)` init in `src/engine/agents/orchestrator.ts`. See `scripts/capability-admin.mjs` for CLI admin. |
+| `src/engine/capabilities/` | Runtime capability registry subsystem | SQLite-backed user/agent-added capability store (skills, tools, workers, MCP). `capability-store.ts` owns CRUD; `capability-loader.ts` reads enabled rows at orchestrator init; `skill-materializer.ts` copies/github-clones user skill dirs into Flue's discovery path; `mcp-broker.ts` connects MCP servers and returns tools. Loaded at `createAgent(...)` init in `src/agents/orchestrator.ts`. See `scripts/capability-admin.mjs` for CLI admin. |
 | `src/engine/commands/` | Pre-LLM command parsing | Slash command definitions and parsing that run before prompts reach the LLM. |
 | `src/engine/embeddings/` | Bundled local embedding model | In-process ONNX + tokenizer path used by the RAG embedding fallback. |
 | `src/engine/memory/` | Shared memory subsystem | Memory retrieval interfaces and routing shared by agents/tools/workflows. Hosts `rust-memory-engine.ts`, the TypeScript shim for the `gorombo-memory` WASM engine (structured memory: checklists, todos, session notes), and `checklist-memory-provider.ts`, the structured-memory RAG provider. Also hosts `knowledge-service.ts` (the shared service module folded in from the removed `src/services/` directory). |
@@ -46,7 +55,6 @@ Every top-level `src/` directory should fit one of these five buckets: `src/core
 | `src/engine/skills/` | Imported/bundled skills | Reusable workflow knowledge for the main orchestrator and shared subagents. |
 | `src/engine/tools/` | Model-callable tools | `defineTool(...)` capabilities attached only to owning agents. |
 | `src/engine/workers/` | Worker/subagent implementations | Specialized worker profiles plus worker-local support code and worker workspaces. |
-| `src/engine/workflows/` | Flue workflows | Finite Flue operations that can initialize agents, manage bounded loops, and return structured results. |
 
 ### `src/workspace/` — agent persona content
 
@@ -60,18 +68,6 @@ Every top-level `src/` directory should fit one of these five buckets: `src/core
 | --- | --- | --- |
 | `src/tests/` | Test suite | Node test files compiled to `.tmp/tsc/tests`. |
 
-### Flue discovery shims
-
-Flue hardcodes discovery at `src/agents/`, `src/workflows/`, and `src/channels/` with no config override. These directories contain thin re-export shims that point to the real implementations under `src/engine/` and `src/api/`. Each shim is a single `export *` line.
-
-| Path | Type | Ownership rule |
-| --- | --- | --- |
-| `src/agents/` | Flue agent discovery shim | Re-exports from `src/engine/agents/`. Flue requires agent files at this path for name-based discovery. |
-| `src/workflows/` | Flue workflow discovery shim | Re-exports from `src/engine/workflows/`. Flue requires workflow files at this path for name-based discovery. |
-| `src/channels/` | Flue channel discovery shim | Re-exports from `src/api/channels/`. Flue requires channel files at this path for name-based discovery. |
-
-Flue also hardcodes `src/db.ts` as the persistence adapter entrypoint. A re-export shim at `src/db.ts` forwards to `src/core/db.ts`, which contains the real `goromboPersistenceRuntime` adapter wrapper.
-
 Top-level non-`src/` directories:
 
 | `crates/gorombo-memory/` | Rust engine compiled to WebAssembly via `wasm-pack`. Owns the structured-memory data model, validation (scope non-empty, slug uniqueness, checklist cycle/depth), the in-memory inverted index, and the query planner. Never exposed to the model or agents directly — only via `src/engine/memory/rust-memory-engine.ts`. The TypeScript shim generates ids/timestamps/audit fields (Rust owns no clock/RNG in the WASM target) and passes fully-formed records to the WASM exports. The WASM module keeps a `thread_local` store hydrated by `reconcile_index` from the durable SQLite store on cold start. |
@@ -82,7 +78,7 @@ Root source files:
 src/app.ts
   Hono application shell and Flue route mount.
 
-src/core/db.ts
+src/db.ts
   Flue Node persistence adapter entrypoint discovered by Flue at build time.
   Exports the SIM-ONE Alpha persistence adapter wrapper around Flue's sqlite() adapter.
 
@@ -131,7 +127,7 @@ src/api/routes/schedules.ts
   App-owned /api/schedules/* admin route (full v1), behind requireApiSecret.
   CRUD + pause/resume + force-fire + run history; forwards into the Flue agent dispatch path (create/update/delete/pause/resume mutate the row + syncCron; run calls fireNow which dispatches). ?wait=1 polls the runId to terminal.
 
-src/core/db.ts
+src/db.ts
   Flue persistence adapter entrypoint.
   Uses Flue's Node sqlite() adapter for canonical agent sessions, durable direct/dispatch submissions, and event streams.
   Supplies SQLite workflow run and run registry records through SIM-ONE Alpha's persistence wrapper.
@@ -153,7 +149,7 @@ src/core/telemetry/flue-telemetry.ts
   Stores sanitized live event summaries in memory by runId.
   Tracks whether a run delegated to the researcher and whether web_research was called.
 
-src/engine/agents/orchestrator.ts
+src/agents/orchestrator.ts
   Main Flue orchestrator agent.
   Coordinates protocols, memory lookup, subagent delegation, and final synthesis.
   Composes its instructions from main workspace files plus a small runtime capability block.
@@ -221,16 +217,16 @@ src/core/config/
 .gorombo/sim-one-alpha/gorombo.config.json
   Built editable runtime config shipped with the product. Starts with primary and backup model card keys.
 
-src/engine/workflows/research.ts
+src/workflows/research.ts
   Finite direct research harness for testing or direct research runs.
   Initializes the researcher.
 
-src/engine/workflows/retrieval.ts
+src/workflows/retrieval.ts
   Shared retrieval machinery.
   Web-search provider access is restricted to the researcher/research workflow caller boundary.
   Does not expose a public route.
 
-src/engine/workflows/web-research.ts
+src/workflows/web-research.ts
   Researcher-owned web research workflow.
   Handles query planning, basic/standard/deep research depth, cache, web search, fetch, evidence packing, confidence, and failures.
   Used by the researcher-owned web_research tool.
@@ -244,7 +240,7 @@ src/engine/capabilities/
   owns CRUD; `capability-loader.ts` reads enabled rows at orchestrator init;
   `skill-materializer.ts` copies/github-clones user skill dirs into Flue's
   discovery path; `mcp-broker.ts` connects MCP servers and returns tools.
-  Loaded at `createAgent(...)` init in `src/engine/agents/orchestrator.ts`. See
+  Loaded at `createAgent(...)` init in `src/agents/orchestrator.ts`. See
   `docs/architecture/capability-system.md` and `scripts/capability-admin.mjs`.
   `tool-loader.ts` and `worker-loader.ts` dynamically `import()` user JS
   modules that export `defineTool(...`/`defineAgentProfile(...)` results.
@@ -400,4 +396,4 @@ POST /api/chat/events
 -> 200 { result, streamUrl, offset, event, session }
 ```
 
-Async connector-style delivery should use Flue `dispatch(...)` against the orchestrator agent instance. Direct prompts and dispatched inputs share Flue's durable agent submission lifecycle when the Node runtime uses the SQLite `src/core/db.ts` adapter.
+Async connector-style delivery should use Flue `dispatch(...)` against the orchestrator agent instance. Direct prompts and dispatched inputs share Flue's durable agent submission lifecycle when the Node runtime uses the SQLite `src/db.ts` adapter.

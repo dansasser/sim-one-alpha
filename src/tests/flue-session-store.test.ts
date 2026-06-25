@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import type { SessionData } from '@flue/runtime/adapter';
-import orchestratorAgent from '../engine/agents/orchestrator.js';
+import orchestratorAgent from '../agents/orchestrator.js';
 import {
   createFlueSessionStorageKey,
   parseFlueSessionStorageKey,

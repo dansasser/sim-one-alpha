@@ -1,4 +1,4 @@
-import { goromboPersistenceRuntime } from '../../core/db.js';
+import { goromboPersistenceRuntime } from '../../db.js';
 import { getStructuredMemoryEngine } from '../../engine/memory/structured-memory-runtime.js';
 import type { MemoryEngine } from '../../engine/memory/memory-engine.js';
 import type { MemoryRecordScope } from '../../core/types/memory.js';

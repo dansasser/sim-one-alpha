@@ -73,7 +73,7 @@ src/app.ts
   No direct old/non-Flue orchestrator path.
   No passing process.env into model-provider setup.
 
-src/engine/agents/orchestrator.ts
+src/agents/orchestrator.ts
   Main Flue createAgent(...) entrypoint.
   The main agent selects models from project model cards.
   The main agent attaches tools, skills, subagents, sessions, and compaction.
@@ -89,7 +89,7 @@ src/engine/workers/<name>/*.ts
 src/engine/workers/<name>/workspace/
   Worker user-editable workspace persona files.
 
-src/engine/workflows/*.ts
+src/workflows/*.ts
   Finite Flue operations.
   Workflows can initialize agents, open sessions, call tasks/skills, and implement bounded application machinery.
 
@@ -279,7 +279,7 @@ Testing / Review Worker
 Future Domain Workers
 ```
 
-Internal subagents under `src/engine/workers/<name>/subagents/` are owned by that worker. They must not be exposed directly to `src/engine/agents/orchestrator.ts` or registered as top-level orchestrator tools/subagents.
+Internal subagents under `src/engine/workers/<name>/subagents/` are owned by that worker. They must not be exposed directly to `src/agents/orchestrator.ts` or registered as top-level orchestrator tools/subagents.
 
 Workers return structured results.
 

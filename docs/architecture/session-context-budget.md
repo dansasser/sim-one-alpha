@@ -14,7 +14,7 @@ Sources:
 - Installed runtime types: `node_modules/@flue/runtime/dist/run-registry-PAFvJO48.d.mts`
 - Installed runtime implementation: `node_modules/@flue/runtime/dist/run-store-CkOkvOxX.mjs`
 
-Flue persists session state through the configured `PersistenceAdapter`. On Node, the current Flue persistence entrypoint is a source-root `src/core/db.ts` file that exports an adapter such as `sqlite('./data/flue.db')`. Without `db.ts`, the Node target uses in-memory state that disappears when the process exits. `SessionData` is version 5 and contains `affinityKey`, entries, `leafId`, metadata, and timestamps.
+Flue persists session state through the configured `PersistenceAdapter`. On Node, the current Flue persistence entrypoint is a source-root `src/db.ts` file that exports an adapter such as `sqlite('./data/flue.db')`. Without `db.ts`, the Node target uses in-memory state that disappears when the process exits. `SessionData` is version 5 and contains `affinityKey`, entries, `leafId`, metadata, and timestamps.
 
 `session.prompt(...)` appends the user prompt to the active session and runs against the session's current conversation context. The runtime rebuilds the agent harness state from stored session history when opening a session, then syncs newly produced messages back into session history after each prompt.
 
@@ -37,14 +37,14 @@ The active runtime model card now drives context budgeting and compaction:
 - the shipped `gorombo.config.json` runtime file selects the primary model card and optional backup model card for the deployment.
 - `src/engine/session/context-budget.ts` calculates enforced context, output reserve, usable input, warning threshold, compaction threshold, and hard-stop threshold.
 - `src/engine/session/compaction-policy.ts` converts token estimates into `normal`, `warn`, `compact`, or `stop`.
-- `src/core/db.ts` exports the Flue persistence adapter discovered by Flue at build time.
+- `src/db.ts` exports the Flue persistence adapter discovered by Flue at build time.
 - `src/engine/session/session-persistence.ts` wraps Flue's built-in SQLite adapter through the public `PersistenceAdapter` contract.
 - `src/engine/session/session-database.ts` stores SIM-ONE Alpha session catalog, active-session routing, logical Flue session indexes, durable direct-agent instance indexes, normalized event context, and extracted session-memory FTS records.
 - `src/engine/session/flue-session-store.ts` contains Flue session-key helpers only.
 - `src/engine/session/session-budget.ts` derives budget state from stored Flue `SessionData` and keeps an in-process fallback ledger for cases where session data is unavailable.
 - `src/api/routes/chat-events.ts` owns HTTP chat ingress and opens durable direct-agent sessions for slash commands.
 - `src/api/routes/chat-events.ts` is the primary app-owned chat ingress. It persists normalized event context and prompts `/agents/orchestrator/:sessionId?wait=result` so normal chat enters Flue's durable agent submission lifecycle.
-- `src/engine/agents/orchestrator.ts` passes card-derived Flue compaction settings to `createAgent(...)`; it does not pass persistence. Persistence belongs to `src/core/db.ts`.
+- `src/agents/orchestrator.ts` passes card-derived Flue compaction settings to `createAgent(...)`; it does not pass persistence. Persistence belongs to `src/db.ts`.
 
 Flue remains the owner of canonical `SessionData`. The SIM-ONE Alpha wrapper indexes latest data by logical harness/session name for workflows and by instance/harness/session identity for durable direct-agent sessions.
 
@@ -64,7 +64,7 @@ This keeps Flue's native automatic compaction enabled on the durable direct-agen
 
 ## Persistence And Session Memory Boundary
 
-`src/core/db.ts` is the Flue persistence boundary. `src/engine/session/session-database.ts` is the SIM-ONE Alpha sidecar index for product session records and extracted session-memory retrieval.
+`src/db.ts` is the Flue persistence boundary. `src/engine/session/session-database.ts` is the SIM-ONE Alpha sidecar index for product session records and extracted session-memory retrieval.
 
 Current behavior:
 

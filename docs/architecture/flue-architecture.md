@@ -65,7 +65,7 @@ If app-owned ingress is needed, it must dispatch or invoke the Flue agent/workfl
 
 An agent file is a Flue `createAgent(...)` entrypoint. Every agent has a main file. A subagent is a Flue agent profile called by an agent. In this project, that Flue term is not a model-selection concept; model selection always goes through project model cards.
 
-The main agent entrypoint lives at `src/engine/agents/orchestrator.ts`. A re-export shim at `src/agents/orchestrator.ts` satisfies Flue's hardcoded discovery path. Subagent implementations live under `src/engine/workers/<name>/` so they do not sit at the same directory level as the main agent. The main agent workspace lives at `src/workspace/`; subagent workspaces live at `src/engine/workers/<name>/workspace/`.
+The main agent entrypoint lives at `src/agents/orchestrator.ts`. Subagent implementations live under `src/engine/workers/<name>/` so they do not sit at the same directory level as the main agent. The main agent workspace lives at `src/workspace/`; subagent workspaces live at `src/engine/workers/<name>/workspace/`.
 
 Agents own:
 
@@ -84,7 +84,7 @@ Agents use model specifiers from project model cards. They do not hardcode provi
 
 ## Workflows
 
-Workflow files live under `src/engine/workflows/` and export `run(...)`. Workflows are finite application-controlled operations.
+Workflow files live under `src/workflows/` and export `run(...)`. Workflows are finite application-controlled operations.
 
 Workflows may:
 

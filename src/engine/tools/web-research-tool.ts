@@ -1,6 +1,6 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { goromboPersistenceRuntime } from '../../core/db.js';
+import { goromboPersistenceRuntime } from '../../db.js';
 import {
   readNonNegativeInteger,
   readPositiveInteger,
@@ -8,7 +8,7 @@ import {
   readResearchFreshness,
   readWebFetchMode,
 } from '../../core/utils/input.js';
-import { runWebResearch } from '../../engine/workflows/web-research.js';
+import { runWebResearch } from '../../workflows/web-research.js';
 
 export const webResearchTool = defineTool({
   name: 'web_research',

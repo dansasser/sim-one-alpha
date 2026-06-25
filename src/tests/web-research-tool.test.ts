@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { webResearchTool } from '../engine/tools/web-research-tool.js';
-import { goromboPersistenceRuntime } from '../core/db.js';
+import { goromboPersistenceRuntime } from '../db.js';
 
 function seedEvent() {
   const db = goromboPersistenceRuntime.sessionDatabase;

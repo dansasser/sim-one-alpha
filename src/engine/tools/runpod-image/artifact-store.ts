@@ -1,5 +1,5 @@
 import { statSync } from 'node:fs';
-import { goromboPersistenceRuntime } from '../../../core/db.js';
+import { goromboPersistenceRuntime } from '../../../db.js';
 import { estimateTextTokens } from '../../../engine/session/context-budget.js';
 import type {
   ImageArtifactRecord,

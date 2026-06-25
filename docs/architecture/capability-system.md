@@ -122,7 +122,7 @@ src/engine/capabilities/
 scripts/
   capability-admin.mjs     CLI admin script (add/list/enable/disable/remove/update)
 
-src/engine/agents/
+src/agents/
   orchestrator.ts          Modified — calls loadUserCapabilitiesFromStore(env) at init,
                             merges user tools/MCP into tools array, user workers into subagents
 ```
@@ -137,7 +137,7 @@ Agent-initiated additions of code-exec kinds (tool, worker, MCP) will go through
 
 ## Config-File Mirror
 
-`gorombo.config.json` has a `capabilities` array that reconciles into SQLite on boot (in `src/core/db.ts`, at server startup — before any agent request). Config is additive: entries in config but missing from SQLite get inserted with `installedBy: "seed"`; entries already in SQLite are skipped (idempotent). Removal is a CLI/db operation, not a config edit.
+`gorombo.config.json` has a `capabilities` array that reconciles into SQLite on boot (in `src/db.ts`, at server startup — before any agent request). Config is additive: entries in config but missing from SQLite get inserted with `installedBy: "seed"`; entries already in SQLite are skipped (idempotent). Removal is a CLI/db operation, not a config edit.
 
 ```json
 {

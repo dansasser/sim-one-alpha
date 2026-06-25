@@ -1,4 +1,4 @@
-import { goromboPersistenceRuntime } from '../../core/db.js';
+import { goromboPersistenceRuntime } from '../../db.js';
 import { LanceDbKnowledgeStore } from '../../engine/rag/knowledge-store.js';
 import type { AddKnowledgeInput } from '../../engine/rag/knowledge-store.js';
 

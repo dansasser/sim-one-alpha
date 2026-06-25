@@ -1,6 +1,6 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { goromboPersistenceRuntime } from '../../core/db.js';
+import { goromboPersistenceRuntime } from '../../db.js';
 import { SessionMemoryProvider } from '../../engine/memory/memory-provider.js';
 import { MemoryRouter } from '../../engine/memory/memory-router.js';
 import { getStructuredMemoryRuntime, resetStructuredMemoryRuntime } from '../../engine/memory/structured-memory-runtime.js';

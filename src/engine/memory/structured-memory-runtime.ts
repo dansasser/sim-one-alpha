@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { goromboPersistenceRuntime } from '../../core/db.js';
+import { goromboPersistenceRuntime } from '../../db.js';
 import type { GoromboConfig } from '../../core/config/gorombo-config.js';
 import type {
   AddChecklistItemInput,

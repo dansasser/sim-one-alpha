@@ -6,7 +6,7 @@ import {
   type ParsedSlashCommand,
 } from '../../engine/commands/slash-commands.js';
 import { normalizeWebApiMessage, type WebApiMessageInput } from '../../api/connectors/web-api.js';
-import { goromboPersistenceRuntime } from '../../core/db.js';
+import { goromboPersistenceRuntime } from '../../db.js';
 import { requireApiSecret, runtimeEnvForRequest } from '../../api/middleware/api-secret.js';
 import { configureRuntimeModels } from '../../core/models/index.js';
 import { calculateContextBudget } from '../../engine/session/context-budget.js';

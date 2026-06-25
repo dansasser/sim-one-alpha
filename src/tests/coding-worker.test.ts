@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import * as v from 'valibot';
-import orchestratorAgent from '../engine/agents/orchestrator.js';
+import orchestratorAgent from '../agents/orchestrator.js';
 import { CodingFileEditSchema, CodingImplementerResultSchema } from '../core/schemas/coding-worker.js';
 import { evaluateCodingApproval, createCodingApprovalRequest } from '../engine/workers/coding-worker/approvals/approval-policy.js';
 import {

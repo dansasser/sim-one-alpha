@@ -959,7 +959,7 @@ Implemented pieces:
 - `resolveModelCard(...)` maps a Flue model specifier back to a project model card.
 - `calculateContextBudget(...)` chooses the provider-safe context window, reserves output tokens, and calculates warning, compaction, and hard-stop thresholds.
 - `evaluateCompaction(...)` returns `normal`, `warn`, `compact`, or `stop`.
-- `src/core/db.ts` exports the Flue persistence adapter discovered by Flue at build time.
+- `src/db.ts` exports the Flue persistence adapter discovered by Flue at build time.
 - `session-persistence.ts` wraps Flue's built-in SQLite adapter and indexes latest logical workflow sessions plus durable direct-agent instance sessions.
 - `session-database.ts` stores chat session catalog records, active connector sessions, persisted normalized event context, and session-memory FTS chunks.
 - `deriveSessionBudgetStateFromData(...)` estimates budget from the stored Flue conversation tree, including compaction entries.
@@ -1037,7 +1037,7 @@ Use the boundaries this way:
 - low-level provider errors: the research workflow records failures in `providerFailures`
 - research strategy: researcher decides which searches to run, when to fetch pages, when to stop, and how to compare sources
 
-The researcher subagent lives in `src/engine/workers/researcher/researcher.ts` and owns the `web_research` tool. The standalone `research` workflow in `src/engine/workflows/research.ts` initializes the researcher directly for CLI or API research runs. Use `pnpm run research:local -- "..."` for local one-shot research testing.
+The researcher subagent lives in `src/engine/workers/researcher/researcher.ts` and owns the `web_research` tool. The standalone `research` workflow in `src/workflows/research.ts` initializes the researcher directly for CLI or API research runs. Use `pnpm run research:local -- "..."` for local one-shot research testing.
 
 Main-agent workspace persona files live in `src/workspace/`. Subagent workspace persona files live beside their subagent implementation, for example `src/engine/workers/researcher/workspace/`. Persona names belong inside workspace file contents, not in architecture paths.
 

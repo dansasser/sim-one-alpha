@@ -1,4 +1,4 @@
-import { goromboPersistenceRuntime } from '../../core/db.js';
+import { goromboPersistenceRuntime } from '../../db.js';
 ﻿import type { Hono } from 'hono';
 import { normalizeWebApiMessage, type WebApiMessageInput } from '../../api/connectors/web-api.js';
 import { requireApiSecret, runtimeEnvForRequest } from '../../api/middleware/api-secret.js';

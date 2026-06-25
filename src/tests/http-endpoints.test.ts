@@ -3,7 +3,7 @@ import test from 'node:test';
 import type { FlueEvent, FlueSession } from '@flue/runtime';
 import { Hono } from 'hono';
 import app from '../app.js';
-import { goromboPersistenceRuntime } from '../core/db.js';
+import { goromboPersistenceRuntime } from '../db.js';
 import { requireApiSecret } from '../api/middleware/api-secret.js';
 import { registerChatEventRoutes } from '../api/routes/chat-events.js';
 import { registerTelemetryRoutes } from '../api/routes/telemetry.js';

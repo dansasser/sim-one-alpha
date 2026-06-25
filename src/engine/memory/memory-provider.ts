@@ -1,6 +1,6 @@
 ﻿import type { EmbeddingClient } from '../../engine/rag/embeddings.js';
 import type { VectorStore } from '../../engine/rag/vector/index.js';
-import { goromboPersistenceRuntime } from '../../core/db.js';
+import { goromboPersistenceRuntime } from '../../db.js';
 import type { RagQuery, RetrievedContext } from '../../core/types/index.js';
 
 export interface MemoryProvider {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createResearchPrompt } from '../engine/workflows/research.js';
+import { createResearchPrompt } from '../workflows/research.js';
 
 test('research workflow prompt instructs the researcher to use retrieval controls', () => {
   const prompt = createResearchPrompt({

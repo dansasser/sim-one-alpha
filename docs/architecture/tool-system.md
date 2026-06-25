@@ -21,7 +21,7 @@ Tools are discovered at build time by Flue and wired into the owning agent's `to
 2. Define Valibot/Flue parameter schemas and a clear `description`.
 3. Implement `execute` to perform the capability and return structured JSON or a string.
 4. Export the tool from `src/engine/tools/index.ts`.
-5. Attach the tool to the owning agent in `src/engine/agents/orchestrator.ts` or a worker entrypoint.
+5. Attach the tool to the owning agent in `src/agents/orchestrator.ts` or a worker entrypoint.
 6. Update `src/workspace/TOOLS.md` to document when and how the tool should be used.
 7. Update `docs/architecture/gorombo-flue-map.md` if the new tool introduces a new directory or cross-cutting concern.
 
