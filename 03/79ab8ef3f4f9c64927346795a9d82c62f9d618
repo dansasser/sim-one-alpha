@@ -1,0 +1,19 @@
+sim-one-cli/src/cli.tsx
+  s_76757f26def8c6::t_7f1f131bacdf03 40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "0379ab8ef3f4f9c64927346795a9d82c62f9d618",
+  "prompts": {},
+  "sessions": {
+    "s_76757f26def8c6": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_0ffcf1734ffe1mO2WLwGDAOOpJ",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
