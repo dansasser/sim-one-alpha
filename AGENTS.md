@@ -726,9 +726,7 @@ Memory provides applicable context.
 
 Memory retrieval is prioritized before advanced memory storage.
 
-After basic chat routing is operational, Memory and RAG should be among the first major systems implemented.
-
-The initial memory architecture may leverage the existing doc-index approach.
+Memory and RAG are implemented as first-class architecture layers.
 
 Connectors do not orchestrate.
 

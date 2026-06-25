@@ -1342,7 +1342,7 @@ Do not claim tests passed unless they were actually run.
 
 ## Public Development Status
 
-This repository is public during early development to help the community learn from and contribute to the project.
+This repository is public during development to help the community learn from and contribute to the project.
 
 The project may become private later as proprietary business logic, client-specific workflows, and production infrastructure are added.
 
