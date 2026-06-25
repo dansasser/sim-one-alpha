@@ -4,8 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches:
-      - "**"
+    branches: [main]
 
 jobs:
   test:
@@ -70,7 +69,6 @@ jobs:
           GOROMBO_TEST_MODE: '1'
 
       - name: TUI end-to-end test
-        if: ${{ secrets.OLLAMA_API_KEY != '' }}
         run: pnpm run test:tui
         env:
           GOROMBO_TEST_MODE: '1'
