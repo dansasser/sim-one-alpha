@@ -70,7 +70,7 @@ jobs:
 
       - name: TUI end-to-end test
         run: pnpm run test:tui
-        env:
+        if: ${{ secrets.OLLAMA_API_KEY != '' }}
           GOROMBO_TEST_MODE: '1'
           OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
 
