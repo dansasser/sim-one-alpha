@@ -78,9 +78,11 @@ test('web_research tool accepts string budget controls and webFetch mode', async
 
 test('web_research tool falls back to explicit actor/conversation when event is not persisted', async () => {
   const originalFetch = globalThis.fetch;
+  const fetchCalls = [];
   try {
-    globalThis.fetch = async () =>
-      new Response(
+    globalThis.fetch = async (url, init) => {
+      fetchCalls.push({ url: String(url), body: init?.body });
+      return new Response(
         JSON.stringify({
           results: [
             {
@@ -92,6 +94,7 @@ test('web_research tool falls back to explicit actor/conversation when event is 
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
+    };
 
     const result = JSON.parse(
       await webResearchTool.execute({
@@ -109,9 +112,16 @@ test('web_research tool falls back to explicit actor/conversation when event is 
         minSources: '1',
         maxIterations: '1',
       }),
-    ) as { budget?: { depth?: string } };
+    ) as {
+      budget?: { depth?: string };
+      queriesRun?: string[];
+    };
 
     assert.equal(result.budget?.depth, 'basic');
+    assert.deepEqual(result.queriesRun, ['query']);
+    // Verify the tool actually made a search call — proving the fallback
+    // actor/conversation values were used (not a throw, not a skip).
+    assert.ok(fetchCalls.length > 0, 'web_research should have made at least one fetch call with fallback params');
   } finally {
     globalThis.fetch = originalFetch;
   }
