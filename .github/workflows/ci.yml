@@ -4,7 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches:
+      - "**"
 
 jobs:
   test:
@@ -57,10 +58,23 @@ jobs:
       - name: Build
         run: pnpm run build
 
+      - name: Build CLI
+        run: pnpm run build:cli
+
+      - name: Verify CLI binary
+        run: test -f .gorombo/sim-one-cli/cli.js
+
       - name: Integration tests
         run: pnpm run test:http
         env:
           GOROMBO_TEST_MODE: '1'
+
+      - name: TUI end-to-end test
+        if: ${{ secrets.OLLAMA_API_KEY != '' }}
+        run: pnpm run test:tui
+        env:
+          GOROMBO_TEST_MODE: '1'
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
 
       - name: Verify WASM artifact in build output
         run: test -f .gorombo/sim-one-alpha/memory/gorombo_memory_bg.wasm

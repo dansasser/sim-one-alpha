@@ -76,17 +76,53 @@ test('web_research tool accepts string budget controls and webFetch mode', async
   }
 });
 
-test('web_research tool throws on unresolved eventId', async () => {
-  await assert.rejects(
-    async () => {
+test('web_research tool falls back to explicit actor/conversation when event is not persisted', async () => {
+  const originalFetch = globalThis.fetch;
+  const fetchCalls = [];
+  try {
+    globalThis.fetch = async (url, init) => {
+      fetchCalls.push({ url: String(url), body: init?.body });
+      return new Response(
+        JSON.stringify({
+          results: [
+            {
+              title: 'Test source',
+              url: 'https://example.com/test',
+              content: 'Test content.',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    };
+
+    const result = JSON.parse(
       await webResearchTool.execute({
         eventId: 'nonexistent-event-id',
         text: 'query',
-      });
-    },
-    (error: Error) => {
-      assert.match(error.message, /nonexistent-event-id/);
-      return true;
-    },
-  );
+        actorId: 'tui-user',
+        conversationId: 'tui-conversation',
+        depth: 'basic',
+        maxQueries: '1',
+        maxFetches: '1',
+        maxContextTokens: '200',
+        webFetch: 'never',
+        limit: '1',
+        freshness: 'fresh',
+        minSources: '1',
+        maxIterations: '1',
+      }),
+    ) as {
+      budget?: { depth?: string };
+      queriesRun?: string[];
+    };
+
+    assert.equal(result.budget?.depth, 'basic');
+    assert.deepEqual(result.queriesRun, ['query']);
+    // Verify the tool actually made a search call — proving the fallback
+    // actor/conversation values were used (not a throw, not a skip).
+    assert.ok(fetchCalls.length > 0, 'web_research should have made at least one fetch call with fallback params');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
