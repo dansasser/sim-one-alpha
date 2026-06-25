@@ -70,6 +70,8 @@ Flue hardcodes discovery at `src/agents/`, `src/workflows/`, and `src/channels/`
 | `src/workflows/` | Flue workflow discovery shim | Re-exports from `src/engine/workflows/`. Flue requires workflow files at this path for name-based discovery. |
 | `src/channels/` | Flue channel discovery shim | Re-exports from `src/api/channels/`. Flue requires channel files at this path for name-based discovery. |
 
+Flue also hardcodes `src/db.ts` as the persistence adapter entrypoint. A re-export shim at `src/db.ts` forwards to `src/core/db.ts`, which contains the real `goromboPersistenceRuntime` adapter wrapper.
+
 Top-level non-`src/` directories:
 
 | `crates/gorombo-memory/` | Rust engine compiled to WebAssembly via `wasm-pack`. Owns the structured-memory data model, validation (scope non-empty, slug uniqueness, checklist cycle/depth), the in-memory inverted index, and the query planner. Never exposed to the model or agents directly — only via `src/engine/memory/rust-memory-engine.ts`. The TypeScript shim generates ids/timestamps/audit fields (Rust owns no clock/RNG in the WASM target) and passes fully-formed records to the WASM exports. The WASM module keeps a `thread_local` store hydrated by `reconcile_index` from the durable SQLite store on cold start. |
