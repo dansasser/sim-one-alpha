@@ -1,6 +1,6 @@
 # Memory System (Structured Memory)
 
-The Memory Helper is GOROMBO Agent's durable memory: **checklists, todos, and session notes** that survive across long-running tasks and process restarts. It is a Rust crate compiled to WebAssembly, backed by SQLite, with a TypeScript shim that the agent tools call.
+The Memory Helper is SIM-ONE Alpha's durable memory: **checklists, todos, and session notes** that survive across long-running tasks and process restarts. It is a Rust crate compiled to WebAssembly, backed by SQLite, with a TypeScript shim that the agent tools call.
 
 This doc is the architecture reference. For the quick-start (build + smoke + config), see the [Memory Helper](../../README.md#memory-helper-structured-memory) section of the README.
 
@@ -29,7 +29,7 @@ retrieve_memory          src/engine/memory/checklist-memory-provider.ts  (provid
 
 ## Rust engine (`crates/gorombo-memory/`)
 
-The crate owns the data model, validation, and query logic. It is compiled to WASM with `wasm-pack` (`pnpm run wasm:build`) and the artifact is copied into `dist/memory/` for the built server.
+The crate owns the data model, validation, and query logic. It is compiled to WASM with `wasm-pack` (`pnpm run wasm:build`) and the artifact is copied into `.gorombo/sim-one-alpha/memory/` for the built server.
 
 WASM exports (each takes/returns JSON; `Err(String)` prefixes map to `MemoryEngineError` kinds `validation` / `not_found` / `conflict` / `internal`):
 

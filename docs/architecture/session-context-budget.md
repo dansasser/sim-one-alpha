@@ -1,7 +1,5 @@
 # Session Context Budget
 
-Last checked: 2026-06-10.
-
 ## Flue Session Findings
 
 Flue sessions are named conversation state inside an initialized harness. `harness.session(name)` gets or creates a session, while `harness.sessions.get(name)` only loads an existing session and throws when it does not exist. A session runs one active `prompt`, `skill`, `task`, `shell`, or `compact` operation at a time.

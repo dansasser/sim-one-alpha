@@ -1,4 +1,4 @@
-# flue-agent (SIM-ONE Alpha)
+# SIM-ONE Alpha
 
 SIM-ONE Alpha is a Flue-based agent project for building practical AI Employees, business automation workflows, research assistants, coding workers, connected chat experiences, and operational AI systems.
 
@@ -17,7 +17,7 @@ The goal is simple:
 - Secure Web API / Gateway layer
 - SQLite-backed protocol system
 - Database-backed memory layer
-- RAG architecture with memory, web search, and document-index support
+- RAG architecture with memory, web search, and document-index support (document-index provider is a placeholder)
 - Registry-driven tools
 - Registry-driven skills
 - Registry-driven workers/subagents
@@ -125,17 +125,15 @@ See [Memory Helper (Structured Memory)](#memory-helper-structured-memory) for th
 
 RAG gives the agent access to knowledge outside the current prompt.
 
-The RAG architecture should support:
+The RAG architecture provides:
 
-- memory retrieval
-- web search
-- company documents
-- Git repositories
-- project data
-- client data
-- future vector stores
+- memory retrieval (structured memory + session memory via FTS + LanceDB vector search)
+- web search (Ollama Search provider)
+- project file indexing (background indexer)
+- LanceDB vector store for semantic retrieval
+- embedding fallback chain (Ollama Cloud → bundled ONNX local model)
 
-RAG should be one of the first major systems built after basic chat routing works.
+RAG is accessed through the `retrieve_context` tool (researcher-only) and the `retrieve_memory` tool (orchestrator). The RAG router fans queries to registered providers and merges results with reciprocal rank fusion. The document-index provider is a placeholder for future document retrieval integration.
 
 ### Tools
 
@@ -173,17 +171,17 @@ Skills may reference tools.
 
 Skills may guide the agent or workers.
 
-Skills are not protocols and should not store mandatory runtime rules.
+Skills are not protocols and do not store mandatory runtime rules.
 
-Future skills may include:
+The coding worker ships with 5 built-in skills:
 
-- research verification
-- client update writing
-- task decomposition
-- PR synthesis
-- SEO review
-- construction workflow support
-- code review
+- `code-change-loop` — the lead coding loop (plan → implement → test → review → github)
+- `code-review-loop` — code review subagent workflow
+- `github-pr-loop` — GitHub PR creation and management workflow
+- `triage-loop` — task triage and decomposition workflow
+- `ci-debug-loop` — CI failure diagnosis workflow
+
+Skills are extensible at runtime via the capability registry (see [Capability Model](#capability-model--two-tier-extensibility) below).
 
 ### Workers
 
@@ -191,15 +189,18 @@ Workers are specialized executors.
 
 Workers may run independently or be called by the main agent.
 
-Expected worker types include:
+Built:
 
-- Research Worker
+- **Research Worker** — owns web research, source-backed investigation, query planning, cache, and evidence packing. Delegated via the Flue `task` tool with `agent: "researcher"`.
+- **Coding Worker** — owns coding work with 5 internal subagents (triage, implementer, test-debug, code-review, github). Approval-gated repo mutations. Delegated via `agent: "coding-worker"`. The main orchestrator exposes only the lead; internal subagents are not visible to the orchestrator.
+
+Roadmap:
+
 - Writing Worker
-- Coding Worker
 - Testing / Review Worker
 - Future Domain Workers
 
-Workers should return structured results and should not silently mutate global state.
+Workers return structured results and do not silently mutate global state.
 
 ### Registries
 
@@ -220,16 +221,34 @@ Connectors normalize external communication into internal message events.
 
 Connectors do not contain orchestration logic.
 
-Expected connector types include:
+Built:
 
-- Telegram
-- Web/API
-- Scheduled Jobs
-- Future Connectors
+- **Telegram** — bot receives messages, dispatches to orchestrator, sends replies
+- **Web/API** — HTTP endpoints for external integrations and the TUI
+- **Scheduled Jobs** — cron-style triggers via Croner that dispatch to the orchestrator
+
+Roadmap:
+
+- Discord
+- Future connectors
 
 Web chat is a client of the Secure Web API.
 
 The Secure Web API is the backend ingress point.
+
+### Capability Model — Two-Tier Extensibility
+
+SIM-ONE Alpha has two ways to add capabilities (skills, tools, workers, MCP servers):
+
+**1. Flue-native (build-time / developer):** When developing from source, Flue gives you build-time discovery. You add agents, workflows, channels, skills, and tools by writing TypeScript files in `src/agents/`, `src/workflows/`, `src/channels/`, and `src/engine/tools/`. Flue discovers these at build time and compiles them into the server. This is how all built-in capabilities are defined — the orchestrator, researcher, coding-worker, memory tools, protocol tool, schedule tools, image generation tools, MCP servers.
+
+**2. SIM-ONE Alpha capability registry (runtime / user + agent):** SIM-ONE Alpha adds a layer on top of Flue. After you build or install the final product, users and the agent itself can add skills, tools, workers (subagents), and MCP servers at runtime through the capability registry — no rebuild needed. The capability store in SQLite persists these. At agent init, capabilities are materialized from SQLite into Flue's discovery paths and merged with built-in capabilities. The agent can self-extend via `add_skill` (auto-enables, no approval needed), `add_tool`, `add_worker`, `add_mcp_server` (require user approval via CLI or TUI before activation — they are added with `enabled=0` until approved, since they execute arbitrary code). Users can add via `sim-one` CLI subcommands or the developer `capability-admin.mjs` script.
+
+Both tiers coexist: built-in capabilities (defined in code) and user-defined capabilities (stored in SQLite) merge into the same `tools`, `skills`, and `subagents` arrays at agent init. Collision detection prevents name conflicts between the two tiers.
+
+The runtime registry is what makes SIM-ONE Alpha extensible as a product — users don't need to write code or rebuild to add capabilities. When developing from source, you have both options available.
+
+See [Capability Management](#capability-management) below for CLI commands and source directory structures.
 
 ## Example Workflows
 
@@ -335,21 +354,39 @@ LanceDB     = vector search (session memory, session notes, knowledge/project-fi
 
 ```text
 src/
-  agents/            # orchestrator + worker agent entrypoints
+  agents/            # Flue-contract: orchestrator entrypoint (Flue discovers here)
+  channels/          # Flue-contract: provider ingress (e.g. Telegram)
+  workflows/         # Flue-contract: finite Flue operations (research, retrieval, web-research)
+  db.ts              # Flue-contract: persistence adapter entrypoint
+  app.ts             # Flue-contract: Hono application shell
+  core/              # cross-cutting foundations
+    config/          # runtime config loaders + shipped gorombo.config.json
+    models/          # model cards, provider registration, registry, runtime bootstrap
+    protocols/       # protocol schemas + SQLite protocol provider
+    schemas/         # shared Valibot schemas for structured-output contracts
+    telemetry/       # sanitized Flue event capture and run summaries
+    types/           # shared TypeScript contracts
+    utils/           # generic helpers
+  api/               # external interfaces and transport
+    connectors/      # telegram, web-api normalizers
+    ingress/         # approval ingress modules
+    middleware/      # Hono middleware (API-secret auth)
+    routes/          # HTTP routes (chat, approval, telemetry, schedules, ...)
+  engine/            # AI/Agentic logic and orchestration
+    approvals/       # shared approval service
+    capabilities/    # runtime capability registry (SQLite store, loaders, MCP broker)
+    commands/        # pre-LLM slash command parsing
+    embeddings/      # bundled ONNX embedding model + tokenizer
+    memory/          # structured-memory shim, SQLite store, providers (Rust/WASM engine lives in crates/)
+    rag/             # retrieval, embeddings, vector store, indexers
+    registries/      # tool / skill / agent registries
+    schedules/       # scheduled/recurring/one-shot agent execution (Croner + SQLite)
+    session/         # session persistence, compaction, context budget
+    skills/          # extensible skills slot (user-added at runtime)
+    tools/           # orchestrator-owned tools (memory, research, protocols, schedules, image gen, ...)
+    workers/         # coding worker + researcher + subagents + tools
   workspace/         # main agent persona files
-  connectors/        # telegram, web-api, scheduled-job normalizers
-  routes/            # Hono HTTP routes (chat, approval, telemetry, schedules, ...)
-  middleware/
-  memory/            # structured-memory shim, SQLite store, providers (Rust/WASM engine lives in crates/)
-  protocols/         # protocol system + SQLite protocol provider
-  rag/                # retrieval, embeddings, vector store, indexers
-  registries/        # tool / skill / agent registries
-  skills/
-  tools/             # orchestrator-owned tools (memory, research, ...)
-  types/
-  workers/           # coding worker + subagents + tools
-  workflows/         # finite Flue operations (research, retrieval, web-research)
-  tests/
+  tests/             # test suite
 crates/
   gorombo-memory/    # Rust structured-memory engine -> WASM (wasm-pack)
 ```
@@ -950,7 +987,7 @@ Model selection rules:
 - Model cards live inside each provider directory under `src/core/models/providers/<provider>/cards`.
 - The catalog in `src/core/models/catalog.ts` aggregates cards for model selection and budget lookup.
 
-The agent currently has tool flow wired for protocol loading, session-memory retrieval, and RAG/context retrieval. The protocol and document-index providers remain typed placeholders; web search is live through Ollama Search when an Ollama API key is configured.
+The agent has tool flow wired for protocol loading, session-memory retrieval, and RAG/context retrieval. Protocols are live (SQLite-backed, loaded through the protocol tool). Web search is owned by the researcher subagent and is live through Ollama Search when an Ollama API key is configured. The document-index provider is a placeholder for future document retrieval integration.
 
 ## Model Cards
 
@@ -1167,28 +1204,34 @@ Do not commit real secrets.
 
 Use local `.env` files or the deployment platform's secret manager.
 
-## Development
+## Status
 
-This project is being built incrementally.
+### Built
 
-Early development focuses on:
+- Flue-based orchestrator agent with protocol loading, memory retrieval, RAG, and tool delegation
+- Researcher subagent with web research (Ollama Search), query planning, cache, and evidence packing
+- Coding worker with 5 subagents (triage, implementer, test-debug, code-review, github) and approval-gated repo mutations
+- Structured memory engine (Rust/WASM) with checklists, todos, session notes, SQLite durability
+- RAG architecture with memory retrieval, web search, LanceDB vector store, embedding fallback chain
+- SQLite-backed protocol system with runtime rule loading
+- Capability registry (SQLite) for runtime-extensible skills, tools, workers, and MCP servers
+- Telegram connector, Web/API connector, scheduled jobs (Croner)
+- Interactive TUI (Ink/React) with live agent conversation, tool calls, subagent delegations, approval prompts
+- Model card system with provider registration, context budget, and compaction
+- Image generation tools (Runpod Public Endpoints)
+- Built-in MCP (Astro docs search)
+- Session budget and compaction system
 
-- base agent setup
-- message normalization
-- Secure Web API / Gateway skeleton
-- Telegram connector
-- SQLite protocol schema
-- Protocol Tool
-- Memory Tool
-- RAG Router
-- document-index retrieval placeholder
-- Ollama web search provider
-- registry interfaces
-- worker interfaces
+### Roadmap
 
-Use small, testable steps.
-
-Do not build the entire final system in one pass.
+- `sim-one` product binary (unified CLI with wizard, TUI, admin subcommands)
+- Install script (`sim-one.sh`) and first-run wizard TUI
+- Web UI (browser dashboard + chat via `@flue/react` + `react-dom`)
+- Writing worker
+- Testing / Review worker
+- Discord and future connectors
+- Document-index provider (currently a placeholder, not wired into the RAG router)
+- Gateway service management (systemd/pm2 lifecycle)
 
 ## Memory Helper (Structured Memory)
 
@@ -1273,11 +1316,15 @@ Common commands:
 pnpm test
 pnpm run typecheck
 pnpm run build
-pnpm run test:http
+pnpm run build:cli      # build the TUI/CLI (tsup → .gorombo/sim-one-cli/cli.js)
+pnpm run build:all      # build both + launch the TUI
+pnpm run test:unit      # unit tests only
+pnpm run test:http      # HTTP integration test against built server
+pnpm run test:tui        # TUI end-to-end test (requires OLLAMA_API_KEY)
 pnpm run smoke:http
-pnpm run wasm:build        # build the gorombo-memory WASM artifact
-pnpm run cargo:test        # cargo test -p gorombo-memory (Rust crate tests)
-pnpm run smoke:memory      # Memory Helper end-to-end + durability smoke
+pnpm run wasm:build      # build the gorombo-memory WASM artifact
+pnpm run cargo:test      # cargo test -p gorombo-memory (Rust crate tests)
+pnpm run smoke:memory    # Memory Helper end-to-end + durability smoke
 ```
 
 `pnpm test` runs the TypeScript unit suite, builds `.gorombo/sim-one-alpha/server.mjs`, then runs `pnpm run test:http` against the built server over real localhost HTTP. The root `.env` file remains the runtime environment source; it is not copied into the build output.
@@ -1294,7 +1341,7 @@ Do not claim tests passed unless they were actually run.
 
 ## Public Development Status
 
-This repository is public during early development to help the community learn from and contribute to the project.
+This repository is public during development to help the community learn from and contribute to the project.
 
 The project may become private later as proprietary business logic, client-specific workflows, and production infrastructure are added.
 
