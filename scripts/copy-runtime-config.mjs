@@ -1,10 +1,10 @@
 import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-const source = resolve('src/config/gorombo.config.json');
+const source = resolve('src/core/config/gorombo.config.json');
 const includeTscOutput = process.argv.includes('--tsc');
 const targets = includeTscOutput
-  ? [resolve('.tmp/tsc/config/gorombo.config.json')]
+  ? [resolve('.tmp/tsc/core/config/gorombo.config.json')]
   : [resolve('.gorombo/sim-one-alpha/gorombo.config.json')];
 
 if (!existsSync(source)) {
@@ -33,7 +33,7 @@ function copyTestFixtures(outputRoot) {
 function copyWorkspaceDirectories(outputRoot) {
   copyDirectoryIfExists(resolve('src/workspace'), join(outputRoot, 'workspace'));
 
-  const workersRoot = resolve('src/workers');
+  const workersRoot = resolve('src/engine/workers');
   if (!existsSync(workersRoot)) {
     return;
   }
@@ -72,7 +72,7 @@ function copyDirectoryIfExists(sourceDir, targetDir) {
 }
 
 function copyModelsYaml(outputRoot) {
-  const modelsYamlSource = resolve('src/tools/runpod-image/models.yaml');
+  const modelsYamlSource = resolve('src/engine/tools/runpod-image/models.yaml');
   if (!existsSync(modelsYamlSource)) {
     return;
   }

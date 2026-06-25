@@ -3,9 +3,9 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { baseProtocolSeeds } from '../protocols/protocol-provider.js';
-import { SqliteProtocolProvider } from '../protocols/sqlite-protocol-provider.js';
-import type { NormalizedMessageEvent } from '../types/index.js';
+import { baseProtocolSeeds } from '../core/protocols/protocol-provider.js';
+import { SqliteProtocolProvider } from '../core/protocols/sqlite-protocol-provider.js';
+import type { NormalizedMessageEvent } from '../core/types/index.js';
 
 function createTempDbPath() {
   const dir = mkdtempSync(join(tmpdir(), 'gorombo-protocols-'));

@@ -3,10 +3,10 @@ import test from 'node:test';
 import { rmSync, mkdirSync, mkdtempSync, existsSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { checkNameCollision } from '../capabilities/collision-check.js';
-import { resetBuiltinRegistryCache } from '../capabilities/builtin-registry.js';
-import { createCapabilityStore } from '../capabilities/capability-store.js';
-import type { CapabilityRecord } from '../capabilities/types.js';
+import { checkNameCollision } from '../engine/capabilities/collision-check.js';
+import { resetBuiltinRegistryCache } from '../engine/capabilities/builtin-registry.js';
+import { createCapabilityStore } from '../engine/capabilities/capability-store.js';
+import type { CapabilityRecord } from '../engine/capabilities/types.js';
 
 let tempDir: string;
 let originalCwd: string;

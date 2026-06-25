@@ -4,10 +4,10 @@ import type { FlueEvent, FlueSession } from '@flue/runtime';
 import { Hono } from 'hono';
 import app from '../app.js';
 import { goromboPersistenceRuntime } from '../db.js';
-import { requireApiSecret } from '../middleware/api-secret.js';
-import { registerChatEventRoutes } from '../routes/chat-events.js';
-import { registerTelemetryRoutes } from '../routes/telemetry.js';
-import { flueTelemetryStore } from '../telemetry/flue-telemetry.js';
+import { requireApiSecret } from '../api/middleware/api-secret.js';
+import { registerChatEventRoutes } from '../api/routes/chat-events.js';
+import { registerTelemetryRoutes } from '../api/routes/telemetry.js';
+import { flueTelemetryStore } from '../core/telemetry/flue-telemetry.js';
 
 test('chat endpoints fail closed when API_SECRET is not configured', async () => {
   await withApiSecret(undefined, async () => {

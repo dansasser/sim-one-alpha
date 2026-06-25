@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { OllamaWebSearchProvider, createDefaultWebSearchProvider } from '../rag/providers.js';
+import { OllamaWebSearchProvider, createDefaultWebSearchProvider } from '../engine/rag/providers.js';
 
 test('Ollama web search provider normalizes web search results', async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];

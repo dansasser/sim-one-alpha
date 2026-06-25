@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { readMemoryEnvOverrides, resolveMemoryConfig } from '../memory/structured-memory-runtime.js';
+import { readMemoryEnvOverrides, resolveMemoryConfig } from '../engine/memory/structured-memory-runtime.js';
 
 test('resolveMemoryConfig applies defaults when the block is absent', () => {
   const cfg = resolveMemoryConfig(undefined, {});

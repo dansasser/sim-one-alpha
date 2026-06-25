@@ -1,0 +1,126 @@
+import type {
+  AgentDefinition,
+  ProtocolDefinition,
+  SkillDefinition,
+  ToolDefinition,
+} from '../../core/types/index.js';
+import { baseProtocolSeeds } from '../../core/protocols/protocol-provider.js';
+import { InMemoryRegistry } from '../../engine/registries/generic-registry.js';
+
+export function createDefaultToolRegistry() {
+  return new InMemoryRegistry<ToolDefinition>([
+    {
+      id: 'protocol.load',
+      name: 'Load Protocols',
+      description: 'Loads applicable runtime protocol records before orchestration.',
+      scope: 'base',
+      enabled: true,
+      kind: 'flue-native',
+      inputSchema: { type: 'object' },
+      outputSchema: { type: 'object' },
+      tags: ['protocols', 'sqlite-placeholder'],
+    },
+    {
+      id: 'memory.retrieve',
+      name: 'Retrieve Memory',
+      description: 'Retrieves relevant memory records for the current message.',
+      scope: 'base',
+      enabled: true,
+      kind: 'flue-native',
+      inputSchema: { type: 'object' },
+      outputSchema: { type: 'object' },
+      tags: ['memory', 'retrieval'],
+    },
+    {
+      id: 'rag.retrieve',
+      name: 'Retrieve Context',
+      description: 'Routes non-web retrieval across memory, document index, and future internal providers.',
+      scope: 'base',
+      enabled: true,
+      kind: 'registry-gateway',
+      inputSchema: { type: 'object' },
+      outputSchema: { type: 'object' },
+      tags: ['rag', 'retrieval'],
+    },
+  ]);
+}
+
+export function createDefaultSkillRegistry() {
+  return new InMemoryRegistry<SkillDefinition>([
+    {
+      id: 'chat.route-basic',
+      name: 'Basic Chat Routing',
+      description: 'Reusable workflow knowledge for routing a normalized chat event.',
+      scope: 'base',
+      enabled: true,
+      kind: 'workflow-knowledge',
+      requiredTools: ['protocol.load', 'memory.retrieve'],
+      tags: ['chat', 'routing'],
+    },
+  ]);
+}
+
+export function createDefaultAgentRegistry() {
+  return new InMemoryRegistry<AgentDefinition>([
+    {
+      id: 'main-orchestrator',
+      name: 'Main Orchestrator',
+      description: 'Coordinates protocols, registries, memory, tools, workflows, and workers.',
+      scope: 'base',
+      enabled: true,
+      kind: 'orchestrator',
+      model: false,
+      capabilities: ['chat-routing', 'protocol-loading', 'research-delegation'],
+      tags: ['orchestrator'],
+    },
+    {
+      id: 'researcher',
+      name: 'Researcher',
+      description: 'Subagent that owns web research, source gathering, cache use, and evidence synthesis.',
+      scope: 'base',
+      enabled: true,
+      kind: 'subagent',
+      model: false,
+      capabilities: ['web-research', 'source-comparison', 'research-cache'],
+      tags: ['subagent', 'research'],
+    },
+    {
+      id: 'coding-worker',
+      name: 'Coding Worker',
+      description:
+        'Lead coding worker that coordinates worker-local triage, implementer, test-debug, code-review, and GitHub/PR subagents.',
+      scope: 'base',
+      enabled: true,
+      kind: 'worker',
+      model: false,
+      capabilities: [
+        'coding-triage',
+        'plan-edit-test-debug-review',
+        'github-context',
+        'approval-gates',
+        'public-progress-events',
+      ],
+      tags: ['worker', 'coding'],
+    },
+  ]);
+}
+
+export function createDefaultProtocolRegistry(seed: ProtocolDefinition[]) {
+  return new InMemoryRegistry<ProtocolDefinition>(seed);
+}
+
+export interface DefaultRegistries {
+  tools: ReturnType<typeof createDefaultToolRegistry>;
+  skills: ReturnType<typeof createDefaultSkillRegistry>;
+  agents: ReturnType<typeof createDefaultAgentRegistry>;
+  protocols: ReturnType<typeof createDefaultProtocolRegistry>;
+}
+
+export function createDefaultRegistries(): DefaultRegistries {
+  return {
+    tools: createDefaultToolRegistry(),
+    skills: createDefaultSkillRegistry(),
+    agents: createDefaultAgentRegistry(),
+    protocols: createDefaultProtocolRegistry(baseProtocolSeeds),
+  };
+}

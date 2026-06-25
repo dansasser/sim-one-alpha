@@ -8,7 +8,7 @@ import {
   listChecklistsTool,
   moveChecklistItemTool,
   updateChecklistItemTool,
-} from '../tools/memory-checklist-tools.js';
+} from '../engine/tools/memory-checklist-tools.js';
 import { setupMemoryToolTest } from './helpers/memory-tool-test-setup.js';
 
 type TreeItem = { id: string; title: string; parentId?: string; ordinal?: number; children: TreeItem[] };

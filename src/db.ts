@@ -1,6 +1,6 @@
-import { loadGoromboConfig } from './config/gorombo-config.js';
-import { createGoromboPersistenceRuntime } from './session/session-persistence.js';
-import { reconcileCapabilitiesFromConfig } from './capabilities/capability-config-reconcile.js';
+import { loadGoromboConfig } from './core/config/gorombo-config.js';
+import { createGoromboPersistenceRuntime } from './engine/session/session-persistence.js';
+import { reconcileCapabilitiesFromConfig } from './engine/capabilities/capability-config-reconcile.js';
 
 const goromboConfig = loadGoromboConfig();
 

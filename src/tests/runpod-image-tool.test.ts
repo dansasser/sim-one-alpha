@@ -4,10 +4,10 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { loadRunpodImageCatalog, getRunpodImageModel, getDefaultRunpodImageModel } from '../tools/runpod-image/catalog.js';
-import { normalizeWebApiMessage } from '../connectors/web-api.js';
-import { persistImageArtifact } from '../tools/runpod-image/artifact-store.js';
-import { recordImageArtifactTool } from '../tools/runpod-image/record-image-artifact-tool.js';
+import { loadRunpodImageCatalog, getRunpodImageModel, getDefaultRunpodImageModel } from '../engine/tools/runpod-image/catalog.js';
+import { normalizeWebApiMessage } from '../api/connectors/web-api.js';
+import { persistImageArtifact } from '../engine/tools/runpod-image/artifact-store.js';
+import { recordImageArtifactTool } from '../engine/tools/runpod-image/record-image-artifact-tool.js';
 import { goromboPersistenceRuntime } from '../db.js';
 
 test('catalog loads and validates', () => {

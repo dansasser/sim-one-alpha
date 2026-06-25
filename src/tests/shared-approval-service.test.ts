@@ -6,7 +6,7 @@ import { describe, it } from 'node:test';
 import {
   createSharedCodingApprovalService,
   resolveCodingApprovalRoot,
-} from '../approvals/shared-approval-service.js';
+} from '../engine/approvals/shared-approval-service.js';
 
 describe('shared approval service', () => {
   function makeTempDir(prefix: string): string {

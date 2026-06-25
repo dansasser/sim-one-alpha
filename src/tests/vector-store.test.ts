@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { LanceDbVectorStore } from '../rag/vector/lance-db-store.js';
+import { LanceDbVectorStore } from '../engine/rag/vector/lance-db-store.js';
 
 function createTempDir(): string {
   return mkdtempSync(join(tmpdir(), 'gorombo-vector-test-'));

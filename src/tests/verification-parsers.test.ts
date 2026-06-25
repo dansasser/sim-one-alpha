@@ -6,10 +6,10 @@ import test from 'node:test';
 import {
   detectVerificationParser,
   parseVerificationCommandFailures,
-} from '../workers/coding-worker/repo/verification.js';
-import { parseJestOrVitestFailures } from '../workers/coding-worker/repo/verification-parsers/jest-vitest.js';
-import { parsePytestFailures } from '../workers/coding-worker/repo/verification-parsers/pytest.js';
-import { parseTscFailures } from '../workers/coding-worker/repo/verification-parsers/tsc.js';
+} from '../engine/workers/coding-worker/repo/verification.js';
+import { parseJestOrVitestFailures } from '../engine/workers/coding-worker/repo/verification-parsers/jest-vitest.js';
+import { parsePytestFailures } from '../engine/workers/coding-worker/repo/verification-parsers/pytest.js';
+import { parseTscFailures } from '../engine/workers/coding-worker/repo/verification-parsers/tsc.js';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const projectRoot = currentDir.includes('.tmp/tsc')

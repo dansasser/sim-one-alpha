@@ -8,8 +8,8 @@ import {
   getStructuredMemoryRuntime,
   resetStructuredMemoryRuntime,
   type GoromboMemoryConfig,
-} from '../memory/structured-memory-runtime.js';
-import type { GoromboConfig } from '../config/gorombo-config.js';
+} from '../engine/memory/structured-memory-runtime.js';
+import type { GoromboConfig } from '../core/config/gorombo-config.js';
 
 function tmpDbPath(): string {
   const dir = mkdtempSync(join(tmpdir(), 'gorombo-rt-'));

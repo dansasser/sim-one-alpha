@@ -113,7 +113,7 @@ Examples of protocol records may include:
 
 Memory is a first-class architecture layer. Protocols provide rules; memory provides context.
 
-Structured memory is implemented as durable **checklists, todos, and session notes** that survive across long-running tasks and process restarts. The data model, scope matching, and query/scoring logic live in a Rust crate (`crates/gorombo-memory/`) compiled to WebAssembly via `wasm-pack`; a thin TypeScript shim (`src/memory/rust-memory-engine.ts`) loads the WASM module and delegates every create/update/delete/query to it. A pure-TypeScript `InMemoryMemoryEngine` mirrors the same contract as a parity reference for unit tests.
+Structured memory is implemented as durable **checklists, todos, and session notes** that survive across long-running tasks and process restarts. The data model, scope matching, and query/scoring logic live in a Rust crate (`crates/gorombo-memory/`) compiled to WebAssembly via `wasm-pack`; a thin TypeScript shim (`src/engine/memory/rust-memory-engine.ts`) loads the WASM module and delegates every create/update/delete/query to it. A pure-TypeScript `InMemoryMemoryEngine` mirrors the same contract as a parity reference for unit tests.
 
 - **Durable store:** every mutation is persisted to SQLite (default `.gorombo/db/structured-memory.sqlite`); the WASM in-memory index is hydrated from the durable store on cold start via `reconcile_index`.
 - **Scope is truth, never from the model:** scope (`actorId`/`conversationId`/`projectId`/`threadId`) is derived from a trusted persisted `NormalizedMessageEvent` (`eventId`) for orchestrator tools, and injected from the worker context for coding-worker tools. Update operations verify the target record's scope matches before mutating.
@@ -809,7 +809,7 @@ See `docs/architecture/capability-system.md` for full architecture documentation
 Model choice lives in the shipped runtime config file. In source it is:
 
 ```text
-src/config/gorombo.config.json
+src/core/config/gorombo.config.json
 ```
 
 After build it is copied to:
@@ -947,8 +947,8 @@ Model selection rules:
 - Raw Flue specifiers and `GOROMBO_MODEL` env selection are rejected.
 - The default primary card is `minimax-m3-cloud`, which resolves through its card to `ollama-cloud/minimax-m3` and calls Ollama Cloud through `https://ollama.com/v1`.
 - The durable orchestrator agent uses the configured primary card. The backup card remains configured metadata for paths that explicitly implement fallback behavior.
-- Model cards live inside each provider directory under `src/models/providers/<provider>/cards`.
-- The catalog in `src/models/catalog.ts` aggregates cards for model selection and budget lookup.
+- Model cards live inside each provider directory under `src/core/models/providers/<provider>/cards`.
+- The catalog in `src/core/models/catalog.ts` aggregates cards for model selection and budget lookup.
 
 The agent currently has tool flow wired for protocol loading, session-memory retrieval, and RAG/context retrieval. The protocol and document-index providers remain typed placeholders; web search is live through Ollama Search when an Ollama API key is configured.
 
@@ -970,7 +970,7 @@ Runtime model choice is separate from card definition. The shipped `gorombo.conf
 
 `.env` stores provider credentials. It must not choose models.
 
-Each card lives under its owning provider directory, for example `src/models/providers/ollama-cloud/cards/minimax-m3.ts`, and owns the details that are specific to one model:
+Each card lives under its owning provider directory, for example `src/core/models/providers/ollama-cloud/cards/minimax-m3.ts`, and owns the details that are specific to one model:
 
 - provider id and model id
 - Flue model specifier
@@ -980,7 +980,7 @@ Each card lives under its owning provider directory, for example `src/models/pro
 - advertised, guaranteed, and provider-reported limits when those differ
 - source notes for where the metadata came from
 
-Provider files live next to their cards in `src/models/providers/<provider>`. Providers describe transport: base URLs, API key environment variables, Flue `registerProvider(...)` calls, and per-provider model registration. When a provider has multiple model cards, those cards live in that provider's `cards/` subdirectory. This keeps provider setup out of agent files and lets the agent reference a card by specifier.
+Provider files live next to their cards in `src/core/models/providers/<provider>`. Providers describe transport: base URLs, API key environment variables, Flue `registerProvider(...)` calls, and per-provider model registration. When a provider has multiple model cards, those cards live in that provider's `cards/` subdirectory. This keeps provider setup out of agent files and lets the agent reference a card by specifier.
 
 Cards exist because session management, compaction, and RAG all need model-specific token limits. MiniMax M3, DeepSeek V4 Pro, and Qwen 3.5 do not have the same usable context or output budgets. The context-budget layer reads the selected card instead of hardcoding token limits in the agent, durable ingress, or RAG router.
 
@@ -1082,9 +1082,9 @@ Use the boundaries this way:
 - low-level provider errors: the research workflow records failures in `providerFailures`
 - research strategy: researcher decides which searches to run, when to fetch pages, when to stop, and how to compare sources
 
-The researcher subagent lives in `src/workers/researcher/researcher.ts` and owns the `web_research` tool. The standalone `research` workflow in `src/workflows/research.ts` initializes the researcher directly for CLI or API research runs. Use `pnpm run research:local -- "..."` for local one-shot research testing.
+The researcher subagent lives in `src/engine/workers/researcher/researcher.ts` and owns the `web_research` tool. The standalone `research` workflow in `src/workflows/research.ts` initializes the researcher directly for CLI or API research runs. Use `pnpm run research:local -- "..."` for local one-shot research testing.
 
-Main-agent workspace persona files live in `src/workspace/`. Subagent workspace persona files live beside their subagent implementation, for example `src/workers/researcher/workspace/`. Persona names belong inside workspace file contents, not in architecture paths.
+Main-agent workspace persona files live in `src/workspace/`. Subagent workspace persona files live beside their subagent implementation, for example `src/engine/workers/researcher/workspace/`. Persona names belong inside workspace file contents, not in architecture paths.
 
 ```text
 durable chat ingress
@@ -1104,7 +1104,7 @@ Environment variables are used for secrets and service configuration.
 The main agent runtime config is a real JSON file shipped with the product:
 
 ```text
-src/config/gorombo.config.json -> source
+src/core/config/gorombo.config.json -> source
 .gorombo/sim-one-alpha/gorombo.config.json       -> built/package runtime file
 ```
 
@@ -1198,7 +1198,7 @@ The Memory Helper is the agent's durable memory: **checklists, todos, and sessio
 
 ```text
 model tools (orchestrator / coding-worker)
-  -> TypeScript shim  (src/memory/rust-memory-engine.ts)
+  -> TypeScript shim  (src/engine/memory/rust-memory-engine.ts)
   -> Rust engine       (crates/gorombo-memory/ -> WASM via wasm-pack)
        - data model: Checklist / ChecklistItem / Todo / SessionNote
        - scope matching + tag/keyword scoring + cycle/depth validation
@@ -1208,7 +1208,7 @@ model tools (orchestrator / coding-worker)
   -> retrieve_memory (structured-memory provider) -> context budget -> model
 ```
 
-- **Engine:** the data model, scope matching, and query scoring live in Rust (`crates/gorombo-memory/`), compiled to WASM with `wasm-pack`. A thin TypeScript shim (`src/memory/rust-memory-engine.ts`) loads the WASM module and delegates every mutation and query to it. A pure-TypeScript `InMemoryMemoryEngine` mirrors the same contract as a parity reference for unit tests.
+- **Engine:** the data model, scope matching, and query scoring live in Rust (`crates/gorombo-memory/`), compiled to WASM with `wasm-pack`. A thin TypeScript shim (`src/engine/memory/rust-memory-engine.ts`) loads the WASM module and delegates every mutation and query to it. A pure-TypeScript `InMemoryMemoryEngine` mirrors the same contract as a parity reference for unit tests.
 - **Durable store:** a `PersistingMemoryEngine` decorator wraps the engine so every create/update/delete is persisted to SQLite (default `.gorombo/db/structured-memory.sqlite`). The WASM in-memory index is hydrated from the durable store on cold start via `reconcile_index`, so records survive process restarts.
 - **Data model:**
   - **Checklist** — a scoped list with nested `ChecklistItem`s (parentId tree, ordinal ordering, status, tags, due dates).

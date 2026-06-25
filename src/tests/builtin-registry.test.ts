@@ -3,7 +3,7 @@ import test from 'node:test';
 import { rmSync, mkdirSync, existsSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { loadBuiltinRegistry, isBuiltinName, getBuiltinNames, resetBuiltinRegistryCache } from '../capabilities/builtin-registry.js';
+import { loadBuiltinRegistry, isBuiltinName, getBuiltinNames, resetBuiltinRegistryCache } from '../engine/capabilities/builtin-registry.js';
 
 const fixtureRegistry = {
   tools: ['load_protocols', 'retrieve_memory', 'add_knowledge', 'test_echo'],

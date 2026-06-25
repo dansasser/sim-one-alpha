@@ -3,8 +3,8 @@ import test from 'node:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LanceDbKnowledgeStore } from '../rag/knowledge-store.js';
-import { LanceDbVectorStore } from '../rag/vector/lance-db-store.js';
+import { LanceDbKnowledgeStore } from '../engine/rag/knowledge-store.js';
+import { LanceDbVectorStore } from '../engine/rag/vector/lance-db-store.js';
 
 const fakeEmbeddingClient = {
   async embed(): Promise<number[]> {

@@ -1,5 +1,5 @@
 import type { FlueContext, PromptResponse, WorkflowRouteHandler } from '@flue/runtime';
-import researcherAgent from '../workers/researcher/researcher.js';
+import researcherAgent from '../engine/workers/researcher/researcher.js';
 import type { ResearchDepth } from './web-research.js';
 import type { WebFetchMode } from './retrieval.js';
 

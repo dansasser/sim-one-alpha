@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { normalizeWebApiMessage } from '../connectors/web-api.js';
-import { rememberMemoryLookupEvent, retrieveMemoryTool } from '../tools/memory-tool.js';
+import { normalizeWebApiMessage } from '../api/connectors/web-api.js';
+import { rememberMemoryLookupEvent, retrieveMemoryTool } from '../engine/tools/memory-tool.js';
 
 test('retrieve_memory scopes lookup through a trusted registered event', async () => {
   const serializedParameters = JSON.stringify((retrieveMemoryTool as { parameters?: unknown }).parameters ?? {});

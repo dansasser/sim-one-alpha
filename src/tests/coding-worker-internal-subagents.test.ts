@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createCodingWorkerInternalSubagents } from '../workers/coding-worker/subagents/index.js';
+import { createCodingWorkerInternalSubagents } from '../engine/workers/coding-worker/subagents/index.js';
 import type { AgentProfile } from '@flue/runtime';
 
 const MEMORY_TOOL_PREFIX = 'coding_task_';

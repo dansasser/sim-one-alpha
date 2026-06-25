@@ -9,7 +9,7 @@ import {
   backoffForAttempt,
   resolveScheduleConfig,
   type SchedulesConfig,
-} from '../schedules/schedule-config.js';
+} from '../engine/schedules/schedule-config.js';
 
 test('resolveScheduleConfig applies defaults when the block is absent', () => {
   const c = resolveScheduleConfig(undefined, {});

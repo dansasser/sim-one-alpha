@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { ChecklistMemoryProvider, toRetrievedContext } from '../memory/checklist-memory-provider.js';
-import { InMemoryMemoryEngine } from '../memory/rust-memory-engine.js';
-import { ulid } from '../memory/ulid.js';
-import type { RagQuery } from '../types/index.js';
-import type { Checklist, SessionNote, Todo } from '../types/memory.js';
+import { ChecklistMemoryProvider, toRetrievedContext } from '../engine/memory/checklist-memory-provider.js';
+import { InMemoryMemoryEngine } from '../engine/memory/rust-memory-engine.js';
+import { ulid } from '../engine/memory/ulid.js';
+import type { RagQuery } from '../core/types/index.js';
+import type { Checklist, SessionNote, Todo } from '../core/types/memory.js';
 
 function baseQuery(overrides: Partial<RagQuery> = {}): RagQuery {
   return {

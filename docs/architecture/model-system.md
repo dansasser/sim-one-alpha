@@ -8,7 +8,7 @@ provider-id/model-id
 
 Built-in providers such as OpenAI and Anthropic can be referenced directly when their provider credentials are available. Non-built-in or OpenAI-compatible providers, such as Ollama and local model gateways, must be registered in project code before an agent references them.
 
-This project keeps model cards under their owning provider directories in `src/models/providers/<provider>/cards` so the orchestrator does not hardcode model IDs, context limits, or provider-specific capabilities.
+This project keeps model cards under their owning provider directories in `src/core/models/providers/<provider>/cards` so the orchestrator does not hardcode model IDs, context limits, or provider-specific capabilities.
 
 ## Why Cards Exist
 
@@ -22,10 +22,10 @@ Cards also preserve conflicting-but-useful metadata. For example, MiniMax advert
 
 Runtime setup has two layers:
 
-1. Provider modules in `src/models/providers/<provider>` register Flue provider IDs from `src/app.ts`.
+1. Provider modules in `src/core/models/providers/<provider>` register Flue provider IDs from `src/app.ts`.
 2. Model cards in each provider's `cards/` directory provide the model IDs and per-model metadata used by those provider registrations and by the orchestrator model registry.
 3. The shipped `gorombo.config.json` runtime file selects active project model card keys for the running deployment.
-4. `src/models/catalog.ts` aggregates provider-owned cards for lookup by Flue model specifier.
+4. `src/core/models/catalog.ts` aggregates provider-owned cards for lookup by Flue model specifier.
 
 The orchestrator should not register providers itself. Runtime config selects a primary project model card and an optional backup card. The durable orchestrator agent uses the active card's specifier as the Flue model string. Session-budget and compaction code uses the selected card before estimating, reserving, or compacting context.
 
@@ -92,7 +92,7 @@ Current default runtime config:
 
 ## Adding Models
 
-Add a card file under the provider that owns the model, such as `src/models/providers/ollama-cloud/cards/new-model.ts`, including:
+Add a card file under the provider that owns the model, such as `src/core/models/providers/ollama-cloud/cards/new-model.ts`, including:
 
 - provider id
 - model id
@@ -104,7 +104,7 @@ Add a card file under the provider that owns the model, such as `src/models/prov
 - max output tokens
 - provider env requirements
 
-Provider transport belongs in `src/models/providers/<provider>/provider.ts`. Register custom providers from `src/app.ts` through the model runtime bootstrap before any agent uses the card specifier.
+Provider transport belongs in `src/core/models/providers/<provider>/provider.ts`. Register custom providers from `src/app.ts` through the model runtime bootstrap before any agent uses the card specifier.
 
 As of June 7, 2026, Ollama Cloud's live model list did not expose a dedicated embedding model, so no embedding card is added yet.
 

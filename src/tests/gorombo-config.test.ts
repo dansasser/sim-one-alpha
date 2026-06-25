@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { loadGoromboConfig, validateGoromboConfig } from '../config/index.js';
+import { loadGoromboConfig, validateGoromboConfig } from '../core/config/index.js';
 
 test('GOROMBO config loads model card keys from the shipped runtime config file', () => {
   const config = loadGoromboConfig();

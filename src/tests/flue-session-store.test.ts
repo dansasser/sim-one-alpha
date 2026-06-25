@@ -8,8 +8,8 @@ import orchestratorAgent from '../agents/orchestrator.js';
 import {
   createFlueSessionStorageKey,
   parseFlueSessionStorageKey,
-} from '../session/flue-session-store.js';
-import { createGoromboPersistenceRuntime } from '../session/session-persistence.js';
+} from '../engine/session/flue-session-store.js';
+import { createGoromboPersistenceRuntime } from '../engine/session/session-persistence.js';
 
 test('Flue session storage keys can be parsed into stable logical session parts', () => {
   const storageKey = createFlueSessionStorageKey('workflow-run-1', 'gorombo-orchestrator', 'support');

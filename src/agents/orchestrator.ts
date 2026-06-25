@@ -3,12 +3,12 @@ import {
   createAgent,
   type AgentRouteHandler,
 } from '@flue/runtime';
-import { configureRuntimeModels } from '../models/index.js';
+import { configureRuntimeModels } from '../core/models/index.js';
 import {
   composeWorkspaceInstructions,
   resolveWorkspaceDirectory,
 } from '../workspace-loader.js';
-import { calculateContextBudget } from '../session/context-budget.js';
+import { calculateContextBudget } from '../engine/session/context-budget.js';
 import {
   addKnowledgeTool,
   loadProtocolsTool,
@@ -43,18 +43,18 @@ import {
   scheduleRunNowTool,
   scheduleRunsTool,
   capabilityTools,
-} from '../tools/index.js';
-import type { AgentModelCard } from '../models/types.js';
+} from '../engine/tools/index.js';
+import type { AgentModelCard } from '../core/models/types.js';
 import { telegramReplyTool } from '../channels/telegram.js';
-import { createCodingWorkerSubagent } from '../workers/coding-worker/coding-worker.js';
-import { createResearcherSubagent } from '../workers/researcher/researcher.js';
-import { createCapabilityStore } from '../capabilities/capability-store.js';
-import { loadUserCapabilities } from '../capabilities/capability-loader.js';
-import { materializeCapability } from '../capabilities/skill-materializer.js';
-import { connectUserMcpServers } from '../capabilities/mcp-broker.js';
-import { connectBuiltinMcpServers } from '../capabilities/builtin-mcp.js';
-import { loadUserTools } from '../capabilities/tool-loader.js';
-import { loadUserWorkers } from '../capabilities/worker-loader.js';
+import { createCodingWorkerSubagent } from '../engine/workers/coding-worker/coding-worker.js';
+import { createResearcherSubagent } from '../engine/workers/researcher/researcher.js';
+import { createCapabilityStore } from '../engine/capabilities/capability-store.js';
+import { loadUserCapabilities } from '../engine/capabilities/capability-loader.js';
+import { materializeCapability } from '../engine/capabilities/skill-materializer.js';
+import { connectUserMcpServers } from '../engine/capabilities/mcp-broker.js';
+import { connectBuiltinMcpServers } from '../engine/capabilities/builtin-mcp.js';
+import { loadUserTools } from '../engine/capabilities/tool-loader.js';
+import { loadUserWorkers } from '../engine/capabilities/worker-loader.js';
 
 export const route: AgentRouteHandler = async (_c, next) => next();
 

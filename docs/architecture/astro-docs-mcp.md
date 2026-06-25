@@ -2,7 +2,7 @@
 
 ## Built-in MCP for the Orchestrator
 
-SIM-ONE Alpha includes a built-in MCP connection to the Astro docs MCP server (`https://mcp.docs.astro.build/mcp`). This is wired in `src/capabilities/builtin-mcp.ts` and connected at orchestrator init alongside user-defined MCP servers.
+SIM-ONE Alpha includes a built-in MCP connection to the Astro docs MCP server (`https://mcp.docs.astro.build/mcp`). This is wired in `src/engine/capabilities/builtin-mcp.ts` and connected at orchestrator init alongside user-defined MCP servers.
 
 The built-in MCP gives the orchestrator access to the `mcp__astro-docs__search_astro_docs` tool, which searches Astro framework documentation. This is useful because:
 - Flue is built by the Astro team — the agent can look up Flue-adjacent framework docs
@@ -38,7 +38,7 @@ This keeps the MCP connection shared (one connection per process, not per agent)
 
 ## Related
 
-- `src/capabilities/builtin-mcp.ts` — built-in MCP connection implementation
+- `src/engine/capabilities/builtin-mcp.ts` — built-in MCP connection implementation
 - `src/agents/orchestrator.ts` — where the built-in MCP is wired into the orchestrator
 - `scripts/generate-builtin-registry.mjs` — includes `astro-docs` in the `mcpServers` array
 - `docs/architecture/capability-system.md` — full capability system documentation

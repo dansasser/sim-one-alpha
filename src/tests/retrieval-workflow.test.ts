@@ -3,11 +3,11 @@ import test from 'node:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { MemoryProvider } from '../memory/memory-provider.js';
-import type { RagProvider, WebFetchResult } from '../rag/providers.js';
-import { GoromboSessionDatabase } from '../session/session-database.js';
-import { estimateTextTokens } from '../session/context-budget.js';
-import type { RagQuery, RetrievedContext } from '../types/index.js';
+import type { MemoryProvider } from '../engine/memory/memory-provider.js';
+import type { RagProvider, WebFetchResult } from '../engine/rag/providers.js';
+import { GoromboSessionDatabase } from '../engine/session/session-database.js';
+import { estimateTextTokens } from '../engine/session/context-budget.js';
+import type { RagQuery, RetrievedContext } from '../core/types/index.js';
 import { retrieveContext } from '../workflows/retrieval.js';
 
 let eventCounter = 0;

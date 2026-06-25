@@ -1,10 +1,10 @@
 import {
   checkNameCollision,
-} from '../../../src/capabilities/index.js';
+} from '../../../src/engine/capabilities/index.js';
 import type {
   CapabilityConfig,
   CapabilityRecord,
-} from '../../../src/capabilities/index.js';
+} from '../../../src/engine/capabilities/index.js';
 import { assertSafeCapabilityId, withStore } from './store.js';
 
 const KIND = 'mcp' as const;

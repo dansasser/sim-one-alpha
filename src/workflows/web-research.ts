@@ -1,21 +1,21 @@
 import type { FlueContext } from '@flue/runtime';
-import type { MemoryProvider } from '../memory/memory-provider.js';
-import { createDefaultWebSearchProvider, type RagProvider } from '../rag/providers.js';
-import { CachedWebSearchProvider } from '../workers/researcher/research/cached-web-provider.js';
+import type { MemoryProvider } from '../engine/memory/memory-provider.js';
+import { createDefaultWebSearchProvider, type RagProvider } from '../engine/rag/providers.js';
+import { CachedWebSearchProvider } from '../engine/workers/researcher/research/cached-web-provider.js';
 import {
   type ResearchCache,
   ResearchRunCache,
   createDefaultResearchCache,
-} from '../workers/researcher/research/research-cache.js';
-import { estimateTextTokens } from '../session/context-budget.js';
-import type { RagResultMetadata, RetrievedContext } from '../types/index.js';
+} from '../engine/workers/researcher/research/research-cache.js';
+import { estimateTextTokens } from '../engine/session/context-budget.js';
+import type { RagResultMetadata, RetrievedContext } from '../core/types/index.js';
 import {
   readNonNegativeInteger,
   readPositiveInteger,
   readResearchDepth,
   readResearchFreshness,
   readWebFetchMode,
-} from '../utils/input.js';
+} from '../core/utils/input.js';
 import { retrieveContext, type WebFetchMode } from './retrieval.js';
 
 export interface WebResearchWorkflowPayload {

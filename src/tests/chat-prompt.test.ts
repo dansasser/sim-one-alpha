@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeWebApiMessage } from '../connectors/web-api.js';
-import { createChatPrompt } from '../routes/chat-prompt.js';
+import { normalizeWebApiMessage } from '../api/connectors/web-api.js';
+import { createChatPrompt } from '../api/routes/chat-prompt.js';
 
 test('chat prompt requires minimal tool flow before answering', () => {
   const event = normalizeWebApiMessage({

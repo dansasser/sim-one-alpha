@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DocumentIndexProvider } from '../rag/document-index-provider.js';
+import { DocumentIndexProvider } from '../engine/rag/document-index-provider.js';
 
 test('document-index provider skips unscoped knowledge_base queries', async () => {
   const searches: Array<{ collection: string; query: number[]; options: unknown }> = [];
@@ -19,7 +19,7 @@ test('document-index provider skips unscoped knowledge_base queries', async () =
     listIds: async () => [],
     getVectorDimension: async () => undefined,
   };
-  const embeddingClient: import('../rag/embeddings.js').EmbeddingClient = {
+  const embeddingClient: import('../engine/rag/embeddings.js').EmbeddingClient = {
     embed: async () => [1, 2, 3],
     embedBatch: async () => [],
     embedWithOutcome: async () => ({ ok: true as const, result: { vector: [1, 2, 3], provider: 'onnx-local' as const, modelId: 'all-minilm-l6-v2' } }),
@@ -71,7 +71,7 @@ test('document-index provider allows scoped knowledge_base queries', async () =>
     listIds: async () => [],
     getVectorDimension: async () => undefined,
   };
-  const embeddingClient: import('../rag/embeddings.js').EmbeddingClient = {
+  const embeddingClient: import('../engine/rag/embeddings.js').EmbeddingClient = {
     embed: async () => [1, 2, 3],
     embedBatch: async () => [],
     embedWithOutcome: async () => ({ ok: true as const, result: { vector: [1, 2, 3], provider: 'onnx-local' as const, modelId: 'all-minilm-l6-v2' } }),

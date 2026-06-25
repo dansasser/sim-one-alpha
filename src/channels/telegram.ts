@@ -6,16 +6,16 @@ import orchestratorAgent from '../agents/orchestrator.js';
 import {
   createApprovalIngress,
   createFileApprovalBindingStore,
-} from '../ingress/approval-ingress.js';
-import { createSharedCodingApprovalService } from '../approvals/shared-approval-service.js';
+} from '../api/ingress/approval-ingress.js';
+import { createSharedCodingApprovalService } from '../engine/approvals/shared-approval-service.js';
 import { goromboPersistenceRuntime } from '../db.js';
-import { resolveChatSession } from '../session/session-routing.js';
-import { createChatPrompt } from '../routes/chat-prompt.js';
-import { normalizeTelegramUpdate } from '../connectors/telegram/telegram.js';
-import { buildApprovalResolvedMessage, parseApprovalCallback } from '../connectors/telegram/approval-ui/index.js';
-import { markTelegramUpdateReceived } from '../connectors/telegram/telegram-state.js';
-import { isMentioned } from '../connectors/telegram/telegram-api.js';
-import type { NormalizedMessageEvent } from '../types/index.js';
+import { resolveChatSession } from '../engine/session/session-routing.js';
+import { createChatPrompt } from '../api/routes/chat-prompt.js';
+import { normalizeTelegramUpdate } from '../api/connectors/telegram/telegram.js';
+import { buildApprovalResolvedMessage, parseApprovalCallback } from '../api/connectors/telegram/approval-ui/index.js';
+import { markTelegramUpdateReceived } from '../api/connectors/telegram/telegram-state.js';
+import { isMentioned } from '../api/connectors/telegram/telegram-api.js';
+import type { NormalizedMessageEvent } from '../core/types/index.js';
 import * as v from 'valibot';
 
 function isTestMode(): boolean {

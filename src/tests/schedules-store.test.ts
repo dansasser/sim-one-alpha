@@ -8,8 +8,8 @@ import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import test from 'node:test';
 
-import { ScheduleStore, ScheduleValidationError } from '../schedules/schedule-store.js';
-import type { ScheduleDefinition } from '../schedules/schedule-types.js';
+import { ScheduleStore, ScheduleValidationError } from '../engine/schedules/schedule-store.js';
+import type { ScheduleDefinition } from '../engine/schedules/schedule-types.js';
 
 function tempDbPath(): string {
   return `/tmp/sim-one-schedules-store-${Date.now()}-${Math.floor(Math.random() * 1e6)}.sqlite`;

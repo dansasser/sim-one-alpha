@@ -4,9 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { GoromboStructuredMemoryDatabase } from '../memory/structured-memory-database.js';
-import { ulid } from '../memory/ulid.js';
-import type { Checklist, MemoryRecord, SessionNote, Todo } from '../types/memory.js';
+import { GoromboStructuredMemoryDatabase } from '../engine/memory/structured-memory-database.js';
+import { ulid } from '../engine/memory/ulid.js';
+import type { Checklist, MemoryRecord, SessionNote, Todo } from '../core/types/memory.js';
 
 function tmpDbPath(): string {
   const dir = mkdtempSync(join(tmpdir(), 'gorombo-mem-'));

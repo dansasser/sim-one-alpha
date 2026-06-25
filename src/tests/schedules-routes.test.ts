@@ -13,13 +13,13 @@ import test from 'node:test';
 import type { FlueEvent } from '@flue/runtime';
 import { Hono } from 'hono';
 
-import { resolveScheduleConfig } from '../schedules/schedule-config.js';
-import type { DispatchScheduleArgs, ScheduleDispatchResult } from '../schedules/schedule-dispatch.js';
-import { __setScheduleManagerForTesting } from '../schedules/boot.js';
-import { ScheduleManager } from '../schedules/schedule-manager.js';
-import { ScheduleStore } from '../schedules/schedule-store.js';
-import { requireApiSecret } from '../middleware/api-secret.js';
-import { registerSchedulesRoutes } from '../routes/schedules.js';
+import { resolveScheduleConfig } from '../engine/schedules/schedule-config.js';
+import type { DispatchScheduleArgs, ScheduleDispatchResult } from '../engine/schedules/schedule-dispatch.js';
+import { __setScheduleManagerForTesting } from '../engine/schedules/boot.js';
+import { ScheduleManager } from '../engine/schedules/schedule-manager.js';
+import { ScheduleStore } from '../engine/schedules/schedule-store.js';
+import { requireApiSecret } from '../api/middleware/api-secret.js';
+import { registerSchedulesRoutes } from '../api/routes/schedules.js';
 
 function tempDbPath(): string {
   return `/tmp/sim-one-schedules-routes-${Date.now()}-${Math.floor(Math.random() * 1e6)}.sqlite`;

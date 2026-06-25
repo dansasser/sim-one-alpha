@@ -111,7 +111,7 @@ Capabilities live outside `dist/` and survive upgrades.
 ## Source Code
 
 ```text
-src/capabilities/
+src/engine/capabilities/
   types.ts                 CapabilityRecord, CapabilityStore interfaces
   capability-store.ts      SQLite CRUD
   capability-loader.ts     loadUserCapabilities(env) — reads SQLite, returns grouped by kind

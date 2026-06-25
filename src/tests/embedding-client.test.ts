@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createEmbeddingClient } from '../rag/embeddings.js';
+import { createEmbeddingClient } from '../engine/rag/embeddings.js';
 
 test('createEmbeddingClient tries cloud first and falls back to onnx-local when cloud fails', async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];

@@ -7,23 +7,23 @@ This doc is the architecture reference. For the quick-start (build + smoke + con
 ## Layers
 
 ```text
-model tools  (src/tools/memory-*.ts, src/workers/coding-worker/tools/coding-task-memory-tools.ts)
+model tools  (src/engine/tools/memory-*.ts, src/engine/workers/coding-worker/tools/coding-task-memory-tools.ts)
   │  trusted scope injected here (eventId / worker context); model never supplies scope
   ▼
-TypeScript shim          src/memory/rust-memory-engine.ts
+TypeScript shim          src/engine/memory/rust-memory-engine.ts
   │  RustMemoryEngine      — loads the WASM, delegates every call
   │  InMemoryMemoryEngine  — pure-TS parity reference for unit tests
   ▼
 Rust engine (WASM)       crates/gorombo-memory/  →  pkg/gorombo_memory_bg.wasm  (wasm-pack)
   │  data model + scope matching + tag/keyword scoring + cycle/depth validation
   ▼
-PersistingMemoryEngine   src/memory/structured-memory-runtime.ts
+PersistingMemoryEngine   src/engine/memory/structured-memory-runtime.ts
   │  wraps the engine: every create/update/delete is persisted to SQLite
   │  cold start: hydrate the WASM index from SQLite via reconcile_index
   ▼
 SQLite durable store     .gorombo/db/structured-memory.sqlite  (table: structured_memory_records)
   ▼
-retrieve_memory          src/memory/checklist-memory-provider.ts  (provider 'structured-memory')
+retrieve_memory          src/engine/memory/checklist-memory-provider.ts  (provider 'structured-memory')
   │  ranked + truncated to the context budget, alongside session memory + RAG
 ```
 
@@ -49,13 +49,13 @@ Internals:
 - `Scope` (`src/scope.rs`) — `matches(record, query)` is the trust boundary: a record scoped to `projectId=A` is never returned to a query whose `projectId` is `B` or absent. Global records are visible to all queries.
 - `validate_request` (`src/validate.rs`) — rejects empty required fields and empty scopes (`scope must carry at least one of actorId/conversationId/projectId/threadId/global`).
 
-## TypeScript shim (`src/memory/rust-memory-engine.ts`)
+## TypeScript shim (`src/engine/memory/rust-memory-engine.ts`)
 
 `RustMemoryEngine` loads the WASM module, keeps a TS-side cache, and maps each `MemoryEngine` interface method to the corresponding WASM export. `InMemoryMemoryEngine` is a pure-TypeScript implementation of the same `MemoryEngine` contract used as a parity reference in unit tests (so test behavior does not depend on a built WASM artifact).
 
-The `MemoryEngine` contract (`src/memory/memory-engine.ts`) is the boundary: callers inject scope and audit fields; the engine owns no `actorId`/`conversationId`/`projectId`/`threadId`/`global`.
+The `MemoryEngine` contract (`src/engine/memory/memory-engine.ts`) is the boundary: callers inject scope and audit fields; the engine owns no `actorId`/`conversationId`/`projectId`/`threadId`/`global`.
 
-## Durability (`src/memory/structured-memory-runtime.ts`)
+## Durability (`src/engine/memory/structured-memory-runtime.ts`)
 
 `getStructuredMemoryRuntime(config)` is the lazily-initialized singleton. On first access it:
 1. opens the SQLite store (`GoromboStructuredMemoryDatabase`),
@@ -85,12 +85,12 @@ record_json TEXT NOT NULL          -- full denormalized record
 
 Scope is injected by the caller and never trusted from the model.
 
-- **Orchestrator tools** (`src/tools/memory-checklist-tools.ts`, `memory-todo-tools.ts`, `memory-note-tools.ts`) derive all scope fields from a trusted persisted `NormalizedMessageEvent` (`eventId`). Update operations pass `expectedScope`; the engine's `assertExpectedScope` verifies the target record's scope matches before mutating.
-- **Coding-worker tools** (`src/workers/coding-worker/tools/coding-task-memory-tools.ts`) inject `projectId` from the worker context (`CodingWorkspaceTargetInput`). Each `execute` calls `requireTrustedScope()` and fails closed if no trusted scope was injected. Mutating writes route through `SharedCodingApprovalService` as an audit-only `memory.write` event (never blocking).
+- **Orchestrator tools** (`src/engine/tools/memory-checklist-tools.ts`, `memory-todo-tools.ts`, `memory-note-tools.ts`) derive all scope fields from a trusted persisted `NormalizedMessageEvent` (`eventId`). Update operations pass `expectedScope`; the engine's `assertExpectedScope` verifies the target record's scope matches before mutating.
+- **Coding-worker tools** (`src/engine/workers/coding-worker/tools/coding-task-memory-tools.ts`) inject `projectId` from the worker context (`CodingWorkspaceTargetInput`). Each `execute` calls `requireTrustedScope()` and fails closed if no trusted scope was injected. Mutating writes route through `SharedCodingApprovalService` as an audit-only `memory.write` event (never blocking).
 
 ## Retrieval (`retrieve_memory`)
 
-The `structured-memory` provider (`src/memory/checklist-memory-provider.ts`) runs a scoped keyword/tag query against the engine and returns `RetrievedContext` records, ranked and truncated to the context budget (`maxContextTokens`, `defaultLimit`) alongside session-memory chunks and RAG results.
+The `structured-memory` provider (`src/engine/memory/checklist-memory-provider.ts`) runs a scoped keyword/tag query against the engine and returns `RetrievedContext` records, ranked and truncated to the context budget (`maxContextTokens`, `defaultLimit`) alongside session-memory chunks and RAG results.
 
 Session notes are optionally searchable by LanceDB semantic similarity (`StructuredMemoryNoteIndex`), merged with the keyword index via reciprocal rank fusion, with a graceful keyword-only fallback when no embedding client is configured.
 

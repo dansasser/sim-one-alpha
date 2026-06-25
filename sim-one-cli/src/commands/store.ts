@@ -1,8 +1,8 @@
 import { homedir } from 'node:os';
 import { isAbsolute, resolve } from 'node:path';
-import { createCapabilityStore } from '../../../src/capabilities/index.js';
-import { resolveCapabilitiesDir, assertSafeCapabilityId } from '../../../src/capabilities/index.js';
-import type { CapabilityKind, CapabilityStore } from '../../../src/capabilities/index.js';
+import { createCapabilityStore } from '../../../src/engine/capabilities/index.js';
+import { resolveCapabilitiesDir, assertSafeCapabilityId } from '../../../src/engine/capabilities/index.js';
+import type { CapabilityKind, CapabilityStore } from '../../../src/engine/capabilities/index.js';
 
 /**
  * Resolve the capability SQLite database path using the same rules as the

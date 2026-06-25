@@ -3,12 +3,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { createLspTools } from '../workers/coding-worker/tools/code-intelligence/lsp/lsp-tools.js';
-import { JsonRpcClient } from '../workers/coding-worker/tools/code-intelligence/lsp/lsp-json-rpc.js';
-import { createFlueLocalCodingSandbox } from '../workers/coding-worker/tools/sandbox-runtime.js';
-import type { CodingSandboxRuntime } from '../workers/coding-worker/tools/sandbox-runtime.js';
+import { createLspTools } from '../engine/workers/coding-worker/tools/code-intelligence/lsp/lsp-tools.js';
+import { JsonRpcClient } from '../engine/workers/coding-worker/tools/code-intelligence/lsp/lsp-json-rpc.js';
+import { createFlueLocalCodingSandbox } from '../engine/workers/coding-worker/tools/sandbox-runtime.js';
+import type { CodingSandboxRuntime } from '../engine/workers/coding-worker/tools/sandbox-runtime.js';
 import type { ChildProcess } from 'node:child_process';
-import type { LspRequestContext } from '../workers/coding-worker/tools/code-intelligence/lsp/lsp-client-manager.js';
+import type { LspRequestContext } from '../engine/workers/coding-worker/tools/code-intelligence/lsp/lsp-client-manager.js';
 
 const tsSource = `
 import { helper } from './helper.ts';
@@ -407,7 +407,7 @@ test('wrapper tool returns empty when no symbol exists anywhere', async () => {
     const onlySource = `export const greeting: string = 'hello';\n`;
     writeFileSync(join(projectPath, 'index.ts'), onlySource);
 
-    const { createCodingCodeIntelligenceTools } = await import('../workers/coding-worker/tools/code-intelligence/index.js');
+    const { createCodingCodeIntelligenceTools } = await import('../engine/workers/coding-worker/tools/code-intelligence/index.js');
     const tools = createCodingCodeIntelligenceTools({
       workspaceRoot,
       targetKind: 'project',

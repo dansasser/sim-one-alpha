@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { MemoryRouter, reciprocalRankFusion } from '../memory/memory-router.js';
-import type { MemoryProvider } from '../memory/memory-provider.js';
-import type { RagQuery, RetrievedContext } from '../types/index.js';
+import { MemoryRouter, reciprocalRankFusion } from '../engine/memory/memory-router.js';
+import type { MemoryProvider } from '../engine/memory/memory-provider.js';
+import type { RagQuery, RetrievedContext } from '../core/types/index.js';
 
 function ctx(id: string, score: number, provider: RetrievedContext['provider'], title = id): RetrievedContext {
   return { id, provider, title, content: `c-${id}`, score };
