@@ -21,6 +21,6 @@
   "capabilities": [],
   "gateway": {
     "mode": "dev",
-    "port": 3000
+    "port": 3940
   }
 }
