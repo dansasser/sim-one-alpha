@@ -1,0 +1,47 @@
+.github/workflows/ci.yml
+  s_38452e3b10f10f::t_7b3d19ca4c0e07 65-66
+sim-one-cli/src/cli.tsx
+  s_38452e3b10f10f::t_5a80fc7426d90a 68-71
+  s_38452e3b10f10f::t_83b83200840952 42-51,59
+  s_38452e3b10f10f::t_941dcbbbca8732 53-56
+docs/architecture/product-flow.md
+  s_38452e3b10f10f::t_087d573108e644 166
+  s_38452e3b10f10f::t_11b943d5c0f99d 139
+  s_38452e3b10f10f::t_5fc4318152d666 129
+package.json
+  s_38452e3b10f10f::t_c05ad632dc00f6 17
+sim-one-cli/src/launcher/server-manager.ts
+  s_38452e3b10f10f::t_251efa2868d616 44
+  s_38452e3b10f10f::t_6956be478c9ec4 42
+  s_38452e3b10f10f::t_158b793f80feac 159-162
+  s_38452e3b10f10f::t_a6f51426d7b06e 169,173-175
+  s_38452e3b10f10f::t_5a45acb8766c9d 140-141,144-152
+src/approvals/shared-approval-service.ts
+  s_38452e3b10f10f::t_b83d20caef0d34 14-15
+src/middleware/api-secret.ts
+  s_38452e3b10f10f::t_054aee0a99648d 28-29
+sim-one-cli/src/lib/approvalClient.ts
+  s_38452e3b10f10f::t_2dc0579574b031 35,39-41
+README.md
+  s_38452e3b10f10f::t_326756085c817c 1189
+src/tests/api-secret-loopback.test.ts
+  s_38452e3b10f10f::t_34de4ae2fe6cc4 80-81,85-87
+  s_38452e3b10f10f::t_ed96cd947ae3a7 44-53,88
+  s_38452e3b10f10f::t_d8192cd51a0234 101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "1bafc5afc6a4d380a10c57485aa4790a58271469",
+  "prompts": {},
+  "sessions": {
+    "s_38452e3b10f10f": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10508c1efffeDMyPAsvTtRZdLR",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
