@@ -170,7 +170,7 @@ async function waitForHealth(baseUrl: string, child?: ChildProcess): Promise<voi
   const deadline = Date.now() + HEALTH_TIMEOUT_MS;
 
   while (Date.now() < deadline) {
-    if (child && child.exitCode !== null) {
+    if (child && (child.exitCode !== null || child.signalCode !== null)) {
       throw new Error(`Server exited unexpectedly with code ${child.exitCode} before becoming healthy.`);
     }
     if (await checkHealth(baseUrl)) return;
