@@ -544,7 +544,7 @@ Before modifying architecture, read:
 
 ```text
 ./agents.md
-./agent-flow.svg
+./docs/agent-flow.svg
 https://flueframework.com
 https://github.com/withastro/flue
 https://flueframework.com/start.md
