@@ -1,0 +1,36 @@
+src/tests/architecture-contract.test.ts
+  s_c53b0d1ca1404e::t_daadad7dcaef99 182-183
+  s_c53b0d1ca1404e::t_94e52991de766e 20
+  s_c53b0d1ca1404e::t_ae4fa37884cfc3 69-70
+src/tests/retrieval-workflow.test.ts
+  s_c53b0d1ca1404e::t_9270e4da973238 481
+scripts/generate-builtin-registry.mjs
+  s_c53b0d1ca1404e::t_c2a4b3a1b06c13 227
+  s_c53b0d1ca1404e::t_70fcd10d681553 20,23
+  s_c53b0d1ca1404e::t_7ee860ae70ebc4 167
+docs/architecture/gorombo-flue-map.md
+  s_c53b0d1ca1404e::t_0abe16cb4b8663 47
+  s_c53b0d1ca1404e::t_c9fbd0b0d76f89 7-19
+  s_c53b0d1ca1404e::t_3745351c3e5de7 37
+docs/architecture/flue-architecture.md
+  s_c53b0d1ca1404e::t_2b7724062aeff9 68
+  s_c53b0d1ca1404e::t_f335011f23a9ca 87
+src/db.ts
+  s_c53b0d1ca1404e::t_6eebfcd6a735a5 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "91dc6f9cdac16b4cff76e0dd82418b388abbe345",
+  "prompts": {},
+  "sessions": {
+    "s_c53b0d1ca1404e": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_100dc175bffe3o1xoz3L9SPLYT",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
