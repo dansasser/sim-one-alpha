@@ -1,0 +1,23 @@
+sim-one-cli/src/cli.tsx
+  s_38452e3b10f10f::t_8fdb82a03377a1 53
+sim-one-cli/src/launcher/server-manager.ts
+  s_38452e3b10f10f::t_bc4c0903bae9b3 148
+  s_38452e3b10f10f::t_f58b95db31c07c 42-48
+  s_38452e3b10f10f::t_b9883517bd6742 180-187
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "fb0aac3bf6965ed0e33947a2e50f2789861cb131",
+  "prompts": {},
+  "sessions": {
+    "s_38452e3b10f10f": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10508c1efffeDMyPAsvTtRZdLR",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
