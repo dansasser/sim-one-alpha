@@ -62,5 +62,5 @@ jobs:
         env:
           GOROMBO_TEST_MODE: '1'
 
-      - name: Verify WASM artifact in dist
-        run: test -f dist/memory/gorombo_memory_bg.wasm
+      - name: Verify WASM artifact in build output
+        run: test -f .gorombo/sim-one-alpha/memory/gorombo_memory_bg.wasm

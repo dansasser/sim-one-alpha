@@ -126,7 +126,7 @@ sim-one stop           # Stop the gateway service
 
 ### NOT the product interface (developer-only)
 - `pnpm capabilities:add skill ...` — developer pnpm script, not the product CLI
-- `pnpm run build:prod` — developer build+test workflow, not the product install
+- `pnpm run build:all` — developer build+launch workflow (builds runtime + CLI, launches TUI), not the product install
 - `node scripts/capability-admin.mjs ...` — standalone dev-time admin script, replaced by `sim-one` subcommands
 - `pnpm --filter sim-one-alpha-tui-proto exec tsx src/cli.tsx` — prototype TUI launch, replaced by `sim-one`
 
@@ -136,7 +136,7 @@ sim-one stop           # Stop the gateway service
 sim-one-alpha/                    # repository (development)
   src/                            # runtime source (compiled to .gorombo/sim-one-alpha/)
   tui-proto/                      # throwaway TUI prototype (deleted when production TUI ships)
-  scripts/                        # dev-time scripts (capability-admin.mjs, build-prod.mjs, etc.)
+  scripts/                        # dev-time scripts (capability-admin.mjs, copy-runtime-config.mjs, etc.)
   .gorombo/sim-one-alpha/                           # built runtime artifact (what gets installed)
 
 # Install package (what sim-one.sh installs):
@@ -163,7 +163,7 @@ The `sim-one` binary is the production TUI package from the agent-tui plan (`sim
 | Web UI | ❌ Not built | `@flue/react` + `react-dom` dashboard + chat |
 | Install script (`sim-one.sh`) | ❌ Not built | Package install + wizard trigger |
 | `capability-admin.mjs` | ✅ Working (dev-time) | Replaced by `sim-one skill/tool/worker/mcp` subcommands |
-| `build:prod` launcher | ✅ Working (dev-time) | Replaced by `sim-one` service management |
+| `build:all` launcher | ✅ Working (dev-time) | Replaced by `sim-one` service management |
 
 ## Key principles
 

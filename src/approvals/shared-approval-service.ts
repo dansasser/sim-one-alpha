@@ -11,11 +11,8 @@ export interface SharedCodingApprovalServiceEnv {
  * Resolves the on-disk root used for approval persistence.
  *
  * Order of resolution:
- * 1. `env.GOROMBO_APPROVAL_ROOT`
- * 2. `~/.gorombo/approvals` (unified runtime data root)
- *
- * Throws if GOROMBO_APPROVAL_ROOT is not set and the home directory
- * cannot be resolved.
+ * 1. `env.GOROMBO_APPROVAL_ROOT` (if set to a non-empty string)
+ * 2. `~/.gorombo/approvals` (unified runtime data root, via homedir())
  */
 export function resolveCodingApprovalRoot(
   env: SharedCodingApprovalServiceEnv,

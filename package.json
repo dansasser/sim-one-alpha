@@ -14,7 +14,7 @@
   "scripts": {
     "build": "flue build --target node && node scripts/generate-builtin-registry.mjs && node scripts/copy-runtime-config.mjs && node scripts/copy-wasm-artifact.mjs",
     "build:cli": "pnpm --filter sim-one-cli run build",
-    "build:all": "pnpm run build && pnpm run build:cli && node .gorombo/sim-one-cli/cli.mjs",
+    "build:all": "pnpm run build && pnpm run build:cli && node .gorombo/sim-one-cli/cli.js",
     "connect": "flue connect orchestrator local --target node --session local",
     "dev": "flue dev --target node",
     "test:unit": "node scripts/run-unit-tests.mjs",

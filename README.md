@@ -1186,7 +1186,7 @@ pnpm run smoke:memory
 
 `pnpm run wasm:build` rebuilds the Rust crate to WASM and requires the Rust toolchain + `wasm-pack`. This is only needed when modifying the structured-memory engine; the shipped `.gorombo/sim-one-alpha/memory/` artifact is already compiled and runs without Rust.
 
-The default smoke drives the real Memory Helper tools, WASM engine, SQLite, `retrieve_memory`, and the coding-worker path end-to-end with a durability restart check (no live model required). To run the real-model smoke that boots the server and lets a live model drive the orchestrator memory tools, set `GOROMBO_SMOKE_REAL_MODEL=1` (requires a `.env` with model API creds and a built `dist`): `GOROMBO_SMOKE_REAL_MODEL=1 pnpm run smoke:memory`.
+The default smoke drives the real Memory Helper tools, WASM engine, SQLite, `retrieve_memory`, and the coding-worker path end-to-end with a durability restart check (no live model required). To run the real-model smoke that boots the server and lets a live model drive the orchestrator memory tools, set `GOROMBO_SMOKE_REAL_MODEL=1` (requires a `.env` with model API creds and a built `.gorombo/sim-one-alpha/`): `GOROMBO_SMOKE_REAL_MODEL=1 pnpm run smoke:memory`.
 
 ### Configuration
 

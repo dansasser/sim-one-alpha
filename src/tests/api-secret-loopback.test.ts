@@ -41,6 +41,16 @@ describe('api-secret middleware — loopback bypass', () => {
     assert.equal(isLoopbackRequest(ctx), false);
   });
 
+  it('returns false when X-Real-Ip is present (even from loopback)', () => {
+    const ctx = mockContext('127.0.0.1', { 'x-real-ip': '10.0.0.1' });
+    assert.equal(isLoopbackRequest(ctx), false);
+  });
+
+  it('returns false when Forwarded header is present (even from loopback)', () => {
+    const ctx = mockContext('127.0.0.1', { 'forwarded': 'for=10.0.0.1' });
+    assert.equal(isLoopbackRequest(ctx), false);
+  });
+
   it('returns false when remoteAddress is missing', () => {
     const ctx = mockContext(undefined);
     assert.equal(isLoopbackRequest(ctx), false);
@@ -67,9 +77,14 @@ describe('api-secret middleware — requireApiSecret', () => {
     assert.equal(result, undefined);
   });
 
-  it('rejects loopback with X-Forwarded-For and no token', async () => {
-    const result = await callMiddleware('127.0.0.1', { 'x-forwarded-for': '10.0.0.1' });
+  it('rejects loopback with X-Forwarded-For and no token (API_SECRET not configured)', async () => {
+    const result = await callMiddleware('127.0.0.1', { 'x-forwarded-for': '10.0.0.1' }, { API_SECRET: undefined });
     assert.equal(result?.status, 503);
+  });
+
+  it('rejects loopback with X-Forwarded-For and wrong token', async () => {
+    const result = await callMiddleware('127.0.0.1', { 'x-forwarded-for': '10.0.0.1', 'x-api-secret': 'wrong' }, { API_SECRET: 'test-secret' });
+    assert.equal(result?.status, 401);
   });
 
   it('accepts non-loopback with correct token', async () => {
@@ -83,7 +98,7 @@ describe('api-secret middleware — requireApiSecret', () => {
   });
 
   it('returns 503 for non-loopback when API_SECRET not configured', async () => {
-    const result = await callMiddleware('10.0.0.1', {});
+    const result = await callMiddleware('10.0.0.1', {}, { API_SECRET: undefined });
     assert.equal(result?.status, 503);
   });
 

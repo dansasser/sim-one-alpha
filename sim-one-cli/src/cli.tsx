@@ -39,11 +39,24 @@ program
   .option('--base-url <url>', 'full base url (overrides --port, when launching TUI)')
   .option('--session <id>', 'agent instance id (when launching TUI)', 'proto')
   .action(async (opts) => {
+    const session = opts.session;
+
+    if (opts.baseUrl) {
+      const instance = render(<App baseUrl={opts.baseUrl} session={session} />, {
+        exitOnCtrlC: true,
+      });
+      instance.waitUntilExit().then(() => process.exit(0));
+      return;
+    }
+
     const port = opts.port ? parseInt(opts.port, 10) : undefined;
+    if (opts.port && (!port || port < 1 || port > 65535)) {
+      console.error(`Invalid port: ${opts.port}. Must be a number 1-65535.`);
+      process.exit(1);
+    }
     const result = await ensureServerRunning({ port });
 
-    const baseUrl = opts.baseUrl ?? result.baseUrl;
-    const session = opts.session;
+    const baseUrl = result.baseUrl;
     const { started } = result;
 
     const instance = render(<App baseUrl={baseUrl} session={session} />, {
@@ -52,7 +65,10 @@ program
 
     instance.waitUntilExit().then(async () => {
       if (started) {
-        await cleanupServer();
+        try {
+          await cleanupServer();
+        } catch {
+        }
       }
       process.exit(0);
     });

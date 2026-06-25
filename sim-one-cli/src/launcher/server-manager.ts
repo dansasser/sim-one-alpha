@@ -39,7 +39,9 @@ export async function ensureServerRunning(options: ServerManagerOptions = {}): P
   const child = startServer(serverPath, envPath, port);
   serverChild = child;
 
-  await waitForHealth(baseUrl);
+  await waitForHealth(baseUrl, child);
+
+  (child as any).__detachLogs?.();
 
   return { started: true, pid: child.pid ?? undefined, port, baseUrl };
 }
@@ -135,29 +137,42 @@ function startServer(serverPath: string, envPath: string, port: number): ChildPr
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
-  child.stdout?.on('data', (chunk: Buffer) => {
-    process.stdout.write(chunk);
+  child.on('error', (err) => {
+    console.error(`Failed to start server: ${err.message}`);
   });
-  child.stderr?.on('data', (chunk: Buffer) => {
-    process.stderr.write(chunk);
-  });
+
+  const stdoutListener = (chunk: Buffer) => { process.stdout.write(chunk); };
+  const stderrListener = (chunk: Buffer) => { process.stderr.write(chunk); };
+  child.stdout?.on('data', stdoutListener);
+  child.stderr?.on('data', stderrListener);
+
+  (child as any).__detachLogs = () => {
+    child.stdout?.off('data', stdoutListener);
+    child.stderr?.off('data', stderrListener);
+  };
 
   return child;
 }
 
 async function checkHealth(baseUrl: string): Promise<boolean> {
   try {
-    const resp = await fetch(`${baseUrl}/health`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const resp = await fetch(`${baseUrl}/health`, { signal: controller.signal });
+    clearTimeout(timeout);
     return resp.ok;
   } catch {
     return false;
   }
 }
 
-async function waitForHealth(baseUrl: string): Promise<void> {
+async function waitForHealth(baseUrl: string, child?: ChildProcess): Promise<void> {
   const deadline = Date.now() + HEALTH_TIMEOUT_MS;
 
   while (Date.now() < deadline) {
+    if (child && child.exitCode !== null) {
+      throw new Error(`Server exited unexpectedly with code ${child.exitCode} before becoming healthy.`);
+    }
     if (await checkHealth(baseUrl)) return;
     await sleep(HEALTH_POLL_INTERVAL_MS);
   }

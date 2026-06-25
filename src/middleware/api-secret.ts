@@ -25,6 +25,8 @@ export const requireApiSecret: MiddlewareHandler = async (c, next) => {
 
 export function isLoopbackRequest(c: Parameters<MiddlewareHandler>[0]): boolean {
   if (c.req.header('x-forwarded-for')) return false;
+  if (c.req.header('x-real-ip')) return false;
+  if (c.req.header('forwarded')) return false;
 
   const env = c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined;
   const addr = env?.incoming?.socket?.remoteAddress;
