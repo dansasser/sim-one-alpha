@@ -1,0 +1,22 @@
+src/config/gorombo-config.ts
+  s_38452e3b10f10f::t_0554e04f85d6e9 106,117
+  s_38452e3b10f10f::t_01875dc6c795b0 223-254
+src/memory/structured-memory-runtime.ts
+  s_38452e3b10f10f::t_ac0e37381a617e 69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "aa2089aab5833b3b06b877ba30a62b08a44f599d",
+  "prompts": {},
+  "sessions": {
+    "s_38452e3b10f10f": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10508c1efffeDMyPAsvTtRZdLR",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
