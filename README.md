@@ -419,19 +419,56 @@ After downloading, RAG works without Ollama running and without any API keys. Th
 ### Build
 
 ```sh
+# Build the runtime (Flue server → .gorombo/sim-one-alpha/)
 pnpm run build
+
+# Build the TUI/CLI (tsup → .gorombo/sim-one-cli/cli.js)
+pnpm run build:cli
+
+# Build both + launch the TUI (one command)
+pnpm run build:all
 ```
 
-This compiles the WASM memory engine (the `prebuild` step invokes `wasm-pack` — this is what requires the Rust toolchain), builds the Flue Node server (`.gorombo/sim-one-alpha/server.mjs`), copies the runtime config, and copies the WASM artifact into `.gorombo/sim-one-alpha/`. The resulting `.gorombo/sim-one-alpha/` is self-contained: you can copy it to a machine without Rust installed and run the server from there. Only rebuilding the WASM from source requires the toolchain.
+`pnpm run build` compiles the WASM memory engine (the `prebuild` step invokes `wasm-pack` — this is what requires the Rust toolchain), builds the Flue Node server (`.gorombo/sim-one-alpha/server.mjs`), copies the runtime config, and copies the WASM artifact into `.gorombo/sim-one-alpha/`. The resulting `.gorombo/sim-one-alpha/` is self-contained: you can copy it to a machine without Rust installed and run the server from there. Only rebuilding the WASM from source requires the toolchain.
 
-### Start the server
+`pnpm run build:cli` compiles the TUI from TSX source into a single self-contained ESM bundle at `.gorombo/sim-one-cli/cli.js` (~7.5MB, no external dependencies — only Node builtins).
+
+`pnpm run build:all` builds both, then launches the TUI directly from the build output.
+
+### Launch the TUI
+
+```sh
+# Launch the built TUI (Node 22+ required)
+node .gorombo/sim-one-cli/cli.js
+```
+
+This one command:
+1. Checks if the server is already running (health check on `127.0.0.1:<port>`)
+2. If not running, starts it from `.gorombo/sim-one-alpha/server.mjs` with env from `.env`
+3. Waits for the server to become healthy (~30s for ONNX model load)
+4. Launches the Ink TUI, connected to the server over loopback (no auth needed)
+5. On exit (Ctrl+C), kills the server if the TUI started it
+
+The port is read from `gorombo.config.json` (`gateway.port`, default 3940). Override with `--port`:
+
+```sh
+node .gorombo/sim-one-cli/cli.js --port 3960
+```
+
+To connect to an already-running remote server (skip server lifecycle):
+
+```sh
+node .gorombo/sim-one-cli/cli.js --base-url http://192.168.0.131:3940
+```
+
+### Start the server alone
 
 ```sh
 # Using the built artifact
 pnpm start
 # or: node --env-file=.env .gorombo/sim-one-alpha/server.mjs
 
-# Custom port (default: 3000)
+# Custom port
 PORT=3960 node --env-file=.env .gorombo/sim-one-alpha/server.mjs
 ```
 
@@ -455,7 +492,7 @@ pnpm run typecheck # TypeScript type checking
 
 ## Interactive TUI
 
-SIM-ONE Alpha includes an interactive terminal UI for chatting with the agent, viewing tool calls and subagent delegations, and managing approvals. The production `sim-one` binary is the target interface, but is not yet shipped from this repo. The current runnable TUI is the developer prototype (see below).
+SIM-ONE Alpha includes an interactive terminal UI for chatting with the agent, viewing tool calls and subagent delegations, and managing approvals. The TUI is built into `.gorombo/sim-one-cli/cli.js` and manages the server lifecycle automatically — one command starts the server and launches the TUI.
 
 ### What the TUI shows
 
@@ -476,20 +513,28 @@ On first install, `sim-one install` (or the install script) will launch a wizard
 - Persona/workspace configuration
 - Gateway service launch (always-on background process)
 
-> **Status:** The wizard is part of the production `sim-one` binary, which is not yet shipped. Use the developer prototype below for now.
+> **Status:** The wizard (`sim-one install`) is planned for the next phase. The TUI itself is working now — use `node .gorombo/sim-one-cli/cli.js` to launch it.
 
-### Developer prototype
+### Running the TUI
 
-The current TUI and CLI live in `sim-one-cli/` at the repo top level. This is the evolving production CLI package — it will become the `sim-one` binary when the install script ships. During development, it can be launched directly:
+The TUI and CLI live in `sim-one-cli/` at the repo top level. The source is compiled by tsup into `.gorombo/sim-one-cli/cli.js` during build. During development you can run from source or from the build output:
 
 ```sh
-# Against a running dev server
+# From the build output (recommended — one command starts the server + TUI)
+node .gorombo/sim-one-cli/cli.js
+
+# Build both + launch in one command
+pnpm run build:all
+
+# From source (dev mode, against a running dev server on port 3583)
 pnpm --filter sim-one-cli exec tsx src/cli.tsx --port 3583
 
-# One-command build + launch (developer workflow)
-pnpm run build:prod
+# Capability management subcommands (from build output)
+node .gorombo/sim-one-cli/cli.js skill list
+node .gorombo/sim-one-cli/cli.js skill add /path/to/skill my-skill "My Skill" --enable
+node .gorombo/sim-one-cli/cli.js mcp add my-mcp "My MCP" --url http://localhost:8080 --enable
 
-# Capability management subcommands
+# Capability management subcommands (from source, dev mode)
 pnpm --filter sim-one-cli exec tsx src/cli.tsx skill list
 pnpm --filter sim-one-cli exec tsx src/cli.tsx skill add /path/to/skill my-skill "My Skill" --enable
 pnpm --filter sim-one-cli exec tsx src/cli.tsx mcp add my-mcp "My MCP" --url http://localhost:8080 --enable
