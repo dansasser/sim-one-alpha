@@ -1,0 +1,34 @@
+docs/architecture/orchestrator-flow.md
+  s_c53b0d1ca1404e::t_e4b78d00cf426b 3
+docs/architecture/registry-system.md
+  s_c53b0d1ca1404e::t_d3867c06fac27d 5,14
+README.md
+  s_c53b0d1ca1404e::t_99c5bd6d176f02 991
+  s_c53b0d1ca1404e::t_38b38a9f444704 225-231,233-234
+  s_c53b0d1ca1404e::t_70ff260870ca8f 358-388,390
+  s_c53b0d1ca1404e::t_8325a804fde320 1208-1235
+  s_c53b0d1ca1404e::t_e849f8ad75cd89 1
+  s_c53b0d1ca1404e::t_67b26c239458b4 194
+  s_c53b0d1ca1404e::t_18b0e624d36740 128,130-135,137
+  s_c53b0d1ca1404e::t_e1417e2f9cb31f 193,195-198,204
+  s_c53b0d1ca1404e::t_6638e31c955072 175,177,179-185
+  s_c53b0d1ca1404e::t_d4d6a4655510a5 240-253
+docs/architecture/memory-system.md
+  s_c53b0d1ca1404e::t_cebee14d70d56c 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "e2d3be9dbcae4ca0820bd272ae92db5aef7fb8e2",
+  "prompts": {},
+  "sessions": {
+    "s_c53b0d1ca1404e": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_100dc175bffe3o1xoz3L9SPLYT",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
