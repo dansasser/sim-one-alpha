@@ -1,8 +1,6 @@
 # Orchestrator Flow
 
-Phase 1 builds the base orchestrator system only.
-
-The flow is intentionally simple and testable:
+The orchestration flow:
 
 ```text
 Connector
