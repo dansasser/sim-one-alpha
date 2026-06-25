@@ -76,17 +76,43 @@ test('web_research tool accepts string budget controls and webFetch mode', async
   }
 });
 
-test('web_research tool throws on unresolved eventId', async () => {
-  await assert.rejects(
-    async () => {
+test('web_research tool falls back to explicit actor/conversation when event is not persisted', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          results: [
+            {
+              title: 'Test source',
+              url: 'https://example.com/test',
+              content: 'Test content.',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+
+    const result = JSON.parse(
       await webResearchTool.execute({
         eventId: 'nonexistent-event-id',
         text: 'query',
-      });
-    },
-    (error: Error) => {
-      assert.match(error.message, /nonexistent-event-id/);
-      return true;
-    },
-  );
+        actorId: 'tui-user',
+        conversationId: 'tui-conversation',
+        depth: 'basic',
+        maxQueries: '1',
+        maxFetches: '1',
+        maxContextTokens: '200',
+        webFetch: 'never',
+        limit: '1',
+        freshness: 'fresh',
+        minSources: '1',
+        maxIterations: '1',
+      }),
+    ) as { budget?: { depth?: string } };
+
+    assert.equal(result.budget?.depth, 'basic');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

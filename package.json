@@ -19,6 +19,7 @@
     "dev": "flue dev --target node",
     "test:unit": "node scripts/run-unit-tests.mjs",
     "test:http": "node scripts/test-built-http.mjs",
+    "test:tui": "node scripts/test-tui-e2e.mjs",
     "test:lsp": "node scripts/run-unit-tests.mjs -- src/tests/lsp-integration.test.ts",
     "smoke:http": "node scripts/smoke-http-endpoints.mjs",
     "research:local": "node scripts/research.mjs",
