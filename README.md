@@ -1317,11 +1317,15 @@ Common commands:
 pnpm test
 pnpm run typecheck
 pnpm run build
-pnpm run test:http
+pnpm run build:cli      # build the TUI/CLI (tsup → .gorombo/sim-one-cli/cli.js)
+pnpm run build:all      # build both + launch the TUI
+pnpm run test:unit      # unit tests only
+pnpm run test:http      # HTTP integration test against built server
+pnpm run test:tui        # TUI end-to-end test (requires OLLAMA_API_KEY)
 pnpm run smoke:http
-pnpm run wasm:build        # build the gorombo-memory WASM artifact
-pnpm run cargo:test        # cargo test -p gorombo-memory (Rust crate tests)
-pnpm run smoke:memory      # Memory Helper end-to-end + durability smoke
+pnpm run wasm:build      # build the gorombo-memory WASM artifact
+pnpm run cargo:test      # cargo test -p gorombo-memory (Rust crate tests)
+pnpm run smoke:memory    # Memory Helper end-to-end + durability smoke
 ```
 
 `pnpm test` runs the TypeScript unit suite, builds `.gorombo/sim-one-alpha/server.mjs`, then runs `pnpm run test:http` against the built server over real localhost HTTP. The root `.env` file remains the runtime environment source; it is not copied into the build output.
