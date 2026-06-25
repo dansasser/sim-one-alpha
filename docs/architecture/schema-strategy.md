@@ -18,17 +18,17 @@ We use [Valibot](https://valibot.dev/) because:
 ## Directory layout
 
 ```text
-src/schemas/
+src/core/schemas/
   Shared Valibot schemas for cross-cutting runtime contracts.
   One file per domain. Promote a schema here only when it is reused across files or subsystems.
 
-src/workers/<domain>/schemas.ts (optional)
+src/engine/workers/<domain>/schemas.ts (optional)
   Worker-local schemas that are only consumed inside that worker.
   Useful when a schema is private to a single tool or workflow.
 
-src/types/
+src/core/types/
   Pure TypeScript type contracts. May re-export inferred types from
-  `src/schemas/` so consumers can continue importing from one place.
+  `src/core/schemas/` so consumers can continue importing from one place.
 ```
 
 ## Decision rules
@@ -41,21 +41,21 @@ src/types/
 
 Example: a one-off validation schema inside a single tool file.
 
-### Promote a schema to `src/schemas/` when:
+### Promote a schema to `src/core/schemas/` when:
 
 - It is reused by more than one file.
 - It represents a cross-subsystem contract (orchestrator ? worker, worker ? memory, worker ? DB).
 - It is used for Flue structured output (`session.task(..., { result: ... })`) and the type is referenced in a shared type contract.
 - It needs to be converted to JSON Schema or used for database validation.
 
-Example: `CodingImplementerResultSchema` lives in `src/schemas/coding-worker.ts` because it is shared between the implementer tool, the delegation path, and the public `CodingSubagentRunResult` type contract.
+Example: `CodingImplementerResultSchema` lives in `src/core/schemas/coding-worker.ts` because it is shared between the implementer tool, the delegation path, and the public `CodingSubagentRunResult` type contract.
 
 ## Pattern: schema + derived type + re-export
 
 Define the schema and derive its type in the schema file:
 
 ```ts
-// src/schemas/coding-worker.ts
+// src/core/schemas/coding-worker.ts
 import * as v from 'valibot';
 
 export const CodingImplementerResultSchema = v.object({
@@ -91,18 +91,18 @@ export type CodingImplementerResult = v.InferOutput<typeof CodingImplementerResu
 Import and re-export from the domain type contract so existing consumers do not need to change paths:
 
 ```ts
-// src/workers/coding-worker/types.ts
-import { CodingImplementerResultSchema } from '../../schemas/coding-worker.js';
+// src/engine/workers/coding-worker/types.ts
+import { CodingImplementerResultSchema } from '../../../core/schemas/coding-worker.js';
 
 export { CodingImplementerResultSchema };
-export type CodingImplementerResult = import('../../schemas/coding-worker.js').CodingImplementerResult;
+export type CodingImplementerResult = import('../../../core/schemas/coding-worker.js').CodingImplementerResult;
 ```
 
 Use the schema for structured Flue output:
 
 ```ts
-// src/workers/coding-worker/workflow/coordination.ts
-import { CodingImplementerResultSchema } from '../../../schemas/coding-worker.js';
+// src/engine/workers/coding-worker/workflow/coordination.ts
+import { CodingImplementerResultSchema } from '../../../../core/schemas/coding-worker.js';
 
 const response = await session.task(prompt, {
   agent: codingImplementerSubagentName,
@@ -119,10 +119,10 @@ return {
 
 ## Future growth
 
-- Add one file per domain to `src/schemas/` as contracts stabilize.
-- If a domain becomes large, split it into `src/schemas/<domain>/*.ts` with an `index.ts` barrel.
-- Do not create a `src/schemas/` file for a schema that is purely internal to one function; that belongs next to its consumer.
-- When a shape is shared across workers or between workers and the orchestrator, that is the signal to move it to `src/schemas/`.
+- Add one file per domain to `src/core/schemas/` as contracts stabilize.
+- If a domain becomes large, split it into `src/core/schemas/<domain>/*.ts` with an `index.ts` barrel.
+- Do not create a `src/core/schemas/` file for a schema that is purely internal to one function; that belongs next to its consumer.
+- When a shape is shared across workers or between workers and the orchestrator, that is the signal to move it to `src/core/schemas/`.
 
 ## Relationship to SIM-ONE
 

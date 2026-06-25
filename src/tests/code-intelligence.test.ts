@@ -17,9 +17,9 @@ import {
   parseFile,
   parsePython,
   parseTypeScript,
-} from '../workers/coding-worker/tools/code-intelligence/index.js';
-import { createCodingCodeIntelligenceTools } from '../workers/coding-worker/tools/code-intelligence/index.js';
-import { createFlueLocalCodingSandbox } from '../workers/coding-worker/tools/sandbox-runtime.js';
+} from '../engine/workers/coding-worker/tools/code-intelligence/index.js';
+import { createCodingCodeIntelligenceTools } from '../engine/workers/coding-worker/tools/code-intelligence/index.js';
+import { createFlueLocalCodingSandbox } from '../engine/workers/coding-worker/tools/sandbox-runtime.js';
 
 const tsSource = `
 import { helper } from './helper.ts';

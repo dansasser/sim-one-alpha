@@ -4,8 +4,8 @@ import { dirname, isAbsolute, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
   checkNameCollision,
-} from '../../../src/capabilities/index.js';
-import type { CapabilityRecord, CapabilitySource, CapabilityStore } from '../../../src/capabilities/index.js';
+} from '../../../src/engine/capabilities/index.js';
+import type { CapabilityRecord, CapabilitySource, CapabilityStore } from '../../../src/engine/capabilities/index.js';
 import {
   assertSafeCapabilityId,
   getCapabilityPath,

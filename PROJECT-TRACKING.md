@@ -97,7 +97,7 @@ The agent successfully called the MCP tool and returned Astro docs search result
 ### Memory Leak (verified by another agent — do not re-litigate)
 - **Symptom:** Built server grows to ~16GB resident in under a minute, gets OOM-killed every 3-7 min. `flue dev` restarts it, making it look like things are "working" but the process is dying constantly. Global OOM can take down collateral processes.
 - **NOT the cause:** wasm/gorombo-memory (no .wasm mapped in leaking process; in-memory engine fallback is running)
-- **Root cause area:** `runBackgroundIndexing` in `src/rag/indexers/background-indexer.ts`, fired fire-and-forget from `src/session/session-persistence.ts:55`. It loads ALL knowledge docs + ALL project files, embeds the entire corpus in a single batch via `embeddingClient.embedBatchWithOutcome(contents)`, and writes to LanceDB in one Arrow batch via `vectorStore.upsert(collection, vectorRecords)`.
+- **Root cause area:** `runBackgroundIndexing` in `src/engine/rag/indexers/background-indexer.ts`, fired fire-and-forget from `src/engine/session/session-persistence.ts:55`. It loads ALL knowledge docs + ALL project files, embeds the entire corpus in a single batch via `embeddingClient.embedBatchWithOutcome(contents)`, and writes to LanceDB in one Arrow batch via `vectorStore.upsert(collection, vectorRecords)`.
 - **Leak is native, not JS:** ~20.6GB single contiguous native allocation (onnxruntime-node + LanceDB path). JS heap is only ~130MB.
 - **Fix direction (needs verification):**
   1. Batch the indexing — chunk records into fixed-size batches, embed/upsert per batch instead of one shot
@@ -153,7 +153,7 @@ kill $(pgrep -f "node.*<port>")
 
 ## Server Startup Sequence
 1. `node --env-file=.env .gorombo/sim-one-alpha/server.mjs` starts
-2. `src/db.ts` loads → config reconcile runs → `[capabilities] Reconciled N capability(ies)` if config has capabilities
+2. `src/core/db.ts` loads → config reconcile runs → `[capabilities] Reconciled N capability(ies)` if config has capabilities
 3. ONNX model loads (~30 seconds, blocks event loop) → `[INFO] embeddings.onnx-loaded`
 4. `[flue] Server listening on http://localhost:<port>`
 5. Health endpoint starts responding (`GET /health` → `{"ok":true}`)
@@ -163,7 +163,7 @@ kill $(pgrep -f "node.*<port>")
 ## Key Files (in capability-registry worktree)
 
 ```
-src/capabilities/
+src/engine/capabilities/
   types.ts                      — CapabilityRecord, CapabilityStore interfaces
   capability-store.ts           — SQLite CRUD (node:sqlite DatabaseSync)
   capability-loader.ts          — loadUserCapabilities(), resolveCapabilitiesDir()
@@ -175,11 +175,11 @@ src/capabilities/
   capability-config-reconcile.ts — reconciles config capabilities into SQLite at boot
   index.ts                      — barrel exports
 
-src/tools/capability-tools.ts   — add_skill, add_tool, add_worker, add_mcp_server, list_capabilities
-src/agents/orchestrator.ts      — merge layer (loadUserCapabilitiesFromStore at init)
-src/db.ts                       — config reconcile at boot
-src/config/gorombo-config.ts    — GoromboCapabilityConfig type
-src/config/gorombo.config.json  — capabilities: [] array
+src/engine/tools/capability-tools.ts   — add_skill, add_tool, add_worker, add_mcp_server, list_capabilities
+src/engine/agents/orchestrator.ts      — merge layer (loadUserCapabilitiesFromStore at init)
+src/core/db.ts                       — config reconcile at boot
+src/core/config/gorombo-config.ts    — GoromboCapabilityConfig type
+src/core/config/gorombo.config.json  — capabilities: [] array
 
 scripts/capability-admin.mjs    — CLI admin (add/list/enable/disable/remove/update)
 docs/architecture/capability-system.md — full system docs

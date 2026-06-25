@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createInMemoryCodingApprovalService } from '../workers/coding-worker/approvals/approval-service.js';
-import { requiresCodingApproval } from '../workers/coding-worker/approvals/approval-policy.js';
-import { createCodingTaskMemoryTools } from '../workers/coding-worker/tools/coding-task-memory-tools.js';
-import { InMemoryMemoryEngine } from '../memory/rust-memory-engine.js';
-import type { MemoryEngine } from '../memory/memory-engine.js';
+import { createInMemoryCodingApprovalService } from '../engine/workers/coding-worker/approvals/approval-service.js';
+import { requiresCodingApproval } from '../engine/workers/coding-worker/approvals/approval-policy.js';
+import { createCodingTaskMemoryTools } from '../engine/workers/coding-worker/tools/coding-task-memory-tools.js';
+import { InMemoryMemoryEngine } from '../engine/memory/rust-memory-engine.js';
+import type { MemoryEngine } from '../engine/memory/memory-engine.js';
 import type { ToolDefinition } from '@flue/runtime';
 
 function getTool(tools: ToolDefinition[], name: string): ToolDefinition {

@@ -3,10 +3,10 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import orchestratorAgent from '../agents/orchestrator.js';
-import { createCodingWorkerSubagent } from '../workers/coding-worker/coding-worker.js';
-import { createResearcherSubagent } from '../workers/researcher/researcher.js';
-import { resolveCodingWorkerWorkspaceRoot as resolveCodingWorkerWorkspaceRootFromOrchestrator } from '../agents/orchestrator.js';
+import orchestratorAgent from '../engine/agents/orchestrator.js';
+import { createCodingWorkerSubagent } from '../engine/workers/coding-worker/coding-worker.js';
+import { createResearcherSubagent } from '../engine/workers/researcher/researcher.js';
+import { resolveCodingWorkerWorkspaceRoot as resolveCodingWorkerWorkspaceRootFromOrchestrator } from '../engine/agents/orchestrator.js';
 
 test('root and architecture docs preserve the Flue component contract', () => {
   const agents = readText('AGENTS.md');
@@ -17,14 +17,14 @@ test('root and architecture docs preserve the Flue component contract', () => {
   assert.match(agents, /docs\/architecture\/gorombo-flue-map\.md/);
   assert.match(flueArchitecture, /workflows/);
   assert.match(flueArchitecture, /The orchestrator must not directly call web search/);
-  assert.match(goromboMap, /src\/workflows\/web-research\.ts/);
+  assert.match(goromboMap, /src\/engine\/workflows\/web-research\.ts/);
   assert.match(goromboMap, /`src\/app\.ts` must stay close/);
 });
 
 test('app.ts stays a Flue app shell and does not bypass agents or cards', () => {
   const app = readText('src/app.ts');
-  const chatEventsRoute = readText('src/routes/chat-events.ts');
-  const apiSecretMiddleware = readText('src/middleware/api-secret.ts');
+  const chatEventsRoute = readText('src/api/routes/chat-events.ts');
+  const apiSecretMiddleware = readText('src/api/middleware/api-secret.ts');
 
   assert.match(app, /app\.route\('\/', flue\(\)\)/);
   assert.match(app, /models\/runtime\.js/);
@@ -43,7 +43,7 @@ test('app.ts stays a Flue app shell and does not bypass agents or cards', () => 
   assert.doesNotMatch(chatEventsRoute, /app\.request\(\s*[`'"]\/workflows\//);
   assert.doesNotMatch(chatEventsRoute, /executionCtx/);
   assert.match(apiSecretMiddleware, /API_SECRET/);
-  assert.equal(existsSync(['src', 'workflows', 'chat.ts'].join('/')), false);
+  assert.equal(existsSync(['src', 'engine', 'workflows', 'chat.ts'].join('/')), false);
 });
 
 test('legacy non-Flue orchestrator and gateway paths stay removed', () => {
@@ -66,8 +66,8 @@ test('GOROMBO Flue map documents every top-level source directory', () => {
 });
 
 test('low-level web retrieval workflows are internal machinery, not public routes', () => {
-  assert.doesNotMatch(readText('src/workflows/retrieval.ts'), /export const route/);
-  assert.doesNotMatch(readText('src/workflows/web-research.ts'), /export const route/);
+  assert.doesNotMatch(readText('src/engine/workflows/retrieval.ts'), /export const route/);
+  assert.doesNotMatch(readText('src/engine/workflows/web-research.ts'), /export const route/);
 });
 
 test('Flue orchestrator routes research to the researcher instead of owning web tools', async () => {
@@ -179,8 +179,8 @@ test('coding worker owns its workspace-backed lead profile', async () => {
     true,
   );
   assert.equal(subagent.skills?.some((skill) => skill.name === 'coding-worker.code-change-loop'), true);
-  assert.equal(existsSync('src/workflows/coding-task.ts'), false);
-  assert.equal(existsSync('src/agents/coding-worker.ts'), false);
+  assert.equal(existsSync('src/engine/workflows/coding-task.ts'), false);
+  assert.equal(existsSync('src/engine/agents/coding-worker.ts'), false);
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
     rmSync(approvalRoot, { recursive: true, force: true });
@@ -204,7 +204,7 @@ test('coding worker lead loop is documented in profile instructions', async () =
 });
 
 test('coding worker progress events cover every defined loop checkpoint', async () => {
-  const { createCodingWorkerEvent } = await import('../workers/coding-worker/events/coding-worker-events.js');
+  const { createCodingWorkerEvent } = await import('../engine/workers/coding-worker/events/coding-worker-events.js');
   const checkpointTypes = [
     'coding.task.accepted',
     'coding.triage.started',
@@ -226,7 +226,7 @@ test('coding worker progress events cover every defined loop checkpoint', async 
   for (const type of checkpointTypes) {
     assert.doesNotThrow(() =>
       createCodingWorkerEvent({
-        type: type as import('../workers/coding-worker/events/coding-worker-events.js').CodingWorkerEventType,
+        type: type as import('../engine/workers/coding-worker/events/coding-worker-events.js').CodingWorkerEventType,
         taskId: 'checkpoint-test',
         summary: `${type} event.`,
       }),

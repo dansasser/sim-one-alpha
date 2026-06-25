@@ -5,57 +5,57 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import * as v from 'valibot';
-import orchestratorAgent from '../agents/orchestrator.js';
-import { CodingFileEditSchema, CodingImplementerResultSchema } from '../schemas/coding-worker.js';
-import { evaluateCodingApproval, createCodingApprovalRequest } from '../workers/coding-worker/approvals/approval-policy.js';
+import orchestratorAgent from '../engine/agents/orchestrator.js';
+import { CodingFileEditSchema, CodingImplementerResultSchema } from '../core/schemas/coding-worker.js';
+import { evaluateCodingApproval, createCodingApprovalRequest } from '../engine/workers/coding-worker/approvals/approval-policy.js';
 import {
   createFileCodingApprovalService,
   createInMemoryCodingApprovalService,
-} from '../workers/coding-worker/approvals/approval-service.js';
-import { createCodingGitHubTools } from '../workers/coding-worker/github/github-tools.js';
-import { GhCliGitHubClient } from '../workers/coding-worker/github/gh-cli-client.js';
-import type { GitHubClient } from '../workers/coding-worker/github/github-client.js';
+} from '../engine/workers/coding-worker/approvals/approval-service.js';
+import { createCodingGitHubTools } from '../engine/workers/coding-worker/github/github-tools.js';
+import { GhCliGitHubClient } from '../engine/workers/coding-worker/github/gh-cli-client.js';
+import type { GitHubClient } from '../engine/workers/coding-worker/github/github-client.js';
 import {
   createCodingWorkerSubagent,
   resolveCodingWorkerWorkspaceRoot,
-} from '../workers/coding-worker/coding-worker.js';
-import { InMemoryCodingProgressReporter } from '../workers/coding-worker/events/progress-reporter.js';
-import { createCodingWorkerEvent } from '../workers/coding-worker/events/coding-worker-events.js';
-import { createOrchestratorProgressUpdate } from '../workers/coding-worker/events/orchestrator-bridge.js';
-import { createCodingWorkerSessionPlan } from '../workers/coding-worker/session/child-session-names.js';
+} from '../engine/workers/coding-worker/coding-worker.js';
+import { InMemoryCodingProgressReporter } from '../engine/workers/coding-worker/events/progress-reporter.js';
+import { createCodingWorkerEvent } from '../engine/workers/coding-worker/events/coding-worker-events.js';
+import { createOrchestratorProgressUpdate } from '../engine/workers/coding-worker/events/orchestrator-bridge.js';
+import { createCodingWorkerSessionPlan } from '../engine/workers/coding-worker/session/child-session-names.js';
 import {
   codingWorkerInternalSubagentNames,
   createCodingWorkerInternalSubagents,
-} from '../workers/coding-worker/subagents/index.js';
-import { parseCodingCodeReviewText } from '../workers/coding-worker/subagents/code-review/code-review-agent.js';
-import { readPackageScripts, runCodingRepoPreflight } from '../workers/coding-worker/repo/preflight.js';
-import { parseGitStatusShort } from '../workers/coding-worker/repo/git-state.js';
-import { InMemoryCodingRepoRegistry } from '../workers/coding-worker/repo/repo-registry.js';
+} from '../engine/workers/coding-worker/subagents/index.js';
+import { parseCodingCodeReviewText } from '../engine/workers/coding-worker/subagents/code-review/code-review-agent.js';
+import { readPackageScripts, runCodingRepoPreflight } from '../engine/workers/coding-worker/repo/preflight.js';
+import { parseGitStatusShort } from '../engine/workers/coding-worker/repo/git-state.js';
+import { InMemoryCodingRepoRegistry } from '../engine/workers/coding-worker/repo/repo-registry.js';
 import {
   packageManagerRunCommand,
   packageManagerTestCommand,
-} from '../workers/coding-worker/repo/package-manager.js';
-import { createCodingVerificationPlan } from '../workers/coding-worker/repo/verification.js';
-import { createCodingGitTools } from '../workers/coding-worker/tools/coding-git-tools.js';
-import { createCodingImplementerTools } from '../workers/coding-worker/tools/coding-implementer-tools.js';
+} from '../engine/workers/coding-worker/repo/package-manager.js';
+import { createCodingVerificationPlan } from '../engine/workers/coding-worker/repo/verification.js';
+import { createCodingGitTools } from '../engine/workers/coding-worker/tools/coding-git-tools.js';
+import { createCodingImplementerTools } from '../engine/workers/coding-worker/tools/coding-implementer-tools.js';
 import {
   applyCodingEditTransaction,
   createCodingEditTransaction,
   createCodingRepoTools,
-} from '../workers/coding-worker/tools/coding-repo-tools.js';
-import { createCodingRepoWorkflowTools } from '../workers/coding-worker/tools/coding-repo-workflow-tools.js';
-import { createCodingTestDebugTools } from '../workers/coding-worker/tools/coding-test-debug-tools.js';
-import { evaluateCodingShellCommand } from '../workers/coding-worker/tools/command-policy.js';
-import { createFlueLocalCodingSandbox } from '../workers/coding-worker/tools/sandbox-runtime.js';
-import { resolveCodingWorkspaceTarget } from '../workers/coding-worker/repo/workspace-target.js';
-import { JsonFileCodingTaskRunStore } from '../workers/coding-worker/session/task-run-store.js';
-import { createFlueCodingSubagentDelegate } from '../workers/coding-worker/workflow/coordination.js';
-import { createInitialCodingPlan } from '../workers/coding-worker/workflow/coding-task.js';
-import { createInitialPlan, replan } from '../workers/coding-worker/workflow/planning.js';
-import { runCodingWorkerLoop, createInitialLoopState, createLoopCheckpoint } from '../workers/coding-worker/workflow/loop.js';
-import { assertCodingWorkerCanComplete } from '../workers/coding-worker/workflow/result-schema.js';
-import type { CodingSubagentKind, CodingSubagentRunResult, CodingWorkerTaskRequest } from '../workers/coding-worker/types.js';
-import type { CodingTaskSubagentRequest } from '../workers/coding-worker/workflow/coding-task.js';
+} from '../engine/workers/coding-worker/tools/coding-repo-tools.js';
+import { createCodingRepoWorkflowTools } from '../engine/workers/coding-worker/tools/coding-repo-workflow-tools.js';
+import { createCodingTestDebugTools } from '../engine/workers/coding-worker/tools/coding-test-debug-tools.js';
+import { evaluateCodingShellCommand } from '../engine/workers/coding-worker/tools/command-policy.js';
+import { createFlueLocalCodingSandbox } from '../engine/workers/coding-worker/tools/sandbox-runtime.js';
+import { resolveCodingWorkspaceTarget } from '../engine/workers/coding-worker/repo/workspace-target.js';
+import { JsonFileCodingTaskRunStore } from '../engine/workers/coding-worker/session/task-run-store.js';
+import { createFlueCodingSubagentDelegate } from '../engine/workers/coding-worker/workflow/coordination.js';
+import { createInitialCodingPlan } from '../engine/workers/coding-worker/workflow/coding-task.js';
+import { createInitialPlan, replan } from '../engine/workers/coding-worker/workflow/planning.js';
+import { runCodingWorkerLoop, createInitialLoopState, createLoopCheckpoint } from '../engine/workers/coding-worker/workflow/loop.js';
+import { assertCodingWorkerCanComplete } from '../engine/workers/coding-worker/workflow/result-schema.js';
+import type { CodingSubagentKind, CodingSubagentRunResult, CodingWorkerTaskRequest } from '../engine/workers/coding-worker/types.js';
+import type { CodingTaskSubagentRequest } from '../engine/workers/coding-worker/workflow/coding-task.js';
 import type { ToolDefinition } from '@flue/runtime';
 
 test('coding worker internal subagents are worker-local profiles with distinct context identities', () => {
@@ -2879,10 +2879,10 @@ function createFakeGitHubClient(): GitHubClient {
 }
 
 interface EndToEndDelegateInput {
-  approvalService: import('../workers/coding-worker/approvals/approval-service.js').CodingApprovalService;
+  approvalService: import('../engine/workers/coding-worker/approvals/approval-service.js').CodingApprovalService;
   fakeClient: GitHubClient;
   project: TempWorkspaceProject;
-  sandbox: import('../workers/coding-worker/tools/sandbox-runtime.js').CodingSandboxRuntime;
+  sandbox: import('../engine/workers/coding-worker/tools/sandbox-runtime.js').CodingSandboxRuntime;
 }
 
 function createEndToEndDelegate(input: EndToEndDelegateInput): (
@@ -3025,8 +3025,8 @@ function createEndToEndDelegate(input: EndToEndDelegateInput): (
 
 function createMinimalLoopState(
   taskId: string,
-  plan: import('../workers/coding-worker/types.js').CodingPlanItem[],
-): import('../workers/coding-worker/types.js').CodingWorkerLoopState {
+  plan: import('../engine/workers/coding-worker/types.js').CodingPlanItem[],
+): import('../engine/workers/coding-worker/types.js').CodingWorkerLoopState {
   return {
     task: { taskId, text: 'test task' },
     sessionPlan: {
@@ -3080,11 +3080,11 @@ function createModelEnv(): Record<string, string> {
 }
 
 interface FakeDelegateOptions {
-  triage?: Partial<import('../workers/coding-worker/types.js').CodingTriageResult>;
-  implementer?: Partial<import('../workers/coding-worker/types.js').CodingImplementerResult>;
-  testDebug?: Partial<import('../workers/coding-worker/types.js').CodingTestDebugResult>;
-  codeReview?: Partial<import('../workers/coding-worker/types.js').CodingCodeReviewResult>;
-  github?: Partial<import('../workers/coding-worker/types.js').CodingGithubResult>;
+  triage?: Partial<import('../engine/workers/coding-worker/types.js').CodingTriageResult>;
+  implementer?: Partial<import('../engine/workers/coding-worker/types.js').CodingImplementerResult>;
+  testDebug?: Partial<import('../engine/workers/coding-worker/types.js').CodingTestDebugResult>;
+  codeReview?: Partial<import('../engine/workers/coding-worker/types.js').CodingCodeReviewResult>;
+  github?: Partial<import('../engine/workers/coding-worker/types.js').CodingGithubResult>;
 }
 
 function createFakeDelegate(options: FakeDelegateOptions = {}): (
@@ -3149,12 +3149,12 @@ function createFakeDelegate(options: FakeDelegateOptions = {}): (
   };
 }
 
-function createAutoApprovingApprovalService(actionTypes: string[]): import('../workers/coding-worker/approvals/approval-service.js').CodingApprovalService {
+function createAutoApprovingApprovalService(actionTypes: string[]): import('../engine/workers/coding-worker/approvals/approval-service.js').CodingApprovalService {
   const inner = createInMemoryCodingApprovalService();
   return new Proxy(inner, {
     get(target, prop) {
       if (prop === 'evaluateRequest') {
-        return async (request: import('../workers/coding-worker/approvals/approval-types.js').CodingApprovalRequest) => {
+        return async (request: import('../engine/workers/coding-worker/approvals/approval-types.js').CodingApprovalRequest) => {
           if (actionTypes.includes(request.actionType)) {
             return {
               allowed: true,

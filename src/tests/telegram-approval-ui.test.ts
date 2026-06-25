@@ -8,8 +8,8 @@ import {
   buildApprovalResolvedMessage,
   escapeMarkdown,
   parseApprovalCallback,
-} from '../connectors/telegram/approval-ui/index.js';
-import type { CodingApprovalRecord } from '../workers/coding-worker/approvals/approval-types.js';
+} from '../api/connectors/telegram/approval-ui/index.js';
+import type { CodingApprovalRecord } from '../engine/workers/coding-worker/approvals/approval-types.js';
 
 describe('telegram approval UI', () => {
   function makeRecord(status: CodingApprovalRecord['status'] = 'pending'): CodingApprovalRecord {

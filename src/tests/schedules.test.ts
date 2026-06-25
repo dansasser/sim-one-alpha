@@ -28,11 +28,11 @@ import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import test from 'node:test';
 
-import { resolveScheduleConfig } from '../schedules/schedule-config.js';
-import type { DispatchScheduleArgs, ScheduleDispatchResult } from '../schedules/schedule-dispatch.js';
-import { ScheduleStore } from '../schedules/schedule-store.js';
-import { ScheduleManager } from '../schedules/schedule-manager.js';
-import { installScheduleTelemetry, getScheduleProgressReporter } from '../schedules/schedule-telemetry.js';
+import { resolveScheduleConfig } from '../engine/schedules/schedule-config.js';
+import type { DispatchScheduleArgs, ScheduleDispatchResult } from '../engine/schedules/schedule-dispatch.js';
+import { ScheduleStore } from '../engine/schedules/schedule-store.js';
+import { ScheduleManager } from '../engine/schedules/schedule-manager.js';
+import { installScheduleTelemetry, getScheduleProgressReporter } from '../engine/schedules/schedule-telemetry.js';
 import type { FlueEvent } from '@flue/runtime';
 
 function tempDbPath(): string {

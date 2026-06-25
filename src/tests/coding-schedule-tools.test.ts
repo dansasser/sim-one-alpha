@@ -9,12 +9,12 @@ import { rmSync } from 'node:fs';
 import test from 'node:test';
 import type { FlueEvent } from '@flue/runtime';
 
-import { resolveScheduleConfig } from '../schedules/schedule-config.js';
-import type { DispatchScheduleArgs, ScheduleDispatchResult } from '../schedules/schedule-dispatch.js';
-import { __setScheduleManagerForTesting } from '../schedules/boot.js';
-import { ScheduleManager } from '../schedules/schedule-manager.js';
-import { ScheduleStore } from '../schedules/schedule-store.js';
-import { createCodingScheduleTools } from '../workers/coding-worker/tools/coding-schedule-tools.js';
+import { resolveScheduleConfig } from '../engine/schedules/schedule-config.js';
+import type { DispatchScheduleArgs, ScheduleDispatchResult } from '../engine/schedules/schedule-dispatch.js';
+import { __setScheduleManagerForTesting } from '../engine/schedules/boot.js';
+import { ScheduleManager } from '../engine/schedules/schedule-manager.js';
+import { ScheduleStore } from '../engine/schedules/schedule-store.js';
+import { createCodingScheduleTools } from '../engine/workers/coding-worker/tools/coding-schedule-tools.js';
 import type { ToolDefinition } from '@flue/runtime';
 
 function tempDbPath(): string {

@@ -20,7 +20,7 @@ import {
   UpdateChecklistItemInputSchema,
   UpdateSessionNoteInputSchema,
   UpdateTodoInputSchema,
-} from '../schemas/memory.js';
+} from '../core/schemas/memory.js';
 import { parseOrThrow } from './helpers/parse-or-throw.js';
 
 const scope = { projectId: 'proj-1', conversationId: 'conv-1' };

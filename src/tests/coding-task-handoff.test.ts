@@ -4,11 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { createInMemoryCodingApprovalService } from '../workers/coding-worker/approvals/approval-service.js';
-import { createCodingTaskMemoryTools } from '../workers/coding-worker/tools/coding-task-memory-tools.js';
-import { InMemoryCodingTaskRunStore } from '../workers/coding-worker/session/task-run-store.js';
-import { InMemoryMemoryEngine } from '../memory/rust-memory-engine.js';
-import type { CodingTaskRunRecord } from '../workers/coding-worker/session/task-run-store.js';
+import { createInMemoryCodingApprovalService } from '../engine/workers/coding-worker/approvals/approval-service.js';
+import { createCodingTaskMemoryTools } from '../engine/workers/coding-worker/tools/coding-task-memory-tools.js';
+import { InMemoryCodingTaskRunStore } from '../engine/workers/coding-worker/session/task-run-store.js';
+import { InMemoryMemoryEngine } from '../engine/memory/rust-memory-engine.js';
+import type { CodingTaskRunRecord } from '../engine/workers/coding-worker/session/task-run-store.js';
 import type { ToolDefinition } from '@flue/runtime';
 
 function getTool(tools: ToolDefinition[], name: string): ToolDefinition {

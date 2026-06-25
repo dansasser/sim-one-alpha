@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { rmSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { createCapabilityStore } from '../capabilities/capability-store.js';
-import type { CapabilityRecord } from '../capabilities/types.js';
+import { createCapabilityStore } from '../engine/capabilities/capability-store.js';
+import type { CapabilityRecord } from '../engine/capabilities/types.js';
 
 let tempDbPath: string;
 let tempDir: string;

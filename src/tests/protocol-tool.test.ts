@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeWebApiMessage } from '../connectors/web-api.js';
+import { normalizeWebApiMessage } from '../api/connectors/web-api.js';
 import {
   createProtocolLookupEvent,
   forgetProtocolLookupEvent,
   rememberProtocolLookupEvent,
-} from '../tools/protocol-tool.js';
+} from '../engine/tools/protocol-tool.js';
 
 test('protocol tool lookup event requires a persisted normalized event', () => {
   assert.throws(() => createProtocolLookupEvent({

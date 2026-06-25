@@ -2,13 +2,13 @@
 
 Tools are executable, model-callable capabilities in SIM-ONE Alpha. They are implemented with Flue's `defineTool(...)` and attached only to the agents that should own them.
 
-Tools live in `src/tools/`. Each tool is a focused capability with a typed parameter schema, a description, and an `execute` function that returns structured output. Tools are not protocols, skills, or workers. They do what they are told and return results.
+Tools live in `src/engine/tools/`. Each tool is a focused capability with a typed parameter schema, a description, and an `execute` function that returns structured output. Tools are not protocols, skills, or workers. They do what they are told and return results.
 
 ## Tool Ownership
 
 - The main orchestrator owns orchestration-support tools such as `load_protocols`, `retrieve_memory`, and image generation tools.
 - The researcher subagent owns web-research tools.
-- The coding worker owns worker-local tools under `src/workers/coding-worker/tools/`.
+- The coding worker owns worker-local tools under `src/engine/workers/coding-worker/tools/`.
 - Internal worker subagents must not be exposed as top-level orchestrator tools.
 
 ## Discoverability
@@ -17,11 +17,11 @@ Tools are discovered at build time by Flue and wired into the owning agent's `to
 
 ## Adding a Tool
 
-1. Create the tool file under `src/tools/` or a focused subdirectory such as `src/tools/runpod-image/`.
+1. Create the tool file under `src/engine/tools/` or a focused subdirectory such as `src/engine/tools/runpod-image/`.
 2. Define Valibot/Flue parameter schemas and a clear `description`.
 3. Implement `execute` to perform the capability and return structured JSON or a string.
-4. Export the tool from `src/tools/index.ts`.
-5. Attach the tool to the owning agent in `src/agents/orchestrator.ts` or a worker entrypoint.
+4. Export the tool from `src/engine/tools/index.ts`.
+5. Attach the tool to the owning agent in `src/engine/agents/orchestrator.ts` or a worker entrypoint.
 6. Update `src/workspace/TOOLS.md` to document when and how the tool should be used.
 7. Update `docs/architecture/gorombo-flue-map.md` if the new tool introduces a new directory or cross-cutting concern.
 
@@ -37,7 +37,7 @@ Tools are discovered at build time by Flue and wired into the owning agent's `to
 The Runpod Public Endpoints image tools demonstrate the pattern:
 
 ```text
-src/tools/runpod-image/
+src/engine/tools/runpod-image/
   generate-image-tool.ts       # generate_image
   record-image-artifact-tool.ts # record_image_artifact
   list-image-artifacts-tool.ts  # list_image_artifacts

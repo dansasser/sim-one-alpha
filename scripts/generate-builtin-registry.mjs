@@ -16,12 +16,12 @@ const repoRoot = resolve(__dirname, '..');
  */
 
 const TOOL_DIRS = [
-  resolve(repoRoot, 'src/tools'),
-  resolve(repoRoot, 'src/channels'),
+  resolve(repoRoot, 'src/engine/tools'),
+  resolve(repoRoot, 'src/api/channels'),
 ];
-const WORKER_ROOT = resolve(repoRoot, 'src/workers');
-const ORCHESTRATOR_FILE = resolve(repoRoot, 'src/agents/orchestrator.ts');
-const REGISTRY_FILE = resolve(repoRoot, 'src/registries/default-registries.ts');
+const WORKER_ROOT = resolve(repoRoot, 'src/engine/workers');
+const ORCHESTRATOR_FILE = resolve(repoRoot, 'src/engine/agents/orchestrator.ts');
+const REGISTRY_FILE = resolve(repoRoot, 'src/engine/registries/default-registries.ts');
 
 /**
  * Recursively collect .ts files under a directory.
@@ -164,7 +164,7 @@ function main() {
   const subagents = new Set();
   const skills = new Set();
 
-  // 1. Tools: scan src/tools/ (recursive) and src/channels/ for defineTool.
+  // 1. Tools: scan src/engine/tools/ (recursive) and src/api/channels/ for defineTool.
   for (const toolDir of TOOL_DIRS) {
     for (const file of collectTsFiles(toolDir)) {
       const content = safeReadFile(file);
@@ -177,7 +177,7 @@ function main() {
 
   // 2. Subagents: scan orchestrator and top-level worker files for
   //    defineAgentProfile. Worker-internal subagents under
-  //    src/workers/<name>/subagents/ are intentionally excluded — they
+  //    src/engine/workers/<name>/subagents/ are intentionally excluded — they
   //    are owned by the worker lead and never exposed to the orchestrator.
   const orchestratorContent = safeReadFile(ORCHESTRATOR_FILE);
   if (orchestratorContent) {
@@ -224,8 +224,8 @@ function main() {
 
   // 4. Imported skills scan across agents and workers.
   const scanDirsForSkills = [
-    resolve(repoRoot, 'src/agents'),
-    resolve(repoRoot, 'src/workers'),
+    resolve(repoRoot, 'src/engine/agents'),
+    resolve(repoRoot, 'src/engine/workers'),
   ];
   for (const dir of scanDirsForSkills) {
     for (const file of collectTsFiles(dir)) {

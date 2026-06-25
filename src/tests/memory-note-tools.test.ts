@@ -6,7 +6,7 @@ import {
   listSessionNotesTool,
   storeSessionNoteTool,
   updateSessionNoteTool,
-} from '../tools/memory-note-tools.js';
+} from '../engine/tools/memory-note-tools.js';
 import { setupMemoryToolTest } from './helpers/memory-tool-test-setup.js';
 
 test('note tools store/list/archive through the trusted event scope', async () => {

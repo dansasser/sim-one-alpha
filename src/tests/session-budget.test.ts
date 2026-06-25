@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SessionData } from '@flue/runtime/adapter';
-import { minimaxM3Card } from '../models/catalog.js';
-import { calculateContextBudget } from '../session/context-budget.js';
+import { minimaxM3Card } from '../core/models/catalog.js';
+import { calculateContextBudget } from '../engine/session/context-budget.js';
 import {
   InMemorySessionBudgetStore,
   createSessionBudgetReport,
   deriveSessionBudgetStateFromData,
   recordManualCompaction,
   recordPromptUsage,
-} from '../session/session-budget.js';
+} from '../engine/session/session-budget.js';
 
 test('session budget report requests compaction before an oversized next prompt', () => {
   const store = new InMemorySessionBudgetStore();

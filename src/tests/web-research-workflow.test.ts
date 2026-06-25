@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { RagProvider, WebFetchResult } from '../rag/providers.js';
-import { InMemoryResearchCache } from '../workers/researcher/research/research-cache.js';
-import type { RagQuery, RetrievedContext } from '../types/index.js';
-import { buildResearchQueryPlan, runWebResearch } from '../workflows/web-research.js';
+import type { RagProvider, WebFetchResult } from '../engine/rag/providers.js';
+import { InMemoryResearchCache } from '../engine/workers/researcher/research/research-cache.js';
+import type { RagQuery, RetrievedContext } from '../core/types/index.js';
+import { buildResearchQueryPlan, runWebResearch } from '../engine/workflows/web-research.js';
 
 test('web research query plan expands based on research complexity', () => {
   assert.deepEqual(buildResearchQueryPlan('Find the official Ollama web search API docs URL.', 3), [

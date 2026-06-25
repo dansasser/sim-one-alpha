@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { rmSync, mkdirSync, existsSync, cpSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { loadUserWorkers } from '../capabilities/worker-loader.js';
-import { createCapabilityStore } from '../capabilities/capability-store.js';
-import type { CapabilityRecord } from '../capabilities/types.js';
+import { loadUserWorkers } from '../engine/capabilities/worker-loader.js';
+import { createCapabilityStore } from '../engine/capabilities/capability-store.js';
+import type { CapabilityRecord } from '../engine/capabilities/types.js';
 
 let tempDir: string;
 let tempCapabilitiesDir: string;

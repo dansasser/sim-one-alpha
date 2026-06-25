@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import type { SessionData } from '@flue/runtime/adapter';
-import { LanceDbVectorStore } from '../rag/vector/lance-db-store.js';
-import { GoromboSessionDatabase } from '../session/session-database.js';
+import { LanceDbVectorStore } from '../engine/rag/vector/lance-db-store.js';
+import { GoromboSessionDatabase } from '../engine/session/session-database.js';
 
 const fakeEmbeddingClient = {
   async embed(): Promise<number[]> {

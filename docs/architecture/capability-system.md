@@ -111,7 +111,7 @@ Capabilities live outside `dist/` and survive upgrades.
 ## Source Code
 
 ```text
-src/capabilities/
+src/engine/capabilities/
   types.ts                 CapabilityRecord, CapabilityStore interfaces
   capability-store.ts      SQLite CRUD
   capability-loader.ts     loadUserCapabilities(env) — reads SQLite, returns grouped by kind
@@ -122,7 +122,7 @@ src/capabilities/
 scripts/
   capability-admin.mjs     CLI admin script (add/list/enable/disable/remove/update)
 
-src/agents/
+src/engine/agents/
   orchestrator.ts          Modified — calls loadUserCapabilitiesFromStore(env) at init,
                             merges user tools/MCP into tools array, user workers into subagents
 ```
@@ -137,7 +137,7 @@ Agent-initiated additions of code-exec kinds (tool, worker, MCP) will go through
 
 ## Config-File Mirror
 
-`gorombo.config.json` has a `capabilities` array that reconciles into SQLite on boot (in `src/db.ts`, at server startup — before any agent request). Config is additive: entries in config but missing from SQLite get inserted with `installedBy: "seed"`; entries already in SQLite are skipped (idempotent). Removal is a CLI/db operation, not a config edit.
+`gorombo.config.json` has a `capabilities` array that reconciles into SQLite on boot (in `src/core/db.ts`, at server startup — before any agent request). Config is additive: entries in config but missing from SQLite get inserted with `installedBy: "seed"`; entries already in SQLite are skipped (idempotent). Removal is a CLI/db operation, not a config edit.
 
 ```json
 {

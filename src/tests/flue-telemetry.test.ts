@@ -4,7 +4,7 @@ import type { FlueEvent } from '@flue/runtime';
 import {
   FlueTelemetryStore,
   summarizeTelemetryRunFromEvents,
-} from '../telemetry/flue-telemetry.js';
+} from '../core/telemetry/flue-telemetry.js';
 
 test('telemetry store summarizes researcher delegation and web research calls', () => {
   const store = new FlueTelemetryStore();

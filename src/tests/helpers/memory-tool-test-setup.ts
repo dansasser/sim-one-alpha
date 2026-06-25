@@ -2,13 +2,13 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { normalizeWebApiMessage } from '../../connectors/web-api.js';
+import { normalizeWebApiMessage } from '../../api/connectors/web-api.js';
 import {
   getStructuredMemoryRuntime,
   resetStructuredMemoryRuntime,
-} from '../../memory/structured-memory-runtime.js';
-import { rememberMemoryLookupEvent } from '../../tools/memory-tool.js';
-import type { NormalizedMessageEvent } from '../../types/index.js';
+} from '../../engine/memory/structured-memory-runtime.js';
+import { rememberMemoryLookupEvent } from '../../engine/tools/memory-tool.js';
+import type { NormalizedMessageEvent } from '../../core/types/index.js';
 
 export interface MemoryTestSetup {
   event: NormalizedMessageEvent;

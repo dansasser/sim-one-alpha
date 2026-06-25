@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createChecklistTool } from '../tools/memory-checklist-tools.js';
-import { flueTelemetryStore, type MemoryMutationEvent } from '../telemetry/flue-telemetry.js';
+import { createChecklistTool } from '../engine/tools/memory-checklist-tools.js';
+import { flueTelemetryStore, type MemoryMutationEvent } from '../core/telemetry/flue-telemetry.js';
 import { setupMemoryToolTest } from './helpers/memory-tool-test-setup.js';
 
 function lastMutation(): MemoryMutationEvent | undefined {

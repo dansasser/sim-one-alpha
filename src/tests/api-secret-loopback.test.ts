@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { isLoopbackRequest, apiSecretHeaderName, requireApiSecret } from '../middleware/api-secret.js';
+import { isLoopbackRequest, apiSecretHeaderName, requireApiSecret } from '../api/middleware/api-secret.js';
 import type { Context } from 'hono';
 
 function mockContext(remoteAddress: string | undefined, headers: Record<string, string> = {}): Context {

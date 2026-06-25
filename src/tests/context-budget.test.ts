@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { calculateContextBudget } from '../session/context-budget.js';
+import { calculateContextBudget } from '../engine/session/context-budget.js';
 
 test('context budget reserves output tokens from provider-safe context', () => {
   const budget = calculateContextBudget({

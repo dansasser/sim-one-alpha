@@ -11,7 +11,7 @@ CRUD via LLM tool (schedule_*) or admin route (/api/schedules/*)
        enabled -> new Cron(pattern, { protect, timezone, catch }, fire)
        disabled/paused -> stop the Croner job, keep the row
 
-Boot (src/app.ts imports src/schedules/boot.js side effect)
+Boot (src/app.ts imports src/engine/schedules/boot.js side effect)
   -> ScheduleManager.start()
        -> ScheduleStore.migrate() + cleanup()
        -> observe((event) => ...) subscribed once (routes agent events by instanceId)
@@ -34,9 +34,9 @@ Croner fire (dispatch is ADMISSION-ONLY — dispatch resolves = admitted, not co
 
 ### Key Flue constraints (verified against the installed 1.0.0-beta.1 runtime)
 
-- **`dispatch()` is admission-only.** It returns `DispatchReceipt { dispatchId, acceptedAt }` — `dispatchId` is "not a workflow runId." The agent turn runs asynchronously in the agent's continuing durable queue. The terminal status is observed in-process via `observe()` (the same API `src/telemetry/flue-telemetry.ts` uses) filtered by `event.dispatchId`/`event.instanceId`. A dispatch promise resolving is NOT the turn completing.
+- **`dispatch()` is admission-only.** It returns `DispatchReceipt { dispatchId, acceptedAt }` — `dispatchId` is "not a workflow runId." The agent turn runs asynchronously in the agent's continuing durable queue. The terminal status is observed in-process via `observe()` (the same API `src/core/telemetry/flue-telemetry.ts` uses) filtered by `event.dispatchId`/`event.instanceId`. A dispatch promise resolving is NOT the turn completing.
 - **Only `orchestrator` is dispatchable.** `coding-worker` is a subagent profile of the orchestrator ("not a separately addressable agent endpoint"). Schedules always dispatch to `orchestrator`; `targetAgent: 'coding-worker'` is carried in the input and the orchestrator delegates to the coding-worker subagent via its `task` tool per its workspace instructions. Direct subagent dispatch is a Flue constraint; the Flue-native way to run a specific subagent on a schedule without an orchestrator turn is workflow-target schedules (deferred, see below).
-- **`node:sqlite`, not `better-sqlite3`.** The Flue `sqlite()` adapter in `src/db.ts` stores only Flue-runtime state (sessions, submissions, runs); schedule definitions + run history are application-owned business data (per the Flue database guide) and live in their own `node:sqlite` file, mirroring `GoromboSessionDatabase`.
+- **`node:sqlite`, not `better-sqlite3`.** The Flue `sqlite()` adapter in `src/core/db.ts` stores only Flue-runtime state (sessions, submissions, runs); schedule definitions + run history are application-owned business data (per the Flue database guide) and live in their own `node:sqlite` file, mirroring `GoromboSessionDatabase`.
 
 ### Schedule kinds
 
@@ -50,9 +50,9 @@ Timezone: Croner `timezone` option (default UTC). Day-of-month/day-of-week use C
 
 ## Surfaces
 
-- **Orchestrator tools** (`src/tools/schedule-tools.ts`, attached to `src/agents/orchestrator.ts`): `schedule_create`, `schedule_pause`, `schedule_resume`, `schedule_update`, `schedule_delete`, `schedule_list`, `schedule_get`, `schedule_run_now`, `schedule_runs`. Auth boundary: `ownerScope` is derived from the trusted chat `eventId` (never model-selected).
-- **Coding-worker aliases** (`src/workers/coding-worker/tools/coding-schedule-tools.ts`, lead-only): `coding_schedule_*` scoped to the worker's `projectId`, `targetAgent` defaults to `coding-worker`. Never exposed to internal coding subagents.
-- **Admin HTTP route** (`src/routes/schedules.ts`, behind `requireApiSecret`): `GET/POST /api/schedules`, `GET/PATCH/DELETE /api/schedules/:slug`, `POST /api/schedules/:slug/pause|resume|run`, `GET /api/schedules/:slug/runs[/:runId]`. `?wait=1` on run polls the runId to terminal.
+- **Orchestrator tools** (`src/engine/tools/schedule-tools.ts`, attached to `src/engine/agents/orchestrator.ts`): `schedule_create`, `schedule_pause`, `schedule_resume`, `schedule_update`, `schedule_delete`, `schedule_list`, `schedule_get`, `schedule_run_now`, `schedule_runs`. Auth boundary: `ownerScope` is derived from the trusted chat `eventId` (never model-selected).
+- **Coding-worker aliases** (`src/engine/workers/coding-worker/tools/coding-schedule-tools.ts`, lead-only): `coding_schedule_*` scoped to the worker's `projectId`, `targetAgent` defaults to `coding-worker`. Never exposed to internal coding subagents.
+- **Admin HTTP route** (`src/api/routes/schedules.ts`, behind `requireApiSecret`): `GET/POST /api/schedules`, `GET/PATCH/DELETE /api/schedules/:slug`, `POST /api/schedules/:slug/pause|resume|run`, `GET /api/schedules/:slug/runs[/:runId]`. `?wait=1` on run polls the runId to terminal.
 
 ## Config (GoromboConfig.schedules)
 
@@ -72,12 +72,12 @@ Env overrides: `GOROMBO_SCHEDULES_MAX_CONCURRENT_RUNS`, `GOROMBO_SCHEDULES_KEEP_
 
 ## Visibility
 
-`src/schedules/schedule-telemetry.ts` emits structured `schedule.*` progress events (fired, dispatched, completed, error, skipped, created, paused, resumed, updated, deleted, shutdown) to a bounded in-memory `ScheduleProgressReporter`. The scheduled turn's actual *output* reaches the user through the orchestrator's response (the same path chat ingress uses). Full durable persistence + connector push of the `schedule.*` lifecycle events is a follow-up; v1 makes them typed + collected + exposable (via the reporter / admin route).
+`src/engine/schedules/schedule-telemetry.ts` emits structured `schedule.*` progress events (fired, dispatched, completed, error, skipped, created, paused, resumed, updated, deleted, shutdown) to a bounded in-memory `ScheduleProgressReporter`. The scheduled turn's actual *output* reaches the user through the orchestrator's response (the same path chat ingress uses). Full durable persistence + connector push of the `schedule.*` lifecycle events is a follow-up; v1 makes them typed + collected + exposable (via the reporter / admin route).
 
 ## Files
 
 ```text
-src/schedules/
+src/engine/schedules/
   schedule-types.ts        ScheduleKind, ScheduleRecord, ScheduleRunRecord, ScheduleRunInput, ScheduleRunStatus
   schedule-store.ts        ScheduleStore (node:sqlite CRUD + run history + cleanup)
   schedule-config.ts       resolveScheduleConfig + env overrides
@@ -86,9 +86,9 @@ src/schedules/
   schedule-telemetry.ts    ScheduleProgressEvent + reporter + installScheduleTelemetry
   schedule-shutdown.ts     SIGTERM/SIGINT drain
   boot.ts                  side-effect boot target (config + start + shutdown)
-src/tools/schedule-tools.ts                      orchestrator schedule_* tools
-src/workers/coding-worker/tools/coding-schedule-tools.ts  coding_schedule_* aliases (lead-only)
-src/routes/schedules.ts                         admin HTTP route
+src/engine/tools/schedule-tools.ts                      orchestrator schedule_* tools
+src/engine/workers/coding-worker/tools/coding-schedule-tools.ts  coding_schedule_* aliases (lead-only)
+src/api/routes/schedules.ts                         admin HTTP route
 ```
 
 ## Deferred phases (planned, not built in v1)
@@ -104,7 +104,7 @@ src/routes/schedules.ts                         admin HTTP route
 ## Adding to it
 
 - New schedule kind: add to `ScheduleKind`, handle in `toCronerPattern`, validate in `ScheduleStore.validateDefinition`.
-- New tool: add a `defineTool` in `schedule-tools.ts`, export from `src/tools/index.ts`, attach to the orchestrator `tools:` slot.
-- New admin endpoint: add to `src/routes/schedules.ts` (behind `requireApiSecret`).
+- New tool: add a `defineTool` in `schedule-tools.ts`, export from `src/engine/tools/index.ts`, attach to the orchestrator `tools:` slot.
+- New admin endpoint: add to `src/api/routes/schedules.ts` (behind `requireApiSecret`).
 - New config field: add to `SchedulesConfig` + `resolveScheduleConfig` + `readScheduleEnvOverrides`.
 - Tests: focused unit tests use injected fake dispatch + fake observe (`schedule-manager.test.ts`); the three-surface test (`schedules.test.ts`) uses a real 1-second Croner job to verify real firing + persistence; the route test (`schedules-routes.test.ts`) injects a real manager via `__setScheduleManagerForTesting`.

@@ -40,7 +40,7 @@ Workers are subsystems of SIM-ONE Alpha, not standalone products or public endpo
 - **Capability directories:** `.gorombo/capabilities/{skills,tools,workers,mcp}/<id>/`.
 - **Config file:** `gorombo.config.json` — company-prefixed, shipped in `.gorombo/sim-one-alpha/`.
 - **Environment variables:** `GOROMBO_*` prefix for runtime config (e.g. `GOROMBO_CAPABILITY_DB_PATH`, `GOROMBO_CAPABILITIES_DIR`, `GOROMBO_APPROVAL_ROOT`). Use `SIM_ONE_*` prefix for product-CLI-specific env vars if needed in the future.
-- **Source code:** `src/` directories use lowercase kebab-case (`src/capabilities/`, `src/rag/`). TypeScript files use kebab-case (`capability-store.ts`, `mcp-broker.ts`).
+- **Source code:** `src/` directories use lowercase kebab-case (`src/engine/capabilities/`, `src/engine/rag/`). TypeScript files use kebab-case (`capability-store.ts`, `mcp-broker.ts`).
 - **Scripts:** `scripts/` uses kebab-case (`capability-admin.mjs`, `protocol-admin.mjs`, `build-prod.mjs`).
 - **Docs:** `docs/architecture/` uses kebab-case (`capability-system.md`, `product-flow.md`).
 
@@ -73,7 +73,7 @@ src/app.ts
   No direct old/non-Flue orchestrator path.
   No passing process.env into model-provider setup.
 
-src/agents/orchestrator.ts
+src/engine/agents/orchestrator.ts
   Main Flue createAgent(...) entrypoint.
   The main agent selects models from project model cards.
   The main agent attaches tools, skills, subagents, sessions, and compaction.
@@ -82,21 +82,21 @@ src/workspace/
   Main agent user-editable workspace persona files.
   Persona names belong inside workspace file contents, not in architecture paths.
 
-src/workers/<name>/*.ts
+src/engine/workers/<name>/*.ts
   Worker implementations for Flue subagent profiles.
   Workers are built like normal agents but are organized away from main agent entrypoints.
 
-src/workers/<name>/workspace/
+src/engine/workers/<name>/workspace/
   Worker user-editable workspace persona files.
 
-src/workflows/*.ts
+src/engine/workflows/*.ts
   Finite Flue operations.
   Workflows can initialize agents, open sessions, call tasks/skills, and implement bounded application machinery.
 
-src/tools/*.ts
+src/engine/tools/*.ts
   Executable model-callable capabilities exposed only to the agents that should own them.
 
-src/skills/**/SKILL.md
+src/engine/skills/**/SKILL.md
   Reusable workflow knowledge and instructions, not executable capability.
 
 model cards
@@ -253,9 +253,9 @@ Skills do not store mandatory runtime rules.
 
 Workers are specialized executors. They are subsystems of SIM-ONE Alpha, not standalone products or public endpoints.
 
-Workers live under `src/workers/<name>/`. They are built like normal Flue agents but are organized away from the main agent entrypoint.
+Workers live under `src/engine/workers/<name>/`. They are built like normal Flue agents but are organized away from the main agent entrypoint.
 
-All workers are invoked by the main orchestrator. The orchestrator workspace at `src/workspace/` defines when and how to invoke each worker. A worker's own workspace at `src/workers/<name>/workspace/` defines the worker's internal persona and guidance, not the orchestrator's routing rules.
+All workers are invoked by the main orchestrator. The orchestrator workspace at `src/workspace/` defines when and how to invoke each worker. A worker's own workspace at `src/engine/workers/<name>/workspace/` defines the worker's internal persona and guidance, not the orchestrator's routing rules.
 
 Workers are discovered through the Agent Registry.
 
@@ -279,7 +279,7 @@ Testing / Review Worker
 Future Domain Workers
 ```
 
-Internal subagents under `src/workers/<name>/subagents/` are owned by that worker. They must not be exposed directly to `src/agents/orchestrator.ts` or registered as top-level orchestrator tools/subagents.
+Internal subagents under `src/engine/workers/<name>/subagents/` are owned by that worker. They must not be exposed directly to `src/engine/agents/orchestrator.ts` or registered as top-level orchestrator tools/subagents.
 
 Workers return structured results.
 
@@ -445,7 +445,7 @@ The orchestrator should not assume it knows context when memory or retrieval can
 
 ## Coding Worker System
 
-The Coding Worker is a specialized worker under `src/workers/coding-worker/`.
+The Coding Worker is a specialized worker under `src/engine/workers/coding-worker/`.
 
 It must support:
 
@@ -504,20 +504,37 @@ RagResult
 
 ```text
 src/
-  agents/
+  core/
+    config/
+    db.ts
+    models/
+    protocols/
+    schemas/
+    telemetry/
+    types/
+    utils/
+  api/
+    channels/
+    connectors/
+    ingress/
+    middleware/
+    routes/
+  engine/
+    agents/
+    approvals/
+    capabilities/
+    commands/
+    embeddings/
+    memory/
+    rag/
+    registries/
+    schedules/
+    session/
+    skills/
+    tools/
+    workers/
+    workflows/
   workspace/
-  connectors/
-  routes/
-  middleware/
-  memory/
-  protocols/
-  rag/
-  registries/
-  skills/
-  tools/
-  types/
-  workers/
-  workflows/
   tests/
 ```
 
@@ -588,7 +605,7 @@ pnpm run typecheck                           # verify
 
 ### Running tests
 
-For TypeScript changes, run the project's configured checks from `package.json`. pnpm and npm are both supported in this repository. The Coding Worker resolves the package manager from lockfile presence (`pnpm-lock.yaml` → pnpm, `package-lock.json` → npm) via `src/workers/coding-worker/repo/package-manager.ts`.
+For TypeScript changes, run the project's configured checks from `package.json`. pnpm and npm are both supported in this repository. The Coding Worker resolves the package manager from lockfile presence (`pnpm-lock.yaml` → pnpm, `package-lock.json` → npm) via `src/engine/workers/coding-worker/repo/package-manager.ts`.
 
 Do not invoke `corepack` to launch pnpm — the repo no longer wires corepack into the command builder. Contributors must have pnpm installed (via npm, standalone installer, or Corepack) before running pnpm commands. The `package.json#packageManager` field documents the required version but does not automatically install or shim the binary.
 

@@ -5,9 +5,9 @@ import {
   chunkTelegramText,
   generatePairingCode,
   isMentioned,
-} from '../connectors/telegram/telegram-api.js';
-import { resolveTelegramApprovalPrincipal } from '../channels/telegram.js';
-import { goromboPersistenceRuntime } from '../db.js';
+} from '../api/connectors/telegram/telegram-api.js';
+import { resolveTelegramApprovalPrincipal } from '../api/channels/telegram.js';
+import { goromboPersistenceRuntime } from '../core/db.js';
 import app from '../app.js';
 
 let testCounter = 0;

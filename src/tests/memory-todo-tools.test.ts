@@ -6,7 +6,7 @@ import {
   createTodoTool,
   listTodosTool,
   updateTodoTool,
-} from '../tools/memory-todo-tools.js';
+} from '../engine/tools/memory-todo-tools.js';
 import { setupMemoryToolTest } from './helpers/memory-tool-test-setup.js';
 
 test('todo tools create/complete/list through the trusted event scope', async () => {

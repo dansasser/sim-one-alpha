@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createDefaultRegistries } from '../registries/default-registries.js';
-import { InMemoryRegistry } from '../registries/generic-registry.js';
-import type { ToolDefinition } from '../types/index.js';
+import { createDefaultRegistries } from '../engine/registries/default-registries.js';
+import { InMemoryRegistry } from '../engine/registries/generic-registry.js';
+import type { ToolDefinition } from '../core/types/index.js';
 
 test('registry stores and retrieves enabled definitions', () => {
   const registry = new InMemoryRegistry<ToolDefinition>();

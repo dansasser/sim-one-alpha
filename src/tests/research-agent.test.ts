@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createResearcherSubagent, researcherAgentName } from '../workers/researcher/researcher.js';
+import { createResearcherSubagent, researcherAgentName } from '../engine/workers/researcher/researcher.js';
 
 test('researcher subagent has web research tools', () => {
   const subagent = createResearcherSubagent('ollama-cloud/minimax-m3');

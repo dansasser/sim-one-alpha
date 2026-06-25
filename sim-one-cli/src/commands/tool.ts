@@ -1,6 +1,6 @@
 import { existsSync, rmSync } from 'node:fs';
-import { checkNameCollision } from '../../../src/capabilities/index.js';
-import type { CapabilityRecord } from '../../../src/capabilities/index.js';
+import { checkNameCollision } from '../../../src/engine/capabilities/index.js';
+import type { CapabilityRecord } from '../../../src/engine/capabilities/index.js';
 import {
   assertSafeCapabilityId,
   getCapabilityPath,

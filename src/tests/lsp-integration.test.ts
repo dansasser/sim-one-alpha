@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
-import { createLspTools } from '../workers/coding-worker/tools/code-intelligence/lsp/lsp-tools.js';
-import { createFlueLocalCodingSandbox } from '../workers/coding-worker/tools/sandbox-runtime.js';
-import { LspLanguageServerRegistry, type LanguageServerCommand } from '../workers/coding-worker/tools/code-intelligence/lsp/lsp-server-registry.js';
+import { createLspTools } from '../engine/workers/coding-worker/tools/code-intelligence/lsp/lsp-tools.js';
+import { createFlueLocalCodingSandbox } from '../engine/workers/coding-worker/tools/sandbox-runtime.js';
+import { LspLanguageServerRegistry, type LanguageServerCommand } from '../engine/workers/coding-worker/tools/code-intelligence/lsp/lsp-server-registry.js';
 
 const fixturesRoot = resolve(process.cwd(), 'src/tests/fixtures');
 

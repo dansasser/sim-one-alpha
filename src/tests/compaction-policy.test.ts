@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { evaluateCompaction } from '../session/compaction-policy.js';
+import { evaluateCompaction } from '../engine/session/compaction-policy.js';
 
 test('compaction policy stays normal below warning threshold', () => {
   assert.equal(

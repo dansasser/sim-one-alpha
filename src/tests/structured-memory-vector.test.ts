@@ -4,12 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { LanceDbVectorStore } from '../rag/vector/lance-db-store.js';
-import { ChecklistMemoryProvider } from '../memory/checklist-memory-provider.js';
-import { InMemoryMemoryEngine } from '../memory/rust-memory-engine.js';
-import { StructuredMemoryNoteIndex } from '../memory/structured-memory-note-index.js';
-import { ulid } from '../memory/ulid.js';
-import type { SessionNote } from '../types/memory.js';
+import { LanceDbVectorStore } from '../engine/rag/vector/lance-db-store.js';
+import { ChecklistMemoryProvider } from '../engine/memory/checklist-memory-provider.js';
+import { InMemoryMemoryEngine } from '../engine/memory/rust-memory-engine.js';
+import { StructuredMemoryNoteIndex } from '../engine/memory/structured-memory-note-index.js';
+import { ulid } from '../engine/memory/ulid.js';
+import type { SessionNote } from '../core/types/memory.js';
 
 function fakeEmbeddingClient() {
   // Deterministic, network-free embedding: hash the text into a 16-dim vector.

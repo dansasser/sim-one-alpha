@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { codexBrainCard, deepseekV4ProCard, kimik27codeCard, minimaxM3Card, qwen35Card, resolveModelCard } from '../models/catalog.js';
-import { configureRuntimeModels, createModelRegistry, selectModelCardForRole } from '../models/index.js';
-import { registerOllamaCloudProvider } from '../models/providers/ollama-cloud/index.js';
-import { resolveOllamaLocalProviderRegistration } from '../models/providers/ollama-local/index.js';
+import { codexBrainCard, deepseekV4ProCard, kimik27codeCard, minimaxM3Card, qwen35Card, resolveModelCard } from '../core/models/catalog.js';
+import { configureRuntimeModels, createModelRegistry, selectModelCardForRole } from '../core/models/index.js';
+import { registerOllamaCloudProvider } from '../core/models/providers/ollama-cloud/index.js';
+import { resolveOllamaLocalProviderRegistration } from '../core/models/providers/ollama-local/index.js';
 
 test('model registry defaults agentic chat to MiniMax M3', () => {
   const registry = createModelRegistry({

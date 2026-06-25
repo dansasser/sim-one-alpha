@@ -1,15 +1,15 @@
 import { flue } from '@flue/runtime/routing';
 import { Hono } from 'hono';
-import './models/runtime.js';
-import './schedules/boot.js';
-import { requireApiSecret } from './middleware/api-secret.js';
-import { registerChatEventRoutes } from './routes/chat-events.js';
-import { registerApprovalRoutes } from './routes/approval-routes.js';
-import { registerKnowledgeRoutes } from './routes/knowledge.js';
-import { registerSchedulesRoutes } from './routes/schedules.js';
-import { registerTelemetryRoutes } from './routes/telemetry.js';
-import { registerTelegramAdminRoutes } from './routes/telegram-admin.js';
-import { registerFlueTelemetryObserver } from './telemetry/flue-telemetry.js';
+import './core/models/runtime.js';
+import './engine/schedules/boot.js';
+import { requireApiSecret } from './api/middleware/api-secret.js';
+import { registerChatEventRoutes } from './api/routes/chat-events.js';
+import { registerApprovalRoutes } from './api/routes/approval-routes.js';
+import { registerKnowledgeRoutes } from './api/routes/knowledge.js';
+import { registerSchedulesRoutes } from './api/routes/schedules.js';
+import { registerTelemetryRoutes } from './api/routes/telemetry.js';
+import { registerTelegramAdminRoutes } from './api/routes/telegram-admin.js';
+import { registerFlueTelemetryObserver } from './core/telemetry/flue-telemetry.js';
 
 registerFlueTelemetryObserver();
 

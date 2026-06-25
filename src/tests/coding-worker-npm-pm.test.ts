@@ -7,7 +7,7 @@ import {
   detectPackageManager,
   packageManagerRunCommand,
   packageManagerTestCommand,
-} from '../workers/coding-worker/repo/package-manager.js';
+} from '../engine/workers/coding-worker/repo/package-manager.js';
 
 test('detectPackageManager returns npm when package-lock.json is present', () => {
   const repoPath = mkdtempSync(join(tmpdir(), 'coding-worker-npm-detect-'));

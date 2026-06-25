@@ -10,16 +10,16 @@ import { rmSync } from 'node:fs';
 import test from 'node:test';
 import type { FlueEvent } from '@flue/runtime';
 
-import { resolveScheduleConfig } from '../schedules/schedule-config.js';
-import type { DispatchScheduleArgs, ScheduleDispatchResult } from '../schedules/schedule-dispatch.js';
-import { ScheduleStore } from '../schedules/schedule-store.js';
+import { resolveScheduleConfig } from '../engine/schedules/schedule-config.js';
+import type { DispatchScheduleArgs, ScheduleDispatchResult } from '../engine/schedules/schedule-dispatch.js';
+import { ScheduleStore } from '../engine/schedules/schedule-store.js';
 import {
   ScheduleManager,
   classifyError,
   intervalToCron,
   toCronerPattern,
-} from '../schedules/schedule-manager.js';
-import type { ScheduleKind } from '../schedules/schedule-types.js';
+} from '../engine/schedules/schedule-manager.js';
+import type { ScheduleKind } from '../engine/schedules/schedule-types.js';
 
 function tempDbPath(): string {
   return `/tmp/sim-one-schedules-mgr-${Date.now()}-${Math.floor(Math.random() * 1e6)}.sqlite`;

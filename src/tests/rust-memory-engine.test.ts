@@ -3,9 +3,9 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import type { MemoryEngine } from '../memory/memory-engine.js';
-import { InMemoryMemoryEngine, RustMemoryEngine } from '../memory/rust-memory-engine.js';
-import { ulid } from '../memory/ulid.js';
+import type { MemoryEngine } from '../engine/memory/memory-engine.js';
+import { InMemoryMemoryEngine, RustMemoryEngine } from '../engine/memory/rust-memory-engine.js';
+import { ulid } from '../engine/memory/ulid.js';
 
 const WASM_MODULE_PATH = path.resolve(
   process.cwd(),

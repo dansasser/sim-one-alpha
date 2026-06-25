@@ -4,12 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import app from '../app.js';
-import { createApprovalEventBridge } from '../ingress/approval-event-bridge.js';
-import { createApprovalIngress, createFileApprovalBindingStore } from '../ingress/approval-ingress.js';
-import { createCodingWorkerEvent } from '../workers/coding-worker/events/coding-worker-events.js';
-import { createInMemoryCodingApprovalService } from '../workers/coding-worker/approvals/approval-service.js';
-import { InMemoryCodingApprovalStore } from '../workers/coding-worker/approvals/approval-store.js';
-import type { CodingApprovalRecord } from '../workers/coding-worker/approvals/approval-types.js';
+import { createApprovalEventBridge } from '../api/ingress/approval-event-bridge.js';
+import { createApprovalIngress, createFileApprovalBindingStore } from '../api/ingress/approval-ingress.js';
+import { createCodingWorkerEvent } from '../engine/workers/coding-worker/events/coding-worker-events.js';
+import { createInMemoryCodingApprovalService } from '../engine/workers/coding-worker/approvals/approval-service.js';
+import { InMemoryCodingApprovalStore } from '../engine/workers/coding-worker/approvals/approval-store.js';
+import type { CodingApprovalRecord } from '../engine/workers/coding-worker/approvals/approval-types.js';
 
 describe('approval ingress', () => {
   function makeIngress() {
@@ -236,7 +236,7 @@ describe('approval ingress', () => {
   it('uses a file-backed binding store that shares data across instances', async () => {
     const approvalRoot = mkdtempSync(join(tmpdir(), 'gorombo-approval-ingress-'));
     try {
-      const { createSharedCodingApprovalService } = await import('../approvals/shared-approval-service.js');
+      const { createSharedCodingApprovalService } = await import('../engine/approvals/shared-approval-service.js');
 
       const service = createSharedCodingApprovalService({ GOROMBO_APPROVAL_ROOT: approvalRoot });
       const ingressA = createApprovalIngress({
@@ -408,8 +408,8 @@ describe('approval HTTP routes', () => {
 
   it('GET /api/approvals/pending returns pending approvals', async () => {
     await withApprovalEnv(async (approvalRoot) => {
-      const { createSharedCodingApprovalService } = await import('../approvals/shared-approval-service.js');
-      const { createApprovalIngress, createFileApprovalBindingStore } = await import('../ingress/approval-ingress.js');
+      const { createSharedCodingApprovalService } = await import('../engine/approvals/shared-approval-service.js');
+      const { createApprovalIngress, createFileApprovalBindingStore } = await import('../api/ingress/approval-ingress.js');
       const service = createSharedCodingApprovalService({ GOROMBO_APPROVAL_ROOT: approvalRoot });
       const ingress = createApprovalIngress({
         approvalService: service,
@@ -442,7 +442,7 @@ describe('approval HTTP routes', () => {
 
   it('GET /api/approvals/:requestId returns one approval', async () => {
     await withApprovalEnv(async (approvalRoot) => {
-      const { createSharedCodingApprovalService } = await import('../approvals/shared-approval-service.js');
+      const { createSharedCodingApprovalService } = await import('../engine/approvals/shared-approval-service.js');
       const service = createSharedCodingApprovalService({ GOROMBO_APPROVAL_ROOT: approvalRoot });
       const request = await service.createRequest({
         taskId: 'http-task',
@@ -464,7 +464,7 @@ describe('approval HTTP routes', () => {
 
   it('POST /api/approvals/:requestId/decision records a decision', async () => {
     await withApprovalEnv(async (approvalRoot) => {
-      const { createSharedCodingApprovalService } = await import('../approvals/shared-approval-service.js');
+      const { createSharedCodingApprovalService } = await import('../engine/approvals/shared-approval-service.js');
       const service = createSharedCodingApprovalService({ GOROMBO_APPROVAL_ROOT: approvalRoot });
       const request = await service.createRequest({
         taskId: 'http-task',
@@ -495,8 +495,8 @@ describe('approval HTTP routes', () => {
 
   it('GET /api/approvals/bindings/pending returns bindings', async () => {
     await withApprovalEnv(async (approvalRoot) => {
-      const { createSharedCodingApprovalService } = await import('../approvals/shared-approval-service.js');
-      const { createApprovalIngress, createFileApprovalBindingStore } = await import('../ingress/approval-ingress.js');
+      const { createSharedCodingApprovalService } = await import('../engine/approvals/shared-approval-service.js');
+      const { createApprovalIngress, createFileApprovalBindingStore } = await import('../api/ingress/approval-ingress.js');
       const service = createSharedCodingApprovalService({ GOROMBO_APPROVAL_ROOT: approvalRoot });
       const ingress = createApprovalIngress({
         approvalService: service,
@@ -546,10 +546,10 @@ describe('approval ingress end-to-end', () => {
       process.env.API_SECRET = 'test-approval-secret';
       process.env.GOROMBO_APPROVAL_ROOT = approvalRoot;
 
-      const { createSharedCodingApprovalService } = await import('../approvals/shared-approval-service.js');
-      const { createApprovalIngress, createFileApprovalBindingStore } = await import('../ingress/approval-ingress.js');
-      const { createApprovalEventBridge } = await import('../ingress/approval-event-bridge.js');
-      const { createCodingWorkerEvent } = await import('../workers/coding-worker/events/coding-worker-events.js');
+      const { createSharedCodingApprovalService } = await import('../engine/approvals/shared-approval-service.js');
+      const { createApprovalIngress, createFileApprovalBindingStore } = await import('../api/ingress/approval-ingress.js');
+      const { createApprovalEventBridge } = await import('../api/ingress/approval-event-bridge.js');
+      const { createCodingWorkerEvent } = await import('../engine/workers/coding-worker/events/coding-worker-events.js');
 
       const service = createSharedCodingApprovalService({ GOROMBO_APPROVAL_ROOT: approvalRoot });
       const ingress = createApprovalIngress({
