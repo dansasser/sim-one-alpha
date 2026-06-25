@@ -1,0 +1,19 @@
+docs/architecture/gorombo-flue-map.md
+  s_c53b0d1ca1404e::t_e6d558b34cc60a 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "0d61525cab9cb10f17532737ab0359ba070fd959",
+  "prompts": {},
+  "sessions": {
+    "s_c53b0d1ca1404e": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_100dc175bffe3o1xoz3L9SPLYT",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
