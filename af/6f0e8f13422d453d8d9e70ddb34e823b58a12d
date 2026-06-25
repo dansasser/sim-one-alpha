@@ -1,0 +1,22 @@
+src/tests/web-research-tool.test.ts
+  s_c53b0d1ca1404e::t_a5a2b3a231546b 81,83-85,97,115-118,121-124
+.github/workflows/ci.yml
+  s_c53b0d1ca1404e::t_2e56a0a29e3970 7
+  s_c53b0d1ca1404e::t_5143bf97872577 72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "af6f0e8f13422d453d8d9e70ddb34e823b58a12d",
+  "prompts": {},
+  "sessions": {
+    "s_c53b0d1ca1404e": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_100dc175bffe3o1xoz3L9SPLYT",
+        "model": "glm-5.2"
+      },
+      "human_author": null
+    }
+  }
+}
