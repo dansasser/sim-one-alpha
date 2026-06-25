@@ -39,7 +39,13 @@ export async function ensureServerRunning(options: ServerManagerOptions = {}): P
   const child = startServer(serverPath, envPath, port);
   serverChild = child;
 
-  await waitForHealth(baseUrl, child);
+  try {
+    await waitForHealth(baseUrl, child);
+  } catch (err) {
+    await stopServer(child);
+    serverChild = undefined;
+    throw err;
+  }
 
   (child as any).__detachLogs?.();
 
@@ -139,6 +145,7 @@ function startServer(serverPath: string, envPath: string, port: number): ChildPr
 
   child.on('error', (err) => {
     console.error(`Failed to start server: ${err.message}`);
+    (child as any).__spawnError = err;
   });
 
   const stdoutListener = (chunk: Buffer) => { process.stdout.write(chunk); };
@@ -170,8 +177,14 @@ async function waitForHealth(baseUrl: string, child?: ChildProcess): Promise<voi
   const deadline = Date.now() + HEALTH_TIMEOUT_MS;
 
   while (Date.now() < deadline) {
-    if (child && (child.exitCode !== null || child.signalCode !== null)) {
-      throw new Error(`Server exited unexpectedly with code ${child.exitCode} before becoming healthy.`);
+    if (child) {
+      const spawnError = (child as any).__spawnError;
+      if (spawnError) {
+        throw new Error(`Failed to start server: ${spawnError.message}`);
+      }
+      if (child.exitCode !== null || child.signalCode !== null) {
+        throw new Error(`Server exited unexpectedly with code ${child.exitCode} before becoming healthy.`);
+      }
     }
     if (await checkHealth(baseUrl)) return;
     await sleep(HEALTH_POLL_INTERVAL_MS);

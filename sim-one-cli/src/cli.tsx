@@ -50,7 +50,7 @@ program
     }
 
     const port = opts.port ? parseInt(opts.port, 10) : undefined;
-    if (opts.port && (!port || port < 1 || port > 65535)) {
+    if (opts.port && (!port || port < 1 || port > 65535 || !/^\d+$/.test(opts.port))) {
       console.error(`Invalid port: ${opts.port}. Must be a number 1-65535.`);
       process.exit(1);
     }
