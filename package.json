@@ -5,7 +5,7 @@
   "type": "module",
   "description": "SIM-ONE Alpha — Flue-based multi-purpose orchestrating agent foundation.",
   "files": [
-    "dist/**",
+    ".gorombo/sim-one-alpha/**",
     "scripts/test-built-http.mjs",
     "scripts/smoke-http-endpoints.mjs",
     "README.md",
@@ -13,6 +13,8 @@
   ],
   "scripts": {
     "build": "flue build --target node && node scripts/generate-builtin-registry.mjs && node scripts/copy-runtime-config.mjs && node scripts/copy-wasm-artifact.mjs",
+    "build:cli": "pnpm --filter sim-one-cli run build",
+    "build:all": "pnpm run build && pnpm run build:cli && node .gorombo/sim-one-cli/cli.js",
     "connect": "flue connect orchestrator local --target node --session local",
     "dev": "flue dev --target node",
     "test:unit": "node scripts/run-unit-tests.mjs",
@@ -32,8 +34,7 @@
     "capabilities:disable": "node scripts/capability-admin.mjs disable",
     "capabilities:remove": "node scripts/capability-admin.mjs remove",
     "capabilities:update": "node scripts/capability-admin.mjs update",
-    "start": "node --env-file=.env dist/server.mjs",
-    "build:prod": "node scripts/build-prod.mjs",
+    "start": "node --env-file=.env .gorombo/sim-one-alpha/server.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm run test:unit && pnpm run build && pnpm run test:http",
     "fetch-embedding-model": "node scripts/fetch-embedding-model.mjs",

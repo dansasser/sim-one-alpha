@@ -30,12 +30,12 @@
 - **wasm-pack:** `/root/.cargo/bin/wasm-pack`
 - **cargo env:** `source ~/.cargo/env`
 - **Required for build:** `prebuild` script runs `wasm-build.mjs` which needs wasm-pack on PATH
-- **WASM artifact:** `crates/gorombo-memory/pkg/gorombo_memory_bg.wasm` — built by wasm-pack, copied to `dist/memory/` by `copy-wasm-artifact.mjs`
+- **WASM artifact:** `crates/gorombo-memory/pkg/gorombo_memory_bg.wasm` — built by wasm-pack, copied to `.gorombo/sim-one-alpha/memory/` by `copy-wasm-artifact.mjs`
 
 ### .env File
 - **Location:** `/opt/ai/sim-one-alpha-capability-registry/.env` (copied from main checkout)
 - **Source:** `/opt/ai/sim-one-alpha/.env` — copy if missing: `cp /opt/ai/sim-one-alpha/.env .env`
-- **Key env vars:** `OLLAMA_API_KEY`, `CODEX_BRAIN_LOCAL_API_KEY`, `CODEX_BRAIN_LOCAL_API_URL`, `JINA_API_KEY`, `API_SECRET`, `JUELS_API_KEY`, `RUNPOD_API_KEY`
+- **Key env vars:** `OLLAMA_API_KEY`, `CODEX_BRAIN_LOCAL_API_KEY`, `CODEX_BRAIN_LOCAL_API_URL`, `JINA_API_KEY`, `API_SECRET` (external connectors only), `JUELS_API_KEY`, `RUNPOD_API_KEY`
 - **No TELEGRAM_* vars** — Telegram is optional (fixed in PR #46)
 - **No GOROMBO_APPROVAL_ROOT** — approval endpoints return 400/500 (not configured)
 
@@ -58,10 +58,10 @@
 Runtime capability registry for SIM-ONE Alpha — lets users and agents add skills, tools, workers (subagents), and MCP servers to a running instance without rebuilding. Service restart picks up changes.
 
 ### Key Design Decisions (settled with Dan)
-1. **Restart required** (not rebuild, not hot-reload) — user restarts `node dist/server.mjs` to pick up new capabilities
+1. **Restart required** (not rebuild, not hot-reload) — user restarts `node .gorombo/sim-one-alpha/server.mjs` to pick up new capabilities
 2. **Same loading path as built-ins** — merge layer in `orchestrator.ts` reads SQLite + scans dir at init, spreads into `tools/skills/subagents` arrays alongside built-in imports
 3. **SQLite authoritative** — config file is a mirror that reconciles into SQLite on boot (additive, idempotent)
-4. **`~/.gorombo/capabilities/`** for user skill/tool/worker dirs (outside `dist/`, survives upgrades)
+4. **`~/.gorombo/capabilities/`** for user skill/tool/worker dirs (outside `.gorombo/sim-one-alpha/`, survives upgrades)
 5. **Admin CLI** — standalone `capability-admin.mjs` script (like `protocol-admin.mjs` pattern)
 6. **Approval gating** — skills auto-enable (markdown only); tools/workers/MCP require user approval (enabled=0 until CLI/TUI approves)
 7. **3rd plan impact** — agent-tui plan defines where things ultimately live (production TUI owns admin subcommands); this PR builds runtime store + merge layer
@@ -137,7 +137,7 @@ pnpm run typecheck
 pnpm run test:unit
 
 # Start built server (use a port in 3940-3960 range)
-PORT=3956 node --env-file=.env dist/server.mjs
+PORT=3956 node --env-file=.env .gorombo/sim-one-alpha/server.mjs
 
 # Start dev server (watches for changes, rebuilds automatically)
 npx flue dev --target node --port 3956
@@ -152,7 +152,7 @@ kill $(pgrep -f "node.*<port>")
 ```
 
 ## Server Startup Sequence
-1. `node --env-file=.env dist/server.mjs` starts
+1. `node --env-file=.env .gorombo/sim-one-alpha/server.mjs` starts
 2. `src/db.ts` loads → config reconcile runs → `[capabilities] Reconciled N capability(ies)` if config has capabilities
 3. ONNX model loads (~30 seconds, blocks event loop) → `[INFO] embeddings.onnx-loaded`
 4. `[flue] Server listening on http://localhost:<port>`

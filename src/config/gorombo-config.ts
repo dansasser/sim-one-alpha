@@ -22,7 +22,7 @@ export interface GoromboConfig {
   memory?: Record<string, unknown>;
   protocols?: Record<string, unknown>;
   schedules?: Record<string, unknown>;
-  gateway?: Record<string, unknown>;
+  gateway?: GatewayConfig;
   observability?: Record<string, unknown>;
   capabilities?: GoromboCapabilityConfig[];
 }
@@ -36,6 +36,11 @@ export interface GoromboStorageConfig {
   flueDatabasePath?: string;
   sessionDatabasePath?: string;
   vectorStorePath?: string;
+}
+
+export interface GatewayConfig {
+  mode?: 'dev' | 'terminal' | 'service';
+  port?: number;
 }
 
 export interface GoromboCapabilityConfig {
@@ -98,6 +103,7 @@ export function validateGoromboConfig(value: unknown, source = 'GOROMBO config')
   const backup = readString(value.models.backup);
   const storage = validateStorageConfig(value.storage, source);
   const capabilities = validateCapabilitiesConfig(value.capabilities, source);
+  const gateway = validateGatewayConfig(value.gateway, source);
 
   return {
     ...value,
@@ -108,6 +114,7 @@ export function validateGoromboConfig(value: unknown, source = 'GOROMBO config')
     },
     ...(storage ? { storage } : {}),
     ...(capabilities ? { capabilities } : {}),
+    ...(gateway ? { gateway } : {}),
   } as GoromboConfig;
 }
 
@@ -211,6 +218,38 @@ function validateStorageConfig(value: unknown, source: string): GoromboStorageCo
     ...(sessionDatabasePath ? { sessionDatabasePath } : {}),
     ...(vectorStorePath ? { vectorStorePath } : {}),
   };
+}
+
+const VALID_GATEWAY_MODES = new Set(['dev', 'terminal', 'service']);
+
+function validateGatewayConfig(value: unknown, source: string): GatewayConfig | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${source} gateway must be a JSON object when provided.`);
+  }
+
+  const result: GatewayConfig = {};
+
+  if ('mode' in value) {
+    const mode = readString(value.mode);
+    if (!mode || !VALID_GATEWAY_MODES.has(mode)) {
+      throw new Error(`${source} gateway.mode must be one of: ${[...VALID_GATEWAY_MODES].join(', ')}.`);
+    }
+    result.mode = mode as GatewayConfig['mode'];
+  }
+
+  if ('port' in value) {
+    const port = value.port;
+    if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535) {
+      throw new Error(`${source} gateway.port must be an integer between 1 and 65535.`);
+    }
+    result.port = port;
+  }
+
+  return result;
 }
 
 function readOptionalStoragePath(

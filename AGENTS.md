@@ -38,7 +38,7 @@ Workers are subsystems of SIM-ONE Alpha, not standalone products or public endpo
 - **Runtime data root:** `~/.gorombo/` — uses the company name (Gorombo). This is intentional and matches industry convention (other companies name their runtime dirs after the company, not the product).
 - **SQLite databases:** `.gorombo/db/*.sqlite` — e.g. `capabilities.sqlite`, `protocols.sqlite`, `sessions.sqlite`.
 - **Capability directories:** `.gorombo/capabilities/{skills,tools,workers,mcp}/<id>/`.
-- **Config file:** `gorombo.config.json` — company-prefixed, shipped in `dist/`.
+- **Config file:** `gorombo.config.json` — company-prefixed, shipped in `.gorombo/sim-one-alpha/`.
 - **Environment variables:** `GOROMBO_*` prefix for runtime config (e.g. `GOROMBO_CAPABILITY_DB_PATH`, `GOROMBO_CAPABILITIES_DIR`, `GOROMBO_APPROVAL_ROOT`). Use `SIM_ONE_*` prefix for product-CLI-specific env vars if needed in the future.
 - **Source code:** `src/` directories use lowercase kebab-case (`src/capabilities/`, `src/rag/`). TypeScript files use kebab-case (`capability-store.ts`, `mcp-broker.ts`).
 - **Scripts:** `scripts/` uses kebab-case (`capability-admin.mjs`, `protocol-admin.mjs`, `build-prod.mjs`).
@@ -568,10 +568,10 @@ Always run the relevant verification commands before calling work complete.
 - Server startup blocks ~30s for ONNX load (event loop blocked, HTTP doesn't respond until done).
 
 **.env file:**
-- Copy from `.env.example` and fill in provider secrets. Required: `API_SECRET`. Optional: `OLLAMA_API_KEY`, `RUNPOD_API_KEY`, `CODEX_BRAIN_LOCAL_API_KEY`, `JINA_API_KEY`, etc.
+- Copy from `.env.example` and fill in provider secrets. `API_SECRET` optional (external connectors only — local TUI bypasses via loopback). Optional: `OLLAMA_API_KEY`, `RUNPOD_API_KEY`, `CODEX_BRAIN_LOCAL_API_KEY`, `JINA_API_KEY`, etc.
 - No TELEGRAM_* — Telegram is optional. No GOROMBO_APPROVAL_ROOT — approval not configured.
 
-**curl 400 known issue:** `curl`/`wget` to Flue routes return 400 with empty body when `x-api-secret` header is long (48+ chars). This is a `@hono/node-server` issue, not our bug. Use Node's `fetch()` or `@flue/sdk` for testing agent endpoints.
+**curl 400 known issue:** `curl`/`wget` to Flue routes return 400 with empty body when `x-api-secret` header is long (48+ chars). This is a `@hono/node-server` issue, not our bug. Use Node's `fetch()` or `@flue/sdk` for testing agent endpoints. Note: local TUI connections don't send `x-api-secret` (loopback bypass), so this only affects external connector testing.
 
 ### Worktree setup checklist (do ALL before working)
 

@@ -38,7 +38,7 @@ Allowed in `src/app.ts`:
 ```text
 Hono app creation
 health checks
-auth and middleware
+auth and middleware (loopback bypass for local TUI, x-api-secret for external connectors)
 imported route registration
 custom ingress that forwards into Flue architecture
 telemetry observer registration

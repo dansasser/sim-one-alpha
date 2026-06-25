@@ -55,7 +55,7 @@ Runtime policy changes via the admin API take effect immediately for the next up
 
 ## Admin HTTP API
 
-All routes require the `x-api-secret` header.
+All routes require the `x-api-secret` header (external connector auth — the local TUI bypasses this via loopback).
 
 ```bash
 export API_SECRET=$(grep API_SECRET .env | cut -d= -f2)

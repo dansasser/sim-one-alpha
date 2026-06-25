@@ -362,11 +362,11 @@ There are two distinct requirement sets depending on how you obtain SIM-ONE Alph
 
 #### Runtime requirements (running a finished install)
 
-These apply to end users running a packaged install (the eventual `sim-one` install package, or a pre-built `dist/` artifact):
+These apply to end users running a packaged install (the eventual `sim-one` install package, or a pre-built `.gorombo/sim-one-alpha/` artifact):
 
 - **Node.js >= 22.18.0** — required by Flue (native TypeScript config support). Use `nvm use 22` or set `PATH` to the Node 22 binary.
 
-That's it. The structured-memory WASM engine ships pre-compiled inside `dist/`, so no Rust toolchain, no `wasm-pack`, and no build step is needed at runtime.
+That's it. The structured-memory WASM engine ships pre-compiled inside `.gorombo/sim-one-alpha/`, so no Rust toolchain, no `wasm-pack`, and no build step is needed at runtime.
 
 #### Build-from-source requirements (cloning and building this repo)
 
@@ -376,7 +376,7 @@ These apply to developers cloning this repository to build from source:
 - **pnpm 10.x** — the repo uses pnpm (declared in `packageManager`). Install via `npm install -g pnpm` or Corepack.
 - **Rust toolchain + wasm-pack** — required for building the structured-memory WASM engine from source. Install via [rustup](https://rustup.rs/) and `cargo install wasm-pack --version 0.13.1`. The `prebuild` script runs `wasm-build.mjs` which needs `wasm-pack` on `PATH`.
 
-> **Why Rust is a build-time dependency only:** The structured-memory engine is a Rust crate (`crates/gorombo-memory/`) compiled to WebAssembly via `wasm-pack`. Once built, the resulting `.wasm` artifact lives in `dist/memory/` and is loaded by Node at runtime — no Rust compiler, `cargo`, or `wasm-pack` needed on the host running the server. The `prebuild` script only invokes the Rust toolchain to produce the `.wasm`; the finished `dist/` is self-contained and can be copied to a machine without Rust installed and run there.
+> **Why Rust is a build-time dependency only:** The structured-memory engine is a Rust crate (`crates/gorombo-memory/`) compiled to WebAssembly via `wasm-pack`. Once built, the resulting `.wasm` artifact lives in `.gorombo/sim-one-alpha/memory/` and is loaded by Node at runtime — no Rust compiler, `cargo`, or `wasm-pack` needed on the host running the server. The `prebuild` script only invokes the Rust toolchain to produce the `.wasm`; the finished `.gorombo/sim-one-alpha/` is self-contained and can be copied to a machine without Rust installed and run there.
 
 ### Setup
 
@@ -398,7 +398,7 @@ Key environment variables (see `.env.example` for the full list):
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `API_SECRET` | Yes | Shared secret for HTTP API auth (`x-api-secret` header). Set to any strong random string. |
+| `API_SECRET` | No (external only) | Shared secret for external HTTP API auth (`x-api-secret` header). Required only for external connectors (Telegram, web API). Local TUI connections over loopback bypass auth. |
 | `OLLAMA_API_KEY` | No | Ollama Cloud API key. Enables cloud embeddings and web search. Without it, the bundled local ONNX model is used for embeddings. |
 | `RUNPOD_API_KEY` | No | Runpod Public Endpoints API key. Enables image generation tools. |
 | `TELEGRAM_BOT_TOKEN` | No | Telegram bot token. Enables the Telegram connector. Without it, the server runs in TUI/HTTP-only mode. |
@@ -422,17 +422,17 @@ After downloading, RAG works without Ollama running and without any API keys. Th
 pnpm run build
 ```
 
-This compiles the WASM memory engine (the `prebuild` step invokes `wasm-pack` — this is what requires the Rust toolchain), builds the Flue Node server (`dist/server.mjs`), copies the runtime config, and copies the WASM artifact into `dist/`. The resulting `dist/` is self-contained: you can copy it to a machine without Rust installed and run the server from there. Only rebuilding the WASM from source requires the toolchain.
+This compiles the WASM memory engine (the `prebuild` step invokes `wasm-pack` — this is what requires the Rust toolchain), builds the Flue Node server (`.gorombo/sim-one-alpha/server.mjs`), copies the runtime config, and copies the WASM artifact into `.gorombo/sim-one-alpha/`. The resulting `.gorombo/sim-one-alpha/` is self-contained: you can copy it to a machine without Rust installed and run the server from there. Only rebuilding the WASM from source requires the toolchain.
 
 ### Start the server
 
 ```sh
 # Using the built artifact
 pnpm start
-# or: node --env-file=.env dist/server.mjs
+# or: node --env-file=.env .gorombo/sim-one-alpha/server.mjs
 
 # Custom port (default: 3000)
-PORT=3960 node --env-file=.env dist/server.mjs
+PORT=3960 node --env-file=.env .gorombo/sim-one-alpha/server.mjs
 ```
 
 The server takes ~30 seconds to start (ONNX model load blocks the event loop). Wait for `[flue] Server listening` in the log before sending requests.
@@ -752,7 +752,7 @@ See `docs/architecture/astro-docs-mcp.md` for details and planned coding agent i
 ### Naming collision detection
 
 When adding a capability, the system checks for name conflicts:
-- **Built-in names** — tools, subagents, skills, and MCP servers that ship with SIM-ONE Alpha (e.g. `load_protocols`, `coding-worker`, `astro-docs`). The full list is generated at build time in `dist/builtin-capabilities.json`.
+- **Built-in names** — tools, subagents, skills, and MCP servers that ship with SIM-ONE Alpha (e.g. `load_protocols`, `coding-worker`, `astro-docs`). The full list is generated at build time in `.gorombo/sim-one-alpha/builtin-capabilities.json`.
 - **Existing capabilities** — any capability already registered in the SQLite store.
 
 If a collision is found, the add is refused with an error: `Name 'X' conflicts with a built-in capability. Choose a different name.` or `Name 'X' already exists as a <kind> capability. Choose a different name.` The user or agent must pick a different name — no auto-rename.
@@ -770,7 +770,7 @@ src/config/gorombo.config.json
 After build it is copied to:
 
 ```text
-dist/gorombo.config.json
+.gorombo/sim-one-alpha/gorombo.config.json
 ```
 
 ```json
@@ -872,7 +872,7 @@ Protected routes require:
 x-api-secret: <API_SECRET>
 ```
 
-`API_SECRET` must be set in `.env` or by the deployment secret manager. If it is missing, protected endpoints fail closed with `503`.
+`API_SECRET` is optional — only needed for external connectors (Telegram, web API). Local TUI connections over loopback (127.0.0.1) bypass the secret check entirely. If `API_SECRET` is missing and an external request hits a protected endpoint, it fails closed with `503`.
 
 The app-owned chat ingress normalizes and authorizes the message, persists trusted event context to SQLite, resolves the product session, and prompts the durable orchestrator agent instance at `/agents/orchestrator/:sessionId?wait=result`. A successful normal chat event returns the direct agent result with stream coordinates:
 
@@ -1060,7 +1060,7 @@ The main agent runtime config is a real JSON file shipped with the product:
 
 ```text
 src/config/gorombo.config.json -> source
-dist/gorombo.config.json       -> built/package runtime file
+.gorombo/sim-one-alpha/gorombo.config.json       -> built/package runtime file
 ```
 
 It starts with model selection and is intended to grow into the deployment-level config for the agent:
@@ -1093,7 +1093,7 @@ Change model choices in the shipped runtime JSON file, then restart the runtime/
 For Node distribution, `.env` lives beside `package.json` at the runtime root. `pnpm start` runs:
 
 ```sh
-node --env-file=.env dist/server.mjs
+node --env-file=.env .gorombo/sim-one-alpha/server.mjs
 ```
 
 This loads provider keys, `API_SECRET`, and service settings before the built server starts.
@@ -1184,9 +1184,9 @@ pnpm run wasm:build
 pnpm run smoke:memory
 ```
 
-`pnpm run wasm:build` rebuilds the Rust crate to WASM and requires the Rust toolchain + `wasm-pack`. This is only needed when modifying the structured-memory engine; the shipped `dist/memory/` artifact is already compiled and runs without Rust.
+`pnpm run wasm:build` rebuilds the Rust crate to WASM and requires the Rust toolchain + `wasm-pack`. This is only needed when modifying the structured-memory engine; the shipped `.gorombo/sim-one-alpha/memory/` artifact is already compiled and runs without Rust.
 
-The default smoke drives the real Memory Helper tools, WASM engine, SQLite, `retrieve_memory`, and the coding-worker path end-to-end with a durability restart check (no live model required). To run the real-model smoke that boots the server and lets a live model drive the orchestrator memory tools, set `GOROMBO_SMOKE_REAL_MODEL=1` (requires a `.env` with model API creds and a built `dist`): `GOROMBO_SMOKE_REAL_MODEL=1 pnpm run smoke:memory`.
+The default smoke drives the real Memory Helper tools, WASM engine, SQLite, `retrieve_memory`, and the coding-worker path end-to-end with a durability restart check (no live model required). To run the real-model smoke that boots the server and lets a live model drive the orchestrator memory tools, set `GOROMBO_SMOKE_REAL_MODEL=1` (requires a `.env` with model API creds and a built `.gorombo/sim-one-alpha/`): `GOROMBO_SMOKE_REAL_MODEL=1 pnpm run smoke:memory`.
 
 ### Configuration
 
@@ -1235,7 +1235,7 @@ pnpm run cargo:test        # cargo test -p gorombo-memory (Rust crate tests)
 pnpm run smoke:memory      # Memory Helper end-to-end + durability smoke
 ```
 
-`pnpm test` runs the TypeScript unit suite, builds `dist/server.mjs`, then runs `pnpm run test:http` against the built server over real localhost HTTP. The root `.env` file remains the runtime environment source; it is not copied into `dist`.
+`pnpm test` runs the TypeScript unit suite, builds `.gorombo/sim-one-alpha/server.mjs`, then runs `pnpm run test:http` against the built server over real localhost HTTP. The root `.env` file remains the runtime environment source; it is not copied into the build output.
 
 For a live built-server chat smoke through `/api/chat/events`, run:
 

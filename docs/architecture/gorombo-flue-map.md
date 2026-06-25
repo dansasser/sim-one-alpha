@@ -78,7 +78,7 @@ src/app.ts
 src/middleware/api-secret.ts
   Imported Hono middleware for API-secret auth.
   Reads runtime env bindings and Node process env.
-  Fails closed when API_SECRET is missing.
+  Bypassed for loopback origins (127.0.0.1, ::1). Fails closed for non-loopback when API_SECRET is missing.
 
 src/routes/chat-events.ts
   App-owned /api/chat/events ingress alias.
@@ -130,7 +130,7 @@ src/agents/orchestrator.ts
   - `generate_image` calls Runpod, downloads the image, and saves it to `workspace/images/`.
   - `record_image_artifact` persists metadata to SQLite and indexes a memory summary.
   - `list_image_artifacts` queries prior artifacts from SQLite.
-  - `models.yaml` is the human-editable model catalog copied into `dist/` and `.tmp/tsc/` at build time.
+  - `models.yaml` is the human-editable model catalog copied into `.gorombo/sim-one-alpha/` and `.tmp/tsc/` at build time.
 
 src/workspace/
   Main agent user-editable workspace persona files.
@@ -184,7 +184,7 @@ src/commands/
 src/config/
   Typed loader and source JSON for the main SIM-ONE Alpha runtime config file.
 
-dist/gorombo.config.json
+.gorombo/sim-one-alpha/gorombo.config.json
   Built editable runtime config shipped with the product. Starts with primary and backup model card keys.
 
 src/workflows/research.ts

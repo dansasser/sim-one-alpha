@@ -4,15 +4,15 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-if (!existsSync('dist/server.mjs')) {
-  throw new Error('dist/server.mjs does not exist. Run pnpm run build before the built HTTP test.');
+if (!existsSync('.gorombo/sim-one-alpha/server.mjs')) {
+  throw new Error('.gorombo/sim-one-alpha/server.mjs does not exist. Run pnpm run build before the built HTTP test.');
 }
 
 const port = await getFreePort();
 const baseUrl = `http://127.0.0.1:${port}`;
 const envFileValues = parseEnvFile('.env');
 const requestSecret = process.env.GOROMBO_HTTP_TEST_API_SECRET || envFileValues.API_SECRET || 'built-http-test-secret';
-const nodeArgs = existsSync('.env') ? ['--env-file=.env', 'dist/server.mjs'] : ['dist/server.mjs'];
+const nodeArgs = existsSync('.env') ? ['--env-file=.env', '.gorombo/sim-one-alpha/server.mjs'] : ['.gorombo/sim-one-alpha/server.mjs'];
 const codingWorkspaceRoot = mkdtempSync(join(tmpdir(), 'built-http-coding-workspace-'));
 const modelEnv = {
   OLLAMA_API_KEY: process.env.OLLAMA_API_KEY || envFileValues.OLLAMA_API_KEY || 'built-http-test-key',
@@ -48,6 +48,8 @@ child.stdout.on('data', (chunk) => {
 try {
   await waitForHealth();
 
+  const externalHeaders = { 'x-forwarded-for': '10.0.0.1' };
+
   await expectJsonStatus(`${baseUrl}/health`, { method: 'GET' }, 200, 'health', (body) => {
     assertJson(body && body.ok === true, 'health did not return { ok: true }');
   });
@@ -56,7 +58,7 @@ try {
     `${baseUrl}/api/chat/events`,
     {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { ...externalHeaders, 'content-type': 'application/json' },
       body: JSON.stringify({ text: 'auth check' }),
     },
     401,
@@ -68,6 +70,7 @@ try {
     {
       method: 'POST',
       headers: {
+        ...externalHeaders,
         'content-type': 'application/json',
         'x-api-secret': requestSecret,
       },
@@ -77,13 +80,13 @@ try {
     'chat event ingress invalid JSON with secret',
   );
 
-  await expectStatus(`${baseUrl}/api/chat/sessions`, { method: 'GET' }, 401, 'chat sessions without secret');
+  await expectStatus(`${baseUrl}/api/chat/sessions`, { method: 'GET', headers: externalHeaders }, 401, 'chat sessions without secret');
 
   await expectJsonStatus(
     `${baseUrl}/api/chat/sessions?limit=3`,
     {
       method: 'GET',
-      headers: { 'x-api-secret': requestSecret },
+      headers: { ...externalHeaders, 'x-api-secret': requestSecret },
     },
     200,
     'chat sessions with secret',
@@ -96,7 +99,7 @@ try {
     `${baseUrl}/workflows/not-real`,
     {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { ...externalHeaders, 'content-type': 'application/json' },
       body: JSON.stringify({ text: 'auth check' }),
     },
     401,
@@ -108,6 +111,7 @@ try {
     {
       method: 'POST',
       headers: {
+        ...externalHeaders,
         'content-type': 'application/json',
         'x-api-secret': requestSecret,
       },
@@ -137,6 +141,7 @@ try {
     {
       method: 'POST',
       headers: {
+        ...externalHeaders,
         'content-type': 'application/json',
         'x-api-secret': requestSecret,
       },
@@ -166,6 +171,7 @@ try {
     {
       method: 'POST',
       headers: {
+        ...externalHeaders,
         'content-type': 'application/json',
         'x-api-secret': requestSecret,
       },
@@ -192,6 +198,7 @@ try {
     {
       method: 'POST',
       headers: {
+        ...externalHeaders,
         'content-type': 'application/json',
         'x-api-secret': requestSecret,
       },
@@ -218,6 +225,7 @@ try {
     {
       method: 'POST',
       headers: {
+        ...externalHeaders,
         'content-type': 'application/json',
         'x-api-secret': requestSecret,
       },
@@ -241,12 +249,12 @@ try {
   );
 
   const missingRunId = 'agent:orchestrator:built-http-missing-run';
-  await expectStatus(`${baseUrl}/runs/${encodeURIComponent(missingRunId)}`, { method: 'GET' }, 401, 'run lookup without secret');
+  await expectStatus(`${baseUrl}/runs/${encodeURIComponent(missingRunId)}`, { method: 'GET', headers: externalHeaders }, 401, 'run lookup without secret');
   await expectStatus(
     `${baseUrl}/runs/${encodeURIComponent(missingRunId)}`,
     {
       method: 'GET',
-      headers: { 'x-api-secret': requestSecret },
+      headers: { ...externalHeaders, 'x-api-secret': requestSecret },
     },
     404,
     'missing run lookup with secret',
@@ -256,7 +264,7 @@ try {
     `${baseUrl}/api/telemetry/runs/${encodeURIComponent(missingRunId)}`,
     {
       method: 'GET',
-      headers: { 'x-api-secret': requestSecret },
+      headers: { ...externalHeaders, 'x-api-secret': requestSecret },
     },
     404,
     'missing telemetry run with secret',
@@ -266,7 +274,7 @@ try {
     `${baseUrl}/api/telemetry/runs`,
     {
       method: 'GET',
-      headers: { 'x-api-secret': requestSecret },
+      headers: { ...externalHeaders, 'x-api-secret': requestSecret },
     },
     200,
     'telemetry run list with secret',

@@ -7,7 +7,7 @@ const repoRoot = resolve(__dirname, '..');
 
 /**
  * Build-time script that scans source code and generates
- * dist/builtin-capabilities.json listing all built-in tool names,
+ * .gorombo/sim-one-alpha/builtin-capabilities.json listing all built-in tool names,
  * subagent names, skill names, and MCP server names.
  *
  * Runs after `flue build` and before copy-runtime-config.mjs in the
@@ -244,7 +244,7 @@ function main() {
     mcpServers: uniqueSorted(['astro-docs']),
   };
 
-  const outputDir = resolve(repoRoot, 'dist');
+  const outputDir = resolve(repoRoot, '.gorombo', 'sim-one-alpha');
   mkdirSync(outputDir, { recursive: true });
   const outputPath = join(outputDir, 'builtin-capabilities.json');
   writeFileSync(outputPath, JSON.stringify(payload, null, 2) + '\n', 'utf8');

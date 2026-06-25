@@ -5,7 +5,7 @@ const source = resolve('src/config/gorombo.config.json');
 const includeTscOutput = process.argv.includes('--tsc');
 const targets = includeTscOutput
   ? [resolve('.tmp/tsc/config/gorombo.config.json')]
-  : [resolve('dist/gorombo.config.json')];
+  : [resolve('.gorombo/sim-one-alpha/gorombo.config.json')];
 
 if (!existsSync(source)) {
   throw new Error(`Runtime config source is missing: ${source}`);
@@ -16,9 +16,9 @@ for (const target of targets) {
   copyFileSync(source, target);
 }
 
-copyTestFixtures(includeTscOutput ? resolve('.tmp/tsc') : resolve('dist'));
-copyWorkspaceDirectories(includeTscOutput ? resolve('.tmp/tsc') : resolve('dist'));
-copyModelsYaml(includeTscOutput ? resolve('.tmp/tsc') : resolve('dist'));
+copyTestFixtures(includeTscOutput ? resolve('.tmp/tsc') : resolve('.gorombo/sim-one-alpha'));
+copyWorkspaceDirectories(includeTscOutput ? resolve('.tmp/tsc') : resolve('.gorombo/sim-one-alpha'));
+copyModelsYaml(includeTscOutput ? resolve('.tmp/tsc') : resolve('.gorombo/sim-one-alpha'));
 
 function copyTestFixtures(outputRoot) {
   const fixturesSource = resolve('src/tests/fixtures');

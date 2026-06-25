@@ -6,6 +6,7 @@
   "description": "SIM-ONE Alpha CLI — interactive TUI coding interface + capability management subcommands.",
   "scripts": {
     "dev": "tsx src/cli.tsx",
+    "build": "tsup",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -20,6 +21,7 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/react": "^19.2.0",
+    "tsup": "^8.0.0",
     "tsx": "^4.19.0",
     "typescript": "^6.0.3"
   }

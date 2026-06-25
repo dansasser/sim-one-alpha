@@ -32,11 +32,13 @@ function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Respo
   );
 }
 
-export function createApprovalClient(baseUrl: string, token: string): ApprovalClient {
+export function createApprovalClient(baseUrl: string, token?: string): ApprovalClient {
   const headers: Record<string, string> = {
-    'x-api-secret': token,
     'content-type': 'application/json',
   };
+  if (token) {
+    headers['x-api-secret'] = token;
+  }
 
   let configured: boolean | undefined;
 
