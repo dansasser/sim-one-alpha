@@ -37,7 +37,7 @@ program
   .description('SIM-ONE Alpha — interactive TUI coding interface + capability management.')
   .option('--port <number>', 'server port (when launching TUI)')
   .option('--base-url <url>', 'full base url (overrides --port, when launching TUI)')
-  .option('--session <id>', 'agent instance id (when launching TUI)', 'proto')
+  .option('--session <id>', 'agent instance id (when launching TUI)', 'primary')
   .action(async (opts) => {
     const session = opts.session;
 
