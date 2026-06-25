@@ -17,7 +17,7 @@ The goal is simple:
 - Secure Web API / Gateway layer
 - SQLite-backed protocol system
 - Database-backed memory layer
-- RAG architecture with memory, web search, and document-index support
+- RAG architecture with memory, web search, and document-index support (document-index provider is a placeholder)
 - Registry-driven tools
 - Registry-driven skills
 - Registry-driven workers/subagents
@@ -129,12 +129,11 @@ The RAG architecture provides:
 
 - memory retrieval (structured memory + session memory via FTS + LanceDB vector search)
 - web search (Ollama Search provider)
-- company documents (document-index provider)
 - project file indexing (background indexer)
 - LanceDB vector store for semantic retrieval
 - embedding fallback chain (Ollama Cloud → bundled ONNX local model)
 
-RAG is accessed through the `retrieve_context` tool (researcher-only) and the `retrieve_memory` tool (orchestrator). The RAG router fans queries to registered providers and merges results with reciprocal rank fusion.
+RAG is accessed through the `retrieve_context` tool (researcher-only) and the `retrieve_memory` tool (orchestrator). The RAG router fans queries to registered providers and merges results with reciprocal rank fusion. The document-index provider is a placeholder for future document retrieval integration.
 
 ### Tools
 
@@ -243,7 +242,7 @@ SIM-ONE Alpha has two ways to add capabilities (skills, tools, workers, MCP serv
 
 **1. Flue-native (build-time / developer):** When developing from source, Flue gives you build-time discovery. You add agents, workflows, channels, skills, and tools by writing TypeScript files in `src/agents/`, `src/workflows/`, `src/channels/`, and `src/engine/tools/`. Flue discovers these at build time and compiles them into the server. This is how all built-in capabilities are defined — the orchestrator, researcher, coding-worker, memory tools, protocol tool, schedule tools, image generation tools, MCP servers.
 
-**2. SIM-ONE Alpha capability registry (runtime / user + agent):** SIM-ONE Alpha adds a layer on top of Flue. After you build or install the final product, users and the agent itself can add skills, tools, workers (subagents), and MCP servers at runtime through the capability registry — no rebuild needed. The capability store in SQLite persists these. At agent init, capabilities are materialized from SQLite into Flue's discovery paths and merged with built-in capabilities. The agent can self-extend via `add_skill`, `add_tool`, `add_worker`, `add_mcp_server` tools. Users can add via `sim-one` CLI subcommands or the developer `capability-admin.mjs` script.
+**2. SIM-ONE Alpha capability registry (runtime / user + agent):** SIM-ONE Alpha adds a layer on top of Flue. After you build or install the final product, users and the agent itself can add skills, tools, workers (subagents), and MCP servers at runtime through the capability registry — no rebuild needed. The capability store in SQLite persists these. At agent init, capabilities are materialized from SQLite into Flue's discovery paths and merged with built-in capabilities. The agent can self-extend via `add_skill` (auto-enables, no approval needed), `add_tool`, `add_worker`, `add_mcp_server` (require user approval via CLI or TUI before activation — they are added with `enabled=0` until approved, since they execute arbitrary code). Users can add via `sim-one` CLI subcommands or the developer `capability-admin.mjs` script.
 
 Both tiers coexist: built-in capabilities (defined in code) and user-defined capabilities (stored in SQLite) merge into the same `tools`, `skills`, and `subagents` arrays at agent init. Collision detection prevents name conflicts between the two tiers.
 
@@ -988,7 +987,7 @@ Model selection rules:
 - Model cards live inside each provider directory under `src/core/models/providers/<provider>/cards`.
 - The catalog in `src/core/models/catalog.ts` aggregates cards for model selection and budget lookup.
 
-The agent has tool flow wired for protocol loading, session-memory retrieval, and RAG/context retrieval. Protocols are live (SQLite-backed, loaded through the protocol tool). Web search is live through Ollama Search when an Ollama API key is configured. The document-index provider is a placeholder for future document retrieval integration.
+The agent has tool flow wired for protocol loading, session-memory retrieval, and RAG/context retrieval. Protocols are live (SQLite-backed, loaded through the protocol tool). Web search is owned by the researcher subagent and is live through Ollama Search when an Ollama API key is configured. The document-index provider is a placeholder for future document retrieval integration.
 
 ## Model Cards
 
@@ -1213,7 +1212,7 @@ Use local `.env` files or the deployment platform's secret manager.
 - Researcher subagent with web research (Ollama Search), query planning, cache, and evidence packing
 - Coding worker with 5 subagents (triage, implementer, test-debug, code-review, github) and approval-gated repo mutations
 - Structured memory engine (Rust/WASM) with checklists, todos, session notes, SQLite durability
-- RAG architecture with memory retrieval, web search, document indexing, LanceDB vector store, embedding fallback chain
+- RAG architecture with memory retrieval, web search, LanceDB vector store, embedding fallback chain
 - SQLite-backed protocol system with runtime rule loading
 - Capability registry (SQLite) for runtime-extensible skills, tools, workers, and MCP servers
 - Telegram connector, Web/API connector, scheduled jobs (Croner)
@@ -1231,7 +1230,7 @@ Use local `.env` files or the deployment platform's secret manager.
 - Writing worker
 - Testing / Review worker
 - Discord and future connectors
-- Document-index provider (currently a placeholder)
+- Document-index provider (currently a placeholder, not wired into the RAG router)
 - Gateway service management (systemd/pm2 lifecycle)
 
 ## Memory Helper (Structured Memory)

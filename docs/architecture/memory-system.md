@@ -29,7 +29,7 @@ retrieve_memory          src/engine/memory/checklist-memory-provider.ts  (provid
 
 ## Rust engine (`crates/gorombo-memory/`)
 
-The crate owns the data model, validation, and query logic. It is compiled to WASM with `wasm-pack` (`pnpm run wasm:build`) and the artifact is copied into `dist/memory/` for the built server.
+The crate owns the data model, validation, and query logic. It is compiled to WASM with `wasm-pack` (`pnpm run wasm:build`) and the artifact is copied into `.gorombo/sim-one-alpha/memory/` for the built server.
 
 WASM exports (each takes/returns JSON; `Err(String)` prefixes map to `MemoryEngineError` kinds `validation` / `not_found` / `conflict` / `internal`):
 
