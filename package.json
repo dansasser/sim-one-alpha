@@ -41,6 +41,7 @@
     "fetch-embedding-model": "node scripts/fetch-embedding-model.mjs",
     "wasm:build": "node scripts/wasm-build.mjs",
     "prebuild": "node scripts/wasm-build.mjs",
+    "postinstall": "node scripts/patch-ink.mjs",
     "smoke:memory": "node scripts/smoke-memory-helper.mjs",
     "cargo:test": "cargo test -p gorombo-memory"
   },

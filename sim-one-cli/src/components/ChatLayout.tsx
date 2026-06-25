@@ -1,14 +1,15 @@
 import { useFlueAgent } from '@flue/react';
 import { Box, Text } from 'ink';
 import React, { useMemo, useState } from 'react';
-import { Header } from './Header.js';
-import { MessageList } from './MessageList.js';
-import { ChatInput } from './ChatInput.js';
-import { StatusBar } from './StatusBar.js';
-import { ApprovalList } from './ApprovalList.js';
-import { ApprovalPrompt } from './ApprovalPrompt.js';
+import { OuterContainer } from './OuterContainer.js';
+import { Aside } from './Aside.js';
+import { MainArea } from './MainArea.js';
+import { InputOutputSection } from './InputOutputSection.js';
+import { BottomSection } from './BottomSection.js';
 import { createApprovalClient } from '../lib/approvalClient.js';
 import { usePendingApprovals } from '../hooks/usePendingApprovals.js';
+import { ApprovalList } from './ApprovalList.js';
+import { ApprovalPrompt } from './ApprovalPrompt.js';
 
 export interface ChatLayoutProps {
   baseUrl: string;
@@ -49,33 +50,31 @@ export function ChatLayout({ baseUrl, session, decidedBy }: ChatLayoutProps) {
     hasActiveApproval;
 
   return (
-    <Box flexDirection="column" height="100%">
-      <Header baseUrl={baseUrl} session={session} status={agent.status} />
-      <MessageList messages={agent.messages} />
-      {!configured && (
-        <Box paddingX={1}>
-          <Text dimColor>approvals: not configured (set GOROMBO_APPROVAL_ROOT on the server)</Text>
-        </Box>
-      )}
-      {configured && pending.length > 0 && !hasActiveApproval && (
-        <ApprovalList pending={pending} />
-      )}
-      {configured && activeApproval && (
-        <ApprovalPrompt
-          key={activeApproval.requestId}
-          approval={activeApproval}
-          client={approvalClient}
-          decidedBy={decidedBy}
-          onResolved={() => setActiveApprovalId(undefined)}
+    <OuterContainer>
+      <Aside />
+      <MainArea>
+        <InputOutputSection messages={agent.messages} />
+        {configured && pending.length > 0 && !hasActiveApproval && (
+          <ApprovalList pending={pending} />
+        )}
+        {configured && activeApproval && (
+          <ApprovalPrompt
+            key={activeApproval.requestId}
+            approval={activeApproval}
+            client={approvalClient}
+            decidedBy={decidedBy}
+            onResolved={() => setActiveApprovalId(undefined)}
+          />
+        )}
+        <BottomSection
+          inputValue={input}
+          onInputChange={setInput}
+          onSubmit={handleSubmit}
+          agentStatus={agent.status}
+          messageCount={agent.messages.length}
+          inputDisabled={inputDisabled}
         />
-      )}
-      <StatusBar messageCount={agent.messages.length} pendingApprovals={pending.length} agentStatus={agent.status} />
-      <ChatInput
-        value={input}
-        onChange={setInput}
-        onSubmit={handleSubmit}
-        disabled={inputDisabled}
-      />
-    </Box>
+      </MainArea>
+    </OuterContainer>
   );
 }
