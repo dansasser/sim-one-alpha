@@ -4,6 +4,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use sim_one_ratatui_tui::app::{App, AppEvent, Clock, SCROLL_PAGE_LINES};
+use sim_one_ratatui_tui::flue::events::{FlueEvent, StreamControl};
+use sim_one_ratatui_tui::flue::stream::AgentStreamUpdate;
 
 #[test]
 fn typing_updates_prompt_without_changing_transcript_scroll() {
@@ -137,6 +139,45 @@ fn failed_response_settles_pending_state_and_renders_error() {
         .transcript_lines()
         .iter()
         .any(|line| line.contains("error: synthetic failure")));
+}
+
+#[test]
+fn stream_updates_change_status_without_touching_prompt() {
+    let mut app = App::new_for_test();
+    app.handle_event(AppEvent::Text("keep this prompt".to_string()));
+
+    app.handle_stream_update(AgentStreamUpdate::Connecting);
+    assert_eq!(app.stream_status(), "connecting");
+    assert_eq!(app.prompt(), "keep this prompt");
+
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({"type":"thinking_delta","eventIndex":3}),
+    )]));
+    assert_eq!(app.stream_status(), "live");
+    assert_eq!(app.last_stream_event(), Some("thinking_delta"));
+    assert!(app.status_text().contains("last: thinking_delta"));
+
+    app.handle_stream_update(AgentStreamUpdate::Control(StreamControl {
+        up_to_date: true,
+        ..StreamControl::default()
+    }));
+    assert_eq!(app.stream_status(), "idle");
+    assert_eq!(app.prompt(), "keep this prompt");
+}
+
+#[test]
+fn stream_reconnect_and_failure_are_visible_in_status() {
+    let mut app = App::new_for_test();
+
+    app.handle_stream_update(AgentStreamUpdate::Reconnecting(
+        "temporary outage".to_string(),
+    ));
+    assert_eq!(app.stream_status(), "reconnecting");
+    assert!(app.status_text().contains("temporary outage"));
+
+    app.handle_stream_update(AgentStreamUpdate::Failed("permanent failure".to_string()));
+    assert_eq!(app.stream_status(), "failed");
+    assert!(app.status_text().contains("permanent failure"));
 }
 
 #[test]

@@ -4,6 +4,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::agent::send_agent_prompt;
+use crate::flue::stream::{spawn_agent_stream, AgentStreamHandle, AgentStreamUpdate};
 
 pub const SCROLL_PAGE_LINES: usize = 8;
 const PLACEHOLDER_CONTEXT_LINES: usize = 24;
@@ -49,6 +50,9 @@ pub struct App {
     agent_sender: AgentSender,
     clock: Clock,
     pending_response: Option<PendingResponse>,
+    stream_handle: Option<AgentStreamHandle>,
+    stream_status: StreamStatus,
+    last_stream_event: Option<String>,
 }
 
 #[derive(Debug)]
@@ -63,6 +67,16 @@ struct PendingResponse {
 #[derive(Debug)]
 struct AgentResponse {
     result: Result<String, String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum StreamStatus {
+    NotAttached,
+    Connecting,
+    Live,
+    Idle,
+    Reconnecting,
+    Failed,
 }
 
 impl App {
@@ -130,6 +144,9 @@ impl App {
             agent_sender,
             clock,
             pending_response: None,
+            stream_handle: None,
+            stream_status: StreamStatus::NotAttached,
+            last_stream_event: None,
         };
         app.jump_to_tail();
         app
@@ -166,6 +183,58 @@ impl App {
             pending.spinner_frame = (pending.spinner_frame + 1) % SPINNER_FRAMES.len();
         }
         self.update_pending_transcript_line();
+    }
+
+    pub fn start_stream(&mut self) {
+        if self.stream_handle.is_some() {
+            return;
+        }
+        self.stream_status = StreamStatus::Connecting;
+        self.stream_handle = Some(spawn_agent_stream(
+            self.base_url.clone(),
+            self.session_id.clone(),
+        ));
+    }
+
+    pub fn poll_stream(&mut self) {
+        let mut updates = Vec::new();
+        if let Some(handle) = &self.stream_handle {
+            while let Ok(update) = handle.receiver.try_recv() {
+                updates.push(update);
+            }
+        }
+
+        for update in updates {
+            self.handle_stream_update(update);
+        }
+    }
+
+    pub fn handle_stream_update(&mut self, update: AgentStreamUpdate) {
+        match update {
+            AgentStreamUpdate::Connecting => self.stream_status = StreamStatus::Connecting,
+            AgentStreamUpdate::Events(events) => {
+                self.stream_status = StreamStatus::Live;
+                if let Some(event) = events.last() {
+                    self.last_stream_event = Some(event.event_type.clone());
+                }
+            }
+            AgentStreamUpdate::Control(control) => {
+                if control.up_to_date {
+                    self.stream_status = StreamStatus::Idle;
+                } else {
+                    self.stream_status = StreamStatus::Live;
+                }
+            }
+            AgentStreamUpdate::Idle => self.stream_status = StreamStatus::Idle,
+            AgentStreamUpdate::Reconnecting(error) => {
+                self.stream_status = StreamStatus::Reconnecting;
+                self.last_stream_event = Some(format!("reconnect: {error}"));
+            }
+            AgentStreamUpdate::Failed(error) => {
+                self.stream_status = StreamStatus::Failed;
+                self.last_stream_event = Some(format!("failed: {error}"));
+            }
+        }
     }
 
     pub fn poll_agent(&mut self) {
@@ -255,11 +324,20 @@ impl App {
         &self.agent_status
     }
 
+    pub fn stream_status(&self) -> &'static str {
+        self.stream_status.as_str()
+    }
+
+    pub fn last_stream_event(&self) -> Option<&str> {
+        self.last_stream_event.as_deref()
+    }
+
     pub fn status_text(&self) -> String {
         let mut parts = vec![
             "SIM-ONE Alpha".to_string(),
             format!("session: {}", self.session_id),
             format!("gateway: {}", self.gateway_status),
+            format!("stream: {}", self.stream_status()),
         ];
 
         if let Some(pending) = &self.pending_response {
@@ -268,7 +346,6 @@ impl App {
                 "turn: {}",
                 format_duration(pending.elapsed((self.clock)()))
             ));
-            parts.push("stream: not attached".to_string());
             if pending.duplicate_submit_notice {
                 parts.push("input locked: waiting for current response".to_string());
             }
@@ -276,6 +353,9 @@ impl App {
             parts.push(format!("agent: {}", self.agent_status));
         }
 
+        if let Some(event_type) = &self.last_stream_event {
+            parts.push(format!("last: {event_type}"));
+        }
         parts.push(format!("messages: {}", self.transcript_lines.len()));
         parts.push(format!(
             "tail: {}",
@@ -458,6 +538,27 @@ impl PendingResponse {
 
     fn spinner_frame_text(&self) -> &'static str {
         SPINNER_FRAMES[self.spinner_frame % SPINNER_FRAMES.len()]
+    }
+}
+
+impl StreamStatus {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::NotAttached => "not attached",
+            Self::Connecting => "connecting",
+            Self::Live => "live",
+            Self::Idle => "idle",
+            Self::Reconnecting => "reconnecting",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+impl Drop for App {
+    fn drop(&mut self) {
+        if let Some(handle) = &self.stream_handle {
+            handle.cancel();
+        }
     }
 }
 
