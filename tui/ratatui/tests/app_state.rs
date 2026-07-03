@@ -181,6 +181,70 @@ fn stream_reconnect_and_failure_are_visible_in_status() {
 }
 
 #[test]
+fn stream_activity_rows_are_synced_into_transcript() {
+    let mut app = App::new_for_test();
+
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![
+        FlueEvent::from_value(serde_json::json!({
+            "type":"thinking_delta",
+            "eventIndex":10,
+            "text":"checking protocol"
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"tool_start",
+            "eventIndex":11,
+            "toolCallId":"cap",
+            "toolName":"list_capabilities"
+        })),
+    ]));
+
+    assert!(app
+        .transcript_lines()
+        .iter()
+        .any(|line| line == "thinking: checking protocol"));
+    assert!(app
+        .transcript_lines()
+        .iter()
+        .any(|line| line == "tool: list_capabilities running"));
+}
+
+#[test]
+fn stream_activity_updates_do_not_snap_when_scrolled_back() {
+    let mut app = App::new_for_test();
+    app.jump_to_tail();
+    app.scroll_page_up();
+    let before_scroll = app.transcript_scroll();
+
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"thinking_delta",
+            "eventIndex":10,
+            "text":"checking protocol"
+        }),
+    )]));
+
+    assert_eq!(app.transcript_scroll(), before_scroll);
+    assert!(!app.follow_tail());
+}
+
+#[test]
+fn stream_activity_updates_follow_tail_when_at_bottom() {
+    let mut app = App::new_for_test();
+    app.jump_to_tail();
+
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"thinking_delta",
+            "eventIndex":10,
+            "text":"checking protocol"
+        }),
+    )]));
+
+    assert!(app.follow_tail());
+    assert_eq!(app.transcript_scroll(), app.max_scroll());
+}
+
+#[test]
 fn prompt_cursor_allows_insertion_navigation_and_word_delete() {
     let mut app = App::new_for_test();
 

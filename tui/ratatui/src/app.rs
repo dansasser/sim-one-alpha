@@ -1,9 +1,11 @@
+use std::collections::BTreeMap;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::agent::send_agent_prompt;
+use crate::flue::reducer::{DisplayRow, EventTranscript};
 use crate::flue::stream::{spawn_agent_stream, AgentStreamHandle, AgentStreamUpdate};
 
 pub const SCROLL_PAGE_LINES: usize = 8;
@@ -53,6 +55,8 @@ pub struct App {
     stream_handle: Option<AgentStreamHandle>,
     stream_status: StreamStatus,
     last_stream_event: Option<String>,
+    event_transcript: EventTranscript,
+    event_row_lines: BTreeMap<String, usize>,
 }
 
 #[derive(Debug)]
@@ -147,6 +151,8 @@ impl App {
             stream_handle: None,
             stream_status: StreamStatus::NotAttached,
             last_stream_event: None,
+            event_transcript: EventTranscript::default(),
+            event_row_lines: BTreeMap::new(),
         };
         app.jump_to_tail();
         app
@@ -217,6 +223,8 @@ impl App {
                 if let Some(event) = events.last() {
                     self.last_stream_event = Some(event.event_type.clone());
                 }
+                self.event_transcript.apply_events(&events);
+                self.sync_event_transcript_rows();
             }
             AgentStreamUpdate::Control(control) => {
                 if control.up_to_date {
@@ -527,6 +535,33 @@ impl App {
         if let Some(line) = self.transcript_lines.get_mut(pending.transcript_line) {
             *line = pending_transcript_line(pending, now);
         }
+    }
+
+    fn sync_event_transcript_rows(&mut self) {
+        let rows = self
+            .event_transcript
+            .rows()
+            .iter()
+            .filter(|row| row.is_activity())
+            .cloned()
+            .collect::<Vec<_>>();
+        for row in rows {
+            self.sync_event_transcript_row(&row);
+        }
+        self.after_transcript_changed();
+    }
+
+    fn sync_event_transcript_row(&mut self, row: &DisplayRow) {
+        if let Some(index) = self.event_row_lines.get(&row.id).copied() {
+            if let Some(line) = self.transcript_lines.get_mut(index) {
+                *line = row.text.clone();
+            }
+            return;
+        }
+
+        let index = self.transcript_lines.len();
+        self.transcript_lines.push(row.text.clone());
+        self.event_row_lines.insert(row.id.clone(), index);
     }
 }
 

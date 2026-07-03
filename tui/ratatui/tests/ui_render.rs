@@ -4,6 +4,8 @@ use ratatui::backend::TestBackend;
 use ratatui::layout::Position;
 use ratatui::Terminal;
 use sim_one_ratatui_tui::app::{App, AppEvent};
+use sim_one_ratatui_tui::flue::events::FlueEvent;
+use sim_one_ratatui_tui::flue::stream::AgentStreamUpdate;
 use sim_one_ratatui_tui::ui::render;
 
 #[test]
@@ -96,6 +98,43 @@ fn narrow_status_truncates_instead_of_overlapping_prompt() {
     assert!(buffer.contains("..."), "{buffer}");
     assert!(buffer.contains("Prompt"), "{buffer}");
     assert!(buffer.contains("> Type a message"), "{buffer}");
+}
+
+#[test]
+fn renders_thinking_and_tool_activity_rows() {
+    let backend = TestBackend::new(120, 28);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![
+        FlueEvent::from_value(serde_json::json!({
+            "type":"thinking_delta",
+            "eventIndex":10,
+            "text":"checking protocol"
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"tool_start",
+            "eventIndex":11,
+            "toolCallId":"cap",
+            "toolName":"list_capabilities"
+        })),
+    ]));
+
+    terminal
+        .draw(|frame| render(frame, &app))
+        .expect("activity shell should render");
+
+    let buffer = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    assert!(buffer.contains("thinking: checking protocol"), "{buffer}");
+    assert!(
+        buffer.contains("tool: list_capabilities running"),
+        "{buffer}"
+    );
 }
 
 fn app_with_pending_response() -> App {
