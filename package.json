@@ -44,7 +44,7 @@
     "wasm:build": "node scripts/wasm-build.mjs",
     "prebuild": "node scripts/wasm-build.mjs",
     "smoke:memory": "node scripts/smoke-memory-helper.mjs",
-    "cargo:test": "cargo test -p gorombo-memory"
+    "cargo:test": "cargo test --workspace"
   },
   "engines": {
     "node": ">=22.18.0"
