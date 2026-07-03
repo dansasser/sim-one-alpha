@@ -1,0 +1,22 @@
+sim-one-cli/src/components/InputOutputSection.tsx
+  s_38452e3b10f10f::t_261616e92d0418 100
+  s_38452e3b10f10f::t_1127560e9ab28d 1-2,103,113-117,119,122
+sim-one-cli/src/components/BottomSection.tsx
+  s_38452e3b10f10f::t_6bc6f53a6236a3 1,31,45,54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "f346b5f2f5fae67cdcc1fff50bb604846fbb98f5",
+  "prompts": {},
+  "sessions": {
+    "s_38452e3b10f10f": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10508c1efffeDMyPAsvTtRZdLR",
+        "model": "glm-5.2"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
