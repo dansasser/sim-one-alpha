@@ -1,0 +1,54 @@
+tui/ratatui/src/app.rs
+  s_a81fff26d52223::t_1cda23b1d65a80 84-86
+  s_a81fff26d52223::t_16a361a474cbf4 1-6,8-11,17,19-26,37,44,46-58,62-63,67-72,75-83,87-95,98-99,105-108,116-118,120-130,140-182,187-194,219-222,227-230,258-303,318-322,325,330-333,335-336,338-371,377,381,383-385,396,399-492
+  s_a81fff26d52223::t_2598a79a342d75 493-495
+tui/ratatui/src/agent.rs
+  s_a81fff26d52223::t_c8a9145a5089f9 20-25
+  s_a81fff26d52223::t_8fc7c1e859b0f5 65-66,88,152-159
+  s_a81fff26d52223::t_0cdbb432c6cb2a 1,3-19,26-44,51-64,67-87,89-151,160-163
+  s_a81fff26d52223::t_73ade8d39153d6 2,45-50
+tui/ratatui/src/ui.rs
+  s_a81fff26d52223::t_d093ee96e68f14 1,69-73,81-88,93-106
+tui/ratatui/tests/input_mapping.rs
+  s_a81fff26d52223::t_438888e3369b22 15-38,56
+tui/ratatui/src/main.rs
+  s_a81fff26d52223::t_9863d62c4e0785 3,7,38-45,51,58-59,62,73-76
+scripts/build-ratatui-tui.mjs
+  s_a81fff26d52223::t_feb92361f2e4dc 1,8,24-27
+tui/ratatui/tests/app_state.rs
+  s_a81fff26d52223::t_fedff388043ee4 57,61
+  s_a81fff26d52223::t_ea7440954719df 1-4,22-28,33,40-43,46-56,58-60,62-72,111-120
+tui/ratatui/src/lib.rs
+  s_a81fff26d52223::t_1709d6717b4f95 1
+tui/ratatui/src/input.rs
+  s_a81fff26d52223::t_d9ad6c8f8391cf 6-17,23,25-28
+tui/ratatui/tests/ui_render.rs
+  s_a81fff26d52223::t_c8500d8c357415 2,4,30-42
+  s_a81fff26d52223::t_044e80d6a39ec9 43
+  s_a81fff26d52223::t_2e12c5a4714785 44
+tui/ratatui/README.md
+  s_a81fff26d52223::t_e40be9f85169f9 5,31,34-46
+scripts/test-ratatui-product.mjs
+  s_a81fff26d52223::t_a8c7f759ea9477 27-34,48-49,54,69-71,73-75,77
+  s_a81fff26d52223::t_902b105de90f6a 65
+tui/ratatui/tests/agent_client.rs
+  s_a81fff26d52223::t_9654b4613dfb68 1-18,20-40,43,80
+  s_a81fff26d52223::t_610c09c3e4bc05 19,41-42,44-79
+  s_a81fff26d52223::t_0cc12fcfc9ae1f 81-86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "3231ba0aabaaba09f6308db9833323df99e35926",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
