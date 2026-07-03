@@ -1,0 +1,42 @@
+tui/ratatui/src/app.rs
+  s_a81fff26d52223::t_79e0d8ded5d414 151,168
+  s_a81fff26d52223::t_0e9a0ea514c30b 30-31,35,38,46,161
+tui/ratatui/src/main.rs
+  s_a81fff26d52223::t_0e9a0ea514c30b 2,7,13-26,29-32,34,38-39,58-105
+package.json
+  s_a81fff26d52223::t_9541e9385527a4 17,24
+tui/ratatui/tests/gateway_launcher.rs
+  s_a81fff26d52223::t_31318f4e0e80c3 1-82
+  s_a81fff26d52223::t_ad91cd9419f7f2 83-85
+tui/ratatui/Cargo.toml
+  s_a81fff26d52223::t_31318f4e0e80c3 13
+tui/ratatui/src/lib.rs
+  s_a81fff26d52223::t_0e9a0ea514c30b 2
+scripts/build-ratatui-tui.mjs
+  s_a81fff26d52223::t_9541e9385527a4 1-26
+tui/ratatui/src/gateway.rs
+  s_a81fff26d52223::t_0e9a0ea514c30b 1-211
+  s_a81fff26d52223::t_97d216e8cb7171 212-216
+scripts/test-ratatui-product.mjs
+  s_a81fff26d52223::t_9541e9385527a4 1-99
+tui/ratatui/README.md
+  s_a81fff26d52223::t_0764055af3aa2f 7-24
+Cargo.lock
+  s_a81fff26d52223::t_9c1535d63b9482 703
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "58a8da8ace255535c2131f4fdf9f45ab8ec9ca50",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
