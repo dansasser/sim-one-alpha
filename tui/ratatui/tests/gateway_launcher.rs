@@ -97,6 +97,68 @@ fn built_binary_accepts_smoke_startup_flag() {
     );
 }
 
+#[test]
+fn built_binary_silences_child_logs_after_gateway_is_healthy() {
+    let root = temp_path("post-health-logs");
+    create_dir_all(&root).expect("temp dir should be created");
+    let server_path = root.join("server.mjs");
+    write(
+        &server_path,
+        r#"
+import http from 'node:http';
+
+const port = Number(process.env.PORT);
+console.error('startup-visible');
+
+const server = http.createServer((request, response) => {
+  if (request.url === '/health') {
+    response.writeHead(200, { 'content-type': 'text/plain' });
+    response.end('ok');
+    return;
+  }
+
+  response.writeHead(404, { 'content-type': 'text/plain' });
+  response.end('missing');
+});
+
+process.on('SIGTERM', () => {
+  console.error('shutdown-noise');
+  setTimeout(() => process.exit(0), 25);
+});
+
+server.listen(port, '127.0.0.1');
+"#,
+    )
+    .expect("test server should be writable");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_sim-one-ratatui-tui"))
+        .arg("--smoke-startup")
+        .arg("--server-path")
+        .arg(&server_path)
+        .arg("--env-path")
+        .arg(root.join("missing.env"))
+        .arg("--port")
+        .arg(free_port().to_string())
+        .output()
+        .expect("built binary should run");
+
+    assert!(
+        output.status.success(),
+        "fake server should satisfy product startup smoke, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("startup-visible"),
+        "startup stderr should still be forwarded before the TUI starts, got: {stderr}"
+    );
+    assert!(
+        !stderr.contains("shutdown-noise"),
+        "post-health child stderr should be drained without reaching the terminal, got: {stderr}"
+    );
+}
+
 fn free_port() -> u16 {
     TcpListener::bind(("127.0.0.1", 0))
         .expect("free port should be allocatable")

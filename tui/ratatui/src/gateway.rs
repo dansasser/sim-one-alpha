@@ -1,10 +1,15 @@
 use std::env;
+use std::fmt;
 use std::fs::read_to_string;
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::thread::sleep;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+use std::thread::{self, sleep, JoinHandle};
 use std::time::{Duration, Instant};
 
 const MIN_NODE_MAJOR: u64 = 22;
@@ -17,18 +22,32 @@ pub struct GatewayOptions {
     pub env_path: Option<PathBuf>,
 }
 
-#[derive(Debug)]
 pub struct GatewayHandle {
     pub started: bool,
     pub port: u16,
     pub base_url: String,
     child: Option<Child>,
+    log_drain: Option<ServerLogDrain>,
+}
+
+impl fmt::Debug for GatewayHandle {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("GatewayHandle")
+            .field("started", &self.started)
+            .field("port", &self.port)
+            .field("base_url", &self.base_url)
+            .finish_non_exhaustive()
+    }
 }
 
 impl GatewayHandle {
     pub fn cleanup(&mut self) {
         if let Some(mut child) = self.child.take() {
             stop_server(&mut child);
+        }
+        if let Some(log_drain) = self.log_drain.take() {
+            log_drain.join();
         }
     }
 }
@@ -49,6 +68,7 @@ pub fn ensure_server_running(options: &GatewayOptions) -> Result<GatewayHandle, 
             port,
             base_url,
             child: None,
+            log_drain: None,
         });
     }
 
@@ -61,17 +81,20 @@ pub fn ensure_server_running(options: &GatewayOptions) -> Result<GatewayHandle, 
     }
 
     let env_path = resolve_env_path(options);
-    let mut child = start_server(&server_path, &env_path, port)?;
-    if let Err(error) = wait_for_health(port, &mut child) {
-        stop_server(&mut child);
+    let mut server = start_server(&server_path, &env_path, port)?;
+    if let Err(error) = wait_for_health(port, &mut server.child) {
+        stop_server(&mut server.child);
+        server.log_drain.join();
         return Err(error);
     }
+    server.log_drain.disable_forwarding();
 
     Ok(GatewayHandle {
         started: true,
         port,
         base_url,
-        child: Some(child),
+        child: Some(server.child),
+        log_drain: Some(server.log_drain),
     })
 }
 
@@ -165,7 +188,7 @@ fn read_gateway_port() -> Option<u16> {
         .find_map(|path| read_gateway_port_from_config(path))
 }
 
-fn start_server(server_path: &Path, env_path: &Path, port: u16) -> Result<Child, String> {
+fn start_server(server_path: &Path, env_path: &Path, port: u16) -> Result<StartedServer, String> {
     let mut command = Command::new(resolve_node_executable()?);
     if env_path.exists() {
         command.arg(format!("--env-file={}", env_path.display()));
@@ -173,11 +196,96 @@ fn start_server(server_path: &Path, env_path: &Path, port: u16) -> Result<Child,
     command.arg(server_path);
     command.env("PORT", port.to_string());
     command.stdin(Stdio::null());
-    command.stdout(Stdio::inherit());
-    command.stderr(Stdio::inherit());
-    command
+    command.stdout(Stdio::piped());
+    command.stderr(Stdio::piped());
+    let mut child = command
         .spawn()
-        .map_err(|error| format!("Failed to start server: {error}"))
+        .map_err(|error| format!("Failed to start server: {error}"))?;
+    let log_drain = ServerLogDrain::from_child(&mut child);
+    Ok(StartedServer { child, log_drain })
+}
+
+struct StartedServer {
+    child: Child,
+    log_drain: ServerLogDrain,
+}
+
+struct ServerLogDrain {
+    forward: Arc<AtomicBool>,
+    handles: Vec<JoinHandle<()>>,
+}
+
+impl ServerLogDrain {
+    fn from_child(child: &mut Child) -> Self {
+        let forward = Arc::new(AtomicBool::new(true));
+        let mut handles = Vec::new();
+
+        if let Some(stdout) = child.stdout.take() {
+            handles.push(spawn_log_drain(
+                stdout,
+                Arc::clone(&forward),
+                LogStream::Stdout,
+            ));
+        }
+        if let Some(stderr) = child.stderr.take() {
+            handles.push(spawn_log_drain(
+                stderr,
+                Arc::clone(&forward),
+                LogStream::Stderr,
+            ));
+        }
+
+        Self { forward, handles }
+    }
+
+    fn disable_forwarding(&self) {
+        self.forward.store(false, Ordering::Relaxed);
+    }
+
+    fn join(self) {
+        for handle in self.handles {
+            let _ = handle.join();
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum LogStream {
+    Stdout,
+    Stderr,
+}
+
+fn spawn_log_drain<R>(mut reader: R, forward: Arc<AtomicBool>, stream: LogStream) -> JoinHandle<()>
+where
+    R: Read + Send + 'static,
+{
+    thread::spawn(move || {
+        let mut buffer = [0; 8192];
+        loop {
+            let size = match reader.read(&mut buffer) {
+                Ok(0) => return,
+                Ok(size) => size,
+                Err(_) => return,
+            };
+
+            if !forward.load(Ordering::Relaxed) {
+                continue;
+            }
+
+            match stream {
+                LogStream::Stdout => {
+                    let mut stdout = std::io::stdout().lock();
+                    let _ = stdout.write_all(&buffer[..size]);
+                    let _ = stdout.flush();
+                }
+                LogStream::Stderr => {
+                    let mut stderr = std::io::stderr().lock();
+                    let _ = stderr.write_all(&buffer[..size]);
+                    let _ = stderr.flush();
+                }
+            }
+        }
+    })
 }
 
 pub fn resolve_node_executable() -> Result<PathBuf, String> {
