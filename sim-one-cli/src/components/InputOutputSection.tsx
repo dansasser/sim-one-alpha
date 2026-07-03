@@ -1,5 +1,5 @@
-import { Box, Text, useStdout } from 'ink';
-import React, { useMemo } from 'react';
+import { Box, Text, useStdout, useFocus, useFocusManager, useInput } from 'ink';
+import React, { useEffect } from 'react';
 import { ScrollableBox } from 'ink-scrollable-box';
 import type { UIMessage, UIMessagePart } from '@flue/react';
 
@@ -30,12 +30,6 @@ const ROLE_LABEL: Record<string, string> = {
   system: 'system',
 };
 
-const ROLE_COLOR: Record<string, string> = {
-  user: 'cyan',
-  assistant: 'green',
-  system: 'gray',
-};
-
 const TOOL_STATE_ICON: Record<string, string> = {
   'input-available': '⏳',
   'output-available': '✓',
@@ -59,7 +53,6 @@ function formatValue(value: unknown): string {
 function messageToLines(message: UIMessage): string[] {
   const lines: string[] = [];
   const label = ROLE_LABEL[message.role] ?? message.role;
-  const color = ROLE_COLOR[message.role] ?? 'gray';
 
   if (message.parts.length === 0) return lines;
 
@@ -104,9 +97,10 @@ function messageToLines(message: UIMessage): string[] {
 
 export function InputOutputSection({ messages }: InputOutputSectionProps) {
   const { stdout } = useStdout();
+  const { isFocused } = useFocus({ id: 'messages' });
   const viewportHeight = (stdout?.rows ?? 24) - 4;
 
-  const lines = useMemo(() => {
+  const lines = React.useMemo(() => {
     const allLines: string[] = [];
     for (const message of messages) {
       allLines.push(...messageToLines(message));
@@ -116,10 +110,16 @@ export function InputOutputSection({ messages }: InputOutputSectionProps) {
 
   return (
     <Box flexGrow={1} flexDirection="column">
+      {isFocused && (
+        <Box paddingX={1}>
+          <Text dimColor italic>↑↓ to scroll, Tab for input</Text>
+        </Box>
+      )}
       <ScrollableBox
-        height={viewportHeight}
+        height={isFocused ? viewportHeight - 1 : viewportHeight}
         lines={lines}
         followOutput={true}
+        focusable={true}
         autoFocus={false}
         showScrollbar={true}
         showIndicators={true}

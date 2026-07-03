@@ -1,4 +1,4 @@
-import { Box, Text } from 'ink';
+import { Box, Text, useFocus } from 'ink';
 import React from 'react';
 import TextInput from 'ink-text-input';
 
@@ -28,6 +28,7 @@ export function BottomSection({
   inputDisabled,
 }: BottomSectionProps) {
   const statusColor = STATUS_COLOR[agentStatus] ?? 'gray';
+  const { isFocused: inputFocused } = useFocus({ id: 'input' });
 
   return (
     <Box flexDirection="column">
@@ -41,7 +42,7 @@ export function BottomSection({
           <Text bold color={statusColor}>{agentStatus}</Text>
         </Box>
       </Box>
-      <Box borderStyle="round" borderColor="gray" paddingX={1}>
+      <Box borderStyle="round" borderColor={inputFocused ? 'green' : 'gray'} paddingX={1}>
         <Text color="green" bold>{'❯ '}</Text>
         {inputDisabled ? (
           <Text color="gray" italic>waiting for agent…</Text>
@@ -50,6 +51,7 @@ export function BottomSection({
             value={inputValue}
             onChange={onInputChange}
             onSubmit={onSubmit}
+            focus={inputFocused}
             placeholder="Type a message and press Enter…"
           />
         )}
