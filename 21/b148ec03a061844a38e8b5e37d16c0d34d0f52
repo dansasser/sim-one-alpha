@@ -1,0 +1,32 @@
+tui/ratatui/tests/gateway_launcher.rs
+  s_a81fff26d52223::t_e56004c86ec818 7-8,46-56,59-62,68,71-72,75
+  s_a81fff26d52223::t_cc6ecec5465e06 57-58,63-67,69-70
+  s_a81fff26d52223::t_51159b544701ae 73-74,76-77
+tui/ratatui/src/main.rs
+  s_a81fff26d52223::t_0efd8dae2d43a1 27-35
+tui/ratatui/src/gateway.rs
+  s_a81fff26d52223::t_8a4d632af4a102 242-245,310,356-365,369-381
+  s_a81fff26d52223::t_14401ca7034dcb 10-12,169,176-177,183-241,246-309
+  s_a81fff26d52223::t_8d7d82274c2a10 96-105
+  s_a81fff26d52223::t_39575e06afd601 311
+scripts/test-ratatui-product.mjs
+  s_a81fff26d52223::t_e9c9bdd7ccacb1 2-8,13-14,31-32,34,38-39,45,60,63-66,85-97
+  s_a81fff26d52223::t_4bf742d5949064 11,28-30,68
+  s_a81fff26d52223::t_c7901fbaffcb3e 98-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "21b148ec03a061844a38e8b5e37d16c0d34d0f52",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
