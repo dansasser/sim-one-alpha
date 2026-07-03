@@ -27,15 +27,15 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
-        Self::with_session("primary")
+    pub fn new(gateway_status: impl Into<String>) -> Self {
+        Self::with_session("primary", gateway_status)
     }
 
     pub fn new_for_test() -> Self {
-        Self::new()
+        Self::new("offline placeholder")
     }
 
-    pub fn with_session(session_id: impl Into<String>) -> Self {
+    pub fn with_session(session_id: impl Into<String>, gateway_status: impl Into<String>) -> Self {
         let mut app = Self {
             prompt: String::new(),
             transcript_lines: placeholder_transcript(),
@@ -43,7 +43,7 @@ impl App {
             follow_tail: true,
             should_quit: false,
             session_id: session_id.into(),
-            gateway_status: "offline placeholder".to_string(),
+            gateway_status: gateway_status.into(),
             agent_status: "static shell".to_string(),
         };
         app.jump_to_tail();
@@ -148,7 +148,7 @@ impl App {
         self.transcript_lines.push(String::new());
         self.transcript_lines.push(format!("you: {prompt}"));
         self.transcript_lines.push(
-            "assistant: Placeholder response from the static Ratatui shell. Gateway wiring begins in Phase 2."
+            "assistant: Placeholder response from the static Ratatui shell. Agent message exchange begins in Phase 2."
                 .to_string(),
         );
         self.prompt.clear();
@@ -158,14 +158,14 @@ impl App {
 
 impl Default for App {
     fn default() -> Self {
-        Self::new()
+        Self::new("offline placeholder")
     }
 }
 
 fn placeholder_transcript() -> Vec<String> {
     let mut lines = vec![
         "system: SIM-ONE Alpha Ratatui TUI static shell".to_string(),
-        "assistant: This Phase 1 shell proves the terminal layout, prompt state, scroll state, and clean exit path before gateway wiring.".to_string(),
+        "assistant: This Phase 1 shell proves the product launcher, terminal layout, prompt state, scroll state, and clean exit path.".to_string(),
         "assistant: The top pane is the transcript/context viewport. The bottom pane is status plus prompt input.".to_string(),
         String::new(),
     ];

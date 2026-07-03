@@ -700,6 +700,7 @@ dependencies = [
  "crossterm",
  "ratatui",
  "ratatui-textarea",
+ "serde_json",
 ]
 
 [[package]]
