@@ -1,4 +1,4 @@
-use ratatui::layout::{Constraint, Direction, Layout};
+use ratatui::layout::{Constraint, Direction, Layout, Position};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{
@@ -66,11 +66,11 @@ fn render_bottom(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Rect) 
     ]);
     frame.render_widget(Paragraph::new(status), status_area);
 
-    let prompt_text = if app.prompt().is_empty() {
-        "Type a message and press Enter..."
-    } else {
-        app.prompt()
-    };
+    let inner_width = prompt_area.width.saturating_sub(2) as usize;
+    let prompt_width = inner_width.saturating_sub(2).max(1);
+    let cursor_chars = app.prompt_cursor_chars();
+    let view_start = cursor_chars.saturating_sub(prompt_width.saturating_sub(1));
+    let prompt_text = visible_prompt_text(app.prompt(), view_start, prompt_width);
     let prompt = Paragraph::new(Line::from(vec![
         Span::styled(
             "> ",
@@ -78,9 +78,30 @@ fn render_bottom(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Rect) 
                 .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(prompt_text),
+        if app.prompt().is_empty() {
+            Span::styled(
+                "Type a message and press Enter...",
+                Style::default().fg(Color::DarkGray),
+            )
+        } else {
+            Span::raw(prompt_text)
+        },
     ]))
     .block(Block::default().borders(Borders::ALL).title("Prompt"));
 
     frame.render_widget(prompt, prompt_area);
+
+    let cursor_offset = cursor_chars.saturating_sub(view_start).min(prompt_width) as u16;
+    let cursor_x = prompt_area
+        .x
+        .saturating_add(1)
+        .saturating_add(2)
+        .saturating_add(cursor_offset)
+        .min(prompt_area.right().saturating_sub(2));
+    let cursor_y = prompt_area.y.saturating_add(1);
+    frame.set_cursor_position(Position::new(cursor_x, cursor_y));
+}
+
+fn visible_prompt_text(prompt: &str, start: usize, width: usize) -> String {
+    prompt.chars().skip(start).take(width).collect()
 }

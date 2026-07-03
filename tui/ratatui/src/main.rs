@@ -1,8 +1,10 @@
 use std::io;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use crossterm::event::{self, Event};
 use ratatui::DefaultTerminal;
+use sim_one_ratatui_tui::agent::send_agent_prompt;
 use sim_one_ratatui_tui::app::{App, AppEvent};
 use sim_one_ratatui_tui::gateway::{ensure_server_running, GatewayOptions};
 use sim_one_ratatui_tui::input::map_key_event;
@@ -33,21 +35,31 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
 
+    if let Ok(prompt) = std::env::var("SIM_ONE_TUI_TEST_PROMPT") {
+        let response = send_agent_prompt(&gateway.base_url, "ratatui-product-e2e", &prompt)
+            .map_err(io::Error::other)?;
+        println!("assistant response: {response}");
+        gateway.cleanup();
+        return Ok(());
+    }
+
     install_panic_restore_hook();
     let terminal = init_terminal();
     let result = run(
         terminal,
         format!("{} started:{}", gateway.base_url, gateway.started),
+        gateway.base_url.clone(),
     );
     restore_terminal();
     gateway.cleanup();
     result
 }
 
-fn run(mut terminal: DefaultTerminal, gateway_status: String) -> io::Result<()> {
-    let mut app = App::new(gateway_status);
+fn run(mut terminal: DefaultTerminal, gateway_status: String, base_url: String) -> io::Result<()> {
+    let mut app = App::new(gateway_status, base_url);
 
     while !app.should_quit() {
+        app.poll_agent();
         terminal.draw(|frame| ui::render(frame, &app))?;
         if let Some(app_event) = read_app_event()? {
             app.handle_event(app_event);
@@ -58,6 +70,10 @@ fn run(mut terminal: DefaultTerminal, gateway_status: String) -> io::Result<()> 
 }
 
 fn read_app_event() -> io::Result<Option<AppEvent>> {
+    if !event::poll(Duration::from_millis(100))? {
+        return Ok(None);
+    }
+
     match event::read()? {
         Event::Key(key) => Ok(map_key_event(key)),
         Event::Resize(_, _) => Ok(None),

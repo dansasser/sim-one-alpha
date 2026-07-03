@@ -1,10 +1,11 @@
-import { copyFileSync, chmodSync, existsSync, mkdirSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const outDir = resolve('.gorombo', 'sim-one-ratatui');
 const targetBinary = resolve('target', 'release', process.platform === 'win32' ? 'sim-one-ratatui-tui.exe' : 'sim-one-ratatui-tui');
 const outBinary = resolve(outDir, process.platform === 'win32' ? 'sim-one-ratatui-tui.exe' : 'sim-one-ratatui-tui');
+const tmpBinary = `${outBinary}.tmp-${process.pid}`;
 
 const result = spawnSync('cargo', ['build', '-p', 'sim-one-ratatui-tui', '--release'], {
   cwd: process.cwd(),
@@ -20,7 +21,9 @@ if (!existsSync(targetBinary)) {
 }
 
 mkdirSync(dirname(outBinary), { recursive: true });
-copyFileSync(targetBinary, outBinary);
-chmodSync(outBinary, 0o755);
+rmSync(tmpBinary, { force: true });
+copyFileSync(targetBinary, tmpBinary);
+chmodSync(tmpBinary, 0o755);
+renameSync(tmpBinary, outBinary);
 
 console.log(`[ratatui-build] Wrote ${outBinary}`);
