@@ -1,14 +1,17 @@
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::Arc;
 use std::thread;
+use std::time::{Duration, Instant};
 
 use crate::agent::send_agent_prompt;
 
 pub const SCROLL_PAGE_LINES: usize = 8;
 const PLACEHOLDER_CONTEXT_LINES: usize = 24;
+const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
 
 pub type AgentSender =
     Arc<dyn Fn(String, String, String) -> Result<String, String> + Send + Sync + 'static>;
+pub type Clock = Arc<dyn Fn() -> Instant + Send + Sync + 'static>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppEvent {
@@ -44,6 +47,7 @@ pub struct App {
     base_url: String,
     agent_status: String,
     agent_sender: AgentSender,
+    clock: Clock,
     pending_response: Option<PendingResponse>,
 }
 
@@ -51,6 +55,9 @@ pub struct App {
 struct PendingResponse {
     receiver: Receiver<AgentResponse>,
     transcript_line: usize,
+    started_at: Instant,
+    spinner_frame: usize,
+    duplicate_submit_notice: bool,
 }
 
 #[derive(Debug)]
@@ -93,6 +100,22 @@ impl App {
         base_url: impl Into<String>,
         agent_sender: AgentSender,
     ) -> Self {
+        Self::with_agent_sender_and_clock(
+            session_id,
+            gateway_status,
+            base_url,
+            agent_sender,
+            Arc::new(Instant::now),
+        )
+    }
+
+    pub fn with_agent_sender_and_clock(
+        session_id: impl Into<String>,
+        gateway_status: impl Into<String>,
+        base_url: impl Into<String>,
+        agent_sender: AgentSender,
+        clock: Clock,
+    ) -> Self {
         let mut app = Self {
             prompt: String::new(),
             prompt_cursor: 0,
@@ -105,6 +128,7 @@ impl App {
             base_url: base_url.into(),
             agent_status: "ready".to_string(),
             agent_sender,
+            clock,
             pending_response: None,
         };
         app.jump_to_tail();
@@ -135,6 +159,13 @@ impl App {
             AppEvent::JumpToTail => self.jump_to_tail(),
             AppEvent::Quit => self.should_quit = true,
         }
+    }
+
+    pub fn tick(&mut self) {
+        if let Some(pending) = &mut self.pending_response {
+            pending.spinner_frame = (pending.spinner_frame + 1) % SPINNER_FRAMES.len();
+        }
+        self.update_pending_transcript_line();
     }
 
     pub fn poll_agent(&mut self) {
@@ -222,6 +253,35 @@ impl App {
 
     pub fn agent_status(&self) -> &str {
         &self.agent_status
+    }
+
+    pub fn status_text(&self) -> String {
+        let mut parts = vec![
+            "SIM-ONE Alpha".to_string(),
+            format!("session: {}", self.session_id),
+            format!("gateway: {}", self.gateway_status),
+        ];
+
+        if let Some(pending) = &self.pending_response {
+            parts.push(format!("agent: thinking {}", pending.spinner_frame_text()));
+            parts.push(format!(
+                "turn: {}",
+                format_duration(pending.elapsed((self.clock)()))
+            ));
+            parts.push("stream: not attached".to_string());
+            if pending.duplicate_submit_notice {
+                parts.push("input locked: waiting for current response".to_string());
+            }
+        } else {
+            parts.push(format!("agent: {}", self.agent_status));
+        }
+
+        parts.push(format!("messages: {}", self.transcript_lines.len()));
+        parts.push(format!(
+            "tail: {}",
+            if self.follow_tail { "live" } else { "scrolled" }
+        ));
+        parts.join(" | ")
     }
 
     pub fn is_agent_pending(&self) -> bool {
@@ -315,7 +375,10 @@ impl App {
     }
 
     fn submit_prompt(&mut self) {
-        if self.pending_response.is_some() {
+        if let Some(pending) = &mut self.pending_response {
+            pending.duplicate_submit_notice = true;
+            self.agent_status = "busy".to_string();
+            self.update_pending_transcript_line();
             return;
         }
 
@@ -329,25 +392,30 @@ impl App {
         self.transcript_lines.push(String::new());
         self.push_speaker_text("you", &prompt);
         let transcript_line = self.transcript_lines.len();
-        self.transcript_lines
-            .push("assistant: thinking...".to_string());
         self.prompt.clear();
         self.prompt_cursor = 0;
-        self.agent_status = "submitted".to_string();
+        self.agent_status = "thinking".to_string();
         self.jump_to_tail();
 
         let base_url = self.base_url.clone();
         let session_id = self.session_id.clone();
         let sender = Arc::clone(&self.agent_sender);
+        let started_at = (self.clock)();
         let (tx, rx) = mpsc::channel();
         thread::spawn(move || {
             let result = sender(base_url, session_id, prompt);
             let _ = tx.send(AgentResponse { result });
         });
-        self.pending_response = Some(PendingResponse {
+        let pending = PendingResponse {
             receiver: rx,
             transcript_line,
-        });
+            started_at,
+            spinner_frame: 0,
+            duplicate_submit_notice: false,
+        };
+        self.transcript_lines
+            .push(pending_transcript_line(&pending, started_at));
+        self.pending_response = Some(pending);
     }
 
     fn push_speaker_text(&mut self, speaker: &str, text: &str) {
@@ -369,6 +437,27 @@ impl App {
         if self.follow_tail {
             self.jump_to_tail();
         }
+    }
+
+    fn update_pending_transcript_line(&mut self) {
+        let Some(pending) = &self.pending_response else {
+            return;
+        };
+        let now = (self.clock)();
+        if let Some(line) = self.transcript_lines.get_mut(pending.transcript_line) {
+            *line = pending_transcript_line(pending, now);
+        }
+    }
+}
+
+impl PendingResponse {
+    fn elapsed(&self, now: Instant) -> Duration {
+        now.checked_duration_since(self.started_at)
+            .unwrap_or(Duration::ZERO)
+    }
+
+    fn spinner_frame_text(&self) -> &'static str {
+        SPINNER_FRAMES[self.spinner_frame % SPINNER_FRAMES.len()]
     }
 }
 
@@ -411,6 +500,31 @@ fn speaker_lines(speaker: &str, text: &str) -> Vec<String> {
     }
 
     lines
+}
+
+fn pending_transcript_line(pending: &PendingResponse, now: Instant) -> String {
+    let mut line = format!(
+        "assistant: {} thinking {} / waiting for final response",
+        pending.spinner_frame_text(),
+        format_duration(pending.elapsed(now))
+    );
+    if pending.duplicate_submit_notice {
+        line.push_str(" / input locked until this response finishes");
+    }
+    line
+}
+
+fn format_duration(duration: Duration) -> String {
+    let total_seconds = duration.as_secs();
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let seconds = total_seconds % 60;
+
+    if hours > 0 {
+        format!("{hours:02}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{minutes:02}:{seconds:02}")
+    }
 }
 
 fn previous_char_boundary(value: &str, cursor: usize) -> Option<usize> {

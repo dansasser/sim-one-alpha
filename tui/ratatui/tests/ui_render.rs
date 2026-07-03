@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ratatui::backend::TestBackend;
 use ratatui::layout::Position;
 use ratatui::Terminal;
@@ -41,4 +43,66 @@ fn renders_prompt_cursor_at_edit_position() {
         .expect("shell should render with cursor");
 
     assert_eq!(terminal.backend().cursor_position(), Position::new(9, 25));
+}
+
+#[test]
+fn renders_pending_spinner_status_without_covering_prompt() {
+    let backend = TestBackend::new(160, 28);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = app_with_pending_response();
+    app.handle_event(AppEvent::Text("slow prompt".to_string()));
+    app.handle_event(AppEvent::Submit);
+    app.tick();
+
+    terminal
+        .draw(|frame| render(frame, &app))
+        .expect("pending shell should render");
+
+    let buffer = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    assert!(buffer.contains("thinking"), "{buffer}");
+    assert!(buffer.contains("turn: 00:00"), "{buffer}");
+    assert!(buffer.contains("stream: not attached"), "{buffer}");
+    assert!(buffer.contains("Prompt"), "{buffer}");
+    assert!(buffer.contains("> Type a message"), "{buffer}");
+}
+
+#[test]
+fn narrow_status_truncates_instead_of_overlapping_prompt() {
+    let backend = TestBackend::new(42, 12);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let app = App::new(
+        "http://127.0.0.1:3940 started:true with a very long status segment",
+        "http://127.0.0.1:3940",
+    );
+
+    terminal
+        .draw(|frame| render(frame, &app))
+        .expect("narrow shell should render");
+
+    let buffer = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    assert!(buffer.contains("SIM-ONE Alpha"), "{buffer}");
+    assert!(buffer.contains("..."), "{buffer}");
+    assert!(buffer.contains("Prompt"), "{buffer}");
+    assert!(buffer.contains("> Type a message"), "{buffer}");
+}
+
+fn app_with_pending_response() -> App {
+    App::with_agent_sender(
+        "primary",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, prompt| Ok(format!("done: {prompt}"))),
+    )
 }

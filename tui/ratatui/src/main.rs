@@ -59,6 +59,7 @@ fn run(mut terminal: DefaultTerminal, gateway_status: String, base_url: String) 
     let mut app = App::new(gateway_status, base_url);
 
     while !app.should_quit() {
+        app.tick();
         app.poll_agent();
         terminal.draw(|frame| ui::render(frame, &app))?;
         if let Some(app_event) = read_app_event()? {

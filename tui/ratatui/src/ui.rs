@@ -48,22 +48,12 @@ fn render_bottom(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Rect) 
         .constraints([Constraint::Length(1), Constraint::Min(3)])
         .areas(area);
 
-    let status = Line::from(vec![
-        Span::styled(
-            "SIM-ONE Alpha",
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw("  "),
-        Span::raw(format!("session: {}", app.session_id())),
-        Span::raw("  "),
-        Span::raw(format!("gateway: {}", app.gateway_status())),
-        Span::raw("  "),
-        Span::raw(format!("agent: {}", app.agent_status())),
-        Span::raw("  "),
-        Span::raw(format!("messages: {}", app.transcript_lines().len())),
-    ]);
+    let status = Line::from(Span::styled(
+        visible_status_text(&app.status_text(), status_area.width as usize),
+        Style::default()
+            .fg(Color::Green)
+            .add_modifier(Modifier::BOLD),
+    ));
     frame.render_widget(Paragraph::new(status), status_area);
 
     let inner_width = prompt_area.width.saturating_sub(2) as usize;
@@ -104,4 +94,23 @@ fn render_bottom(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Rect) 
 
 fn visible_prompt_text(prompt: &str, start: usize, width: usize) -> String {
     prompt.chars().skip(start).take(width).collect()
+}
+
+fn visible_status_text(status: &str, width: usize) -> String {
+    if width == 0 {
+        return String::new();
+    }
+
+    let count = status.chars().count();
+    if count <= width {
+        return status.to_string();
+    }
+
+    if width <= 3 {
+        return status.chars().take(width).collect();
+    }
+
+    let mut visible = status.chars().take(width - 3).collect::<String>();
+    visible.push_str("...");
+    visible
 }
