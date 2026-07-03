@@ -24,6 +24,15 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
 
+    if std::env::var("SIM_ONE_TUI_EXIT_AFTER_STARTUP").as_deref() == Ok("1") {
+        println!(
+            "gateway ready at {} (started: {})",
+            gateway.base_url, gateway.started
+        );
+        gateway.cleanup();
+        return Ok(());
+    }
+
     install_panic_restore_hook();
     let terminal = init_terminal();
     let result = run(

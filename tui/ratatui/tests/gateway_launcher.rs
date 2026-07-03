@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use sim_one_ratatui_tui::gateway::{
-    read_gateway_port_from_config, resolve_env_path, resolve_server_path, GatewayOptions,
+    read_gateway_port_from_config, resolve_env_path, resolve_node_executable, resolve_server_path,
+    GatewayOptions,
 };
 
 #[test]
@@ -40,6 +41,38 @@ fn env_path_prefers_explicit_option_over_candidates() {
     };
 
     assert_eq!(resolve_env_path(&options), explicit);
+}
+
+#[test]
+fn resolves_node_executable_that_supports_runtime_server() {
+    let node_path = resolve_node_executable().expect("Node 22+ should resolve for product launch");
+    let output = Command::new(node_path)
+        .arg("-p")
+        .arg("process.versions.node")
+        .output()
+        .expect("resolved node should run");
+
+    assert!(
+        output.status.success(),
+        "resolved node should report version"
+    );
+    let version = String::from_utf8_lossy(&output.stdout);
+    let mut parts = version.trim().split('.');
+    let major = parts
+        .next()
+        .expect("node version should have a major version")
+        .parse::<u64>()
+        .expect("node major version should parse");
+    let minor = parts
+        .next()
+        .expect("node version should have a minor version")
+        .parse::<u64>()
+        .expect("node minor version should parse");
+    assert!(
+        major > 22 || (major == 22 && minor >= 18),
+        "resolved node must support the packaged server runtime; got {}",
+        version.trim()
+    );
 }
 
 #[test]

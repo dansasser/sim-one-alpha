@@ -7,6 +7,9 @@ use std::process::{Child, Command, Stdio};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
+const MIN_NODE_MAJOR: u64 = 22;
+const MIN_NODE_MINOR: u64 = 18;
+
 #[derive(Debug, Clone, Default)]
 pub struct GatewayOptions {
     pub port: Option<u16>,
@@ -90,6 +93,16 @@ pub fn resolve_server_path(options: &GatewayOptions) -> Result<PathBuf, String> 
         if sibling.exists() {
             return Ok(sibling);
         }
+
+        let dev = env::current_dir()
+            .map_err(|error| format!("Could not read current directory: {error}"))?
+            .join(".gorombo")
+            .join("sim-one-alpha")
+            .join("server.mjs");
+        if dev.exists() {
+            return Ok(dev);
+        }
+
         return Ok(sibling);
     }
 
@@ -153,18 +166,147 @@ fn read_gateway_port() -> Option<u16> {
 }
 
 fn start_server(server_path: &Path, env_path: &Path, port: u16) -> Result<Child, String> {
-    let mut command = Command::new(env::var("SIM_ONE_NODE").unwrap_or_else(|_| "node".to_string()));
+    let mut command = Command::new(resolve_node_executable()?);
     if env_path.exists() {
         command.arg(format!("--env-file={}", env_path.display()));
     }
     command.arg(server_path);
     command.env("PORT", port.to_string());
     command.stdin(Stdio::null());
-    command.stdout(Stdio::null());
-    command.stderr(Stdio::null());
+    command.stdout(Stdio::inherit());
+    command.stderr(Stdio::inherit());
     command
         .spawn()
         .map_err(|error| format!("Failed to start server: {error}"))
+}
+
+pub fn resolve_node_executable() -> Result<PathBuf, String> {
+    let mut candidates = Vec::new();
+
+    if let Ok(path) = env::var("SIM_ONE_NODE") {
+        candidates.push(PathBuf::from(path));
+    }
+
+    if let Ok(path) = env::var("PATH") {
+        for dir in env::split_paths(&path) {
+            candidates.push(dir.join(if cfg!(windows) { "node.exe" } else { "node" }));
+        }
+    }
+
+    for nvm_root in nvm_roots() {
+        collect_nvm_node_candidates(&nvm_root, &mut candidates);
+    }
+
+    let mut checked = Vec::new();
+    for candidate in dedupe_paths(candidates) {
+        if !candidate.exists() {
+            continue;
+        }
+
+        match read_node_version(&candidate) {
+            Some(version) if version.is_supported() => return Ok(candidate),
+            Some(version) => checked.push(format!("{} ({})", candidate.display(), version)),
+            None => checked.push(format!("{} (version unreadable)", candidate.display())),
+        }
+    }
+
+    Err(format!(
+        "SIM-ONE Alpha requires Node >= {MIN_NODE_MAJOR}.{MIN_NODE_MINOR}. \
+         Set SIM_ONE_NODE to a Node 22 executable or put Node 22 on PATH. Checked: {}",
+        if checked.is_empty() {
+            "none".to_string()
+        } else {
+            checked.join(", ")
+        }
+    ))
+}
+
+fn nvm_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    if let Ok(path) = env::var("NVM_DIR") {
+        roots.push(PathBuf::from(path));
+    }
+    if let Ok(home) = env::var("HOME") {
+        roots.push(PathBuf::from(home).join(".nvm"));
+    }
+    roots.push(PathBuf::from("/root/.nvm"));
+    dedupe_paths(roots)
+}
+
+fn collect_nvm_node_candidates(root: &Path, candidates: &mut Vec<PathBuf>) {
+    let versions_dir = root.join("versions").join("node");
+    let Ok(entries) = std::fs::read_dir(versions_dir) else {
+        return;
+    };
+
+    let mut entries = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| right.cmp(left));
+
+    for version_dir in entries {
+        candidates.push(version_dir.join("bin").join(if cfg!(windows) {
+            "node.exe"
+        } else {
+            "node"
+        }));
+    }
+}
+
+fn read_node_version(node_path: &Path) -> Option<NodeVersion> {
+    let output = Command::new(node_path)
+        .arg("-p")
+        .arg("process.versions.node")
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    NodeVersion::parse(stdout.trim())
+}
+
+fn dedupe_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut unique = Vec::new();
+    for path in paths {
+        if !unique.iter().any(|existing| existing == &path) {
+            unique.push(path);
+        }
+    }
+    unique
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NodeVersion {
+    major: u64,
+    minor: u64,
+    patch: u64,
+}
+
+impl NodeVersion {
+    fn parse(value: &str) -> Option<Self> {
+        let mut parts = value.trim_start_matches('v').split('.');
+        Some(Self {
+            major: parts.next()?.parse().ok()?,
+            minor: parts.next()?.parse().ok()?,
+            patch: parts.next().unwrap_or("0").parse().ok()?,
+        })
+    }
+
+    fn is_supported(&self) -> bool {
+        self.major > MIN_NODE_MAJOR
+            || (self.major == MIN_NODE_MAJOR && self.minor >= MIN_NODE_MINOR)
+    }
+}
+
+impl std::fmt::Display for NodeVersion {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "v{}.{}.{}", self.major, self.minor, self.patch)
+    }
 }
 
 fn wait_for_health(port: u16, child: &mut Child) -> Result<(), String> {
@@ -211,6 +353,29 @@ fn stop_server(child: &mut Child) {
     if child.try_wait().ok().flatten().is_some() {
         return;
     }
+
+    request_shutdown(child);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        if child.try_wait().ok().flatten().is_some() {
+            return;
+        }
+        sleep(Duration::from_millis(100));
+    }
+
     let _ = child.kill();
     let _ = child.wait();
+}
+
+#[cfg(unix)]
+fn request_shutdown(child: &mut Child) {
+    let _ = Command::new("kill")
+        .arg("-TERM")
+        .arg(child.id().to_string())
+        .status();
+}
+
+#[cfg(not(unix))]
+fn request_shutdown(child: &mut Child) {
+    let _ = child.kill();
 }
