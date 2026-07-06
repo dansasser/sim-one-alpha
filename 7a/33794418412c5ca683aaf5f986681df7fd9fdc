@@ -1,0 +1,35 @@
+tui/ratatui/tests/gateway_launcher.rs
+  s_a81fff26d52223::t_77d6663cb55e19 1,10-11,46-62,145-216
+tui/ratatui/src/flue/reducer.rs
+  s_a81fff26d52223::t_f855999a8d9318 42,47,62,64,76,83,89-90,98,189,191,204,206,254,258-263
+  s_a81fff26d52223::t_1f45e973140e2b 5,48,77,84,91,99,428
+  s_a81fff26d52223::t_00ea4f9f4ba661 1,6-11,18-22,43-44,123,130-131,155,162-163,253,264-323,424-427,429-435,446,448
+tui/ratatui/tests/event_reducer.rs
+  s_a81fff26d52223::t_966a52311cab65 221-275
+  s_a81fff26d52223::t_968ddf499a0b07 276
+tui/ratatui/tests/app_state.rs
+  s_a81fff26d52223::t_9e2edb7d87bc34 308,328-329,341,345
+  s_a81fff26d52223::t_2b1c5354cdb6fd 298-307,309-327,330-340,342-344,346-354
+  s_a81fff26d52223::t_f15b167f004b5b 297
+tui/ratatui/src/flue/stream.rs
+  s_a81fff26d52223::t_771d39248031ad 167-174,176
+tui/ratatui/src/gateway.rs
+  s_a81fff26d52223::t_f815572811c7cd 199-202,205-208,210,212,223-244
+  s_a81fff26d52223::t_5cb1e691cb575f 245-246
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "7a33794418412c5ca683aaf5f986681df7fd9fdc",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
