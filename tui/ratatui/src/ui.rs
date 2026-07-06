@@ -8,12 +8,13 @@ use ratatui::Frame;
 
 use crate::app::App;
 
-pub fn render(frame: &mut Frame<'_>, app: &App) {
+pub fn render(frame: &mut Frame<'_>, app: &mut App) {
     let [transcript_area, bottom_area] = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(5), Constraint::Length(5)])
         .areas(frame.area());
 
+    app.set_transcript_viewport_height(transcript_area.height.saturating_sub(2) as usize);
     render_transcript(frame, app, transcript_area);
     render_bottom(frame, app, bottom_area);
 }
@@ -29,7 +30,7 @@ fn render_transcript(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Re
     let paragraph = Paragraph::new(text)
         .block(Block::default().borders(Borders::ALL).title(title))
         .wrap(Wrap { trim: false })
-        .scroll((app.transcript_scroll() as u16, 0));
+        .scroll((app.transcript_scroll().min(u16::MAX as usize) as u16, 0));
 
     frame.render_widget(paragraph, area);
 

@@ -12,10 +12,10 @@ use sim_one_ratatui_tui::ui::render;
 fn renders_static_shell_with_transcript_status_and_prompt() {
     let backend = TestBackend::new(96, 28);
     let mut terminal = Terminal::new(backend).expect("test backend should initialize");
-    let app = App::new_for_test();
+    let mut app = App::new_for_test();
 
     terminal
-        .draw(|frame| render(frame, &app))
+        .draw(|frame| render(frame, &mut app))
         .expect("static shell should render");
 
     let buffer = terminal
@@ -29,7 +29,7 @@ fn renders_static_shell_with_transcript_status_and_prompt() {
     assert!(buffer.contains("SIM-ONE Alpha"));
     assert!(buffer.contains("session: primary"));
     assert!(buffer.contains("> Type a message"));
-    assert!(buffer.contains("assistant:"), "{buffer}");
+    assert!(buffer.contains("context"), "{buffer}");
 }
 
 #[test]
@@ -41,7 +41,7 @@ fn renders_prompt_cursor_at_edit_position() {
     app.handle_event(AppEvent::MovePromptWordLeft);
 
     terminal
-        .draw(|frame| render(frame, &app))
+        .draw(|frame| render(frame, &mut app))
         .expect("shell should render with cursor");
 
     assert_eq!(terminal.backend().cursor_position(), Position::new(9, 25));
@@ -57,7 +57,7 @@ fn renders_pending_spinner_status_without_covering_prompt() {
     app.tick();
 
     terminal
-        .draw(|frame| render(frame, &app))
+        .draw(|frame| render(frame, &mut app))
         .expect("pending shell should render");
 
     let buffer = terminal
@@ -78,13 +78,13 @@ fn renders_pending_spinner_status_without_covering_prompt() {
 fn narrow_status_truncates_instead_of_overlapping_prompt() {
     let backend = TestBackend::new(42, 12);
     let mut terminal = Terminal::new(backend).expect("test backend should initialize");
-    let app = App::new(
+    let mut app = App::new(
         "http://127.0.0.1:3940 started:true with a very long status segment",
         "http://127.0.0.1:3940",
     );
 
     terminal
-        .draw(|frame| render(frame, &app))
+        .draw(|frame| render(frame, &mut app))
         .expect("narrow shell should render");
 
     let buffer = terminal
@@ -120,7 +120,7 @@ fn renders_thinking_and_tool_activity_rows() {
     ]));
 
     terminal
-        .draw(|frame| render(frame, &app))
+        .draw(|frame| render(frame, &mut app))
         .expect("activity shell should render");
 
     let buffer = terminal

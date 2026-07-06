@@ -98,6 +98,63 @@ fn parses_split_sse_frames_incrementally() {
 }
 
 #[test]
+fn parses_sse_frame_when_multibyte_utf8_is_split_across_reads() {
+    let mut parser = SseParser::default();
+    let frame = "event: data\ndata: [{\"type\":\"text_delta\",\"text\":\"hello 👋\"}]\n\n";
+    let bytes = frame.as_bytes();
+    let split = bytes
+        .windows(4)
+        .position(|window| window == "👋".as_bytes())
+        .expect("emoji should be present")
+        + 2;
+
+    assert!(parser
+        .push_bytes(&bytes[..split])
+        .expect("partial UTF-8 should be buffered")
+        .is_empty());
+    let frames = parser
+        .push_bytes(&bytes[split..])
+        .expect("completed UTF-8 frame should parse");
+
+    match &frames[0] {
+        SseFrame::Events(events) => {
+            assert_eq!(events[0].event_type, "text_delta");
+            assert_eq!(events[0].value["text"], "hello 👋");
+        }
+        other => panic!("expected events frame, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_chunked_catch_up_body_with_non_ascii_text() {
+    let body = r#"[{"type":"message_end","eventIndex":2,"message":{"role":"assistant","content":"olá 👋"}}]"#;
+    let split = body
+        .as_bytes()
+        .windows(4)
+        .position(|window| window == "👋".as_bytes())
+        .expect("emoji should be present")
+        + 2;
+    let mut response = Vec::new();
+    response.extend_from_slice(
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nStream-Next-Offset: 0000000000000000_0000000000000002\r\n\r\n",
+    );
+    response.extend_from_slice(format!("{split:x}\r\n").as_bytes());
+    response.extend_from_slice(&body.as_bytes()[..split]);
+    response.extend_from_slice(b"\r\n");
+    response.extend_from_slice(format!("{:x}\r\n", body.len() - split).as_bytes());
+    response.extend_from_slice(&body.as_bytes()[split..]);
+    response.extend_from_slice(b"\r\n0\r\n\r\n");
+
+    let batch = parse_catch_up_response(&response).expect("chunked catch-up should parse");
+
+    assert_eq!(batch.events.len(), 1);
+    assert_eq!(
+        batch.events[0].value.pointer("/message/content"),
+        Some(&serde_json::json!("olá 👋"))
+    );
+}
+
+#[test]
 fn rejects_malformed_sse_json_without_panicking() {
     let error = parse_sse_frame("event: data\ndata: not-json\n")
         .expect_err("malformed data frame should fail");

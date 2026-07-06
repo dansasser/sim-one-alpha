@@ -8,7 +8,7 @@ import {
 } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 
 const serverDir = '.gorombo/sim-one-alpha';
 const serverPath = join(serverDir, 'server.mjs');
@@ -35,16 +35,20 @@ if (!ollamaKey) {
 const codingWorkspaceRoot = mkdtempSync(join(tmpdir(), 'ratatui-product-workspace-'));
 const configPath = join(serverDir, 'gorombo.config.json');
 const originalConfig = readFileSync(configPath, 'utf8');
-const config = JSON.parse(originalConfig);
-config.gateway = { ...(config.gateway ?? {}), port };
-writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
-const child = spawn('./.gorombo/sim-one-ratatui/sim-one-ratatui-tui', [], {
-  cwd: process.cwd(),
-  env: {
+let stdout = '';
+let stderr = '';
+let child;
+
+try {
+  const config = JSON.parse(originalConfig);
+  config.gateway = { ...(config.gateway ?? {}), port };
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+
+  const childEnv = {
     ...process.env,
     PATH: productLikePath(),
-    NVM_DIR: process.env.NVM_DIR || '/root/.nvm',
+    SIM_ONE_NODE: process.env.SIM_ONE_NODE || process.execPath,
     OLLAMA_API_KEY: process.env.OLLAMA_API_KEY || envFileValues.OLLAMA_API_KEY || ollamaKey,
     OLLAMA_CLOUD_API_KEY: process.env.OLLAMA_CLOUD_API_KEY || envFileValues.OLLAMA_CLOUD_API_KEY || ollamaKey,
     CODEX_BRAIN_LOCAL_API_KEY: process.env.CODEX_BRAIN_LOCAL_API_KEY || envFileValues.CODEX_BRAIN_LOCAL_API_KEY || 'ratatui-product-placeholder',
@@ -52,17 +56,21 @@ const child = spawn('./.gorombo/sim-one-ratatui/sim-one-ratatui-tui', [], {
     GOROMBO_WORKSPACE_ROOT: codingWorkspaceRoot,
     GOROMBO_TEST_MODE: '1',
     SIM_ONE_TUI_TEST_PROMPT: 'Reply with one short sentence confirming the Ratatui product prompt path works.',
-  },
-  stdio: ['ignore', 'pipe', 'pipe'],
-});
+  };
+  if (!childEnv.NVM_DIR && process.env.HOME) {
+    childEnv.NVM_DIR = join(process.env.HOME, '.nvm');
+  }
 
-let stdout = '';
-let stderr = '';
-child.stdout.on('data', (chunk) => { stdout += String(chunk); });
-child.stderr.on('data', (chunk) => { stderr += String(chunk); });
+  child = spawn(tuiPath, [], {
+    cwd: process.cwd(),
+    env: childEnv,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
 
-try {
-  const exitCode = await waitForExit(child, 240_000);
+  child.stdout.on('data', (chunk) => { stdout += String(chunk); });
+  child.stderr.on('data', (chunk) => { stderr += String(chunk); });
+
+  const exitCode = await waitForClose(child, 240_000);
   if (exitCode !== 0) {
     throw new Error(`Ratatui product smoke failed with exit ${exitCode}\nstdout:\n${stdout}\nstderr:\n${stderr}`);
   }
@@ -76,6 +84,9 @@ try {
   }
   console.log('[ratatui-product] Built TUI command sent a real prompt and received an agent response.');
 } finally {
+  if (child && child.exitCode === null && child.signalCode === null) {
+    child.kill('SIGKILL');
+  }
   writeFileSync(configPath, originalConfig);
   rmSync(codingWorkspaceRoot, { recursive: true, force: true });
 }
@@ -94,18 +105,9 @@ function parseEnvFile(path) {
 }
 
 function productLikePath() {
-  const defaultNodeBin = '/root/.nvm/versions/node/v20.20.0/bin';
   const currentPath = process.env.PATH || '';
-  const withoutActiveNode22 = currentPath
-    .split(delimiter)
-    .filter((entry) => !entry.includes('/versions/node/v22'))
-    .join(delimiter);
-
-  if (existsSync(join(defaultNodeBin, 'node'))) {
-    return [defaultNodeBin, withoutActiveNode22].filter(Boolean).join(delimiter);
-  }
-
-  return withoutActiveNode22 || currentPath;
+  const nodeBin = dirname(process.env.SIM_ONE_NODE || process.execPath);
+  return [nodeBin, currentPath].filter(Boolean).join(delimiter);
 }
 
 async function getFreePort() {
@@ -120,19 +122,23 @@ async function getFreePort() {
   return address.port;
 }
 
-function waitForExit(childProcess, timeoutMs) {
+function waitForClose(childProcess, timeoutMs) {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       childProcess.kill('SIGKILL');
       reject(new Error(`Ratatui product smoke timed out after ${timeoutMs}ms.`));
     }, timeoutMs);
+    let spawnError;
     childProcess.once('error', (error) => {
-      clearTimeout(timeout);
-      reject(error);
+      spawnError = error;
     });
-    childProcess.once('exit', (code) => {
+    childProcess.once('close', (code) => {
       clearTimeout(timeout);
-      resolve(code ?? 1);
+      if (spawnError) {
+        reject(spawnError);
+      } else {
+        resolve(code ?? 1);
+      }
     });
   });
 }

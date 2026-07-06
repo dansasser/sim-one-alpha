@@ -245,6 +245,76 @@ fn stream_activity_updates_follow_tail_when_at_bottom() {
 }
 
 #[test]
+fn multiline_agent_response_reindexes_stream_activity_rows() {
+    let (release_tx, release_rx) = mpsc::channel();
+    let release_rx = Arc::new(Mutex::new(release_rx));
+    let sender_release_rx = Arc::clone(&release_rx);
+    let mut app = App::with_agent_sender(
+        "primary",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(move |_, _, _| {
+            sender_release_rx
+                .lock()
+                .expect("release receiver should lock")
+                .recv_timeout(Duration::from_secs(5))
+                .expect("test should release blocked sender");
+            Ok("first line\nsecond line\nthird line".to_string())
+        }),
+    );
+
+    app.handle_event(AppEvent::Text("multiline".to_string()));
+    app.handle_event(AppEvent::Submit);
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({"type":"turn_start","eventIndex":20}),
+    )]));
+    release_tx.send(()).expect("pending sender should release");
+    wait_for_agent(&mut app);
+
+    assert!(app
+        .transcript_lines()
+        .iter()
+        .any(|line| line == "assistant: first line"));
+    assert!(app
+        .transcript_lines()
+        .iter()
+        .any(|line| line == "  second line"));
+
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({"type":"turn","eventIndex":21}),
+    )]));
+
+    assert!(app
+        .transcript_lines()
+        .iter()
+        .any(|line| line == "  second line"));
+    assert!(app
+        .transcript_lines()
+        .iter()
+        .any(|line| line == "turn: completed"));
+}
+
+#[test]
+fn max_scroll_uses_rendered_viewport_height() {
+    let mut app = App::new_for_test();
+
+    app.set_transcript_viewport_height(20);
+    app.jump_to_tail();
+    assert_eq!(
+        app.max_scroll(),
+        app.transcript_lines().len().saturating_sub(20)
+    );
+    assert_eq!(app.transcript_scroll(), app.max_scroll());
+
+    app.set_transcript_viewport_height(5);
+    assert_eq!(
+        app.max_scroll(),
+        app.transcript_lines().len().saturating_sub(5)
+    );
+    assert_eq!(app.transcript_scroll(), app.max_scroll());
+}
+
+#[test]
 fn prompt_cursor_allows_insertion_navigation_and_word_delete() {
     let mut app = App::new_for_test();
 

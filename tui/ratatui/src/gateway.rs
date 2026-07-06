@@ -12,6 +12,8 @@ use std::sync::{
 use std::thread::{self, sleep, JoinHandle};
 use std::time::{Duration, Instant};
 
+use crate::http::parse_status_code;
+
 const MIN_NODE_MAJOR: u64 = 22;
 const MIN_NODE_MINOR: u64 = 18;
 
@@ -145,8 +147,8 @@ pub fn resolve_env_path(options: &GatewayOptions) -> PathBuf {
         return PathBuf::from(path);
     }
 
-    if let Ok(home) = env::var("HOME") {
-        let prod_env = PathBuf::from(home).join(".gorombo").join(".env");
+    for home in home_dir_candidates() {
+        let prod_env = home.join(".gorombo").join(".env");
         if prod_env.exists() {
             return prod_env;
         }
@@ -160,7 +162,7 @@ pub fn resolve_env_path(options: &GatewayOptions) -> PathBuf {
 pub fn read_gateway_port_from_config(path: &Path) -> Option<u16> {
     let value: serde_json::Value = serde_json::from_str(&read_to_string(path).ok()?).ok()?;
     let port = value.get("gateway")?.get("port")?.as_u64()?;
-    u16::try_from(port).ok()
+    u16::try_from(port).ok().filter(|port| *port != 0)
 }
 
 fn read_gateway_port() -> Option<u16> {
@@ -180,7 +182,12 @@ fn read_gateway_port() -> Option<u16> {
                 .join("sim-one-alpha")
                 .join("gorombo.config.json"),
         );
-        candidates.push(cwd.join("src").join("config").join("gorombo.config.json"));
+        candidates.push(
+            cwd.join("src")
+                .join("core")
+                .join("config")
+                .join("gorombo.config.json"),
+        );
     }
 
     candidates
@@ -454,7 +461,15 @@ fn check_health(port: u16) -> bool {
     let _ = stream.shutdown(Shutdown::Write);
 
     let mut response = String::new();
-    stream.read_to_string(&mut response).is_ok() && response.starts_with("HTTP/1.1 200")
+    if stream.read_to_string(&mut response).is_err() {
+        return false;
+    }
+    let Some((head, _)) = response.split_once("\r\n\r\n") else {
+        return false;
+    };
+    parse_status_code(head, "Gateway health")
+        .map(|status| (200..300).contains(&status))
+        .unwrap_or(false)
 }
 
 fn stop_server(child: &mut Child) {
@@ -477,13 +492,40 @@ fn stop_server(child: &mut Child) {
 
 #[cfg(unix)]
 fn request_shutdown(child: &mut Child) {
-    let _ = Command::new("kill")
-        .arg("-TERM")
-        .arg(child.id().to_string())
-        .status();
+    const SIGTERM: i32 = 15;
+    unsafe extern "C" {
+        fn kill(pid: i32, sig: i32) -> i32;
+    }
+
+    let result = unsafe { kill(child.id() as i32, SIGTERM) };
+    if result != 0 {
+        eprintln!(
+            "Failed to request server shutdown with SIGTERM: {}",
+            std::io::Error::last_os_error()
+        );
+    }
 }
 
 #[cfg(not(unix))]
 fn request_shutdown(child: &mut Child) {
     let _ = child.kill();
+}
+
+fn home_dir_candidates() -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Ok(home) = env::var("HOME") {
+        candidates.push(PathBuf::from(home));
+    }
+    if let Ok(home) = env::var("USERPROFILE") {
+        candidates.push(PathBuf::from(home));
+    }
+    if let Ok(user) = env::var("USER") {
+        if user == "root" {
+            candidates.push(PathBuf::from("/root"));
+        } else {
+            candidates.push(PathBuf::from("/home").join(user));
+        }
+    }
+    candidates.push(PathBuf::from("/root"));
+    dedupe_paths(candidates)
 }

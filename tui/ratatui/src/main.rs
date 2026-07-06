@@ -14,8 +14,7 @@ use sim_one_ratatui_tui::ui;
 fn main() -> io::Result<()> {
     let cli = CliOptions::parse(std::env::args().skip(1))
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
-    let mut gateway = ensure_server_running(&cli.gateway)
-        .map_err(|error| io::Error::new(io::ErrorKind::Other, error))?;
+    let mut gateway = ensure_server_running(&cli.gateway).map_err(io::Error::other)?;
 
     if cli.smoke_startup {
         println!(
@@ -63,7 +62,7 @@ fn run(mut terminal: DefaultTerminal, gateway_status: String, base_url: String) 
         app.tick();
         app.poll_stream();
         app.poll_agent();
-        terminal.draw(|frame| ui::render(frame, &app))?;
+        terminal.draw(|frame| ui::render(frame, &mut app))?;
         if let Some(app_event) = read_app_event()? {
             app.handle_event(app_event);
         }
@@ -100,11 +99,13 @@ impl CliOptions {
                 "--smoke-startup" => options.smoke_startup = true,
                 "--port" => {
                     let value = args.next().ok_or("--port requires a value")?;
-                    options.gateway.port = Some(
-                        value
-                            .parse::<u16>()
-                            .map_err(|_| format!("Invalid port: {value}"))?,
-                    );
+                    let port = value
+                        .parse::<u16>()
+                        .map_err(|_| format!("Invalid port: {value}"))?;
+                    if port == 0 {
+                        return Err("--port must be between 1 and 65535".to_string());
+                    }
+                    options.gateway.port = Some(port);
                 }
                 "--server-path" => {
                     let value = args.next().ok_or("--server-path requires a value")?;

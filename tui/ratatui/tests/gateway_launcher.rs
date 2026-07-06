@@ -1,4 +1,4 @@
-use std::fs::{create_dir_all, write};
+use std::fs::{create_dir_all, remove_dir_all, write};
 use std::net::TcpListener;
 use std::path::PathBuf;
 use std::process::Command;
@@ -10,12 +10,20 @@ use sim_one_ratatui_tui::gateway::{
 
 #[test]
 fn reads_gateway_port_from_config_json() {
-    let root = temp_path("port-config");
-    create_dir_all(&root).expect("temp dir should be created");
-    let config_path = root.join("gorombo.config.json");
+    let root = TestTempDir::new("port-config");
+    let config_path = root.path().join("gorombo.config.json");
     write(&config_path, r#"{"gateway":{"port":3977}}"#).expect("config should be writable");
 
     assert_eq!(read_gateway_port_from_config(&config_path), Some(3977));
+}
+
+#[test]
+fn ignores_zero_gateway_port_from_config_json() {
+    let root = TestTempDir::new("zero-port-config");
+    let config_path = root.path().join("gorombo.config.json");
+    write(&config_path, r#"{"gateway":{"port":0}}"#).expect("config should be writable");
+
+    assert_eq!(read_gateway_port_from_config(&config_path), None);
 }
 
 #[test]
@@ -98,10 +106,26 @@ fn built_binary_accepts_smoke_startup_flag() {
 }
 
 #[test]
+fn built_binary_rejects_port_zero_at_parse_time() {
+    let output = Command::new(env!("CARGO_BIN_EXE_sim-one-ratatui-tui"))
+        .arg("--smoke-startup")
+        .arg("--port")
+        .arg("0")
+        .output()
+        .expect("built binary should run");
+
+    assert!(!output.status.success(), "port zero should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("--port must be between 1 and 65535"),
+        "stderr should explain invalid port, got: {stderr}"
+    );
+}
+
+#[test]
 fn built_binary_silences_child_logs_after_gateway_is_healthy() {
-    let root = temp_path("post-health-logs");
-    create_dir_all(&root).expect("temp dir should be created");
-    let server_path = root.join("server.mjs");
+    let root = TestTempDir::new("post-health-logs");
+    let server_path = root.path().join("server.mjs");
     write(
         &server_path,
         r#"
@@ -136,7 +160,7 @@ server.listen(port, '127.0.0.1');
         .arg("--server-path")
         .arg(&server_path)
         .arg("--env-path")
-        .arg(root.join("missing.env"))
+        .arg(root.path().join("missing.env"))
         .arg("--port")
         .arg(free_port().to_string())
         .output()
@@ -167,14 +191,32 @@ fn free_port() -> u16 {
         .port()
 }
 
-fn temp_path(name: &str) -> PathBuf {
-    let unique = format!(
-        "sim-one-ratatui-{name}-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time should be monotonic enough")
-            .as_nanos()
-    );
-    std::env::temp_dir().join(unique)
+struct TestTempDir {
+    path: PathBuf,
+}
+
+impl TestTempDir {
+    fn new(name: &str) -> Self {
+        let unique = format!(
+            "sim-one-ratatui-{name}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time should be monotonic enough")
+                .as_nanos()
+        );
+        let path = std::env::temp_dir().join(unique);
+        create_dir_all(&path).expect("temp dir should be created");
+        Self { path }
+    }
+
+    fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+}
+
+impl Drop for TestTempDir {
+    fn drop(&mut self) {
+        let _ = remove_dir_all(&self.path);
+    }
 }

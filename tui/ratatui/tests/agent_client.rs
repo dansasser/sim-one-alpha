@@ -43,6 +43,52 @@ fn posts_prompt_to_flue_agent_endpoint_and_extracts_text() {
     assert!(request.contains(r#""message":"hello agent""#));
 }
 
+#[test]
+fn decodes_chunked_agent_response_before_utf8_conversion() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("test server should bind");
+    let port = listener
+        .local_addr()
+        .expect("test server should have address")
+        .port();
+
+    thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("client should connect");
+        let _ = read_http_request(&mut stream);
+
+        let body = r#"{"result":{"text":"real response 👋"}}"#;
+        let split = body
+            .as_bytes()
+            .windows(4)
+            .position(|window| window == "👋".as_bytes())
+            .expect("emoji should be present")
+            + 2;
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n{:x}\r\n",
+            split
+        )
+        .expect("response headers should be writable");
+        stream
+            .write_all(&body.as_bytes()[..split])
+            .expect("first chunk should be writable");
+        write!(stream, "\r\n{:x}\r\n", body.len() - split)
+            .expect("second chunk header should be writable");
+        stream
+            .write_all(&body.as_bytes()[split..])
+            .expect("second chunk should be writable");
+        write!(stream, "\r\n0\r\n\r\n").expect("final chunk should be writable");
+    });
+
+    let response = send_agent_prompt(
+        &format!("http://127.0.0.1:{port}"),
+        "primary",
+        "hello agent",
+    )
+    .expect("agent prompt should decode chunked response");
+
+    assert_eq!(response, "real response 👋");
+}
+
 fn read_http_request(stream: &mut impl Read) -> String {
     let mut bytes = Vec::new();
     let mut buffer = [0_u8; 1024];

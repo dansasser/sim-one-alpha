@@ -18,13 +18,15 @@ impl EventTranscript {
     }
 
     pub fn apply_event(&mut self, event: &FlueEvent) {
-        let event_id = stable_event_id(event);
-        if !self.seen_events.insert(event_id) {
-            return;
+        if let Some(event_id) = stable_event_id(event) {
+            if !self.seen_events.insert(event_id) {
+                return;
+            }
         }
 
         match event.event_type.as_str() {
             "turn_start" => {
+                self.retire_ephemeral_rows();
                 self.current_turn.state = TurnState::ModelActive;
                 self.current_turn.activity = Some("model turn".to_string());
                 self.upsert_row(
@@ -45,7 +47,15 @@ impl EventTranscript {
                     TurnState::Completed
                 };
                 self.current_turn.activity = Some(text.to_string());
-                self.upsert_row("turn-current", DisplayRowKind::Progress, text);
+                self.upsert_row(
+                    "turn-current",
+                    if event_has_error(&event.value) {
+                        DisplayRowKind::Error
+                    } else {
+                        DisplayRowKind::Progress
+                    },
+                    text,
+                );
             }
             "thinking_start" => {
                 self.current_turn.state = TurnState::Thinking;
@@ -110,16 +120,14 @@ impl EventTranscript {
             }
             "tool_start" => {
                 let name = extract_name(&event.value).unwrap_or_else(|| "tool".to_string());
-                let id =
-                    event_tool_id(event).unwrap_or_else(|| format!("tool-{}", self.rows.len()));
+                let id = event_tool_id(event).unwrap_or_else(|| fallback_row_id("tool", &name));
                 self.current_turn.state = TurnState::ToolRunning;
                 self.current_turn.activity = Some(format!("tool: {name}"));
                 self.upsert_row(&id, DisplayRowKind::Tool, &format!("tool: {name} running"));
             }
             "tool" => {
                 let name = extract_name(&event.value).unwrap_or_else(|| "tool".to_string());
-                let id =
-                    event_tool_id(event).unwrap_or_else(|| format!("tool-{}", self.rows.len()));
+                let id = event_tool_id(event).unwrap_or_else(|| fallback_row_id("tool", &name));
                 let status = if event_has_error(&event.value) {
                     "failed"
                 } else {
@@ -131,20 +139,26 @@ impl EventTranscript {
                     TurnState::WaitingForFinal
                 };
                 self.current_turn.activity = Some(format!("tool: {name} {status}"));
-                self.upsert_row(&id, DisplayRowKind::Tool, &format!("tool: {name} {status}"));
+                self.upsert_row(
+                    &id,
+                    if event_has_error(&event.value) {
+                        DisplayRowKind::Error
+                    } else {
+                        DisplayRowKind::Tool
+                    },
+                    &format!("tool: {name} {status}"),
+                );
             }
             "task_start" => {
                 let name = extract_name(&event.value).unwrap_or_else(|| "task".to_string());
-                let id =
-                    event_task_id(event).unwrap_or_else(|| format!("task-{}", self.rows.len()));
+                let id = event_task_id(event).unwrap_or_else(|| fallback_row_id("task", &name));
                 self.current_turn.state = TurnState::TaskRunning;
                 self.current_turn.activity = Some(format!("task: {name}"));
                 self.upsert_row(&id, DisplayRowKind::Task, &format!("task: {name} running"));
             }
             "task" => {
                 let name = extract_name(&event.value).unwrap_or_else(|| "task".to_string());
-                let id =
-                    event_task_id(event).unwrap_or_else(|| format!("task-{}", self.rows.len()));
+                let id = event_task_id(event).unwrap_or_else(|| fallback_row_id("task", &name));
                 let status = if event_has_error(&event.value) {
                     "failed"
                 } else {
@@ -156,7 +170,15 @@ impl EventTranscript {
                     TurnState::WaitingForFinal
                 };
                 self.current_turn.activity = Some(format!("task: {name} {status}"));
-                self.upsert_row(&id, DisplayRowKind::Task, &format!("task: {name} {status}"));
+                self.upsert_row(
+                    &id,
+                    if event_has_error(&event.value) {
+                        DisplayRowKind::Error
+                    } else {
+                        DisplayRowKind::Task
+                    },
+                    &format!("task: {name} {status}"),
+                );
             }
             "operation_start" => {
                 let name = extract_name(&event.value).unwrap_or_else(|| "operation".to_string());
@@ -178,7 +200,11 @@ impl EventTranscript {
                 self.current_turn.activity = Some(format!("operation: {name} {status}"));
                 self.upsert_row(
                     "operation-current",
-                    DisplayRowKind::Progress,
+                    if event_has_error(&event.value) {
+                        DisplayRowKind::Error
+                    } else {
+                        DisplayRowKind::Progress
+                    },
                     &format!("operation: {name} {status}"),
                 );
             }
@@ -217,6 +243,17 @@ impl EventTranscript {
 
     fn has_row(&self, id: &str) -> bool {
         self.row_index.contains_key(id)
+    }
+
+    fn retire_ephemeral_rows(&mut self) {
+        for id in [
+            "assistant-stream",
+            "thinking-current",
+            "turn-current",
+            "operation-current",
+        ] {
+            self.row_index.remove(id);
+        }
     }
 
     fn upsert_row(&mut self, id: &str, kind: DisplayRowKind, text: &str) {
@@ -301,17 +338,14 @@ pub enum TurnState {
     Failed,
 }
 
-fn stable_event_id(event: &FlueEvent) -> String {
-    if let Some(index) = event.event_index {
-        return format!("index:{index}");
-    }
-
-    format!(
-        "{}:{}:{}",
-        event.event_type,
-        event.timestamp.as_deref().unwrap_or(""),
-        event.value
-    )
+fn stable_event_id(event: &FlueEvent) -> Option<String> {
+    event.event_index.map(|index| {
+        format!(
+            "index:{index}:{}:{}",
+            event.timestamp.as_deref().unwrap_or(""),
+            event.event_type
+        )
+    })
 }
 
 fn event_tool_id(event: &FlueEvent) -> Option<String> {
@@ -320,6 +354,23 @@ fn event_tool_id(event: &FlueEvent) -> Option<String> {
 
 fn event_task_id(event: &FlueEvent) -> Option<String> {
     extract_string(&event.value, &["taskId", "id"]).map(|id| format!("task-{id}"))
+}
+
+fn fallback_row_id(kind: &str, name: &str) -> String {
+    let mut key = String::new();
+    for char in name.chars() {
+        if char.is_ascii_alphanumeric() {
+            key.push(char.to_ascii_lowercase());
+        } else if !key.ends_with('-') {
+            key.push('-');
+        }
+    }
+    let key = key.trim_matches('-');
+    if key.is_empty() {
+        format!("{kind}-unnamed")
+    } else {
+        format!("{kind}-{key}")
+    }
 }
 
 fn extract_role(value: &serde_json::Value) -> Option<&str> {
@@ -395,6 +446,10 @@ fn value_as_string(value: &serde_json::Value) -> Option<String> {
 }
 
 fn event_has_error(value: &serde_json::Value) -> bool {
+    if value.get("isError").and_then(|value| value.as_bool()) == Some(true) {
+        return true;
+    }
+
     match value.get("error") {
         Some(serde_json::Value::Bool(value)) => *value,
         Some(serde_json::Value::Null) | None => false,

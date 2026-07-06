@@ -57,6 +57,7 @@ pub struct App {
     last_stream_event: Option<String>,
     event_transcript: EventTranscript,
     event_row_lines: BTreeMap<String, usize>,
+    transcript_viewport_height: usize,
 }
 
 #[derive(Debug)]
@@ -153,6 +154,7 @@ impl App {
             last_stream_event: None,
             event_transcript: EventTranscript::default(),
             event_row_lines: BTreeMap::new(),
+            transcript_viewport_height: SCROLL_PAGE_LINES,
         };
         app.jump_to_tail();
         app
@@ -379,7 +381,21 @@ impl App {
     pub fn max_scroll(&self) -> usize {
         self.transcript_lines
             .len()
-            .saturating_sub(SCROLL_PAGE_LINES)
+            .saturating_sub(self.transcript_viewport_height.max(1))
+    }
+
+    pub fn set_transcript_viewport_height(&mut self, height: usize) {
+        let height = height.max(1);
+        if self.transcript_viewport_height == height {
+            return;
+        }
+
+        self.transcript_viewport_height = height;
+        if self.follow_tail {
+            self.jump_to_tail();
+        } else {
+            self.transcript_scroll = self.transcript_scroll.min(self.max_scroll());
+        }
     }
 
     pub fn scroll_page_up(&mut self) {
@@ -517,8 +533,10 @@ impl App {
         text: &str,
     ) {
         let replacement = speaker_lines(speaker, text);
+        let inserted = replacement.len();
         self.transcript_lines
             .splice(line_index..=line_index, replacement);
+        self.reindex_event_rows_after_splice(line_index, 1, inserted);
     }
 
     fn after_transcript_changed(&mut self) {
@@ -555,13 +573,40 @@ impl App {
         if let Some(index) = self.event_row_lines.get(&row.id).copied() {
             if let Some(line) = self.transcript_lines.get_mut(index) {
                 *line = row.text.clone();
+                return;
             }
-            return;
         }
 
         let index = self.transcript_lines.len();
         self.transcript_lines.push(row.text.clone());
         self.event_row_lines.insert(row.id.clone(), index);
+    }
+
+    fn reindex_event_rows_after_splice(&mut self, start: usize, removed: usize, inserted: usize) {
+        if removed == inserted {
+            return;
+        }
+
+        let removed_end = start.saturating_add(removed);
+        if inserted > removed {
+            let delta = inserted - removed;
+            for index in self.event_row_lines.values_mut() {
+                if *index >= removed_end {
+                    *index = index.saturating_add(delta);
+                } else if *index >= start {
+                    *index = start;
+                }
+            }
+        } else {
+            let delta = removed - inserted;
+            for index in self.event_row_lines.values_mut() {
+                if *index >= removed_end {
+                    *index = index.saturating_sub(delta);
+                } else if *index >= start {
+                    *index = start;
+                }
+            }
+        }
     }
 }
 

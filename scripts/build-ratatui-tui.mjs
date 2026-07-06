@@ -3,7 +3,10 @@ import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const outDir = resolve('.gorombo', 'sim-one-ratatui');
-const targetBinary = resolve('target', 'release', process.platform === 'win32' ? 'sim-one-ratatui-tui.exe' : 'sim-one-ratatui-tui');
+const cargoTargetDir = process.env.CARGO_TARGET_DIR
+  ? resolve(process.env.CARGO_TARGET_DIR)
+  : resolve('target');
+const targetBinary = resolve(cargoTargetDir, 'release', process.platform === 'win32' ? 'sim-one-ratatui-tui.exe' : 'sim-one-ratatui-tui');
 const outBinary = resolve(outDir, process.platform === 'win32' ? 'sim-one-ratatui-tui.exe' : 'sim-one-ratatui-tui');
 const tmpBinary = `${outBinary}.tmp-${process.pid}`;
 

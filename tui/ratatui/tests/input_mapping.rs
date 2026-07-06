@@ -37,6 +37,26 @@ fn maps_prompt_editing_and_submit_keys() {
         Some(AppEvent::DeletePromptWordLeft)
     );
     assert_eq!(
+        map_key_event(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL)),
+        Some(AppEvent::MovePromptStart)
+    );
+    assert_eq!(
+        map_key_event(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL)),
+        Some(AppEvent::MovePromptEnd)
+    );
+    assert_eq!(
+        map_key_event(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL)),
+        Some(AppEvent::ClearPrompt)
+    );
+    assert_eq!(
+        map_key_event(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE)),
+        Some(AppEvent::MovePromptStart)
+    );
+    assert_eq!(
+        map_key_event(KeyEvent::new(KeyCode::End, KeyModifiers::NONE)),
+        Some(AppEvent::MovePromptEnd)
+    );
+    assert_eq!(
         map_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
         Some(AppEvent::Submit)
     );
@@ -55,6 +75,18 @@ fn maps_transcript_scroll_and_exit_keys() {
     assert_eq!(
         map_key_event(KeyEvent::new(KeyCode::End, KeyModifiers::CONTROL)),
         Some(AppEvent::JumpToTail)
+    );
+    assert_eq!(
+        map_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)),
+        Some(AppEvent::ScrollLineUp)
+    );
+    assert_eq!(
+        map_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)),
+        Some(AppEvent::ScrollLineDown)
+    );
+    assert_eq!(
+        map_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
+        Some(AppEvent::Quit)
     );
     assert_eq!(
         map_key_event(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)),
