@@ -12,7 +12,8 @@ import { delimiter, dirname, join } from 'node:path';
 
 const serverDir = '.gorombo/sim-one-alpha';
 const serverPath = join(serverDir, 'server.mjs');
-const tuiPath = '.gorombo/sim-one-ratatui/sim-one-ratatui-tui';
+const tuiBinaryName = process.platform === 'win32' ? 'sim-one-ratatui-tui.exe' : 'sim-one-ratatui-tui';
+const tuiPath = join('.gorombo', 'sim-one-ratatui', tuiBinaryName);
 
 if (!existsSync(serverPath)) {
   throw new Error(`${serverPath} does not exist. Run pnpm run build before the Ratatui product smoke test.`);
