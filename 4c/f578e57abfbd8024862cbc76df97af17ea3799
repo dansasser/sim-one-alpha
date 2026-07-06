@@ -1,0 +1,23 @@
+docs/tui/ratatui.md
+  s_a81fff26d52223::t_acdc835df536db 1-113
+docs/tui/session-management.md
+  s_a81fff26d52223::t_acdc835df536db 1-159
+docs/operations/product-tui.md
+  s_a81fff26d52223::t_acdc835df536db 1-150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "4cf578e57abfbd8024862cbc76df97af17ea3799",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
