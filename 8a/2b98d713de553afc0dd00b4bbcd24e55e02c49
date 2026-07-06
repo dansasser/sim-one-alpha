@@ -1,0 +1,26 @@
+tui/ratatui/src/input.rs
+  s_a81fff26d52223::t_e35b1ca7c12d8b 1,5-12
+  s_a81fff26d52223::t_abda37574babd7 13
+tui/ratatui/src/main.rs
+  s_a81fff26d52223::t_91539d7dc479dc 10
+  s_a81fff26d52223::t_c3c46017e2775b 5,79
+tui/ratatui/tests/input_mapping.rs
+  s_a81fff26d52223::t_29572199df49ad 1,3,96-123
+  s_a81fff26d52223::t_5922ebbf0a218d 124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8a2b98d713de553afc0dd00b4bbcd24e55e02c49",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
