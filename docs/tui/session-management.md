@@ -2,6 +2,8 @@
 
 The Ratatui TUI keeps SIM-ONE Alpha conversations in durable gateway sessions. The TUI is only the terminal surface; session creation, resume checks, rename, compaction, and model execution stay behind the gateway and Flue runtime.
 
+Implementation details live in `docs/architecture/tui-cli-session-flow.md`.
+
 ## Session Model
 
 The TUI sends chat events with connector `tui` and a stable local TUI actor/conversation scope. The active session id selects the durable SIM-ONE Alpha conversation to prompt, stream, compact, or resume.

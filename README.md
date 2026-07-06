@@ -459,43 +459,49 @@ After downloading, RAG works without Ollama running and without any API keys. Th
 # Build the runtime (Flue server → .gorombo/sim-one-alpha/)
 pnpm run build
 
-# Build the TUI/CLI (tsup → .gorombo/sim-one-cli/cli.js)
+# Build the Ratatui TUI binary
+pnpm run build:tui:ratatui
+
+# Build the product CLI wrapper (tsup → .gorombo/sim-one-cli/)
 pnpm run build:cli
 
-# Build both + launch the TUI (one command)
+# Build runtime + Ratatui TUI + CLI and verify sim-one is runnable
 pnpm run build:all
 ```
 
 `pnpm run build` compiles the WASM memory engine (the `prebuild` step invokes `wasm-pack` — this is what requires the Rust toolchain), builds the Flue Node server (`.gorombo/sim-one-alpha/server.mjs`), copies the runtime config, and copies the WASM artifact into `.gorombo/sim-one-alpha/`. The resulting `.gorombo/sim-one-alpha/` is self-contained: you can copy it to a machine without Rust installed and run the server from there. Only rebuilding the WASM from source requires the toolchain.
 
-`pnpm run build:cli` compiles the TUI from TSX source into a single self-contained ESM bundle at `.gorombo/sim-one-cli/cli.js` (~7.5MB, no external dependencies — only Node builtins).
+`pnpm run build:tui:ratatui` compiles the Rust/Ratatui terminal client into `.gorombo/sim-one-ratatui/sim-one-ratatui-tui` (or `.exe` on Windows).
 
-`pnpm run build:all` builds both, then launches the TUI directly from the build output.
+`pnpm run build:cli` compiles the TypeScript product wrapper into `.gorombo/sim-one-cli/cli.js` and writes the runnable launchers `.gorombo/sim-one-cli/sim-one` and `.gorombo/sim-one-cli/sim-one.cmd`.
+
+`pnpm run build:all` builds the runtime, Ratatui binary, and CLI wrapper, then checks that the packaged `sim-one` command is runnable.
 
 ### Launch the TUI
 
 ```sh
-# Launch the built TUI (Node 22+ required)
-node .gorombo/sim-one-cli/cli.js
+# Launch the product TUI from the build output
+./.gorombo/sim-one-cli/sim-one
 ```
 
 This one command:
-1. Checks if the server is already running (health check on `127.0.0.1:<port>`)
-2. If not running, starts it from `.gorombo/sim-one-alpha/server.mjs` with env from `.env`
-3. Waits for the server to become healthy (~30s for ONNX model load)
-4. Launches the Ink TUI, connected to the server over loopback (no auth needed)
-5. On exit (Ctrl+C), kills the server if the TUI started it
+1. Resolves and launches `.gorombo/sim-one-ratatui/sim-one-ratatui-tui`
+2. Checks if the gateway is already running (health check on `127.0.0.1:<port>`)
+3. If not running, starts it from `.gorombo/sim-one-alpha/server.mjs` with env from `.env`
+4. Waits for the gateway to become healthy
+5. Opens the Ratatui interface over loopback (no auth header needed)
+6. On exit, kills only a gateway child that this TUI started
 
 The port is read from `gorombo.config.json` (`gateway.port`, default 3940). Override with `--port`:
 
 ```sh
-node .gorombo/sim-one-cli/cli.js --port 3960
+./.gorombo/sim-one-cli/sim-one --port 3960
 ```
 
 To connect to an already-running remote server (skip server lifecycle):
 
 ```sh
-node .gorombo/sim-one-cli/cli.js --base-url http://192.168.0.131:3940
+./.gorombo/sim-one-cli/sim-one --base-url http://192.168.0.131:3940
 ```
 
 ### Start the server alone
@@ -522,24 +528,26 @@ Starts `flue dev --target node` which watches source files, rebuilds on changes,
 ### Run tests
 
 ```sh
-pnpm test          # unit tests + build + HTTP smoke tests
-pnpm run test:unit # unit tests only
-pnpm run typecheck # TypeScript type checking
+pnpm test              # unit tests + build + HTTP smoke tests
+pnpm run test:unit     # unit tests only
+pnpm run typecheck     # TypeScript type checking
+pnpm run test:tui      # built server + CLI e2e smoke
+pnpm run test:tui:ratatui # packaged sim-one/Ratatui product smoke
 ```
 
 ## Interactive TUI
 
-SIM-ONE Alpha includes an interactive terminal UI for chatting with the agent, viewing tool calls and subagent delegations, and managing approvals. The TUI is built into `.gorombo/sim-one-cli/cli.js` and manages the server lifecycle automatically — one command starts the server and launches the TUI.
+SIM-ONE Alpha includes a Ratatui terminal UI for chatting with the agent, viewing live progress rows, managing durable sessions, and keeping prompt input usable while the transcript scrolls. The TUI is a connector client. It sends prompts and backend-owned slash commands to `/api/chat/events` as connector `tui`; the Flue gateway owns orchestration, model calls, tools, workers, protocols, memory, and compaction.
+
+The TypeScript `sim-one` wrapper owns product command routing and capability subcommands. No-argument `sim-one` launches the Rust/Ratatui binary.
 
 ### What the TUI shows
 
-- **Header** — product name, base URL, session id, live agent status
-- **Message list** — agent messages with text, reasoning (dimmed), tool calls, and subagent delegations
-- **Tool calls** — tool name, input, output/error with state indicators (running/done/error)
-- **Subagent delegations** — rendered as "→ delegated to <agent>" when the orchestrator delegates to a worker
-- **Approval surface** — pending approvals shown inline with [y] approve / [n] deny keypress
-- **Status bar** — message count, pending approvals count, agent status
-- **Chat input** — text input with Enter to send, disabled during streaming and approval prompts
+- **Transcript/context pane** — prompts, assistant responses, stream activity, tool/status rows, and local system notices
+- **Prompt editor** — cursor movement, word movement, Home/End, delete/backspace, Ctrl+U, and submit
+- **Status bar** — gateway URL, active session, stream state, pending response state, elapsed thinking time, and spinner
+- **Session command output** — `/new`, `/resume`, `/rename`, `/compact`, `/session`, `/sessions`, `/help`, and `/exit`
+- **Scroll behavior** — PgUp/PgDown scrolls the transcript while prompt typing remains active
 
 ### First run — the wizard (planned)
 
@@ -550,26 +558,23 @@ On first install, `sim-one install` (or the install script) will launch a wizard
 - Persona/workspace configuration
 - Gateway service launch (always-on background process)
 
-> **Status:** The wizard (`sim-one install`) is planned for the next phase. The TUI itself is working now — use `node .gorombo/sim-one-cli/cli.js` to launch it.
+> **Status:** The wizard (`sim-one install`) is planned for the next phase. The Ratatui TUI itself is working now — use `./.gorombo/sim-one-cli/sim-one` from a built worktree.
 
 ### Running the TUI
 
-The TUI and CLI live in `sim-one-cli/` at the repo top level. The source is compiled by tsup into `.gorombo/sim-one-cli/cli.js` during build. During development you can run from source or from the build output:
+The product wrapper lives in `sim-one-cli/`. The terminal client lives in `tui/ratatui/`. During development, run from the built product output:
 
 ```sh
-# From the build output (recommended — one command starts the server + TUI)
-node .gorombo/sim-one-cli/cli.js
+# From the build output (recommended)
+./.gorombo/sim-one-cli/sim-one
 
-# Build both + launch in one command
+# Build all product artifacts
 pnpm run build:all
 
-# From source (dev mode, against a running dev server on port 3583)
-pnpm --filter sim-one-cli exec tsx src/cli.tsx --port 3583
-
 # Capability management subcommands (from build output)
-node .gorombo/sim-one-cli/cli.js skill list
-node .gorombo/sim-one-cli/cli.js skill add /path/to/skill my-skill "My Skill" --enable
-node .gorombo/sim-one-cli/cli.js mcp add my-mcp "My MCP" --url http://localhost:8080 --enable
+./.gorombo/sim-one-cli/sim-one skill list
+./.gorombo/sim-one-cli/sim-one skill add /path/to/skill my-skill "My Skill" --enable
+./.gorombo/sim-one-cli/sim-one mcp add my-mcp "My MCP" --url http://localhost:8080 --enable
 
 # Capability management subcommands (from source, dev mode)
 pnpm --filter sim-one-cli exec tsx src/cli.tsx skill list
@@ -577,7 +582,26 @@ pnpm --filter sim-one-cli exec tsx src/cli.tsx skill add /path/to/skill my-skill
 pnpm --filter sim-one-cli exec tsx src/cli.tsx mcp add my-mcp "My MCP" --url http://localhost:8080 --enable
 ```
 
-See `docs/architecture/product-flow.md` for the full product install and launch flow.
+Core TUI slash commands:
+
+```text
+/new [title]           create a new durable TUI session and switch to it
+/resume <session-id>   resume an available durable session and switch to it
+/sessions [limit]      list recent sessions, default 10, max 50
+/session               show the current active session id
+/rename <title>        rename the active durable session
+/compact               compact the active durable Flue session
+/help                  print the TUI command list
+/exit                  close the TUI and print the active session id
+```
+
+See:
+
+- `docs/architecture/tui-cli-session-flow.md` for the implementation flow.
+- `docs/architecture/product-flow.md` for the full product install and launch flow.
+- `docs/tui/ratatui.md` for the user guide.
+- `docs/tui/session-management.md` for session commands.
+- `docs/operations/product-tui.md` for packaged runtime operations.
 
 ## Capability Management
 
@@ -587,7 +611,7 @@ The capability registry lets users and agents add skills, tools, workers (subage
 
 After install, manage capabilities with the `sim-one` binary:
 
-> **Status:** The `sim-one` binary is the planned product interface and is not yet shipped from this repo. During development, use the developer-only script (`scripts/capability-admin.mjs`) shown below each command block. See `docs/architecture/product-flow.md` for the full product flow.
+> **Status:** The build output now includes `.gorombo/sim-one-cli/sim-one`. During development, use that path or the source command shown below. Installed systems will expose `sim-one` on PATH. See `docs/architecture/product-flow.md` for the full product flow.
 
 ```sh
 # Add a skill from GitHub
@@ -1064,9 +1088,13 @@ Protected telemetry uses live in-memory Flue observer summaries when available a
 Slash commands are parsed before the prompt reaches the LLM:
 
 - `/new` starts a new trusted connector/TUI session. GUI-managed web chat should use the client new-chat control instead, and generic Web API payloads cannot opt into connector-only behavior by spoofing a connector name.
+- `/resume <session-id>` resumes an available durable TUI session after access checks.
+- `/rename <title>` renames the active durable TUI session.
 - `/compact` calls Flue `session.compact()` for the resolved durable direct-agent session and returns command telemetry.
 
-Architecture details live in `docs/architecture/session-context-budget.md`.
+The Ratatui TUI also owns local commands that do not go to the model: `/session`, `/sessions [limit]`, `/help`, and `/exit`.
+
+Architecture details live in `docs/architecture/session-context-budget.md` and `docs/architecture/tui-cli-session-flow.md`.
 
 ## Web Search And Research
 
@@ -1216,7 +1244,8 @@ Use local `.env` files or the deployment platform's secret manager.
 - SQLite-backed protocol system with runtime rule loading
 - Capability registry (SQLite) for runtime-extensible skills, tools, workers, and MCP servers
 - Telegram connector, Web/API connector, scheduled jobs (Croner)
-- Interactive TUI (Ink/React) with live agent conversation, tool calls, subagent delegations, approval prompts
+- Product `sim-one` wrapper with Ratatui TUI launch and capability subcommands
+- Ratatui terminal UI with transcript scrolling, prompt editing, live status/spinner, stream rows, and durable session commands
 - Model card system with provider registration, context budget, and compaction
 - Image generation tools (Runpod Public Endpoints)
 - Built-in MCP (Astro docs search)
@@ -1224,7 +1253,7 @@ Use local `.env` files or the deployment platform's secret manager.
 
 ### Roadmap
 
-- `sim-one` product binary (unified CLI with wizard, TUI, admin subcommands)
+- Installed `sim-one` PATH packaging and service-management commands
 - Install script (`sim-one.sh`) and first-run wizard TUI
 - Web UI (browser dashboard + chat via `@flue/react` + `react-dom`)
 - Writing worker
@@ -1316,14 +1345,16 @@ Common commands:
 pnpm test
 pnpm run typecheck
 pnpm run build
-pnpm run build:cli      # build the TUI/CLI (tsup → .gorombo/sim-one-cli/cli.js)
-pnpm run build:all      # build both + launch the TUI
+pnpm run build:tui:ratatui # build the Rust/Ratatui TUI binary
+pnpm run build:cli      # build the product CLI wrapper and sim-one launcher
+pnpm run build:all      # build runtime + Ratatui TUI + CLI and check sim-one
 pnpm run test:unit      # unit tests only
 pnpm run test:http      # HTTP integration test against built server
 pnpm run test:tui        # TUI end-to-end test (requires OLLAMA_API_KEY)
+pnpm run test:tui:ratatui # packaged Ratatui product smoke (requires OLLAMA_API_KEY or OLLAMA_CLOUD_API_KEY)
 pnpm run smoke:http
 pnpm run wasm:build      # build the gorombo-memory WASM artifact
-pnpm run cargo:test      # cargo test -p gorombo-memory (Rust crate tests)
+pnpm run cargo:test      # cargo test --workspace
 pnpm run smoke:memory    # Memory Helper end-to-end + durability smoke
 ```
 

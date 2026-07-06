@@ -68,9 +68,10 @@ The user interacts with the gateway through multiple interfaces:
 #### TUI coding interface (local terminal)
 - Launched with the product name: `sim-one` (no arguments)
 - Equivalent to how users launch `opencode`, `claude`, or `codex`
-- Connects to the running gateway over HTTP via `@flue/sdk`
-- Built with Ink (React for terminals) + `@flue/react` + `@flue/sdk`
-- Shows: live agent conversation, tool calls, subagent delegations, approval prompts, status
+- Connects to the gateway over loopback HTTP as connector `tui`
+- Built as a Rust/Ratatui terminal client launched by the TypeScript `sim-one` product wrapper
+- Shows: transcript/context, prompt editor, gateway/session/model status, stream activity, thinking spinner, tool/status rows, and session command results
+- Owns terminal interaction only. The Flue gateway owns orchestration, model calls, tools, workers, protocols, memory, and compaction.
 
 ## The `sim-one` CLI
 
@@ -126,16 +127,17 @@ sim-one stop           # Stop the gateway service
 
 ### NOT the product interface (developer-only)
 - `pnpm capabilities:add skill ...` — developer pnpm script, not the product CLI
-- `pnpm run build:all` — developer build+launch workflow (builds runtime + CLI, launches TUI), not the product install
+- `pnpm run build:all` — developer build workflow (builds runtime + Ratatui TUI + CLI and checks the product command), not the product install
 - `node scripts/capability-admin.mjs ...` — standalone dev-time admin script, replaced by `sim-one` subcommands
-- `pnpm --filter sim-one-alpha-tui-proto exec tsx src/cli.tsx` — prototype TUI launch, replaced by `sim-one`
+- `.gorombo/sim-one-ratatui/sim-one-ratatui-tui` — lower-level TUI binary used by the wrapper and tests, not the primary user command
 
 ## Package structure (target)
 
 ```
 sim-one-alpha/                    # repository (development)
   src/                            # runtime source (compiled to .gorombo/sim-one-alpha/)
-  tui-proto/                      # throwaway TUI prototype (deleted when production TUI ships)
+  sim-one-cli/                    # product command wrapper and capability subcommands
+  tui/ratatui/                    # Rust/Ratatui terminal client
   scripts/                        # dev-time scripts (capability-admin.mjs, copy-runtime-config.mjs, etc.)
   .gorombo/sim-one-alpha/                           # built runtime artifact (what gets installed)
 
@@ -145,11 +147,13 @@ sim-one-alpha/                    # repository (development)
   ~/.gorombo/                     # runtime data (SQLite, capabilities, config, .env)
 ```
 
-The `sim-one` binary is the production TUI package from the agent-tui plan (`sim-one-alpha-tui`). It contains:
-- The wizard TUI (Ink + React)
-- The coding interface TUI (Ink + React + `@flue/react` + `@flue/sdk`)
-- Admin subcommands (skill/tool/worker/mcp management, config, doctor, status)
-- Service management (start/stop/restart the gateway)
+The built development product command currently contains:
+- The `sim-one` wrapper under `.gorombo/sim-one-cli/`
+- No-argument launch of the packaged Ratatui coding interface
+- Capability subcommands (`skill`, `tool`, `worker`, `mcp`)
+- Legacy Ink fallback behind `--ink`
+
+The first-run wizard, service manager commands, `doctor`, and config commands remain planned product-install work.
 
 ## Current state vs target
 
@@ -158,19 +162,21 @@ The `sim-one` binary is the production TUI package from the agent-tui plan (`sim
 | Runtime gateway (`.gorombo/sim-one-alpha/server.mjs`) | ✅ Working — Flue agent, HTTP API, connectors | Production-ready |
 | Capability store + merge layer | ✅ Working — SQLite, CLI, agent tools, MCP broker | Wired into `sim-one` subcommands |
 | Wizard TUI | ❌ Not built | `sim-one install` launches wizard |
-| Coding interface TUI | ✅ Prototype (`tui-proto/`) | Production `sim-one` (no args) |
-| `sim-one` binary | ❌ Not built | Unified CLI with all subcommands |
+| Coding interface TUI | ✅ Ratatui product path (`tui/ratatui/`) | Continue hardening approvals and progress detail |
+| `sim-one` binary | ✅ Built in repo output (`.gorombo/sim-one-cli/sim-one`) | Installable unified PATH command |
 | Web UI | ❌ Not built | `@flue/react` + `react-dom` dashboard + chat |
 | Install script (`sim-one.sh`) | ❌ Not built | Package install + wizard trigger |
-| `capability-admin.mjs` | ✅ Working (dev-time) | Replaced by `sim-one skill/tool/worker/mcp` subcommands |
-| `build:all` launcher | ✅ Working (dev-time) | Replaced by `sim-one` service management |
+| `capability-admin.mjs` | ✅ Working (dev-time) | Product users use `sim-one skill/tool/worker/mcp` subcommands |
+| `build:all` product build | ✅ Working (dev-time) | Replaced by installer/package build |
 
 ## Key principles
 
 1. **The product is `.gorombo/sim-one-alpha/` + the `sim-one` binary.** Users don't need pnpm, Node, or Rust. They install via `sim-one.sh` and use `sim-one`.
 2. **The gateway is always on.** After install, `.gorombo/sim-one-alpha/server.mjs` runs as a background service. Connectors (Telegram, etc.) and interfaces (TUI, Web UI) connect to it.
-3. **The `sim-one` binary is the only command.** It launches the TUI, runs the wizard, manages capabilities, manages config, and manages the service. No `pnpm` commands in the product interface.
+3. **The `sim-one` binary is the only user command.** It launches the TUI and manages capabilities now. The wizard, config, doctor, and service-management subcommands are planned install work. No `pnpm` commands in the product interface.
 4. **Capabilities are runtime-extensible.** Users add skills/tools/workers/MCP via `sim-one` subcommands. A service restart picks them up. No rebuild needed.
-5. **The TUI is React via Ink.** The Web UI is React via `react-dom`. Both use `@flue/react` hooks. Shared logic lives in a shared package; presentation is authored per target.
+5. **The local coding TUI is Ratatui.** The TypeScript CLI wrapper routes to the Rust terminal client. The Web UI can still use React via `react-dom`; presentation is authored per target.
 6. **`~/.gorombo/` is the runtime data root.** SQLite, capabilities, config, .env all live here. It survives `.gorombo/sim-one-alpha/` upgrades.
 7. **Local auth is loopback-based, not token-based.** The TUI connects to the server over `127.0.0.1` with no secret. The server middleware bypasses auth for loopback origins. External connectors (Telegram, web, Discord) require `API_SECRET` via `x-api-secret` header. The wizard never generates a SIM-ONE-internal secret.
+
+See `docs/architecture/tui-cli-session-flow.md` for the implemented `sim-one` + Ratatui + session command flow.

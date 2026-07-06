@@ -1,13 +1,23 @@
 # SIM-ONE Alpha Ratatui TUI
 
-This directory contains the active Ratatui terminal-interface experiment for SIM-ONE Alpha.
+This directory contains the production local terminal client for SIM-ONE Alpha.
 
 It is a local gateway client, not the agent runtime. It connects to the same SIM-ONE Alpha gateway used by other connectors and clients, starts the built server when needed, sends prompts to the Flue orchestrator agent, and renders the returned assistant text in the transcript.
 
-## Product-Style Commands
+The repo-level implementation guide is `docs/architecture/tui-cli-session-flow.md`.
+
+## Product Commands
 
 ```sh
-pnpm run build
+pnpm run build:all
+./.gorombo/sim-one-cli/sim-one
+```
+
+The product command is the supported launch path. It routes to the packaged Ratatui binary and preserves the capability subcommands on the same `sim-one` command.
+
+Lower-level development commands:
+
+```sh
 pnpm run build:tui:ratatui
 pnpm run test:tui:ratatui
 ./.gorombo/sim-one-ratatui/sim-one-ratatui-tui
@@ -17,9 +27,10 @@ The `build:tui:ratatui` script writes the standalone terminal binary to:
 
 ```text
 .gorombo/sim-one-ratatui/sim-one-ratatui-tui
+.gorombo/sim-one-ratatui/sim-one-ratatui-tui.exe on Windows
 ```
 
-That binary owns the same startup contract as the Ink TUI: it checks the gateway health endpoint, starts `.gorombo/sim-one-alpha/server.mjs` if needed, and cleans up only a server child it started itself.
+The Ratatui binary owns the gateway startup contract: it checks the gateway health endpoint, starts `.gorombo/sim-one-alpha/server.mjs` if needed, runs the child from the owner of the `.gorombo` runtime tree, and cleans up only a server child it started itself.
 
 ## Developer Checks
 
@@ -45,3 +56,31 @@ Ctrl+End             Jump the transcript back to the live tail
 Ctrl+C               Exit cleanly
 Esc                  Exit cleanly
 ```
+
+## Slash Commands
+
+Backend-owned commands go through `/api/chat/events`:
+
+```text
+/new [title]
+/resume <session-id>
+/rename <title>
+/compact
+```
+
+TUI-local commands are handled in `src/app.rs`:
+
+```text
+/session
+/sessions [limit]
+/help
+/exit
+```
+
+`/exit` restores the terminal and then prints:
+
+```text
+Exited SIM-ONE Alpha TUI. Session: <active-session-id>
+```
+
+Use that id with `/resume <session-id>` after relaunching.

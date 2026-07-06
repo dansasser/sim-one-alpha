@@ -2,6 +2,8 @@
 
 This guide covers the packaged SIM-ONE Alpha terminal runtime. The production command is `sim-one`; with no subcommand it opens the Ratatui TUI.
 
+Architecture details live in `docs/architecture/tui-cli-session-flow.md`.
+
 ## Packaged Command
 
 Build all product artifacts:

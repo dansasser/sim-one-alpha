@@ -2,6 +2,8 @@
 
 The Ratatui TUI is the production local terminal surface for SIM-ONE Alpha. It is a connector client: prompts and backend-owned slash commands go through the local gateway, and orchestration stays inside the Flue agent runtime.
 
+Implementation details live in `docs/architecture/tui-cli-session-flow.md`. Packaged runtime operations live in `docs/operations/product-tui.md`.
+
 ## Launch
 
 Build the product first when the `.gorombo/` artifacts are missing or stale:
