@@ -59,11 +59,11 @@ fn posts_prompt_to_tui_chat_event_endpoint_and_extracts_text() {
     );
     assert_eq!(
         body.get("conversationId").and_then(|value| value.as_str()),
-        Some("session with spaces")
+        Some("local-tui")
     );
     assert_eq!(
         body.get("threadId").and_then(|value| value.as_str()),
-        Some("session with spaces")
+        Some("local-tui")
     );
     assert_eq!(
         body.get("session").and_then(|value| value.as_str()),

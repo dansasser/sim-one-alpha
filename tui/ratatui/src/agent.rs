@@ -6,6 +6,7 @@ use crate::http::{connect_tcp, parse_http_response, write_http_request, HttpEndp
 const AGENT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const AGENT_READ_TIMEOUT: Duration = Duration::from_secs(240);
 const AGENT_WRITE_TIMEOUT: Duration = Duration::from_secs(10);
+const LOCAL_TUI_SCOPE_ID: &str = "local-tui";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentReply {
@@ -36,10 +37,10 @@ pub fn send_agent_prompt_reply(
     let body = serde_json::json!({
         "connector": "tui",
         "text": prompt,
-        "actorId": "local-tui",
+        "actorId": LOCAL_TUI_SCOPE_ID,
         "actorDisplayName": "Local TUI",
-        "conversationId": session_id,
-        "threadId": session_id,
+        "conversationId": LOCAL_TUI_SCOPE_ID,
+        "threadId": LOCAL_TUI_SCOPE_ID,
         "session": session_id,
     })
     .to_string();

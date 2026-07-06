@@ -1,6 +1,7 @@
 use std::io;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use crossterm::event;
 use ratatui::DefaultTerminal;
@@ -47,6 +48,17 @@ fn run_client(
         return Ok(());
     }
 
+    if let Ok(prompts) = std::env::var("SIM_ONE_TUI_TEST_PROMPTS") {
+        let result = run_scripted_prompts(
+            format!("{} started:{}", base_url, started),
+            base_url,
+            session_id,
+            &prompts,
+        );
+        cleanup();
+        return result;
+    }
+
     if let Ok(prompt) = std::env::var("SIM_ONE_TUI_TEST_PROMPT") {
         let response =
             send_agent_prompt(&base_url, &session_id, &prompt).map_err(io::Error::other)?;
@@ -91,6 +103,56 @@ fn run(
     }
 
     Ok(app.exit_session_id().map(str::to_string))
+}
+
+fn run_scripted_prompts(
+    gateway_status: String,
+    base_url: String,
+    session_id: String,
+    prompts: &str,
+) -> io::Result<()> {
+    let mut app = App::with_session(session_id, gateway_status, base_url);
+
+    for prompt in prompts
+        .lines()
+        .map(str::trim)
+        .filter(|prompt| !prompt.is_empty())
+    {
+        app.handle_event(AppEvent::Text(prompt.to_string()));
+        app.handle_event(AppEvent::Submit);
+        wait_for_scripted_prompt(&mut app)?;
+        if app.should_quit() {
+            break;
+        }
+    }
+
+    for line in app.transcript_lines() {
+        println!("{line}");
+    }
+    if let Some(session_id) = app.exit_session_id() {
+        println!("Exited SIM-ONE Alpha TUI. Session: {session_id}");
+    }
+
+    Ok(())
+}
+
+fn wait_for_scripted_prompt(app: &mut App) -> io::Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(300);
+    while app.is_agent_pending() && Instant::now() < deadline {
+        app.tick();
+        app.poll_agent();
+        thread::sleep(Duration::from_millis(20));
+    }
+    app.poll_agent();
+
+    if app.is_agent_pending() {
+        return Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "Timed out waiting for scripted TUI prompt to finish.",
+        ));
+    }
+
+    Ok(())
 }
 
 fn read_app_event() -> io::Result<Option<AppEvent>> {

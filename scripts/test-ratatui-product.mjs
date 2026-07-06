@@ -64,7 +64,6 @@ try {
     GOROMBO_CAPABILITY_DB_PATH: join(codingWorkspaceRoot, 'capabilities.sqlite'),
     GOROMBO_CAPABILITIES_DIR: join(codingWorkspaceRoot, 'capabilities'),
     GOROMBO_TEST_MODE: '1',
-    SIM_ONE_TUI_TEST_PROMPT: 'Reply with one short sentence confirming the Ratatui product prompt path works.',
   };
   if (!childEnv.NVM_DIR && process.env.HOME) {
     childEnv.NVM_DIR = join(process.env.HOME, '.nvm');
@@ -72,15 +71,14 @@ try {
 
   await assertProductCommandRouting(childEnv);
 
-  child = spawnProductCommand(['--port', String(port)], childEnv);
-
-  child.stdout.on('data', (chunk) => { stdout += String(chunk); });
-  child.stderr.on('data', (chunk) => { stderr += String(chunk); });
-
-  const exitCode = await waitForClose(child, 240_000);
-  if (exitCode !== 0) {
-    throw new Error(`Ratatui product smoke failed with exit ${exitCode}\nstdout:\n${stdout}\nstderr:\n${stderr}`);
-  }
+  ({ stdout, stderr } = await runProductCommand(
+    ['--port', String(port)],
+    {
+      ...childEnv,
+      SIM_ONE_TUI_TEST_PROMPT: 'Reply with one short sentence confirming the Ratatui product prompt path works.',
+    },
+    240_000,
+  ));
   const responseMarker = 'assistant response:';
   if (!stdout.includes(responseMarker)) {
     throw new Error(`Ratatui product smoke did not report an agent response.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
@@ -89,7 +87,51 @@ try {
   if (responseText.length < 8 || /placeholder/i.test(responseText)) {
     throw new Error(`Ratatui product smoke response was not a real agent response.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
   }
+
+  const createSessionSmoke = await runProductCommand(
+    ['--port', String(port)],
+    {
+      ...childEnv,
+      SIM_ONE_TUI_TEST_PROMPTS: [
+        '/new Smoke Session',
+        '/session',
+        '/compact',
+        '/exit',
+      ].join('\n'),
+    },
+    240_000,
+  );
+  stdout = createSessionSmoke.stdout;
+  stderr = createSessionSmoke.stderr;
+  const sessionMatch = /Started new session (tui-[^.]+)\./.exec(stdout);
+  if (!sessionMatch?.[1]) {
+    throw new Error(`Ratatui product session smoke did not create a TUI session.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
+  }
+  const sessionId = sessionMatch[1];
+  assertOutputIncludes(stdout, `system: current session ${sessionId}`, 'session command did not show the active session');
+  assertOutputIncludes(stdout, `assistant: Compacted session ${sessionId}.`, 'compact command did not compact the active session');
+  assertOutputIncludes(stdout, `Exited SIM-ONE Alpha TUI. Session: ${sessionId}`, 'exit command did not print the active session id');
+
+  const resumeSessionSmoke = await runProductCommand(
+    ['--port', String(port)],
+    {
+      ...childEnv,
+      SIM_ONE_TUI_TEST_PROMPTS: [
+        `/resume ${sessionId}`,
+        '/rename Smoke Session Renamed',
+        '/exit',
+      ].join('\n'),
+    },
+    240_000,
+  );
+  stdout = resumeSessionSmoke.stdout;
+  stderr = resumeSessionSmoke.stderr;
+  assertOutputIncludes(stdout, `assistant: Resumed session ${sessionId}.`, 'resume command did not resume the created session');
+  assertOutputIncludes(stdout, `assistant: Renamed session ${sessionId} to "Smoke Session Renamed".`, 'rename command did not rename the active session');
+  assertOutputIncludes(stdout, `Exited SIM-ONE Alpha TUI. Session: ${sessionId}`, 'exit after resume did not print the active session id');
+
   console.log('[ratatui-product] sim-one sent a real prompt through the Ratatui product path and received an agent response.');
+  console.log('[ratatui-product] sim-one session commands created, inspected, compacted, resumed, renamed, and exited a TUI session.');
 } finally {
   if (child && child.exitCode === null && child.signalCode === null) {
     child.kill('SIGKILL');
@@ -163,7 +205,16 @@ async function runProductCommand(args, env, timeoutMs) {
     commandStderr += String(chunk);
   });
   const exitCode = await waitForClose(command, timeoutMs);
+  if (exitCode !== 0) {
+    throw new Error(`sim-one ${args.join(' ')} failed with exit ${exitCode}\nstdout:\n${commandStdout}\nstderr:\n${commandStderr}`);
+  }
   return { exitCode, stdout: commandStdout, stderr: commandStderr };
+}
+
+function assertOutputIncludes(output, expected, label) {
+  if (!output.includes(expected)) {
+    throw new Error(`${label}; expected output to include ${JSON.stringify(expected)}.\nstdout:\n${output}\nstderr:\n${stderr}`);
+  }
 }
 
 async function getFreePort() {
