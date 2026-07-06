@@ -1,4 +1,4 @@
-use std::fs::{create_dir_all, remove_dir_all, write};
+use std::fs::{create_dir_all, read_to_string, remove_dir_all, write};
 use std::net::TcpListener;
 use std::path::PathBuf;
 use std::process::Command;
@@ -7,8 +7,8 @@ use std::process::Command;
 use std::os::fd::AsRawFd;
 
 use sim_one_ratatui_tui::gateway::{
-    read_gateway_port_from_config, resolve_env_path, resolve_node_executable, resolve_server_path,
-    GatewayOptions,
+    read_gateway_port_from_config, resolve_env_path, resolve_node_executable, resolve_server_cwd,
+    resolve_server_path, GatewayOptions,
 };
 
 #[test]
@@ -40,6 +40,23 @@ fn server_path_prefers_explicit_option_over_candidates() {
     assert_eq!(
         resolve_server_path(&options).expect("server path should resolve"),
         explicit
+    );
+}
+
+#[test]
+fn server_cwd_uses_owner_of_packaged_gorombo_runtime_tree() {
+    let root = TestTempDir::new("server-cwd");
+    let server_dir = root.path().join(".gorombo").join("sim-one-alpha");
+    create_dir_all(&server_dir).expect("packaged server dir should be creatable");
+    let server_path = server_dir.join("server.mjs");
+    write(&server_path, "").expect("test server should be writable");
+
+    let resolved = resolve_server_cwd(&server_path).expect("server cwd should resolve");
+    assert_eq!(
+        resolved,
+        root.path()
+            .canonicalize()
+            .expect("temp root should canonicalize")
     );
 }
 
@@ -123,6 +140,78 @@ fn built_binary_rejects_port_zero_at_parse_time() {
         stderr.contains("--port must be between 1 and 65535"),
         "stderr should explain invalid port, got: {stderr}"
     );
+}
+
+#[test]
+fn built_binary_launches_packaged_server_from_runtime_root_when_called_elsewhere() {
+    let runtime_root = TestTempDir::new("packaged-cwd");
+    let launch_dir = TestTempDir::new("launch-cwd");
+    let server_dir = runtime_root.path().join(".gorombo").join("sim-one-alpha");
+    create_dir_all(&server_dir).expect("packaged server dir should be creatable");
+    let server_path = server_dir.join("server.mjs");
+    let cwd_marker = runtime_root.path().join("server-cwd.txt");
+    write(
+        &server_path,
+        r#"
+import { writeFileSync } from 'node:fs';
+import http from 'node:http';
+
+const port = Number(process.env.PORT);
+const listenFd = Number(process.env.SIM_ONE_TEST_LISTEN_FD || 0);
+writeFileSync(process.env.SIM_ONE_TEST_CWD_MARKER, process.cwd());
+
+const server = http.createServer((request, response) => {
+  if (request.url === '/health') {
+    response.writeHead(200, { 'content-type': 'text/plain' });
+    response.end('ok');
+    return;
+  }
+
+  response.writeHead(404, { 'content-type': 'text/plain' });
+  response.end('missing');
+});
+
+process.on('SIGTERM', () => {
+  setTimeout(() => process.exit(0), 25);
+});
+
+if (listenFd) {
+  server.listen({ fd: listenFd });
+} else {
+  server.listen(port, '127.0.0.1');
+}
+"#,
+    )
+    .expect("test server should be writable");
+
+    let reserved_port = ReservedPort::new();
+    let output = Command::new(env!("CARGO_BIN_EXE_sim-one-ratatui-tui"))
+        .current_dir(launch_dir.path())
+        .arg("--smoke-startup")
+        .arg("--server-path")
+        .arg(&server_path)
+        .arg("--env-path")
+        .arg(runtime_root.path().join("missing.env"))
+        .arg("--port")
+        .arg(reserved_port.port().to_string())
+        .env("SIM_ONE_TEST_LISTEN_FD", reserved_port.raw_fd().to_string())
+        .env("SIM_ONE_TEST_CWD_MARKER", &cwd_marker)
+        .output()
+        .expect("built binary should run");
+
+    assert!(
+        output.status.success(),
+        "fake packaged server should satisfy product startup smoke, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let observed_cwd = read_to_string(&cwd_marker).expect("server should write cwd marker");
+    let expected_cwd = runtime_root
+        .path()
+        .canonicalize()
+        .expect("runtime root should canonicalize")
+        .display()
+        .to_string();
+    assert_eq!(observed_cwd, expected_cwd);
 }
 
 #[test]

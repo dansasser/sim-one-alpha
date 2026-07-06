@@ -196,12 +196,20 @@ fn read_gateway_port() -> Option<u16> {
 }
 
 fn start_server(server_path: &Path, env_path: &Path, port: u16) -> Result<StartedServer, String> {
+    let server_cwd = resolve_server_cwd(server_path)?;
+    let server_arg = server_path
+        .canonicalize()
+        .unwrap_or_else(|_| server_path.to_path_buf());
     let mut command = Command::new(resolve_node_executable()?);
     if env_path.exists() {
-        command.arg(format!("--env-file={}", env_path.display()));
+        let env_arg = env_path
+            .canonicalize()
+            .unwrap_or_else(|_| env_path.to_path_buf());
+        command.arg(format!("--env-file={}", env_arg.display()));
     }
-    command.arg(server_path);
+    command.arg(server_arg);
     command.env("PORT", port.to_string());
+    command.current_dir(server_cwd);
     command.stdin(Stdio::null());
     command.stdout(Stdio::piped());
     command.stderr(Stdio::piped());
@@ -210,6 +218,30 @@ fn start_server(server_path: &Path, env_path: &Path, port: u16) -> Result<Starte
         .map_err(|error| format!("Failed to start server: {error}"))?;
     let log_drain = ServerLogDrain::from_child(&mut child);
     Ok(StartedServer { child, log_drain })
+}
+
+pub fn resolve_server_cwd(server_path: &Path) -> Result<PathBuf, String> {
+    let normalized = server_path
+        .canonicalize()
+        .unwrap_or_else(|_| server_path.to_path_buf());
+
+    if let Some(server_dir) = normalized.parent() {
+        let is_packaged_server =
+            server_dir.file_name().and_then(|name| name.to_str()) == Some("sim-one-alpha");
+        if is_packaged_server {
+            if let Some(gorombo_dir) = server_dir.parent() {
+                let is_gorombo_runtime =
+                    gorombo_dir.file_name().and_then(|name| name.to_str()) == Some(".gorombo");
+                if is_gorombo_runtime {
+                    if let Some(runtime_root) = gorombo_dir.parent() {
+                        return Ok(runtime_root.to_path_buf());
+                    }
+                }
+            }
+        }
+    }
+
+    env::current_dir().map_err(|error| format!("Could not read current directory: {error}"))
 }
 
 struct StartedServer {

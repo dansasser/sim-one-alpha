@@ -1,6 +1,13 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use super::events::FlueEvent;
+
+const EPHEMERAL_ROW_IDS: [&str; 4] = [
+    "assistant-stream",
+    "thinking-current",
+    "turn-current",
+    "operation-current",
+];
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct EventTranscript {
@@ -8,6 +15,11 @@ pub struct EventTranscript {
     row_index: BTreeMap<String, usize>,
     seen_events: BTreeSet<String>,
     current_turn: CurrentTurn,
+    turn_sequence: u64,
+    fallback_tool_sequence: u64,
+    fallback_task_sequence: u64,
+    active_fallback_tools: BTreeMap<String, VecDeque<String>>,
+    active_fallback_tasks: BTreeMap<String, VecDeque<String>>,
 }
 
 impl EventTranscript {
@@ -27,13 +39,13 @@ impl EventTranscript {
         match event.event_type.as_str() {
             "turn_start" => {
                 self.retire_ephemeral_rows();
+                self.turn_sequence = self.turn_sequence.saturating_add(1);
+                self.active_fallback_tools.clear();
+                self.active_fallback_tasks.clear();
                 self.current_turn.state = TurnState::ModelActive;
                 self.current_turn.activity = Some("model turn".to_string());
-                self.upsert_row(
-                    "turn-current",
-                    DisplayRowKind::Progress,
-                    "turn: model active",
-                );
+                let id = self.ephemeral_row_id("turn-current");
+                self.upsert_row(&id, DisplayRowKind::Progress, "turn: model active");
             }
             "turn" => {
                 let text = if event_has_error(&event.value) {
@@ -47,8 +59,9 @@ impl EventTranscript {
                     TurnState::Completed
                 };
                 self.current_turn.activity = Some(text.to_string());
+                let id = self.ephemeral_row_id("turn-current");
                 self.upsert_row(
-                    "turn-current",
+                    &id,
                     if event_has_error(&event.value) {
                         DisplayRowKind::Error
                     } else {
@@ -60,43 +73,30 @@ impl EventTranscript {
             "thinking_start" => {
                 self.current_turn.state = TurnState::Thinking;
                 self.current_turn.activity = Some("thinking".to_string());
-                self.upsert_row(
-                    "thinking-current",
-                    DisplayRowKind::Thinking,
-                    "thinking: started",
-                );
+                let id = self.ephemeral_row_id("thinking-current");
+                self.upsert_row(&id, DisplayRowKind::Thinking, "thinking: started");
             }
             "thinking_delta" => {
                 self.current_turn.state = TurnState::Thinking;
                 let text = extract_text(&event.value).unwrap_or_else(|| "thinking".to_string());
                 self.current_turn.activity = Some("thinking".to_string());
-                self.upsert_row(
-                    "thinking-current",
-                    DisplayRowKind::Thinking,
-                    &format!("thinking: {text}"),
-                );
+                let id = self.ephemeral_row_id("thinking-current");
+                self.upsert_row(&id, DisplayRowKind::Thinking, &format!("thinking: {text}"));
             }
             "thinking_end" => {
                 self.current_turn.state = TurnState::WaitingForFinal;
                 self.current_turn.activity = Some("waiting for final response".to_string());
-                if !self.has_row("thinking-current") {
-                    self.upsert_row(
-                        "thinking-current",
-                        DisplayRowKind::Thinking,
-                        "thinking: done",
-                    );
+                let id = self.ephemeral_row_id("thinking-current");
+                if !self.has_row(&id) {
+                    self.upsert_row(&id, DisplayRowKind::Thinking, "thinking: done");
                 }
             }
             "text_delta" => {
                 self.current_turn.state = TurnState::ModelActive;
                 let text = extract_text(&event.value).unwrap_or_default();
                 self.current_turn.activity = Some("assistant text".to_string());
-                self.append_row_text(
-                    "assistant-stream",
-                    DisplayRowKind::Assistant,
-                    "assistant: ",
-                    &text,
-                );
+                let id = self.ephemeral_row_id("assistant-stream");
+                self.append_row_text(&id, DisplayRowKind::Assistant, "assistant: ", &text);
             }
             "message_end" => {
                 let role = extract_role(&event.value).unwrap_or("assistant");
@@ -120,14 +120,15 @@ impl EventTranscript {
             }
             "tool_start" => {
                 let name = extract_name(&event.value).unwrap_or_else(|| "tool".to_string());
-                let id = event_tool_id(event).unwrap_or_else(|| fallback_row_id("tool", &name));
+                let id = event_tool_id(event).unwrap_or_else(|| self.start_fallback_tool_id(&name));
                 self.current_turn.state = TurnState::ToolRunning;
                 self.current_turn.activity = Some(format!("tool: {name}"));
                 self.upsert_row(&id, DisplayRowKind::Tool, &format!("tool: {name} running"));
             }
             "tool" => {
                 let name = extract_name(&event.value).unwrap_or_else(|| "tool".to_string());
-                let id = event_tool_id(event).unwrap_or_else(|| fallback_row_id("tool", &name));
+                let id =
+                    event_tool_id(event).unwrap_or_else(|| self.complete_fallback_tool_id(&name));
                 let status = if event_has_error(&event.value) {
                     "failed"
                 } else {
@@ -151,14 +152,15 @@ impl EventTranscript {
             }
             "task_start" => {
                 let name = extract_name(&event.value).unwrap_or_else(|| "task".to_string());
-                let id = event_task_id(event).unwrap_or_else(|| fallback_row_id("task", &name));
+                let id = event_task_id(event).unwrap_or_else(|| self.start_fallback_task_id(&name));
                 self.current_turn.state = TurnState::TaskRunning;
                 self.current_turn.activity = Some(format!("task: {name}"));
                 self.upsert_row(&id, DisplayRowKind::Task, &format!("task: {name} running"));
             }
             "task" => {
                 let name = extract_name(&event.value).unwrap_or_else(|| "task".to_string());
-                let id = event_task_id(event).unwrap_or_else(|| fallback_row_id("task", &name));
+                let id =
+                    event_task_id(event).unwrap_or_else(|| self.complete_fallback_task_id(&name));
                 let status = if event_has_error(&event.value) {
                     "failed"
                 } else {
@@ -184,8 +186,9 @@ impl EventTranscript {
                 let name = extract_name(&event.value).unwrap_or_else(|| "operation".to_string());
                 self.current_turn.state = TurnState::ModelActive;
                 self.current_turn.activity = Some(format!("operation: {name}"));
+                let id = self.ephemeral_row_id("operation-current");
                 self.upsert_row(
-                    "operation-current",
+                    &id,
                     DisplayRowKind::Progress,
                     &format!("operation: {name} running"),
                 );
@@ -198,8 +201,9 @@ impl EventTranscript {
                     "completed"
                 };
                 self.current_turn.activity = Some(format!("operation: {name} {status}"));
+                let id = self.ephemeral_row_id("operation-current");
                 self.upsert_row(
-                    "operation-current",
+                    &id,
                     if event_has_error(&event.value) {
                         DisplayRowKind::Error
                     } else {
@@ -246,14 +250,75 @@ impl EventTranscript {
     }
 
     fn retire_ephemeral_rows(&mut self) {
-        for id in [
-            "assistant-stream",
-            "thinking-current",
-            "turn-current",
-            "operation-current",
-        ] {
-            self.row_index.remove(id);
+        for id in EPHEMERAL_ROW_IDS {
+            self.row_index.remove(&self.ephemeral_row_id(id));
         }
+    }
+
+    fn ephemeral_row_id(&self, id: &str) -> String {
+        if self.turn_sequence == 0 {
+            id.to_string()
+        } else {
+            format!("{id}-{}", self.turn_sequence)
+        }
+    }
+
+    fn start_fallback_tool_id(&mut self, name: &str) -> String {
+        self.fallback_tool_sequence = self.fallback_tool_sequence.saturating_add(1);
+        let id = fallback_row_id(
+            "tool",
+            self.turn_sequence,
+            self.fallback_tool_sequence,
+            name,
+        );
+        self.active_fallback_tools
+            .entry(name.to_string())
+            .or_default()
+            .push_back(id.clone());
+        id
+    }
+
+    fn complete_fallback_tool_id(&mut self, name: &str) -> String {
+        if let Some(id) = pop_active_fallback_id(&mut self.active_fallback_tools, name) {
+            return id;
+        }
+
+        self.fallback_tool_sequence = self.fallback_tool_sequence.saturating_add(1);
+        fallback_row_id(
+            "tool",
+            self.turn_sequence,
+            self.fallback_tool_sequence,
+            name,
+        )
+    }
+
+    fn start_fallback_task_id(&mut self, name: &str) -> String {
+        self.fallback_task_sequence = self.fallback_task_sequence.saturating_add(1);
+        let id = fallback_row_id(
+            "task",
+            self.turn_sequence,
+            self.fallback_task_sequence,
+            name,
+        );
+        self.active_fallback_tasks
+            .entry(name.to_string())
+            .or_default()
+            .push_back(id.clone());
+        id
+    }
+
+    fn complete_fallback_task_id(&mut self, name: &str) -> String {
+        if let Some(id) = pop_active_fallback_id(&mut self.active_fallback_tasks, name) {
+            return id;
+        }
+
+        self.fallback_task_sequence = self.fallback_task_sequence.saturating_add(1);
+        fallback_row_id(
+            "task",
+            self.turn_sequence,
+            self.fallback_task_sequence,
+            name,
+        )
     }
 
     fn upsert_row(&mut self, id: &str, kind: DisplayRowKind, text: &str) {
@@ -356,7 +421,18 @@ fn event_task_id(event: &FlueEvent) -> Option<String> {
     extract_string(&event.value, &["taskId", "id"]).map(|id| format!("task-{id}"))
 }
 
-fn fallback_row_id(kind: &str, name: &str) -> String {
+fn pop_active_fallback_id(
+    active_ids: &mut BTreeMap<String, VecDeque<String>>,
+    name: &str,
+) -> Option<String> {
+    let id = active_ids.get_mut(name).and_then(|ids| ids.pop_front());
+    if active_ids.get(name).is_some_and(VecDeque::is_empty) {
+        active_ids.remove(name);
+    }
+    id
+}
+
+fn fallback_row_id(kind: &str, turn_sequence: u64, sequence: u64, name: &str) -> String {
     let mut key = String::new();
     for char in name.chars() {
         if char.is_ascii_alphanumeric() {
@@ -367,9 +443,9 @@ fn fallback_row_id(kind: &str, name: &str) -> String {
     }
     let key = key.trim_matches('-');
     if key.is_empty() {
-        format!("{kind}-unnamed")
+        format!("{kind}-fallback-{turn_sequence}-{sequence}-unnamed")
     } else {
-        format!("{kind}-{key}")
+        format!("{kind}-fallback-{turn_sequence}-{sequence}-{key}")
     }
 }
 

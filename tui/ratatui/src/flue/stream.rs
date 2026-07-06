@@ -164,21 +164,16 @@ fn run_agent_stream(
             break;
         }
 
-        let should_wait_before_retry =
-            match read_sse_events(&base_url, &session_id, &offset, &tx, &cancel) {
-                Ok(Some(next_offset)) => {
-                    offset = next_offset;
-                    true
-                }
-                Ok(None) => true,
-                Err(error) => {
-                    let _ = tx.send(AgentStreamUpdate::Reconnecting(error.to_string()));
-                    true
-                }
-            };
-        if should_wait_before_retry {
-            sleep_or_cancel(&cancel, RECONNECT_DELAY);
+        match read_sse_events(&base_url, &session_id, &offset, &tx, &cancel) {
+            Ok(Some(next_offset)) => {
+                offset = next_offset;
+            }
+            Ok(None) => {}
+            Err(error) => {
+                let _ = tx.send(AgentStreamUpdate::Reconnecting(error.to_string()));
+            }
         }
+        sleep_or_cancel(&cancel, RECONNECT_DELAY);
     }
 }
 

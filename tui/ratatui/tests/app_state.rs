@@ -295,6 +295,64 @@ fn multiline_agent_response_reindexes_stream_activity_rows() {
 }
 
 #[test]
+fn second_turn_start_does_not_rewrite_previous_ephemeral_rows() {
+    let mut app = App::new_for_test();
+
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![
+        FlueEvent::from_value(serde_json::json!({
+            "type":"turn_start",
+            "eventIndex":1,
+            "timestamp":"2026-07-03T00:00:00Z"
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"thinking_delta",
+            "eventIndex":2,
+            "timestamp":"2026-07-03T00:00:01Z",
+            "text":"first"
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"turn",
+            "eventIndex":3,
+            "timestamp":"2026-07-03T00:00:02Z"
+        })),
+    ]));
+
+    let first_turn_line = app
+        .transcript_lines()
+        .iter()
+        .position(|line| line == "turn: completed")
+        .expect("first turn should render as completed");
+    let first_stream_line = app
+        .transcript_lines()
+        .iter()
+        .position(|line| line == "thinking: first")
+        .expect("first thinking activity should render");
+
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"turn_start",
+            "eventIndex":1,
+            "timestamp":"2026-07-03T00:01:00Z"
+        }),
+    )]));
+
+    let lines = app.transcript_lines();
+    assert_eq!(lines[first_turn_line], "turn: completed");
+    assert_eq!(lines[first_stream_line], "thinking: first");
+    assert_eq!(
+        lines
+            .iter()
+            .filter(|line| line.as_str() == "thinking: first")
+            .count(),
+        1
+    );
+    assert!(lines
+        .iter()
+        .skip(first_stream_line + 1)
+        .any(|line| line == "turn: model active"));
+}
+
+#[test]
 fn max_scroll_uses_rendered_viewport_height() {
     let mut app = App::new_for_test();
 

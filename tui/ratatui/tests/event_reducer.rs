@@ -219,6 +219,62 @@ fn tool_without_tool_call_id_reuses_name_based_fallback_row() {
 }
 
 #[test]
+fn tool_without_tool_call_id_does_not_rewrite_same_name_history_across_turns() {
+    let mut transcript = EventTranscript::default();
+
+    transcript.apply_events(&[
+        event(1, serde_json::json!({"type":"turn_start","timestamp":"2026-07-03T00:00:00Z"})),
+        event(
+            2,
+            serde_json::json!({"type":"tool_start","toolName":"lookup docs"}),
+        ),
+        event(3, serde_json::json!({"type":"tool","toolName":"lookup docs"})),
+        event(1, serde_json::json!({"type":"turn_start","timestamp":"2026-07-03T00:01:00Z"})),
+        event(
+            2,
+            serde_json::json!({"type":"tool_start","toolName":"lookup docs","timestamp":"2026-07-03T00:01:01Z"}),
+        ),
+        event(
+            3,
+            serde_json::json!({"type":"tool","toolName":"lookup docs","timestamp":"2026-07-03T00:01:02Z"}),
+        ),
+    ]);
+
+    let completed_tools = transcript
+        .rows()
+        .iter()
+        .filter(|row| row.text == "tool: lookup docs completed")
+        .count();
+    assert_eq!(completed_tools, 2);
+}
+
+#[test]
+fn unindexed_same_name_tasks_keep_separate_occurrences() {
+    let mut transcript = EventTranscript::default();
+
+    transcript.apply_events(&[
+        event(
+            1,
+            serde_json::json!({"type":"task_start","taskName":"research"}),
+        ),
+        event(
+            2,
+            serde_json::json!({"type":"task_start","taskName":"research"}),
+        ),
+        event(3, serde_json::json!({"type":"task","taskName":"research"})),
+        event(4, serde_json::json!({"type":"task","taskName":"research"})),
+    ]);
+
+    let task_rows = transcript
+        .rows()
+        .iter()
+        .filter(|row| row.text == "task: research completed")
+        .collect::<Vec<_>>();
+    assert_eq!(task_rows.len(), 2);
+    assert!(task_rows.iter().all(|row| row.kind == DisplayRowKind::Task));
+}
+
+#[test]
 fn is_error_marks_tool_task_turn_and_operation_failures() {
     let mut transcript = EventTranscript::default();
 
