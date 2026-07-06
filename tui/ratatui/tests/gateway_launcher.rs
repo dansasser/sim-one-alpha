@@ -3,6 +3,9 @@ use std::net::TcpListener;
 use std::path::PathBuf;
 use std::process::Command;
 
+#[cfg(unix)]
+use std::os::fd::AsRawFd;
+
 use sim_one_ratatui_tui::gateway::{
     read_gateway_port_from_config, resolve_env_path, resolve_node_executable, resolve_server_path,
     GatewayOptions,
@@ -90,7 +93,7 @@ fn built_binary_accepts_smoke_startup_flag() {
         .arg("--server-path")
         .arg("/tmp/sim-one-ratatui-missing-server.mjs")
         .arg("--port")
-        .arg(free_port().to_string())
+        .arg("9")
         .output()
         .expect("built binary should run");
 
@@ -131,8 +134,9 @@ fn built_binary_silences_child_logs_after_gateway_is_healthy() {
         r#"
 import http from 'node:http';
 
-const port = Number(process.env.PORT);
-console.error('startup-visible');
+	const port = Number(process.env.PORT);
+	const listenFd = Number(process.env.SIM_ONE_TEST_LISTEN_FD || 0);
+	console.error('startup-visible');
 
 const server = http.createServer((request, response) => {
   if (request.url === '/health') {
@@ -150,11 +154,16 @@ process.on('SIGTERM', () => {
   setTimeout(() => process.exit(0), 25);
 });
 
-server.listen(port, '127.0.0.1');
-"#,
+	if (listenFd) {
+	  server.listen({ fd: listenFd });
+	} else {
+	  server.listen(port, '127.0.0.1');
+	}
+	"#,
     )
     .expect("test server should be writable");
 
+    let reserved_port = ReservedPort::new();
     let output = Command::new(env!("CARGO_BIN_EXE_sim-one-ratatui-tui"))
         .arg("--smoke-startup")
         .arg("--server-path")
@@ -162,7 +171,8 @@ server.listen(port, '127.0.0.1');
         .arg("--env-path")
         .arg(root.path().join("missing.env"))
         .arg("--port")
-        .arg(free_port().to_string())
+        .arg(reserved_port.port().to_string())
+        .env("SIM_ONE_TEST_LISTEN_FD", reserved_port.raw_fd().to_string())
         .output()
         .expect("built binary should run");
 
@@ -181,14 +191,6 @@ server.listen(port, '127.0.0.1');
         !stderr.contains("shutdown-noise"),
         "post-health child stderr should be drained without reaching the terminal, got: {stderr}"
     );
-}
-
-fn free_port() -> u16 {
-    TcpListener::bind(("127.0.0.1", 0))
-        .expect("free port should be allocatable")
-        .local_addr()
-        .expect("local addr should be readable")
-        .port()
 }
 
 struct TestTempDir {
@@ -219,4 +221,73 @@ impl Drop for TestTempDir {
     fn drop(&mut self) {
         let _ = remove_dir_all(&self.path);
     }
+}
+
+#[cfg(unix)]
+struct ReservedPort {
+    listener: TcpListener,
+}
+
+#[cfg(unix)]
+impl ReservedPort {
+    fn new() -> Self {
+        let listener =
+            TcpListener::bind(("127.0.0.1", 0)).expect("reserved port should be allocatable");
+        make_inheritable(listener.as_raw_fd());
+        Self { listener }
+    }
+
+    fn port(&self) -> u16 {
+        self.listener
+            .local_addr()
+            .expect("local addr should be readable")
+            .port()
+    }
+
+    fn raw_fd(&self) -> i32 {
+        self.listener.as_raw_fd()
+    }
+}
+
+#[cfg(not(unix))]
+struct ReservedPort {
+    port: u16,
+}
+
+#[cfg(not(unix))]
+impl ReservedPort {
+    fn new() -> Self {
+        let listener =
+            TcpListener::bind(("127.0.0.1", 0)).expect("reserved port should be allocatable");
+        let port = listener
+            .local_addr()
+            .expect("local addr should be readable")
+            .port();
+        drop(listener);
+        Self { port }
+    }
+
+    fn port(&self) -> u16 {
+        self.port
+    }
+
+    fn raw_fd(&self) -> i32 {
+        0
+    }
+}
+
+#[cfg(unix)]
+fn make_inheritable(fd: i32) {
+    const F_GETFD: i32 = 1;
+    const F_SETFD: i32 = 2;
+    const FD_CLOEXEC: i32 = 1;
+
+    unsafe extern "C" {
+        fn fcntl(fd: i32, cmd: i32, ...) -> i32;
+    }
+
+    let flags = unsafe { fcntl(fd, F_GETFD) };
+    assert!(flags >= 0, "fcntl(F_GETFD) failed");
+    let result = unsafe { fcntl(fd, F_SETFD, flags & !FD_CLOEXEC) };
+    assert!(result >= 0, "fcntl(F_SETFD) failed");
 }
