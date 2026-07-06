@@ -65,7 +65,7 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
       return c.json(createCommandResponse({
         eventId: event.id,
         command: slashCommand,
-        text: `Unknown command "${slashCommand.raw}". Supported commands are /new and /compact.`,
+        text: `Unknown command "${slashCommand.raw}". Supported commands are /new, /resume, /rename, and /compact.`,
       }));
     }
 
@@ -78,13 +78,35 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
       }));
     }
 
+    if (slashCommand?.name === 'resume' && !slashCommand.args) {
+      goromboPersistenceRuntime.sessionDatabase.recordNormalizedMessageEvent({ event });
+      return c.json(createCommandResponse({
+        eventId: event.id,
+        command: slashCommand,
+        text: 'Usage: /resume <session-id>',
+      }), 400);
+    }
+
+    if (slashCommand?.name === 'rename' && !slashCommand.args) {
+      goromboPersistenceRuntime.sessionDatabase.recordNormalizedMessageEvent({ event });
+      return c.json(createCommandResponse({
+        eventId: event.id,
+        command: slashCommand,
+        text: 'Usage: /rename <title>',
+      }), 400);
+    }
+
+    const requestedSessionId = slashCommand?.name === 'resume'
+      ? slashCommand.args
+      : typeof (payload as { session?: unknown }).session === 'string'
+        ? (payload as { session: string }).session
+        : undefined;
+
     let sessionResolution: ChatSessionResolution;
     try {
       sessionResolution = resolveChatSession({
         event,
-        requestedSessionId: typeof (payload as { session?: unknown }).session === 'string'
-          ? (payload as { session: string }).session
-          : undefined,
+        requestedSessionId,
         forceNew: slashCommand?.name === 'new',
         title: slashCommand?.name === 'new' && slashCommand.args ? slashCommand.args : undefined,
       });
@@ -108,6 +130,29 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
         sessionResolution,
         command: slashCommand,
         text: `Started new session ${sessionResolution.sessionId}.`,
+      }));
+    }
+
+    if (slashCommand?.name === 'resume') {
+      return c.json(createCommandResponse({
+        eventId: event.id,
+        sessionResolution,
+        command: slashCommand,
+        text: `Resumed session ${sessionResolution.sessionId}.`,
+      }));
+    }
+
+    if (slashCommand?.name === 'rename') {
+      goromboPersistenceRuntime.sessionDatabase.touchChatSession(
+        sessionResolution.sessionId,
+        slashCommand.args,
+      );
+
+      return c.json(createCommandResponse({
+        eventId: event.id,
+        sessionResolution,
+        command: slashCommand,
+        text: `Renamed session ${sessionResolution.sessionId} to "${slashCommand.args}".`,
       }));
     }
 

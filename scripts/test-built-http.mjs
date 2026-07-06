@@ -136,6 +136,8 @@ try {
     `web /new command did not include an event id.\n${JSON.stringify(webNewCommand).slice(0, 1200)}`,
   );
 
+  const tuiActorId = 'built-http-tui-user';
+  const tuiConversationId = `built-http-tui-${Date.now().toString(36)}`;
   const tuiNewCommand = await expectJsonStatus(
     `${baseUrl}/api/chat/events`,
     {
@@ -148,8 +150,8 @@ try {
       body: JSON.stringify({
         text: '/new built http notes',
         connector: 'tui',
-        actorId: 'built-http-tui-user',
-        conversationId: `built-http-tui-${Date.now().toString(36)}`,
+        actorId: tuiActorId,
+        conversationId: tuiConversationId,
       }),
     },
     200,
@@ -165,6 +167,63 @@ try {
   );
   const tuiSessionId = tuiNewCommand.session?.id;
   assertJson(typeof tuiSessionId === 'string', `Could not extract TUI session id from /new command.\n${JSON.stringify(tuiNewCommand).slice(0, 1200)}`);
+
+  await expectJsonStatus(
+    `${baseUrl}/api/chat/events`,
+    {
+      method: 'POST',
+      headers: {
+        ...externalHeaders,
+        'content-type': 'application/json',
+        'x-api-secret': requestSecret,
+      },
+      body: JSON.stringify({
+        text: `/resume ${tuiSessionId}`,
+        connector: 'tui',
+        actorId: tuiActorId,
+        conversationId: tuiConversationId,
+      }),
+    },
+    200,
+    'chat event tui /resume command with secret',
+    (body) => {
+      assertJson(
+        body.result?.text === `Resumed session ${tuiSessionId}.` &&
+          body.result?.command?.name === 'resume' &&
+          body.session?.id === tuiSessionId,
+        `tui /resume command did not include the expected command result.\n${JSON.stringify(body).slice(0, 1200)}`,
+      );
+    },
+  );
+
+  await expectJsonStatus(
+    `${baseUrl}/api/chat/events`,
+    {
+      method: 'POST',
+      headers: {
+        ...externalHeaders,
+        'content-type': 'application/json',
+        'x-api-secret': requestSecret,
+      },
+      body: JSON.stringify({
+        text: '/rename Built HTTP Renamed',
+        connector: 'tui',
+        actorId: tuiActorId,
+        conversationId: tuiConversationId,
+        session: tuiSessionId,
+      }),
+    },
+    200,
+    'chat event tui /rename command with secret',
+    (body) => {
+      assertJson(
+        body.result?.text === `Renamed session ${tuiSessionId} to "Built HTTP Renamed".` &&
+          body.result?.command?.name === 'rename' &&
+          body.session?.id === tuiSessionId,
+        `tui /rename command did not include the expected command result.\n${JSON.stringify(body).slice(0, 1200)}`,
+      );
+    },
+  );
 
   await expectJsonStatus(
     `${baseUrl}/api/chat/events`,

@@ -1,4 +1,4 @@
-export type SlashCommandName = 'new' | 'compact';
+export type SlashCommandName = 'new' | 'resume' | 'rename' | 'compact';
 
 export interface ParsedSlashCommand {
   raw: string;
@@ -6,7 +6,7 @@ export interface ParsedSlashCommand {
   args: string;
 }
 
-const supportedCommands = new Set<SlashCommandName>(['new', 'compact']);
+const supportedCommands = new Set<SlashCommandName>(['new', 'resume', 'rename', 'compact']);
 
 export function parseSlashCommand(text: string): ParsedSlashCommand | undefined {
   const trimmed = text.trim();
@@ -34,4 +34,12 @@ export function isSupportedSlashCommand(command: ParsedSlashCommand): command is
 
 export function isSessionCreationSlashCommand(command: ParsedSlashCommand): boolean {
   return command.name === 'new';
+}
+
+export function isResumeSlashCommand(command: ParsedSlashCommand): boolean {
+  return command.name === 'resume';
+}
+
+export function isRenameSlashCommand(command: ParsedSlashCommand): boolean {
+  return command.name === 'rename';
 }

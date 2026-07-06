@@ -8,6 +8,25 @@ import { requireApiSecret } from '../api/middleware/api-secret.js';
 import { registerChatEventRoutes } from '../api/routes/chat-events.js';
 import { registerTelemetryRoutes } from '../api/routes/telemetry.js';
 import { flueTelemetryStore } from '../core/telemetry/flue-telemetry.js';
+import { isSupportedSlashCommand, parseSlashCommand } from '../engine/commands/slash-commands.js';
+
+test('slash command parser supports resume and rename commands', () => {
+  const resume = parseSlashCommand('/resume tui-abc123');
+  assert.deepEqual(resume, {
+    raw: '/resume tui-abc123',
+    name: 'resume',
+    args: 'tui-abc123',
+  });
+  assert.equal(resume ? isSupportedSlashCommand(resume) : false, true);
+
+  const rename = parseSlashCommand('/rename Release polish');
+  assert.deepEqual(rename, {
+    raw: '/rename Release polish',
+    name: 'rename',
+    args: 'Release polish',
+  });
+  assert.equal(rename ? isSupportedSlashCommand(rename) : false, true);
+});
 
 test('chat endpoints fail closed when API_SECRET is not configured', async () => {
   await withApiSecret(undefined, async () => {
@@ -203,6 +222,246 @@ test('chat event compact command compacts the durable orchestrator session witho
       goromboPersistenceRuntime.sessionDatabase.deleteChatSession(requestedSessionId);
     });
   });
+});
+
+test('chat event TUI session commands create resume and rename without prompting', async () => {
+  const testApp = new Hono();
+  const actorId = `session-user-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const conversationId = `session-thread-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const eventIds: string[] = [];
+  let sessionId: string | undefined;
+
+  testApp.use('/agents/*', requireApiSecret);
+  registerChatEventRoutes(testApp);
+  testApp.post('/agents/orchestrator/:id', () => {
+    throw new Error('session commands should not forward to the agent prompt route');
+  });
+
+  try {
+    await withApiSecret('test-secret', async () => {
+      const createResponse = await testApp.request('/api/chat/events', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-secret': 'test-secret',
+        },
+        body: JSON.stringify({
+          connector: 'tui',
+          text: '/new Release testing',
+          actorId,
+          conversationId,
+        }),
+      });
+      assert.equal(createResponse.status, 200);
+      const createBody = await createResponse.json() as {
+        result?: { command?: { name?: string }; text?: string };
+        event?: { id?: string };
+        session?: { id?: string; surface?: string; created?: boolean };
+      };
+      if (createBody.event?.id) eventIds.push(createBody.event.id);
+      sessionId = createBody.session?.id;
+      assert.equal(createBody.result?.command?.name, 'new');
+      assert.match(createBody.result?.text ?? '', /Started new session tui-/);
+      assert.equal(typeof sessionId, 'string');
+      assert.equal(createBody.session?.surface, 'tui');
+      assert.equal(createBody.session?.created, true);
+
+      const resumeResponse = await testApp.request('/api/chat/events', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-secret': 'test-secret',
+        },
+        body: JSON.stringify({
+          connector: 'tui',
+          text: `/resume ${sessionId}`,
+          actorId,
+          conversationId,
+        }),
+      });
+      assert.equal(resumeResponse.status, 200);
+      const resumeBody = await resumeResponse.json() as {
+        result?: { command?: { name?: string }; text?: string };
+        event?: { id?: string };
+        session?: { id?: string; surface?: string; created?: boolean };
+      };
+      if (resumeBody.event?.id) eventIds.push(resumeBody.event.id);
+      assert.equal(resumeBody.result?.command?.name, 'resume');
+      assert.equal(resumeBody.result?.text, `Resumed session ${sessionId}.`);
+      assert.equal(resumeBody.session?.id, sessionId);
+      assert.equal(resumeBody.session?.created, false);
+
+      const renameResponse = await testApp.request('/api/chat/events', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-secret': 'test-secret',
+        },
+        body: JSON.stringify({
+          connector: 'tui',
+          text: '/rename Demo Session',
+          actorId,
+          conversationId,
+          session: sessionId,
+        }),
+      });
+      assert.equal(renameResponse.status, 200);
+      const renameBody = await renameResponse.json() as {
+        result?: { command?: { name?: string }; text?: string };
+        event?: { id?: string };
+        session?: { id?: string };
+      };
+      if (renameBody.event?.id) eventIds.push(renameBody.event.id);
+      assert.equal(renameBody.result?.command?.name, 'rename');
+      assert.equal(renameBody.result?.text, `Renamed session ${sessionId} to "Demo Session".`);
+      assert.equal(renameBody.session?.id, sessionId);
+
+      const storedSession = goromboPersistenceRuntime.sessionDatabase.getChatSession(sessionId ?? '');
+      assert.equal(storedSession?.title, 'Demo Session');
+    });
+  } finally {
+    for (const eventId of eventIds) {
+      goromboPersistenceRuntime.sessionDatabase.deleteNormalizedMessageEvent(eventId);
+    }
+    if (sessionId) {
+      goromboPersistenceRuntime.sessionDatabase.deleteChatSession(sessionId);
+    }
+  }
+});
+
+test('chat event TUI resume denies sessions from another actor', async () => {
+  const testApp = new Hono();
+  const ownerActorId = `resume-owner-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const ownerConversationId = `resume-owner-thread-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const otherActorId = `resume-other-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  let sessionId: string | undefined;
+  const eventIds: string[] = [];
+
+  testApp.use('/agents/*', requireApiSecret);
+  registerChatEventRoutes(testApp);
+  testApp.post('/agents/orchestrator/:id', () => {
+    throw new Error('resume command should not forward to the agent prompt route');
+  });
+
+  try {
+    await withApiSecret('test-secret', async () => {
+      const createResponse = await testApp.request('/api/chat/events', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-secret': 'test-secret',
+        },
+        body: JSON.stringify({
+          connector: 'tui',
+          text: '/new Owner Session',
+          actorId: ownerActorId,
+          conversationId: ownerConversationId,
+        }),
+      });
+      assert.equal(createResponse.status, 200);
+      const createBody = await createResponse.json() as {
+        event?: { id?: string };
+        session?: { id?: string };
+      };
+      if (createBody.event?.id) eventIds.push(createBody.event.id);
+      sessionId = createBody.session?.id;
+      assert.equal(typeof sessionId, 'string');
+
+      const deniedResponse = await testApp.request('/api/chat/events', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-secret': 'test-secret',
+        },
+        body: JSON.stringify({
+          connector: 'tui',
+          text: `/resume ${sessionId}`,
+          actorId: otherActorId,
+          conversationId: ownerConversationId,
+        }),
+      });
+      assert.equal(deniedResponse.status, 403);
+      const deniedBody = await deniedResponse.json() as { error?: string; eventId?: string };
+      if (deniedBody.eventId) eventIds.push(deniedBody.eventId);
+      assert.match(deniedBody.error ?? '', /not available/);
+    });
+  } finally {
+    for (const eventId of eventIds) {
+      goromboPersistenceRuntime.sessionDatabase.deleteNormalizedMessageEvent(eventId);
+    }
+    if (sessionId) {
+      goromboPersistenceRuntime.sessionDatabase.deleteChatSession(sessionId);
+    }
+  }
+});
+
+test('chat event TUI resume and rename commands validate required arguments', async () => {
+  const testApp = new Hono();
+  const actorId = `usage-user-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const conversationId = `usage-thread-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const eventIds: string[] = [];
+
+  testApp.use('/agents/*', requireApiSecret);
+  registerChatEventRoutes(testApp);
+  testApp.post('/agents/orchestrator/:id', () => {
+    throw new Error('invalid session commands should not forward to the agent prompt route');
+  });
+
+  try {
+    await withApiSecret('test-secret', async () => {
+      const resumeResponse = await testApp.request('/api/chat/events', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-secret': 'test-secret',
+        },
+        body: JSON.stringify({
+          connector: 'tui',
+          text: '/resume',
+          actorId,
+          conversationId,
+        }),
+      });
+      assert.equal(resumeResponse.status, 400);
+      const resumeBody = await resumeResponse.json() as {
+        result?: { text?: string; command?: { name?: string } };
+        event?: { id?: string };
+      };
+      if (resumeBody.event?.id) eventIds.push(resumeBody.event.id);
+      assert.equal(resumeBody.result?.command?.name, 'resume');
+      assert.equal(resumeBody.result?.text, 'Usage: /resume <session-id>');
+
+      const renameResponse = await testApp.request('/api/chat/events', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-secret': 'test-secret',
+        },
+        body: JSON.stringify({
+          connector: 'tui',
+          text: '/rename',
+          actorId,
+          conversationId,
+        }),
+      });
+      assert.equal(renameResponse.status, 400);
+      const renameBody = await renameResponse.json() as {
+        result?: { text?: string; command?: { name?: string } };
+        event?: { id?: string };
+        session?: { id?: string };
+      };
+      if (renameBody.event?.id) eventIds.push(renameBody.event.id);
+      assert.equal(renameBody.result?.command?.name, 'rename');
+      assert.equal(renameBody.result?.text, 'Usage: /rename <title>');
+      if (renameBody.session?.id) {
+        goromboPersistenceRuntime.sessionDatabase.deleteChatSession(renameBody.session.id);
+      }
+    });
+  } finally {
+    for (const eventId of eventIds) {
+      goromboPersistenceRuntime.sessionDatabase.deleteNormalizedMessageEvent(eventId);
+    }
+  }
 });
 
 test('telemetry run endpoint is protected and reports researcher delegation', async () => {
