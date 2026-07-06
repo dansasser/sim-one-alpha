@@ -1,6 +1,6 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use sim_one_ratatui_tui::app::AppEvent;
-use sim_one_ratatui_tui::input::map_key_event;
+use sim_one_ratatui_tui::input::{map_key_event, map_terminal_event};
 
 #[test]
 fn maps_prompt_editing_and_submit_keys() {
@@ -92,4 +92,33 @@ fn maps_transcript_scroll_and_exit_keys() {
         map_key_event(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)),
         Some(AppEvent::Quit)
     );
+}
+
+#[test]
+fn terminal_mapper_ignores_release_events_and_accepts_repeats() {
+    assert_eq!(
+        map_terminal_event(Event::Key(KeyEvent::new_with_kind(
+            KeyCode::Char('a'),
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        ))),
+        None
+    );
+    assert_eq!(
+        map_terminal_event(Event::Key(KeyEvent::new_with_kind(
+            KeyCode::Char('a'),
+            KeyModifiers::NONE,
+            KeyEventKind::Repeat,
+        ))),
+        Some(AppEvent::Text("a".to_string()))
+    );
+    assert_eq!(
+        map_terminal_event(Event::Key(KeyEvent::new_with_kind(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        ))),
+        None
+    );
+    assert_eq!(map_terminal_event(Event::Resize(80, 24)), None);
 }

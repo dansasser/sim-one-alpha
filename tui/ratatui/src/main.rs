@@ -2,12 +2,12 @@ use std::io;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crossterm::event::{self, Event};
+use crossterm::event;
 use ratatui::DefaultTerminal;
 use sim_one_ratatui_tui::agent::send_agent_prompt;
 use sim_one_ratatui_tui::app::{App, AppEvent};
 use sim_one_ratatui_tui::gateway::{ensure_server_running, GatewayOptions};
-use sim_one_ratatui_tui::input::map_key_event;
+use sim_one_ratatui_tui::input::map_terminal_event;
 use sim_one_ratatui_tui::terminal::{init_terminal, install_panic_restore_hook, restore_terminal};
 use sim_one_ratatui_tui::ui;
 
@@ -76,11 +76,7 @@ fn read_app_event() -> io::Result<Option<AppEvent>> {
         return Ok(None);
     }
 
-    match event::read()? {
-        Event::Key(key) => Ok(map_key_event(key)),
-        Event::Resize(_, _) => Ok(None),
-        _ => Ok(None),
-    }
+    Ok(map_terminal_event(event::read()?))
 }
 
 #[derive(Debug, Default)]

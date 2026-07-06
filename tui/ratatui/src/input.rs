@@ -1,6 +1,15 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::app::AppEvent;
+
+pub fn map_terminal_event(event: Event) -> Option<AppEvent> {
+    match event {
+        Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
+            map_key_event(key)
+        }
+        _ => None,
+    }
+}
 
 pub fn map_key_event(key: KeyEvent) -> Option<AppEvent> {
     if key.modifiers.contains(KeyModifiers::CONTROL) {
