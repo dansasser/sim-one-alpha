@@ -3,6 +3,7 @@ use std::sync::Arc;
 use ratatui::backend::TestBackend;
 use ratatui::layout::Position;
 use ratatui::Terminal;
+use sim_one_ratatui_tui::agent::AgentReply;
 use sim_one_ratatui_tui::app::{App, AppEvent};
 use sim_one_ratatui_tui::flue::events::FlueEvent;
 use sim_one_ratatui_tui::flue::stream::AgentStreamUpdate;
@@ -142,6 +143,12 @@ fn app_with_pending_response() -> App {
         "primary",
         "test gateway",
         "http://127.0.0.1:3940",
-        Arc::new(|_, _, prompt| Ok(format!("done: {prompt}"))),
+        Arc::new(|_, _, prompt| {
+            Ok(AgentReply {
+                text: format!("done: {prompt}"),
+                session_id: None,
+                command_name: None,
+            })
+        }),
     )
 }

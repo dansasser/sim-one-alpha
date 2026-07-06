@@ -64,8 +64,11 @@ fn run_client(
         session_id,
     );
     restore_terminal();
+    if let Ok(Some(session_id)) = &result {
+        println!("Exited SIM-ONE Alpha TUI. Session: {session_id}");
+    }
     cleanup();
-    result
+    result.map(|_| ())
 }
 
 fn run(
@@ -73,7 +76,7 @@ fn run(
     gateway_status: String,
     base_url: String,
     session_id: String,
-) -> io::Result<()> {
+) -> io::Result<Option<String>> {
     let mut app = App::with_session(session_id, gateway_status, base_url);
     app.start_stream();
 
@@ -87,7 +90,7 @@ fn run(
         }
     }
 
-    Ok(())
+    Ok(app.exit_session_id().map(str::to_string))
 }
 
 fn read_app_event() -> io::Result<Option<AppEvent>> {

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::agent::send_agent_prompt;
+use crate::agent::{list_chat_sessions, send_agent_prompt_reply, AgentReply, SessionSummary};
 use crate::flue::reducer::{DisplayRow, EventTranscript};
 use crate::flue::stream::{spawn_agent_stream, AgentStreamHandle, AgentStreamUpdate};
 
@@ -13,8 +13,12 @@ const PLACEHOLDER_CONTEXT_LINES: usize = 24;
 const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
 
 pub type AgentSender =
-    Arc<dyn Fn(String, String, String) -> Result<String, String> + Send + Sync + 'static>;
+    Arc<dyn Fn(String, String, String) -> Result<AgentReply, String> + Send + Sync + 'static>;
+pub type SessionLister =
+    Arc<dyn Fn(String, usize) -> Result<Vec<SessionSummary>, String> + Send + Sync + 'static>;
 pub type Clock = Arc<dyn Fn() -> Instant + Send + Sync + 'static>;
+
+const TUI_COMMAND_HELP: &str = "/new [title]\n/resume <session-id>\n/sessions [limit]\n/session\n/rename <title>\n/compact\n/help\n/exit";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppEvent {
@@ -45,11 +49,13 @@ pub struct App {
     transcript_scroll: usize,
     follow_tail: bool,
     should_quit: bool,
+    exit_session_id: Option<String>,
     session_id: String,
     gateway_status: String,
     base_url: String,
     agent_status: String,
     agent_sender: AgentSender,
+    session_lister: SessionLister,
     clock: Clock,
     pending_response: Option<PendingResponse>,
     stream_handle: Option<AgentStreamHandle>,
@@ -71,7 +77,7 @@ struct PendingResponse {
 
 #[derive(Debug)]
 struct AgentResponse {
-    result: Result<String, String>,
+    result: Result<AgentReply, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,7 +100,7 @@ impl App {
             "primary",
             "offline placeholder",
             "http://127.0.0.1:3940",
-            Arc::new(|_, _, prompt| Ok(format!("test response to {prompt}"))),
+            Arc::new(|_, _, prompt| Ok(agent_reply(format!("test response to {prompt}")))),
         )
     }
 
@@ -108,7 +114,7 @@ impl App {
             gateway_status,
             base_url,
             Arc::new(|base_url, session_id, prompt| {
-                send_agent_prompt(&base_url, &session_id, &prompt)
+                send_agent_prompt_reply(&base_url, &session_id, &prompt)
             }),
         )
     }
@@ -119,11 +125,28 @@ impl App {
         base_url: impl Into<String>,
         agent_sender: AgentSender,
     ) -> Self {
+        Self::with_agent_sender_and_session_lister(
+            session_id,
+            gateway_status,
+            base_url,
+            agent_sender,
+            Arc::new(|base_url, limit| list_chat_sessions(&base_url, limit)),
+        )
+    }
+
+    pub fn with_agent_sender_and_session_lister(
+        session_id: impl Into<String>,
+        gateway_status: impl Into<String>,
+        base_url: impl Into<String>,
+        agent_sender: AgentSender,
+        session_lister: SessionLister,
+    ) -> Self {
         Self::with_agent_sender_and_clock(
             session_id,
             gateway_status,
             base_url,
             agent_sender,
+            session_lister,
             Arc::new(Instant::now),
         )
     }
@@ -133,6 +156,7 @@ impl App {
         gateway_status: impl Into<String>,
         base_url: impl Into<String>,
         agent_sender: AgentSender,
+        session_lister: SessionLister,
         clock: Clock,
     ) -> Self {
         let mut app = Self {
@@ -142,11 +166,13 @@ impl App {
             transcript_scroll: 0,
             follow_tail: true,
             should_quit: false,
+            exit_session_id: None,
             session_id: session_id.into(),
             gateway_status: gateway_status.into(),
             base_url: base_url.into(),
             agent_status: "ready".to_string(),
             agent_sender,
+            session_lister,
             clock,
             pending_response: None,
             stream_handle: None,
@@ -258,12 +284,16 @@ impl App {
                 self.pending_response = None;
                 self.agent_status = "ready".to_string();
                 match response.result {
-                    Ok(text) => {
+                    Ok(reply) => {
+                        let session_id = reply.session_id.clone();
                         self.replace_transcript_line_with_speaker_text(
                             transcript_line,
                             "assistant",
-                            text.trim(),
+                            reply.text.trim(),
                         );
+                        if let Some(session_id) = session_id {
+                            self.switch_session(session_id);
+                        }
                     }
                     Err(error) => {
                         self.replace_transcript_line_with_speaker_text(
@@ -316,6 +346,10 @@ impl App {
 
     pub fn should_quit(&self) -> bool {
         self.should_quit
+    }
+
+    pub fn exit_session_id(&self) -> Option<&str> {
+        self.exit_session_id.as_deref()
     }
 
     pub fn session_id(&self) -> &str {
@@ -479,6 +513,14 @@ impl App {
     }
 
     fn submit_prompt(&mut self) {
+        let prompt = self.prompt.trim().to_string();
+        if self.handle_local_slash_command(&prompt) {
+            self.prompt.clear();
+            self.prompt_cursor = 0;
+            self.after_transcript_changed();
+            return;
+        }
+
         if let Some(pending) = &mut self.pending_response {
             pending.duplicate_submit_notice = true;
             self.agent_status = "busy".to_string();
@@ -486,7 +528,6 @@ impl App {
             return;
         }
 
-        let prompt = self.prompt.trim().to_string();
         if prompt.is_empty() {
             self.prompt.clear();
             self.prompt_cursor = 0;
@@ -520,6 +561,80 @@ impl App {
         self.transcript_lines
             .push(pending_transcript_line(&pending, started_at));
         self.pending_response = Some(pending);
+    }
+
+    fn handle_local_slash_command(&mut self, prompt: &str) -> bool {
+        match prompt {
+            "/exit" => {
+                self.exit_session_id = Some(self.session_id.clone());
+                self.should_quit = true;
+                true
+            }
+            "/session" => {
+                self.push_speaker_text("system", &format!("current session {}", self.session_id));
+                true
+            }
+            "/help" => {
+                self.push_speaker_text("system", TUI_COMMAND_HELP);
+                true
+            }
+            command if command == "/sessions" || command.starts_with("/sessions ") => {
+                self.render_recent_sessions(command);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn render_recent_sessions(&mut self, command: &str) {
+        let limit = parse_sessions_limit(command);
+        match (self.session_lister)(self.base_url.clone(), limit) {
+            Ok(sessions) => {
+                self.push_speaker_text("system", "recent sessions");
+                if sessions.is_empty() {
+                    self.push_speaker_text("system", "no recent sessions");
+                    return;
+                }
+                for session in sessions {
+                    let title = session.title.as_deref().unwrap_or("(untitled)");
+                    self.push_speaker_text(
+                        "system",
+                        &format!(
+                            "{} | {} | {} | {}",
+                            session.id, session.origin, title, session.updated_at
+                        ),
+                    );
+                }
+            }
+            Err(error) => {
+                self.push_speaker_text("error", &error);
+            }
+        }
+    }
+
+    fn switch_session(&mut self, session_id: String) {
+        if self.session_id == session_id {
+            return;
+        }
+
+        let had_stream = if let Some(handle) = self.stream_handle.take() {
+            handle.cancel();
+            true
+        } else {
+            false
+        };
+
+        self.session_id = session_id;
+        self.event_transcript = EventTranscript::default();
+        self.event_row_lines.clear();
+        self.last_stream_event = None;
+        if had_stream {
+            self.stream_status = StreamStatus::Connecting;
+            self.start_stream();
+        } else {
+            self.stream_status = StreamStatus::NotAttached;
+        }
+        self.push_speaker_text("system", &format!("active session {}", self.session_id));
     }
 
     fn push_speaker_text(&mut self, speaker: &str, text: &str) {
@@ -705,6 +820,24 @@ fn format_duration(duration: Duration) -> String {
         format!("{hours:02}:{minutes:02}:{seconds:02}")
     } else {
         format!("{minutes:02}:{seconds:02}")
+    }
+}
+
+fn parse_sessions_limit(command: &str) -> usize {
+    command
+        .strip_prefix("/sessions")
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .and_then(|value| value.parse::<usize>().ok())
+        .map(|value| value.clamp(1, 50))
+        .unwrap_or(10)
+}
+
+fn agent_reply(text: impl Into<String>) -> AgentReply {
+    AgentReply {
+        text: text.into(),
+        session_id: None,
+        command_name: None,
     }
 }
 

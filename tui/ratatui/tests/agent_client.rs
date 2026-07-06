@@ -3,10 +3,10 @@ use std::net::TcpListener;
 use std::sync::mpsc;
 use std::thread;
 
-use sim_one_ratatui_tui::agent::send_agent_prompt;
+use sim_one_ratatui_tui::agent::{send_agent_prompt, send_agent_prompt_reply};
 
 #[test]
-fn posts_prompt_to_flue_agent_endpoint_and_extracts_text() {
+fn posts_prompt_to_tui_chat_event_endpoint_and_extracts_text() {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("test server should bind");
     let port = listener
         .local_addr()
@@ -38,9 +38,68 @@ fn posts_prompt_to_flue_agent_endpoint_and_extracts_text() {
 
     assert_eq!(response, "real agent response");
     let request = rx.recv().expect("request should be captured");
-    assert!(request
-        .starts_with("POST /agents/orchestrator/session%20with%20spaces?wait=result HTTP/1.1"));
-    assert!(request.contains(r#""message":"hello agent""#));
+    assert!(request.starts_with("POST /api/chat/events HTTP/1.1"));
+    let body = request_body_json(&request);
+    assert_eq!(
+        body.get("connector").and_then(|value| value.as_str()),
+        Some("tui")
+    );
+    assert_eq!(
+        body.get("text").and_then(|value| value.as_str()),
+        Some("hello agent")
+    );
+    assert_eq!(
+        body.get("actorId").and_then(|value| value.as_str()),
+        Some("local-tui")
+    );
+    assert_eq!(
+        body.get("actorDisplayName")
+            .and_then(|value| value.as_str()),
+        Some("Local TUI")
+    );
+    assert_eq!(
+        body.get("conversationId").and_then(|value| value.as_str()),
+        Some("session with spaces")
+    );
+    assert_eq!(
+        body.get("threadId").and_then(|value| value.as_str()),
+        Some("session with spaces")
+    );
+    assert_eq!(
+        body.get("session").and_then(|value| value.as_str()),
+        Some("session with spaces")
+    );
+}
+
+#[test]
+fn extracts_command_session_metadata_from_chat_event_response() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("test server should bind");
+    let port = listener
+        .local_addr()
+        .expect("test server should have address")
+        .port();
+
+    thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("client should connect");
+        let _ = read_http_request(&mut stream);
+
+        let body = r#"{"result":{"text":"Started new session tui-123.","command":{"name":"new","handled":true}},"session":{"id":"tui-123","surface":"tui","created":true}}"#;
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .expect("response should be writable");
+    });
+
+    let response =
+        send_agent_prompt_reply(&format!("http://127.0.0.1:{port}"), "primary", "/new Demo")
+            .expect("agent prompt should return response metadata");
+
+    assert_eq!(response.text, "Started new session tui-123.");
+    assert_eq!(response.session_id.as_deref(), Some("tui-123"));
+    assert_eq!(response.command_name.as_deref(), Some("new"));
 }
 
 #[test]
@@ -129,4 +188,12 @@ fn read_http_request(stream: &mut impl Read) -> String {
     }
 
     String::from_utf8(bytes).expect("request should be utf8")
+}
+
+fn request_body_json(request: &str) -> serde_json::Value {
+    let body = request
+        .split_once("\r\n\r\n")
+        .map(|(_, body)| body)
+        .expect("request should contain a body");
+    serde_json::from_str(body).expect("request body should be json")
 }

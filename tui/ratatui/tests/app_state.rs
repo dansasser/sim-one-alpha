@@ -3,6 +3,7 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use sim_one_ratatui_tui::agent::{AgentReply, SessionSummary};
 use sim_one_ratatui_tui::app::{App, AppEvent, Clock, SCROLL_PAGE_LINES};
 use sim_one_ratatui_tui::flue::events::{FlueEvent, StreamControl};
 use sim_one_ratatui_tui::flue::stream::AgentStreamUpdate;
@@ -27,7 +28,9 @@ fn enter_submits_prompt_to_agent_and_returns_to_tail() {
         "primary",
         "test gateway",
         "http://127.0.0.1:3940",
-        Arc::new(|_, session, prompt| Ok(format!("session={session}; prompt={prompt}"))),
+        Arc::new(|_, session, prompt| {
+            Ok(agent_reply(format!("session={session}; prompt={prompt}")))
+        }),
     );
     app.handle_event(AppEvent::Text("ship the tui".to_string()));
     app.scroll_page_up();
@@ -259,7 +262,7 @@ fn multiline_agent_response_reindexes_stream_activity_rows() {
                 .expect("release receiver should lock")
                 .recv_timeout(Duration::from_secs(5))
                 .expect("test should release blocked sender");
-            Ok("first line\nsecond line\nthird line".to_string())
+            Ok(agent_reply("first line\nsecond line\nthird line"))
         }),
     );
 
@@ -434,6 +437,138 @@ fn ctrl_c_marks_app_for_clean_exit() {
     assert!(app.should_quit());
 }
 
+#[test]
+fn slash_exit_marks_app_for_clean_exit_and_preserves_session_id() {
+    let mut app = App::new_for_test();
+
+    app.handle_event(AppEvent::Text("/exit".to_string()));
+    app.handle_event(AppEvent::Submit);
+
+    assert!(app.should_quit());
+    assert_eq!(app.prompt(), "");
+    assert_eq!(app.exit_session_id(), Some("primary"));
+}
+
+#[test]
+fn slash_session_renders_current_session_without_calling_agent() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let sender_calls = Arc::clone(&calls);
+    let mut app = App::with_agent_sender(
+        "primary",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(move |_, _, _| {
+            sender_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(agent_reply("should not call"))
+        }),
+    );
+
+    app.handle_event(AppEvent::Text("/session".to_string()));
+    app.handle_event(AppEvent::Submit);
+
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert_eq!(app.prompt(), "");
+    assert!(app
+        .transcript_lines()
+        .iter()
+        .any(|line| line == "system: current session primary"));
+}
+
+#[test]
+fn slash_help_renders_command_reference_without_calling_agent() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let sender_calls = Arc::clone(&calls);
+    let mut app = App::with_agent_sender(
+        "primary",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(move |_, _, _| {
+            sender_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(agent_reply("should not call"))
+        }),
+    );
+
+    app.handle_event(AppEvent::Text("/help".to_string()));
+    app.handle_event(AppEvent::Submit);
+
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    let help = app.transcript_lines().join("\n");
+    for command in [
+        "/new",
+        "/resume",
+        "/sessions",
+        "/session",
+        "/rename",
+        "/compact",
+        "/help",
+        "/exit",
+    ] {
+        assert!(help.contains(command), "help should mention {command}");
+    }
+}
+
+#[test]
+fn slash_sessions_lists_recent_sessions_without_calling_agent() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let sender_calls = Arc::clone(&calls);
+    let mut app = App::with_agent_sender_and_session_lister(
+        "primary",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(move |_, _, _| {
+            sender_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(agent_reply("should not call"))
+        }),
+        Arc::new(|_, limit| {
+            assert_eq!(limit, 10);
+            Ok(vec![SessionSummary {
+                id: "tui-abc123".to_string(),
+                origin: "tui".to_string(),
+                title: Some("Release polish".to_string()),
+                updated_at: "2026-07-06T21:00:00.000Z".to_string(),
+            }])
+        }),
+    );
+
+    app.handle_event(AppEvent::Text("/sessions".to_string()));
+    app.handle_event(AppEvent::Submit);
+
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert!(app
+        .transcript_lines()
+        .iter()
+        .any(|line| line == "system: recent sessions"));
+    assert!(app.transcript_lines().iter().any(|line| {
+        line == "system: tui-abc123 | tui | Release polish | 2026-07-06T21:00:00.000Z"
+    }));
+}
+
+#[test]
+fn command_response_switches_active_session_and_announces_it() {
+    let mut app = App::with_agent_sender(
+        "primary",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| {
+            Ok(AgentReply {
+                text: "Started new session tui-new-1.".to_string(),
+                session_id: Some("tui-new-1".to_string()),
+                command_name: Some("new".to_string()),
+            })
+        }),
+    );
+
+    app.handle_event(AppEvent::Text("/new Demo".to_string()));
+    app.handle_event(AppEvent::Submit);
+    wait_for_agent(&mut app);
+
+    assert_eq!(app.session_id(), "tui-new-1");
+    assert!(app
+        .transcript_lines()
+        .iter()
+        .any(|line| line == "system: active session tui-new-1"));
+}
+
 fn wait_for_agent(app: &mut App) {
     let deadline = Instant::now() + Duration::from_secs(5);
     while app.is_agent_pending() && Instant::now() < deadline {
@@ -442,6 +577,14 @@ fn wait_for_agent(app: &mut App) {
     }
     app.poll_agent();
     assert!(!app.is_agent_pending(), "agent response did not settle");
+}
+
+fn agent_reply(text: impl Into<String>) -> AgentReply {
+    AgentReply {
+        text: text.into(),
+        session_id: None,
+        command_name: None,
+    }
 }
 
 fn wait_for_calls(calls: &AtomicUsize, expected: usize) {
@@ -469,8 +612,9 @@ fn app_with_blocked_sender(clock: &TestClock) -> (App, mpsc::Sender<()>, Arc<Ato
                 .expect("release receiver should lock")
                 .recv_timeout(Duration::from_secs(5))
                 .expect("test should release blocked sender");
-            Ok(format!("done: {prompt}"))
+            Ok(agent_reply(format!("done: {prompt}")))
         }),
+        Arc::new(|_, _| Ok(Vec::new())),
         clock.clock(),
     );
 
