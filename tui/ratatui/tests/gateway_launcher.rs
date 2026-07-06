@@ -143,6 +143,29 @@ fn built_binary_rejects_port_zero_at_parse_time() {
 }
 
 #[test]
+fn built_binary_accepts_base_url_smoke_without_server_artifact() {
+    let output = Command::new(env!("CARGO_BIN_EXE_sim-one-ratatui-tui"))
+        .arg("--smoke-startup")
+        .arg("--base-url")
+        .arg("http://127.0.0.1:3999")
+        .arg("--session")
+        .arg("custom-session")
+        .output()
+        .expect("built binary should run");
+
+    assert!(
+        output.status.success(),
+        "base-url smoke should not require a packaged server, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("gateway ready at http://127.0.0.1:3999 (started: false)"),
+        "stdout should report provided base URL, got: {stdout}"
+    );
+}
+
+#[test]
 fn built_binary_launches_packaged_server_from_runtime_root_when_called_elsewhere() {
     let runtime_root = TestTempDir::new("packaged-cwd");
     let launch_dir = TestTempDir::new("launch-cwd");

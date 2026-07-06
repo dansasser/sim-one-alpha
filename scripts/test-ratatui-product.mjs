@@ -14,6 +14,8 @@ const serverDir = '.gorombo/sim-one-alpha';
 const serverPath = join(serverDir, 'server.mjs');
 const tuiBinaryName = process.platform === 'win32' ? 'sim-one-ratatui-tui.exe' : 'sim-one-ratatui-tui';
 const tuiPath = join('.gorombo', 'sim-one-ratatui', tuiBinaryName);
+const simOneBinaryName = process.platform === 'win32' ? 'sim-one.cmd' : 'sim-one';
+const simOnePath = join('.gorombo', 'sim-one-cli', simOneBinaryName);
 
 if (!existsSync(serverPath)) {
   throw new Error(`${serverPath} does not exist. Run pnpm run build before the Ratatui product smoke test.`);
@@ -21,6 +23,10 @@ if (!existsSync(serverPath)) {
 
 if (!existsSync(tuiPath)) {
   throw new Error(`${tuiPath} does not exist. Run pnpm run build:tui:ratatui before the Ratatui product smoke test.`);
+}
+
+if (!existsSync(simOnePath)) {
+  throw new Error(`${simOnePath} does not exist. Run pnpm run build:cli before the Ratatui product smoke test.`);
 }
 
 const port = await getFreePort();
@@ -55,6 +61,8 @@ try {
     CODEX_BRAIN_LOCAL_API_KEY: process.env.CODEX_BRAIN_LOCAL_API_KEY || envFileValues.CODEX_BRAIN_LOCAL_API_KEY || 'ratatui-product-placeholder',
     CODEX_BRAIN_LOCAL_API_URL: process.env.CODEX_BRAIN_LOCAL_API_URL || envFileValues.CODEX_BRAIN_LOCAL_API_URL || 'https://dt1.example.test/v1',
     GOROMBO_WORKSPACE_ROOT: codingWorkspaceRoot,
+    GOROMBO_CAPABILITY_DB_PATH: join(codingWorkspaceRoot, 'capabilities.sqlite'),
+    GOROMBO_CAPABILITIES_DIR: join(codingWorkspaceRoot, 'capabilities'),
     GOROMBO_TEST_MODE: '1',
     SIM_ONE_TUI_TEST_PROMPT: 'Reply with one short sentence confirming the Ratatui product prompt path works.',
   };
@@ -62,11 +70,9 @@ try {
     childEnv.NVM_DIR = join(process.env.HOME, '.nvm');
   }
 
-  child = spawn(tuiPath, [], {
-    cwd: process.cwd(),
-    env: childEnv,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  await assertProductCommandRouting(childEnv);
+
+  child = spawnProductCommand(['--port', String(port)], childEnv);
 
   child.stdout.on('data', (chunk) => { stdout += String(chunk); });
   child.stderr.on('data', (chunk) => { stderr += String(chunk); });
@@ -83,7 +89,7 @@ try {
   if (responseText.length < 8 || /placeholder/i.test(responseText)) {
     throw new Error(`Ratatui product smoke response was not a real agent response.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
   }
-  console.log('[ratatui-product] Built TUI command sent a real prompt and received an agent response.');
+  console.log('[ratatui-product] sim-one sent a real prompt through the Ratatui product path and received an agent response.');
 } finally {
   if (child && child.exitCode === null && child.signalCode === null) {
     child.kill('SIGKILL');
@@ -109,6 +115,55 @@ function productLikePath() {
   const currentPath = process.env.PATH || '';
   const nodeBin = dirname(process.env.SIM_ONE_NODE || process.execPath);
   return [nodeBin, currentPath].filter(Boolean).join(delimiter);
+}
+
+async function assertProductCommandRouting(env) {
+  const help = await runProductCommand(['--help'], env, 30_000);
+  if (help.exitCode !== 0) {
+    throw new Error(`sim-one --help failed with exit ${help.exitCode}\nstdout:\n${help.stdout}\nstderr:\n${help.stderr}`);
+  }
+  if (!help.stdout.includes('SIM-ONE Alpha') || !help.stdout.includes('skill')) {
+    throw new Error(`sim-one --help did not expose product CLI help.\nstdout:\n${help.stdout}\nstderr:\n${help.stderr}`);
+  }
+
+  for (const kind of ['skill', 'tool', 'worker', 'mcp']) {
+    const result = await runProductCommand([kind, 'list'], env, 30_000);
+    if (result.exitCode !== 0) {
+      throw new Error(`sim-one ${kind} list failed with exit ${result.exitCode}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(result.stdout);
+    } catch (error) {
+      throw new Error(`sim-one ${kind} list did not return JSON: ${error.message}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+    }
+    if (!Array.isArray(parsed)) {
+      throw new Error(`sim-one ${kind} list returned non-array JSON.\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+    }
+  }
+}
+
+function spawnProductCommand(args, env) {
+  return spawn(simOnePath, args, {
+    cwd: process.cwd(),
+    env,
+    shell: process.platform === 'win32',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+}
+
+async function runProductCommand(args, env, timeoutMs) {
+  const command = spawnProductCommand(args, env);
+  let commandStdout = '';
+  let commandStderr = '';
+  command.stdout.on('data', (chunk) => {
+    commandStdout += String(chunk);
+  });
+  command.stderr.on('data', (chunk) => {
+    commandStderr += String(chunk);
+  });
+  const exitCode = await waitForClose(command, timeoutMs);
+  return { exitCode, stdout: commandStdout, stderr: commandStderr };
 }
 
 async function getFreePort() {
