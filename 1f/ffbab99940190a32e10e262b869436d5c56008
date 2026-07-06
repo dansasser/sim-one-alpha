@@ -1,0 +1,29 @@
+src/engine/commands/slash-commands.ts
+  s_a81fff26d52223::t_d1fd398f8f3584 1,9,38-45
+src/tests/http-endpoints.test.ts
+  s_a81fff26d52223::t_45dfc11166febd 227-466
+  s_a81fff26d52223::t_ae5cfad2873a3e 11-29
+src/api/routes/chat-events.ts
+  s_a81fff26d52223::t_d1fd398f8f3584 68
+  s_a81fff26d52223::t_f1fe81b370fcfc 81-104,109,136-157
+  s_a81fff26d52223::t_3fbed99042513d 158
+scripts/test-built-http.mjs
+  s_a81fff26d52223::t_69752388c749af 139-140,153-154,171-226
+  s_a81fff26d52223::t_75140d0400e22c 227
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "1fffbab99940190a32e10e262b869436d5c56008",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
