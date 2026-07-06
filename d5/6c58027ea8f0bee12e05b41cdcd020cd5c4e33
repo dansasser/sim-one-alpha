@@ -1,0 +1,40 @@
+README.md
+  s_a3b1aea6901a1b::t_f0c1fed4d3778f 3,7,10,37,41,43,45
+  s_a3b1aea6901a1b::t_e98c4d1be28e52 4-6,8-9,11-33,35,39,47,49,51,53-71,73,75,77,79,81,83,87,89,91,93,95,97,99,101,103,105,107,109,111,115,117,119,123,127,131,135
+AGENTS.md
+  s_a3b1aea6901a1b::t_c62d1605c13bf4 758-768
+docs/archive/readme-before-release-rewrite.md
+  s_a3b1aea6901a1b::t_b999178c9df423 1-1415
+openwiki/.last-update.json
+  s_a3b1aea6901a1b::t_a0b05edb80e956 1-6
+openwiki/architecture/data-and-capabilities.md
+  s_a3b1aea6901a1b::t_1b046c0abe8234 1-108
+openwiki/architecture/runtime.md
+  s_a3b1aea6901a1b::t_9304597eea74f1 1-79
+openwiki/operations/development-and-testing.md
+  s_a3b1aea6901a1b::t_1d46e2326af333 1-124
+openwiki/quickstart.md
+  s_a3b1aea6901a1b::t_655917b761b7e7 1-101
+openwiki/source-map.md
+  s_a3b1aea6901a1b::t_8e0b482c6376aa 1-148
+openwiki/workflows/product-and-agent-workflows.md
+  s_a3b1aea6901a1b::t_f962d9538243f9 1-140
+pnpm-workspace.yaml
+  s_a3b1aea6901a1b::t_c17ccf11ce5392 13-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "d56c58027ea8f0bee12e05b41cdcd020cd5c4e33",
+  "prompts": {},
+  "sessions": {
+    "s_a3b1aea6901a1b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f38cb-e8a0-7922-b7a7-82ff95d4c704",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}
