@@ -10,4 +10,13 @@ allowBuilds:
   protobufjs: true
   sharp: true
   workerd: true
+onlyBuiltDependencies:
+  - '@google/genai'
+  - '@mongodb-js/zstd'
+  - esbuild
+  - node-liblzma
+  - onnxruntime-node
+  - protobufjs
+  - sharp
+  - workerd
 verifyDepsBeforeRun: true
