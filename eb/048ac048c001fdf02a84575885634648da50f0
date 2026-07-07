@@ -1,0 +1,67 @@
+tui/ratatui/tests/ui_render.rs
+  s_a81fff26d52223::t_18df747b8a6235 33-34
+docs/tui/ratatui.md
+  s_a81fff26d52223::t_ed470842d679dc 26-27,36-37,42-43,71
+  s_a81fff26d52223::t_d367b01c489045 72
+scripts/copy-runtime-config.mjs
+  s_a81fff26d52223::t_e7ad52e2b70223 20,34-35
+  s_a81fff26d52223::t_b81c4705c6ae8b 36-37
+tui/ratatui/src/main.rs
+  s_a81fff26d52223::t_be334a67ddbf9a 20-27,33-40,48,64-73,100,115,118-122,137-152,203-223,237,247,284
+src/workspace-loader.ts
+  s_a81fff26d52223::t_2ae8bcb6bb9dbe 70
+docs/architecture/gorombo-flue-map.md
+  s_a81fff26d52223::t_23efb96368fa14 7,18
+  s_a81fff26d52223::t_82b9103f93b89a 186,200-203
+  s_a81fff26d52223::t_2256386702bafc 204
+docs/tui/session-management.md
+  s_a81fff26d52223::t_2bfe54507fbde4 13-14
+tui/ratatui/tests/app_state.rs
+  s_a81fff26d52223::t_7c3e278bbf49c0 194-195
+  s_a81fff26d52223::t_dbc866cac285ee 147-193,196-204
+src/agents/orchestrator.ts
+  s_a81fff26d52223::t_1ef42ae42907c9 58,131
+scripts/skill-md-loader.mjs
+  s_a81fff26d52223::t_20c75e50d94fba 1-49
+scripts/test-ratatui-product.mjs
+  s_a81fff26d52223::t_b5260c1b291c16 74,78,81-88,133
+src/tests/architecture-contract.test.ts
+  s_a81fff26d52223::t_4d0776a0627b75 82
+tui/ratatui/src/app.rs
+  s_a81fff26d52223::t_35cbfdeac95dd5 66-67,94-102,194-195,245-261,266,324,333,341,356,605-634,709-756,762-768,896,898-900
+  s_a81fff26d52223::t_4731c232c1abd0 262-265,757-761
+  s_a81fff26d52223::t_bda198ff0199ac 267
+src/skills/greeting-preflight/SKILL.md
+  s_a81fff26d52223::t_bbf5507a41b8ad 1-26
+scripts/generate-builtin-registry.mjs
+  s_a81fff26d52223::t_9fa5df1f3c225b 142-146,260
+docs/architecture/capability-system.md
+  s_a81fff26d52223::t_e797e1ca12e6a5 7-9,15,160
+README.md
+  s_a81fff26d52223::t_dcb2e8b7e3e9e5 22,28
+docs/operations/product-tui.md
+  s_a81fff26d52223::t_04673f1e8c61c3 69
+  s_a81fff26d52223::t_a8b4b17065da38 20-21,70-83,124-126
+docs/architecture/tui-cli-session-flow.md
+  s_a81fff26d52223::t_be2c74dbd8bfa0 30-32,107-127,209-211,225
+scripts/run-unit-tests.mjs
+  s_a81fff26d52223::t_e48194b1ba247c 25-26
+src/tests/workspace-loader.test.ts
+  s_a81fff26d52223::t_7cc37f2f21a685 86-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "eb048ac048c001fdf02a84575885634648da50f0",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
