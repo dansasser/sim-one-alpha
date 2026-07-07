@@ -78,6 +78,77 @@ fn pending_turn_starts_with_spinner_elapsed_and_status() {
 }
 
 #[test]
+fn final_agent_response_moves_below_stream_activity_rows() {
+    let clock = TestClock::new();
+    let (mut app, release, calls) = app_with_blocked_sender(&clock);
+
+    app.handle_event(AppEvent::Text("order the transcript".to_string()));
+    app.handle_event(AppEvent::Submit);
+    wait_for_calls(&calls, 1);
+
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![
+        FlueEvent::from_value(serde_json::json!({
+            "type":"thinking_delta",
+            "eventIndex":10,
+            "text":"checking protocol"
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"tool",
+            "eventIndex":11,
+            "toolCallId":"cap",
+            "toolName":"activate_skill"
+        })),
+    ]));
+
+    release.send(()).expect("pending sender should release");
+    wait_for_agent(&mut app);
+
+    let lines = app.transcript_lines();
+    let final_line = lines
+        .iter()
+        .position(|line| line == "assistant: done: order the transcript")
+        .expect("final assistant response should render");
+    let thinking_line = lines
+        .iter()
+        .position(|line| line == "thinking: checking protocol")
+        .expect("thinking row should render");
+    let tool_line = lines
+        .iter()
+        .position(|line| line == "tool: activate_skill completed")
+        .expect("tool row should render");
+
+    assert!(thinking_line < final_line, "{lines:?}");
+    assert!(tool_line < final_line, "{lines:?}");
+    assert_eq!(
+        lines.last().map(String::as_str),
+        Some("assistant: done: order the transcript")
+    );
+
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"operation",
+            "eventIndex":12,
+            "name":"operation"
+        }),
+    )]));
+
+    let lines = app.transcript_lines();
+    let final_line = lines
+        .iter()
+        .position(|line| line == "assistant: done: order the transcript")
+        .expect("final assistant response should still render");
+    let operation_line = lines
+        .iter()
+        .position(|line| line == "operation: operation completed")
+        .expect("later operation row should render");
+    assert!(operation_line < final_line, "{lines:?}");
+    assert_eq!(
+        lines.last().map(String::as_str),
+        Some("assistant: done: order the transcript")
+    );
+}
+
+#[test]
 fn pending_tick_advances_spinner_and_elapsed_time() {
     let clock = TestClock::new();
     let (mut app, release, calls) = app_with_blocked_sender(&clock);

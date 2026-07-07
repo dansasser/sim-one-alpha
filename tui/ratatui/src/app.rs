@@ -63,6 +63,7 @@ pub struct App {
     last_stream_event: Option<String>,
     event_transcript: EventTranscript,
     event_row_lines: BTreeMap<String, usize>,
+    final_response_range: Option<(usize, usize)>,
     transcript_viewport_height: usize,
     startup_phase: StartupPhase,
     startup_attach_stream: bool,
@@ -191,6 +192,7 @@ impl App {
             last_stream_event: None,
             event_transcript: EventTranscript::default(),
             event_row_lines: BTreeMap::new(),
+            final_response_range: None,
             transcript_viewport_height: SCROLL_PAGE_LINES,
             startup_phase: StartupPhase::Idle,
             startup_attach_stream: false,
@@ -251,6 +253,7 @@ impl App {
         self.startup_phase = StartupPhase::CreatingSession;
         self.startup_attach_stream = attach_stream;
         self.agent_status = "preflight".to_string();
+        self.final_response_range = None;
         self.push_speaker_text(
             "preflight",
             &format!("gateway ready ({})", self.gateway_status),
@@ -323,7 +326,7 @@ impl App {
                     Ok(reply) => {
                         let session_id = reply.session_id.clone();
                         let reply_for_startup = reply.clone();
-                        self.replace_transcript_line_with_speaker_text(
+                        self.settle_pending_response_line(
                             transcript_line,
                             "assistant",
                             reply.text.trim(),
@@ -334,11 +337,7 @@ impl App {
                         self.continue_startup_after_agent_reply(&reply_for_startup);
                     }
                     Err(error) => {
-                        self.replace_transcript_line_with_speaker_text(
-                            transcript_line,
-                            "error",
-                            error.trim(),
-                        );
+                        self.settle_pending_response_line(transcript_line, "error", error.trim());
                         self.fail_startup();
                     }
                 }
@@ -349,7 +348,7 @@ impl App {
                 let transcript_line = pending.transcript_line;
                 self.pending_response = None;
                 self.agent_status = "error".to_string();
-                self.replace_transcript_line_with_speaker_text(
+                self.settle_pending_response_line(
                     transcript_line,
                     "error",
                     "Agent response channel disconnected.",
@@ -562,6 +561,10 @@ impl App {
 
     fn submit_prompt(&mut self) {
         let prompt = self.prompt.trim().to_string();
+        if !prompt.is_empty() && self.pending_response.is_none() {
+            self.final_response_range = None;
+        }
+
         if self.handle_local_slash_command(&prompt) {
             self.prompt.clear();
             self.prompt_cursor = 0;
@@ -710,6 +713,7 @@ impl App {
         self.session_id = session_id;
         self.event_transcript = EventTranscript::default();
         self.event_row_lines.clear();
+        self.final_response_range = None;
         self.last_stream_event = None;
         if had_stream {
             self.stream_status = StreamStatus::Connecting;
@@ -786,17 +790,26 @@ Use the workspace identity and user context already loaded for this agent. Greet
         self.transcript_lines.extend(speaker_lines(speaker, text));
     }
 
-    fn replace_transcript_line_with_speaker_text(
-        &mut self,
-        line_index: usize,
-        speaker: &str,
-        text: &str,
-    ) {
+    fn settle_pending_response_line(&mut self, line_index: usize, speaker: &str, text: &str) {
+        self.final_response_range = None;
         let replacement = speaker_lines(speaker, text);
-        let inserted = replacement.len();
-        self.transcript_lines
-            .splice(line_index..=line_index, replacement);
-        self.reindex_event_rows_after_splice(line_index, 1, inserted);
+        let replacement_len = replacement.len();
+
+        if line_index + 1 == self.transcript_lines.len() {
+            self.transcript_lines
+                .splice(line_index..=line_index, replacement);
+            self.reindex_event_rows_after_splice(line_index, 1, replacement_len);
+            self.final_response_range = Some((line_index, replacement_len));
+            return;
+        }
+
+        if line_index < self.transcript_lines.len() {
+            self.transcript_lines.remove(line_index);
+            self.reindex_event_rows_after_splice(line_index, 1, 0);
+        }
+        let final_start = self.transcript_lines.len();
+        self.transcript_lines.extend(replacement);
+        self.final_response_range = Some((final_start, replacement_len));
     }
 
     fn after_transcript_changed(&mut self) {
@@ -837,12 +850,17 @@ Use the workspace identity and user context already loaded for this agent. Greet
             }
         }
 
-        let index = self.transcript_lines.len();
-        self.transcript_lines.push(row.text.clone());
+        let index = self
+            .final_response_range
+            .map(|(start, _)| start)
+            .unwrap_or(self.transcript_lines.len());
+        self.transcript_lines.insert(index, row.text.clone());
+        self.reindex_event_rows_after_splice(index, 0, 1);
         self.event_row_lines.insert(row.id.clone(), index);
     }
 
     fn reindex_event_rows_after_splice(&mut self, start: usize, removed: usize, inserted: usize) {
+        self.reindex_final_response_after_splice(start, removed, inserted);
         if removed == inserted {
             return;
         }
@@ -865,6 +883,37 @@ Use the workspace identity and user context already loaded for this agent. Greet
                 } else if *index >= start {
                     *index = start;
                 }
+            }
+        }
+    }
+
+    fn reindex_final_response_after_splice(
+        &mut self,
+        start: usize,
+        removed: usize,
+        inserted: usize,
+    ) {
+        let Some((range_start, range_len)) = self.final_response_range else {
+            return;
+        };
+        if removed == inserted {
+            return;
+        }
+
+        let removed_end = start.saturating_add(removed);
+        if inserted > removed {
+            let delta = inserted - removed;
+            if range_start >= removed_end {
+                self.final_response_range = Some((range_start.saturating_add(delta), range_len));
+            } else if range_start >= start {
+                self.final_response_range = None;
+            }
+        } else {
+            let delta = removed - inserted;
+            if range_start >= removed_end {
+                self.final_response_range = Some((range_start.saturating_sub(delta), range_len));
+            } else if range_start >= start {
+                self.final_response_range = None;
             }
         }
     }

@@ -86,6 +86,10 @@ try {
   assertOutputIncludes(stdout, 'preflight: gateway ready', 'startup smoke did not show gateway preflight');
   assertOutputIncludes(stdout, 'preflight: all systems go', 'startup smoke did not show all-systems-go preflight');
   assertOutputIncludes(stdout, 'assistant:', 'startup smoke did not render an agent greeting');
+  const lastStartupTranscriptLine = lastTranscriptLine(stdout);
+  if (!lastStartupTranscriptLine?.startsWith('assistant:')) {
+    throw new Error(`Ratatui startup smoke did not leave the greeting as the last transcript line. Last transcript line: ${lastStartupTranscriptLine ?? '(none)'}\nstdout:\n${stdout}\nstderr:\n${stderr}`);
+  }
   if (/session:\s*primary/i.test(stdout)) {
     throw new Error(`Ratatui startup smoke rendered the old primary session default.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
   }
@@ -215,6 +219,14 @@ function parseForwardedArgs(stdout) {
   } catch (error) {
     throw new Error(`fake TUI printed invalid forwarded args: ${error.message}\nstdout:\n${stdout}`);
   }
+}
+
+function lastTranscriptLine(stdout) {
+  return stdout
+    .trim()
+    .split(/\r?\n/)
+    .filter((line) => /^(system|preflight|assistant|operation|turn|thinking|tool|task|error|you):/.test(line))
+    .at(-1);
 }
 
 async function assertProductCommandRouting(env) {
