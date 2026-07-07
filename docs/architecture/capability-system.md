@@ -4,13 +4,15 @@ The capability system lets users and agents add skills, tools, workers (subagent
 
 ## Overview
 
-Capabilities are stored in SQLite (`~/.gorombo/db/capabilities.sqlite` by default). The orchestrator reads the store at agent init (`createAgent(...)`) and merges user-defined capabilities into the same `tools`, `skills`, and `subagents` arrays that hold built-in capabilities. A service restart picks up changes — no rebuild needed.
+Built-in Flue runtime capabilities are source-time application code. Built-in Agent Skills live under `src/skills/<name>/SKILL.md`, are imported with `with { type: 'skill' }`, and are registered directly on the owning agent or workflow. Example: `src/skills/greeting-preflight/SKILL.md` is registered on `src/agents/orchestrator.ts`.
+
+The capability registry is the post-build extension lane. Registry capabilities are stored in SQLite (`~/.gorombo/db/capabilities.sqlite` by default). The orchestrator reads the store at agent init (`createAgent(...)`) and merges user-defined capabilities into the same `tools`, `skills`, and `subagents` arrays that hold built-in capabilities. A service restart picks up changes — no rebuild needed.
 
 Four capability kinds:
 
 | Kind | Flue ingress | Runtime loading path |
 | --- | --- | --- |
-| Skill | `skills: [...]` + auto-discovery of `<cwd>/.agents/skills/<name>/` | Materialize user skill dirs into the discovery path. Flue loads natively. |
+| Skill | `skills: [...]` + auto-discovery of `<cwd>/.agents/skills/<name>/` | Built-ins import from `src/skills`. Registry/user skills materialize into the discovery path. Flue loads both natively. |
 | Tool | `tools: ToolDefinition[]` | Dynamic `import()` of user JS modules exporting `defineTool(...)` results. |
 | Worker (subagent) | `subagents: AgentProfile[]` | Dynamic `import()` of user JS modules exporting `defineAgentProfile(...)` results. |
 | MCP | `connectMcpServer(name, opts) -> { tools }` | `connectMcpServer(...)` per enabled row at init; tools spread into `tools`. |

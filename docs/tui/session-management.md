@@ -10,6 +10,8 @@ The TUI sends chat events with connector `tui` and a stable local TUI actor/conv
 
 When the active session changes, the TUI cancels the old stream handle, clears stream activity rows for the previous live session, and starts a new stream for the selected session.
 
+Normal no-argument launch creates a fresh startup session automatically before stream attach. This keeps the first screen clean and prevents old `primary` stream catch-up rows from appearing. Use `--session <id>` at launch or `/resume <session-id>` inside the TUI when you intentionally want prior session context.
+
 ## Current Session
 
 Use:

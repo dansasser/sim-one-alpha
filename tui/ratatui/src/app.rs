@@ -9,7 +9,6 @@ use crate::flue::reducer::{DisplayRow, EventTranscript};
 use crate::flue::stream::{spawn_agent_stream, AgentStreamHandle, AgentStreamUpdate};
 
 pub const SCROLL_PAGE_LINES: usize = 8;
-const PLACEHOLDER_CONTEXT_LINES: usize = 24;
 const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
 
 pub type AgentSender =
@@ -64,6 +63,8 @@ pub struct App {
     event_transcript: EventTranscript,
     event_row_lines: BTreeMap<String, usize>,
     transcript_viewport_height: usize,
+    startup_phase: StartupPhase,
+    startup_attach_stream: bool,
 }
 
 #[derive(Debug)]
@@ -87,6 +88,15 @@ enum StreamStatus {
     Live,
     Idle,
     Reconnecting,
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StartupPhase {
+    Idle,
+    CreatingSession,
+    Greeting,
+    Complete,
     Failed,
 }
 
@@ -181,6 +191,8 @@ impl App {
             event_transcript: EventTranscript::default(),
             event_row_lines: BTreeMap::new(),
             transcript_viewport_height: SCROLL_PAGE_LINES,
+            startup_phase: StartupPhase::Idle,
+            startup_attach_stream: false,
         };
         app.jump_to_tail();
         app
@@ -228,6 +240,29 @@ impl App {
             self.base_url.clone(),
             self.session_id.clone(),
         ));
+    }
+
+    pub fn start_startup_preflight(&mut self, attach_stream: bool) {
+        if self.pending_response.is_some() || self.startup_phase != StartupPhase::Idle {
+            return;
+        }
+
+        self.startup_phase = StartupPhase::CreatingSession;
+        self.startup_attach_stream = attach_stream;
+        self.agent_status = "preflight".to_string();
+        self.push_speaker_text(
+            "preflight",
+            &format!("gateway ready ({})", self.gateway_status),
+        );
+        self.push_speaker_text("preflight", "creating clean TUI session");
+        self.submit_internal_prompt("/new SIM-ONE Alpha TUI startup".to_string());
+    }
+
+    pub fn startup_complete(&self) -> bool {
+        matches!(
+            self.startup_phase,
+            StartupPhase::Complete | StartupPhase::Failed
+        )
     }
 
     pub fn poll_stream(&mut self) {
@@ -286,6 +321,7 @@ impl App {
                 match response.result {
                     Ok(reply) => {
                         let session_id = reply.session_id.clone();
+                        let command_name = reply.command_name.clone();
                         self.replace_transcript_line_with_speaker_text(
                             transcript_line,
                             "assistant",
@@ -294,6 +330,7 @@ impl App {
                         if let Some(session_id) = session_id {
                             self.switch_session(session_id);
                         }
+                        self.continue_startup_after_agent_reply(command_name.as_deref());
                     }
                     Err(error) => {
                         self.replace_transcript_line_with_speaker_text(
@@ -301,6 +338,7 @@ impl App {
                             "error",
                             error.trim(),
                         );
+                        self.fail_startup();
                     }
                 }
                 self.after_transcript_changed();
@@ -315,6 +353,7 @@ impl App {
                     "error",
                     "Agent response channel disconnected.",
                 );
+                self.fail_startup();
                 self.after_transcript_changed();
             }
         }
@@ -563,6 +602,36 @@ impl App {
         self.pending_response = Some(pending);
     }
 
+    fn submit_internal_prompt(&mut self, prompt: String) {
+        if self.pending_response.is_some() {
+            return;
+        }
+
+        let transcript_line = self.transcript_lines.len();
+        self.agent_status = "thinking".to_string();
+        self.jump_to_tail();
+
+        let base_url = self.base_url.clone();
+        let session_id = self.session_id.clone();
+        let sender = Arc::clone(&self.agent_sender);
+        let started_at = (self.clock)();
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || {
+            let result = sender(base_url, session_id, prompt);
+            let _ = tx.send(AgentResponse { result });
+        });
+        let pending = PendingResponse {
+            receiver: rx,
+            transcript_line,
+            started_at,
+            spinner_frame: 0,
+            duplicate_submit_notice: false,
+        };
+        self.transcript_lines
+            .push(pending_transcript_line(&pending, started_at));
+        self.pending_response = Some(pending);
+    }
+
     fn handle_local_slash_command(&mut self, prompt: &str) -> bool {
         match prompt {
             "/exit" => {
@@ -635,6 +704,66 @@ impl App {
             self.stream_status = StreamStatus::NotAttached;
         }
         self.push_speaker_text("system", &format!("active session {}", self.session_id));
+    }
+
+    fn continue_startup_after_agent_reply(&mut self, command_name: Option<&str>) {
+        match self.startup_phase {
+            StartupPhase::CreatingSession => {
+                if command_name != Some("new") {
+                    self.fail_startup();
+                    return;
+                }
+
+                self.push_speaker_text(
+                    "preflight",
+                    &format!("created clean TUI session {}", self.session_id),
+                );
+                if self.startup_attach_stream {
+                    self.start_stream();
+                    self.push_speaker_text("preflight", "event stream attached");
+                } else {
+                    self.push_speaker_text("preflight", "event stream attach deferred");
+                }
+                self.push_speaker_text("preflight", "all systems go");
+                self.startup_phase = StartupPhase::Greeting;
+                self.submit_internal_prompt(self.startup_greeting_prompt());
+            }
+            StartupPhase::Greeting => {
+                self.startup_phase = StartupPhase::Complete;
+            }
+            _ => {}
+        }
+    }
+
+    fn fail_startup(&mut self) {
+        if matches!(
+            self.startup_phase,
+            StartupPhase::CreatingSession | StartupPhase::Greeting
+        ) {
+            self.startup_phase = StartupPhase::Failed;
+            self.push_speaker_text("preflight", "startup preflight failed");
+        }
+    }
+
+    fn startup_greeting_prompt(&self) -> String {
+        format!(
+            "This is an automatic SIM-ONE Alpha local Ratatui TUI startup event.\n\n\
+Use the `greeting-preflight` Flue skill before answering. This startup event is equivalent to `/greeting preflight`, but it is sent as a normal agent message so it can reach the orchestrator skill system instead of the pre-LLM slash-command parser.\n\n\
+Preflight report:\n\
+- gateway: {gateway}\n\
+- session: {session}\n\
+- stream: {stream}\n\
+- status: all systems go\n\n\
+Skill input variables:\n\
+- status = \"all systems go\"\n\
+- userName = \"Daniel T Sasser II\"\n\
+- connector = \"Ratatui TUI\"\n\
+- sessionId = \"{session}\"\n\n\
+Use the workspace identity and user context already loaded for this agent. Greet Daniel T Sasser II by name, introduce yourself by your workspace identity, briefly say that startup preflight completed and all systems go, then stop. Keep it concise.",
+            gateway = self.gateway_status,
+            session = self.session_id,
+            stream = self.stream_status(),
+        )
     }
 
     fn push_speaker_text(&mut self, speaker: &str, text: &str) {
@@ -764,22 +893,11 @@ impl Default for App {
 }
 
 fn initial_transcript() -> Vec<String> {
-    let mut lines = vec![
+    vec![
         "system: SIM-ONE Alpha Ratatui TUI".to_string(),
-        "assistant: Connected to the local SIM-ONE Alpha gateway. Type a prompt and press Enter.".to_string(),
-        "assistant: The top pane is the transcript/context viewport. The bottom pane is status plus editable prompt input.".to_string(),
-        String::new(),
-    ];
-
-    for index in 1..=PLACEHOLDER_CONTEXT_LINES {
-        lines.push(format!(
-            "context {index:02}: scroll test row; prompt input remains active."
-        ));
-    }
-
-    lines.push(String::new());
-    lines.push("assistant: PgUp/PgDown scroll this transcript. Left/Right, Ctrl+Left/Ctrl+Right, Home/End edit the prompt.".to_string());
-    lines
+        "preflight: waiting for gateway startup result".to_string(),
+        "preflight: clean startup will create a fresh TUI session".to_string(),
+    ]
 }
 
 fn speaker_lines(speaker: &str, text: &str) -> Vec<String> {

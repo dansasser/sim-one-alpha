@@ -23,6 +23,8 @@ cd /opt/ai/sim-one-alpha-tui-production
 
 The command reuses a healthy local gateway when one is already running. If it cannot find one, it starts the packaged `.gorombo/sim-one-alpha/server.mjs` runtime and connects the TUI to it.
 
+On a normal no-argument launch, the TUI starts clean: it creates a fresh durable TUI session, attaches the live stream to that new session, shows preflight rows, then sends an automatic startup greeting prompt to the main orchestrator. The greeting uses the built-in Flue `greeting-preflight` skill and the loaded workspace identity/user context.
+
 Useful launch flags:
 
 ```sh
@@ -31,9 +33,13 @@ Useful launch flags:
 ./.gorombo/sim-one-cli/sim-one --base-url http://127.0.0.1:3940
 ```
 
+Use `--session <id>` only when you intentionally want to attach to an existing session and stream its current context.
+
 ## Layout
 
 The top pane is the transcript and context viewport. It contains user prompts, assistant responses, stream activity rows, and local system notices.
+
+The initial transcript should contain only startup/preflight rows and the agent greeting. It should not contain scaffold scroll-test rows or old activity from `primary`; old sessions are shown only after an explicit `--session` launch or `/resume`.
 
 The bottom pane contains gateway/session/model status and the editable prompt line. Prompt editing remains active while the transcript is scrolled.
 
@@ -61,6 +67,8 @@ Use `PgUp` and `PgDown` to scroll the transcript. Scrolling away from the tail d
 ## Status Bar
 
 The status area shows the gateway connection, active session, stream state, pending response state, elapsed thinking time, and a spinner while the agent is working.
+
+During startup, status and transcript rows show gateway readiness, clean session creation, stream attach, and the greeting turn. After preflight completes, normal prompt entry is available.
 
 If a live stream disconnects, the status changes to reconnecting or failed. Prompt submission still uses the gateway request path and reports errors into the transcript.
 

@@ -27,6 +27,9 @@ src/engine/commands/slash-commands.ts
 src/engine/session/
   Product session catalog, access checks, Flue session persistence wrapper, compaction budget, direct-agent instance indexes, and session-memory indexing.
 
+src/skills/greeting-preflight/SKILL.md
+  Built-in Flue Agent Skill used by the main orchestrator for local startup greeting events after connector preflight.
+
 scripts/test-ratatui-product.mjs
   Packaged product smoke for the exact built `sim-one` path.
 ```
@@ -100,6 +103,27 @@ Ratatui binary starts
 When it starts the packaged server, the launcher sets the child process cwd to the owner of the `.gorombo` runtime tree. This keeps runtime data and packaged artifacts resolving from the product root even if the user launches the binary from another directory.
 
 The launcher only stops a server child that it started. It does not stop a gateway that was already running.
+
+## Startup Preflight And Greeting
+
+A normal no-argument TUI launch does not attach directly to the default `primary` session. It starts with a clean local transcript, creates a fresh durable TUI session, attaches the stream to that new session, reports preflight status, then sends an automatic greeting prompt through `/api/chat/events`.
+
+```text
+TUI opens
+-> render clean preflight shell
+-> confirm gateway startup/reuse result
+-> POST /api/chat/events text="/new SIM-ONE Alpha TUI startup"
+-> switch to returned tui-* session
+-> attach live stream for the fresh session
+-> render "preflight: all systems go"
+-> POST /api/chat/events with startup report
+-> orchestrator activates built-in greeting-preflight skill
+-> assistant greeting renders from workspace identity/user context
+```
+
+The TUI owns only connector checks and transcript/status rendering. The greeting words are not hardcoded in Rust. The startup prompt instructs the main orchestrator to use the built-in Flue skill `greeting-preflight`, which lives at `src/skills/greeting-preflight/SKILL.md` and is registered in `src/agents/orchestrator.ts` through the documented `with { type: 'skill' }` import flow.
+
+Passing `--session <id>` is an explicit resume-style launch. In that mode the TUI attaches to the requested session stream instead of creating a new startup session.
 
 ## Prompt Flow
 
@@ -182,7 +206,9 @@ sim-one skill list
 sim-one tool list
 sim-one worker list
 sim-one mcp list
-real prompt submission through the packaged Ratatui path
+startup preflight through the packaged Ratatui path
+clean transcript without scaffold scroll rows
+agent greeting through the built-in greeting-preflight skill path
 /new
 /session
 /compact
@@ -196,6 +222,7 @@ The smoke uses scripted prompt env vars that are intentionally scoped to tests:
 ```text
 SIM_ONE_TUI_TEST_PROMPT
 SIM_ONE_TUI_TEST_PROMPTS
+SIM_ONE_TUI_TEST_STARTUP
 ```
 
 These let the packaged TUI exercise prompt and slash-command paths without starting an interactive terminal.

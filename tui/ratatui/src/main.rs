@@ -17,15 +17,27 @@ fn main() -> io::Result<()> {
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
 
     if let Some(base_url) = cli.base_url.clone() {
-        return run_client(base_url, false, cli.session_id, cli.smoke_startup, || {});
+        return run_client(
+            base_url,
+            false,
+            cli.session_id,
+            cli.session_explicit,
+            cli.smoke_startup,
+            || {},
+        );
     }
 
     let mut gateway = ensure_server_running(&cli.gateway).map_err(io::Error::other)?;
     let base_url = gateway.base_url.clone();
     let started = gateway.started;
-    let result = run_client(base_url, started, cli.session_id, cli.smoke_startup, || {
-        gateway.cleanup()
-    });
+    let result = run_client(
+        base_url,
+        started,
+        cli.session_id,
+        cli.session_explicit,
+        cli.smoke_startup,
+        || gateway.cleanup(),
+    );
     result
 }
 
@@ -33,6 +45,7 @@ fn run_client(
     base_url: String,
     started: bool,
     session_id: String,
+    session_explicit: bool,
     smoke_startup: bool,
     mut cleanup: impl FnMut(),
 ) -> io::Result<()> {
@@ -46,6 +59,16 @@ fn run_client(
         println!("gateway ready at {} (started: {})", base_url, started);
         cleanup();
         return Ok(());
+    }
+
+    if std::env::var("SIM_ONE_TUI_TEST_STARTUP").as_deref() == Ok("1") {
+        let result = run_scripted_startup(
+            format!("{} started:{}", base_url, started),
+            base_url,
+            session_id,
+        );
+        cleanup();
+        return result;
     }
 
     if let Ok(prompts) = std::env::var("SIM_ONE_TUI_TEST_PROMPTS") {
@@ -74,6 +97,7 @@ fn run_client(
         format!("{} started:{}", base_url, started),
         base_url,
         session_id,
+        !session_explicit,
     );
     restore_terminal();
     if let Ok(Some(session_id)) = &result {
@@ -88,9 +112,14 @@ fn run(
     gateway_status: String,
     base_url: String,
     session_id: String,
+    clean_startup: bool,
 ) -> io::Result<Option<String>> {
     let mut app = App::with_session(session_id, gateway_status, base_url);
-    app.start_stream();
+    if clean_startup {
+        app.start_startup_preflight(true);
+    } else {
+        app.start_stream();
+    }
 
     while !app.should_quit() {
         app.tick();
@@ -103,6 +132,22 @@ fn run(
     }
 
     Ok(app.exit_session_id().map(str::to_string))
+}
+
+fn run_scripted_startup(
+    gateway_status: String,
+    base_url: String,
+    session_id: String,
+) -> io::Result<()> {
+    let mut app = App::with_session(session_id, gateway_status, base_url);
+    app.start_startup_preflight(true);
+    wait_for_scripted_startup(&mut app)?;
+
+    for line in app.transcript_lines() {
+        println!("{line}");
+    }
+
+    Ok(())
 }
 
 fn run_scripted_prompts(
@@ -155,6 +200,27 @@ fn wait_for_scripted_prompt(app: &mut App) -> io::Result<()> {
     Ok(())
 }
 
+fn wait_for_scripted_startup(app: &mut App) -> io::Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(300);
+    while (!app.startup_complete() || app.is_agent_pending()) && Instant::now() < deadline {
+        app.tick();
+        app.poll_stream();
+        app.poll_agent();
+        thread::sleep(Duration::from_millis(20));
+    }
+    app.poll_stream();
+    app.poll_agent();
+
+    if !app.startup_complete() || app.is_agent_pending() {
+        return Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "Timed out waiting for scripted TUI startup preflight to finish.",
+        ));
+    }
+
+    Ok(())
+}
+
 fn read_app_event() -> io::Result<Option<AppEvent>> {
     if !event::poll(Duration::from_millis(100))? {
         return Ok(None);
@@ -168,6 +234,7 @@ struct CliOptions {
     gateway: GatewayOptions,
     base_url: Option<String>,
     session_id: String,
+    session_explicit: bool,
     smoke_startup: bool,
 }
 
@@ -177,6 +244,7 @@ impl Default for CliOptions {
             gateway: GatewayOptions::default(),
             base_url: None,
             session_id: "primary".to_string(),
+            session_explicit: false,
             smoke_startup: false,
         }
     }
@@ -213,6 +281,7 @@ impl CliOptions {
                         return Err("--session requires a non-empty value".to_string());
                     }
                     options.session_id = value;
+                    options.session_explicit = true;
                 }
                 "--server-path" => {
                     let value = args.next().ok_or("--server-path requires a value")?;

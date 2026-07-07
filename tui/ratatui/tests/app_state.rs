@@ -145,6 +145,64 @@ fn failed_response_settles_pending_state_and_renders_error() {
 }
 
 #[test]
+fn initial_transcript_is_clean_preflight_shell() {
+    let app = App::new_for_test();
+    let transcript = app.transcript_lines().join("\n");
+
+    assert!(transcript.contains("system: SIM-ONE Alpha Ratatui TUI"));
+    assert!(transcript.contains("preflight:"));
+    assert!(!transcript.contains("context 01"));
+    assert!(!transcript.contains("scroll test row"));
+    assert!(!transcript.contains("PgUp/PgDown scroll this transcript"));
+}
+
+#[test]
+fn startup_preflight_creates_fresh_session_and_sends_greeting_prompt() {
+    let prompts = Arc::new(Mutex::new(Vec::<String>::new()));
+    let sent_prompts = Arc::clone(&prompts);
+    let mut app = App::with_agent_sender(
+        "primary",
+        "http://127.0.0.1:3940 started:false",
+        "http://127.0.0.1:3940",
+        Arc::new(move |_, _, prompt| {
+            sent_prompts
+                .lock()
+                .expect("prompt recorder should lock")
+                .push(prompt.clone());
+            if prompt.starts_with("/new ") {
+                Ok(AgentReply {
+                    text: "Started new session tui-startup-1.".to_string(),
+                    session_id: Some("tui-startup-1".to_string()),
+                    command_name: Some("new".to_string()),
+                })
+            } else {
+                Ok(agent_reply("Hello Daniel, I'm Ollie. All systems are go."))
+            }
+        }),
+    );
+
+    app.start_startup_preflight(false);
+    wait_for_agent(&mut app);
+
+    assert_eq!(app.session_id(), "tui-startup-1");
+    let prompts = prompts.lock().expect("prompt recorder should lock");
+    assert_eq!(prompts.len(), 2);
+    assert!(prompts[0].starts_with("/new "));
+    assert!(prompts[1].contains("greeting-preflight"));
+    assert!(prompts[1].contains("Daniel T Sasser II"));
+    assert!(prompts[1].contains("all systems go"));
+    assert!(prompts[1].contains("status = \"all systems go\""));
+    assert!(prompts[1].contains("sessionId = \"tui-startup-1\""));
+
+    let transcript = app.transcript_lines().join("\n");
+    assert!(transcript.contains("preflight: gateway ready"));
+    assert!(transcript.contains("preflight: created clean TUI session tui-startup-1"));
+    assert!(transcript.contains("preflight: all systems go"));
+    assert!(transcript.contains("assistant: Hello Daniel, I'm Ollie."));
+    assert_eq!(app.agent_status(), "ready");
+}
+
+#[test]
 fn stream_updates_change_status_without_touching_prompt() {
     let mut app = App::new_for_test();
     app.handle_event(AppEvent::Text("keep this prompt".to_string()));

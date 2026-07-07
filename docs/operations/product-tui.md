@@ -17,6 +17,8 @@ pnpm run build:all
 Launch the TUI:
 
 ```sh
+source "$NVM_DIR/nvm.sh"
+nvm use 22
 ./.gorombo/sim-one-cli/sim-one
 ```
 
@@ -64,7 +66,21 @@ Runtime data:
 .gorombo/db/structured-memory.sqlite
 ```
 
-The TUI launch defaults to session `primary` unless `--session <id>` is supplied. TUI session commands can then create or switch durable sessions inside the running app.
+Normal no-argument launch starts from an internal bootstrap session, then creates a fresh durable startup TUI session before attaching the live stream. This prevents stale `primary` context rows from appearing on the first screen. Passing `--session <id>` is an explicit existing-session attach. TUI session commands can then create, resume, or switch durable sessions inside the running app.
+
+## Startup Preflight
+
+After the gateway is healthy, the TUI startup flow:
+
+```text
+creates a fresh durable TUI session
+attaches the stream to that fresh session
+renders preflight rows in the transcript
+sends a startup greeting prompt to the orchestrator
+uses the built-in Flue greeting-preflight skill for the greeting behavior
+```
+
+The startup greeting words are produced by the main orchestrator using workspace identity/user context. The Rust TUI sends the preflight report and skill instruction; it does not hardcode the greeting.
 
 ## Environment Files
 
@@ -105,7 +121,9 @@ sim-one skill list
 sim-one tool list
 sim-one worker list
 sim-one mcp list
-real prompt submission through the Ratatui product path
+startup preflight through the Ratatui product path
+clean startup transcript without scaffold rows
+agent greeting through the built-in greeting-preflight skill path
 /new
 /session
 /compact

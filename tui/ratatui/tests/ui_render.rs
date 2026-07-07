@@ -30,7 +30,8 @@ fn renders_static_shell_with_transcript_status_and_prompt() {
     assert!(buffer.contains("SIM-ONE Alpha"));
     assert!(buffer.contains("session: primary"));
     assert!(buffer.contains("> Type a message"));
-    assert!(buffer.contains("context"), "{buffer}");
+    assert!(buffer.contains("preflight"), "{buffer}");
+    assert!(!buffer.contains("scroll test row"), "{buffer}");
 }
 
 #[test]

@@ -22,6 +22,8 @@ const testFiles = hasTestFileArgs
       .sort();
 
 run(process.execPath, [
+  '--import',
+  'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./scripts/skill-md-loader.mjs", pathToFileURL("./"));',
   '--test',
   '--test-force-exit',
   ...forwardedArgs,

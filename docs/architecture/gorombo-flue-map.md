@@ -4,7 +4,7 @@ This file maps Flue architecture to this repository.
 
 ## Top-Level Source Directory Map
 
-Every top-level `src/` entry should fit one of these categories: Flue-contract files (`src/agents/`, `src/workflows/`, `src/channels/`, `src/db.ts`, `src/app.ts`), root support files (`src/index.ts`, `src/workspace-loader.ts`, `src/AGENTS.md`), or one of the consolidation buckets (`src/core/`, `src/api/`, `src/engine/`, `src/workspace/`, `src/tests/`). If a new directory is added, update this map in the same change.
+Every top-level `src/` entry should fit one of these categories: Flue-contract files (`src/agents/`, `src/workflows/`, `src/channels/`, `src/skills/`, `src/db.ts`, `src/app.ts`), root support files (`src/index.ts`, `src/workspace-loader.ts`, `src/AGENTS.md`), or one of the consolidation buckets (`src/core/`, `src/api/`, `src/engine/`, `src/workspace/`, `src/tests/`). If a new directory is added, update this map in the same change.
 
 ### Flue-contract top-level files and directories
 
@@ -15,6 +15,7 @@ Flue discovers these at the `src/` root. They cannot be moved into buckets.
 | `src/agents/` | Flue agent entrypoints | Main `createAgent(...)` files discovered by Flue. Each immediate file defines one agent; its filename becomes the agent name. |
 | `src/workflows/` | Flue workflows | Finite Flue operations that can initialize agents, manage bounded loops, and return structured results. Each immediate file defines one discovered workflow. |
 | `src/channels/` | Flue-native channel handlers | First-party provider ingress (e.g. Telegram) discovered by Flue under `/channels/<name>/...`. |
+| `src/skills/` | Flue Agent Skills | Application-owned Agent Skills imported with `with { type: 'skill' }` and registered on the owning agent or workflow. These are built-in Flue runtime skills, not post-build registry capabilities. |
 | `src/db.ts` | Flue persistence adapter entrypoint | Flue Node persistence adapter entrypoint discovered by Flue at build time. Exports the SIM-ONE Alpha persistence adapter wrapper around Flue's sqlite() adapter. |
 | `src/app.ts` | Application entrypoint | Hono application shell and Flue route mount. |
 
@@ -52,7 +53,6 @@ Flue discovers these at the `src/` root. They cannot be moved into buckets.
 | `src/engine/registries/` | Registry subsystem | Typed registries for tools, skills, agents, protocols, and future discoverable capabilities. |
 | `src/engine/schedules/` | Scheduled execution subsystem | Standalone scheduled/recurring/one-shot agent execution: schedule definitions + run history durable in SQLite (`node:sqlite`, `.gorombo/db/schedules.sqlite`), firing via Croner in-process, rehydrated on restart. Dispatch is admission-only (`dispatch(...)` to the orchestrator); terminal status observed in-process via `observe()`. Exposed via orchestrator `schedule_*` tools, coding-worker `coding_schedule_*` aliases (lead-only), and the `/api/schedules/*` admin route. See `docs/architecture/schedules-system.md`. |
 | `src/engine/session/` | Session/context subsystem | Flue session persistence, compaction policy, context budget, and usage tracking. |
-| `src/engine/skills/` | Imported/bundled skills | Reusable workflow knowledge for the main orchestrator and shared subagents. |
 | `src/engine/tools/` | Model-callable tools | `defineTool(...)` capabilities attached only to owning agents. |
 | `src/engine/workers/` | Worker/subagent implementations | Specialized worker profiles plus worker-local support code and worker workspaces. |
 
@@ -183,6 +183,7 @@ src/agents/orchestrator.ts
   Main Flue orchestrator agent.
   Coordinates protocols, memory lookup, subagent delegation, and final synthesis.
   Composes its instructions from main workspace files plus a small runtime capability block.
+  Registers the built-in `greeting-preflight` Agent Skill from `src/skills/greeting-preflight/SKILL.md`.
   Does not own web search.
   Directly owns `generate_image`, `record_image_artifact`, and `list_image_artifacts` for Runpod Public Endpoints image generation.
 
@@ -195,6 +196,11 @@ src/agents/orchestrator.ts
 src/workspace/
   Main agent user-editable workspace persona files.
   Persona names and identity details live inside file contents, not architecture paths.
+
+src/skills/greeting-preflight/SKILL.md
+  Built-in Flue Agent Skill for connector startup greeting events.
+  The Ratatui TUI sends a normal startup prompt that tells the orchestrator to use this skill with the preflight report.
+  The skill is guidance only; executable preflight checks stay in the connector/gateway startup path.
 
 src/engine/workers/researcher/researcher.ts
   Research subagent and direct researcher agent.

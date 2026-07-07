@@ -67,6 +67,7 @@ export function resolveWorkspaceDirectory(relativeWorkspacePath: string, cwd = p
   const candidates = [
     resolveWorkspaceCandidate(cwd, '', normalizedWorkspacePath),
     resolveWorkspaceCandidate(cwd, 'src', normalizedWorkspacePath),
+    resolveWorkspaceCandidate(cwd, '.gorombo/sim-one-alpha', normalizedWorkspacePath),
     resolveWorkspaceCandidate(cwd, 'dist', normalizedWorkspacePath),
     resolveWorkspaceCandidate(cwd, '.tmp/tsc', normalizedWorkspacePath),
   ];

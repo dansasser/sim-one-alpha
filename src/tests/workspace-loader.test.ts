@@ -83,6 +83,23 @@ test('workspace directory resolver falls back to dist when src workspace is abse
   }
 });
 
+test('workspace directory resolver falls back to packaged .gorombo runtime workspace', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'workspace-packaged-runtime-'));
+
+  try {
+    const packagedWorkspace = join(dir, '.gorombo', 'sim-one-alpha', 'workspace');
+    mkdirSync(packagedWorkspace, { recursive: true });
+    writeFileSync(join(packagedWorkspace, '.keep'), '');
+
+    assert.equal(
+      resolveWorkspaceDirectory('workspace', dir),
+      packagedWorkspace,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('workspace directory resolver finds a workspace directly under cwd', () => {
   const dir = mkdtempSync(join(tmpdir(), 'workspace-runtime-root-'));
 

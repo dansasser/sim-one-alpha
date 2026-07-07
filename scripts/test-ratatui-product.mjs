@@ -71,21 +71,21 @@ try {
 
   await assertProductCommandRouting(childEnv);
 
-  ({ stdout, stderr } = await runProductCommand(
+  const startupSmoke = await runProductCommand(
     ['--port', String(port)],
     {
       ...childEnv,
-      SIM_ONE_TUI_TEST_PROMPT: 'Reply with one short sentence confirming the Ratatui product prompt path works.',
+      SIM_ONE_TUI_TEST_STARTUP: '1',
     },
     240_000,
-  ));
-  const responseMarker = 'assistant response:';
-  if (!stdout.includes(responseMarker)) {
-    throw new Error(`Ratatui product smoke did not report an agent response.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
-  }
-  const responseText = stdout.slice(stdout.indexOf(responseMarker) + responseMarker.length).trim();
-  if (responseText.length < 8 || /placeholder/i.test(responseText)) {
-    throw new Error(`Ratatui product smoke response was not a real agent response.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
+  );
+  stdout = startupSmoke.stdout;
+  stderr = startupSmoke.stderr;
+  assertOutputIncludes(stdout, 'preflight: gateway ready', 'startup smoke did not show gateway preflight');
+  assertOutputIncludes(stdout, 'preflight: all systems go', 'startup smoke did not show all-systems-go preflight');
+  assertOutputIncludes(stdout, 'assistant:', 'startup smoke did not render an agent greeting');
+  if (/context 0[1-9]|scroll test row|placeholder/i.test(stdout)) {
+    throw new Error(`Ratatui startup smoke rendered scaffold or placeholder transcript content.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
   }
 
   const createSessionSmoke = await runProductCommand(
@@ -130,7 +130,7 @@ try {
   assertOutputIncludes(stdout, `assistant: Renamed session ${sessionId} to "Smoke Session Renamed".`, 'rename command did not rename the active session');
   assertOutputIncludes(stdout, `Exited SIM-ONE Alpha TUI. Session: ${sessionId}`, 'exit after resume did not print the active session id');
 
-  console.log('[ratatui-product] sim-one sent a real prompt through the Ratatui product path and received an agent response.');
+  console.log('[ratatui-product] sim-one ran startup preflight, created a clean TUI session, and received an agent greeting.');
   console.log('[ratatui-product] sim-one session commands created, inspected, compacted, resumed, renamed, and exited a TUI session.');
 } finally {
   if (child && child.exitCode === null && child.signalCode === null) {

@@ -19,12 +19,13 @@ The goal is simple:
 - Database-backed memory layer
 - RAG architecture with memory, web search, and document-index support (document-index provider is a placeholder)
 - Registry-driven tools
-- Registry-driven skills
+- Built-in Flue Agent Skills plus registry-driven user skills
 - Registry-driven workers/subagents
 - Runtime-extensible capability model
 - Coding worker with plan / implement / test-debug / review / GitHub subagents and approval-gated repo mutations
 - Business-focused AI Employee architecture
 - Runpod Public Endpoints image generation tool (`generate_image`) attached directly to the main orchestrator
+- Production Ratatui TUI with clean startup preflight, durable sessions, and orchestrator-owned greeting behavior
 
 ## Why Flue
 
