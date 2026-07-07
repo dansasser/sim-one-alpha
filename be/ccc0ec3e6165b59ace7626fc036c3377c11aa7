@@ -1,0 +1,25 @@
+README.md
+  s_a3b1aea6901a1b::t_a8be445b729e38 50,53-58,60-64,66-68,72-91
+  s_a3b1aea6901a1b::t_b22b3cf76ded24 59
+  s_a3b1aea6901a1b::t_86a55fe7a9c354 65
+  s_a3b1aea6901a1b::t_bdd8df45e772ea 11,38
+  s_a3b1aea6901a1b::t_adf2da6dee5097 4
+  s_a3b1aea6901a1b::t_92a22ceaa97f40 7-8,52
+  s_a3b1aea6901a1b::t_b41f42ef280471 51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "beccc0ec3e6165b59ace7626fc036c3377c11aa7",
+  "prompts": {},
+  "sessions": {
+    "s_a3b1aea6901a1b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f38cb-e8a0-7922-b7a7-82ff95d4c704",
+        "model": "gpt-5.5"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
