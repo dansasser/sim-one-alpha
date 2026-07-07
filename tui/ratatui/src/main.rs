@@ -243,7 +243,7 @@ impl Default for CliOptions {
         Self {
             gateway: GatewayOptions::default(),
             base_url: None,
-            session_id: "primary".to_string(),
+            session_id: String::new(),
             session_explicit: false,
             smoke_startup: false,
         }
@@ -305,6 +305,6 @@ impl CliOptions {
 
 fn print_help() {
     println!(
-        "SIM-ONE Alpha Ratatui TUI\n\nOptions:\n  --port <number>       Gateway port\n  --base-url <url>      Existing gateway base URL; skips server launch\n  --session <id>        Agent instance id (default: primary)\n  --server-path <path>  Built SIM-ONE Alpha server.mjs path\n  --env-path <path>     Env file path\n  --smoke-startup       Start/connect gateway then exit\n  -h, --help            Show this help"
+        "SIM-ONE Alpha Ratatui TUI\n\nOptions:\n  --port <number>       Gateway port\n  --base-url <url>      Existing gateway base URL; skips server launch\n  --session <id>        Explicit existing agent session id to attach\n  --server-path <path>  Built SIM-ONE Alpha server.mjs path\n  --env-path <path>     Env file path\n  --smoke-startup       Start/connect gateway then exit\n  -h, --help            Show this help"
     );
 }

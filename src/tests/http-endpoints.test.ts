@@ -10,7 +10,7 @@ import { registerTelemetryRoutes } from '../api/routes/telemetry.js';
 import { flueTelemetryStore } from '../core/telemetry/flue-telemetry.js';
 import { isSupportedSlashCommand, parseSlashCommand } from '../engine/commands/slash-commands.js';
 
-test('slash command parser supports resume and rename commands', () => {
+test('slash command parser supports session management commands', () => {
   const resume = parseSlashCommand('/resume tui-abc123');
   assert.deepEqual(resume, {
     raw: '/resume tui-abc123',
@@ -26,6 +26,22 @@ test('slash command parser supports resume and rename commands', () => {
     args: 'Release polish',
   });
   assert.equal(rename ? isSupportedSlashCommand(rename) : false, true);
+
+  const session = parseSlashCommand('/session');
+  assert.deepEqual(session, {
+    raw: '/session',
+    name: 'session',
+    args: '',
+  });
+  assert.equal(session ? isSupportedSlashCommand(session) : false, true);
+
+  const clear = parseSlashCommand('/clear');
+  assert.deepEqual(clear, {
+    raw: '/clear',
+    name: 'clear',
+    args: '',
+  });
+  assert.equal(clear ? isSupportedSlashCommand(clear) : false, true);
 });
 
 test('chat endpoints fail closed when API_SECRET is not configured', async () => {
@@ -329,6 +345,86 @@ test('chat event TUI session commands create resume and rename without prompting
   }
 });
 
+test('chat event TUI resolves one active session per connector scope without primary', async () => {
+  const testApp = new Hono();
+  const actorId = `active-tui-user-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const conversationId = `active-tui-thread-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const eventIds: string[] = [];
+  const sessionIds: string[] = [];
+
+  testApp.use('/agents/*', requireApiSecret);
+  registerChatEventRoutes(testApp);
+  testApp.post('/agents/orchestrator/:id', () => {
+    throw new Error('session resolution commands should not forward to the agent prompt route');
+  });
+
+  try {
+    await withApiSecret('test-secret', async () => {
+      const first = await postChat(testApp, {
+        connector: 'tui',
+        text: '/session',
+        actorId,
+        conversationId,
+      });
+      assert.equal(first.status, 200);
+      const firstBody = await first.json() as CommandSessionBody;
+      if (firstBody.event?.id) eventIds.push(firstBody.event.id);
+      if (firstBody.session?.id) sessionIds.push(firstBody.session.id);
+      assert.equal(firstBody.result?.command?.name, 'session');
+      assert.equal(firstBody.session?.surface, 'tui');
+      assert.equal(firstBody.session?.created, true);
+      assert.match(firstBody.session?.id ?? '', /^tui-/);
+
+      const second = await postChat(testApp, {
+        connector: 'tui',
+        text: '/session',
+        actorId,
+        conversationId,
+      });
+      assert.equal(second.status, 200);
+      const secondBody = await second.json() as CommandSessionBody;
+      if (secondBody.event?.id) eventIds.push(secondBody.event.id);
+      assert.equal(secondBody.result?.command?.name, 'session');
+      assert.equal(secondBody.session?.id, firstBody.session?.id);
+      assert.equal(secondBody.session?.created, false);
+
+      const cleared = await postChat(testApp, {
+        connector: 'tui',
+        text: '/clear',
+        actorId,
+        conversationId,
+      });
+      assert.equal(cleared.status, 200);
+      const clearBody = await cleared.json() as CommandSessionBody;
+      if (clearBody.event?.id) eventIds.push(clearBody.event.id);
+      if (clearBody.session?.id) sessionIds.push(clearBody.session.id);
+      assert.equal(clearBody.result?.command?.name, 'clear');
+      assert.equal(clearBody.session?.surface, 'tui');
+      assert.equal(clearBody.session?.created, true);
+      assert.notEqual(clearBody.session?.id, firstBody.session?.id);
+
+      const afterClear = await postChat(testApp, {
+        connector: 'tui',
+        text: '/session',
+        actorId,
+        conversationId,
+      });
+      assert.equal(afterClear.status, 200);
+      const afterClearBody = await afterClear.json() as CommandSessionBody;
+      if (afterClearBody.event?.id) eventIds.push(afterClearBody.event.id);
+      assert.equal(afterClearBody.session?.id, clearBody.session?.id);
+      assert.equal(afterClearBody.session?.created, false);
+    });
+  } finally {
+    for (const eventId of eventIds) {
+      goromboPersistenceRuntime.sessionDatabase.deleteNormalizedMessageEvent(eventId);
+    }
+    for (const sessionId of sessionIds) {
+      goromboPersistenceRuntime.sessionDatabase.deleteChatSession(sessionId);
+    }
+  }
+});
+
 test('chat event TUI resume denies sessions from another actor', async () => {
   const testApp = new Hono();
   const ownerActorId = `resume-owner-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -589,6 +685,23 @@ test('telemetry run endpoint treats non-JSON persisted run responses as not foun
     });
   });
 });
+
+interface CommandSessionBody {
+  result?: { command?: { name?: string }; text?: string };
+  event?: { id?: string };
+  session?: { id?: string; surface?: string; created?: boolean };
+}
+
+async function postChat(testApp: Hono, body: Record<string, unknown>): Promise<Response> {
+  return await testApp.request('/api/chat/events', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-secret': 'test-secret',
+    },
+    body: JSON.stringify(body),
+  });
+}
 
 async function withApiSecret(secret: string | undefined, fn: () => Promise<void>): Promise<void> {
   const previous = process.env.API_SECRET;

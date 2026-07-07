@@ -28,7 +28,8 @@ fn renders_static_shell_with_transcript_status_and_prompt() {
         .collect::<String>();
     assert!(buffer.contains("Transcript"));
     assert!(buffer.contains("SIM-ONE Alpha"));
-    assert!(buffer.contains("session: primary"));
+    assert!(buffer.contains("session: resolving"));
+    assert!(!buffer.contains("session: primary"));
     assert!(buffer.contains("> Type a message"));
     assert!(buffer.contains("preflight"), "{buffer}");
     assert!(!buffer.contains("scroll test row"), "{buffer}");
@@ -141,7 +142,7 @@ fn renders_thinking_and_tool_activity_rows() {
 
 fn app_with_pending_response() -> App {
     App::with_agent_sender(
-        "primary",
+        "tui-existing-1",
         "test gateway",
         "http://127.0.0.1:3940",
         Arc::new(|_, _, prompt| {
@@ -149,6 +150,7 @@ fn app_with_pending_response() -> App {
                 text: format!("done: {prompt}"),
                 session_id: None,
                 command_name: None,
+                session_created: None,
             })
         }),
     )

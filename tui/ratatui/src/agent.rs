@@ -13,6 +13,7 @@ pub struct AgentReply {
     pub text: String,
     pub session_id: Option<String>,
     pub command_name: Option<String>,
+    pub session_created: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,16 +35,18 @@ pub fn send_agent_prompt_reply(
 ) -> Result<AgentReply, String> {
     let endpoint = HttpEndpoint::parse(base_url)?;
     let path = "/api/chat/events";
-    let body = serde_json::json!({
+    let mut body = serde_json::json!({
         "connector": "tui",
         "text": prompt,
         "actorId": LOCAL_TUI_SCOPE_ID,
         "actorDisplayName": "Local TUI",
         "conversationId": LOCAL_TUI_SCOPE_ID,
         "threadId": LOCAL_TUI_SCOPE_ID,
-        "session": session_id,
-    })
-    .to_string();
+    });
+    if !session_id.trim().is_empty() {
+        body["session"] = serde_json::Value::String(session_id.to_string());
+    }
+    let body = body.to_string();
 
     let mut stream = connect_tcp(
         &endpoint,
@@ -150,11 +153,16 @@ fn extract_agent_reply(value: &serde_json::Value) -> Option<AgentReply> {
         .and_then(|command| command.get("name"))
         .and_then(|name| name.as_str())
         .map(str::to_string);
+    let session_created = value
+        .get("session")
+        .and_then(|session| session.get("created"))
+        .and_then(|created| created.as_bool());
 
     Some(AgentReply {
         text,
         session_id,
         command_name,
+        session_created,
     })
 }
 

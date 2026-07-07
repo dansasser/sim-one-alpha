@@ -10,6 +10,7 @@ use crate::flue::stream::{spawn_agent_stream, AgentStreamHandle, AgentStreamUpda
 
 pub const SCROLL_PAGE_LINES: usize = 8;
 const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
+const UNRESOLVED_SESSION_LABEL: &str = "resolving";
 
 pub type AgentSender =
     Arc<dyn Fn(String, String, String) -> Result<AgentReply, String> + Send + Sync + 'static>;
@@ -17,7 +18,7 @@ pub type SessionLister =
     Arc<dyn Fn(String, usize) -> Result<Vec<SessionSummary>, String> + Send + Sync + 'static>;
 pub type Clock = Arc<dyn Fn() -> Instant + Send + Sync + 'static>;
 
-const TUI_COMMAND_HELP: &str = "/new [title]\n/resume <session-id>\n/sessions [limit]\n/session\n/rename <title>\n/compact\n/help\n/exit";
+const TUI_COMMAND_HELP: &str = "/new [title]\n/clear [title]\n/resume <session-id>\n/sessions [limit]\n/session\n/rename <title>\n/compact\n/help\n/exit";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppEvent {
@@ -102,12 +103,12 @@ enum StartupPhase {
 
 impl App {
     pub fn new(gateway_status: impl Into<String>, base_url: impl Into<String>) -> Self {
-        Self::with_session("primary", gateway_status, base_url)
+        Self::with_session("", gateway_status, base_url)
     }
 
     pub fn new_for_test() -> Self {
         Self::with_agent_sender(
-            "primary",
+            "",
             "offline placeholder",
             "http://127.0.0.1:3940",
             Arc::new(|_, _, prompt| Ok(agent_reply(format!("test response to {prompt}")))),
@@ -254,8 +255,8 @@ impl App {
             "preflight",
             &format!("gateway ready ({})", self.gateway_status),
         );
-        self.push_speaker_text("preflight", "creating clean TUI session");
-        self.submit_internal_prompt("/new SIM-ONE Alpha TUI startup".to_string());
+        self.push_speaker_text("preflight", "resolving active TUI session");
+        self.submit_internal_prompt("/session".to_string());
     }
 
     pub fn startup_complete(&self) -> bool {
@@ -321,7 +322,7 @@ impl App {
                 match response.result {
                     Ok(reply) => {
                         let session_id = reply.session_id.clone();
-                        let command_name = reply.command_name.clone();
+                        let reply_for_startup = reply.clone();
                         self.replace_transcript_line_with_speaker_text(
                             transcript_line,
                             "assistant",
@@ -330,7 +331,7 @@ impl App {
                         if let Some(session_id) = session_id {
                             self.switch_session(session_id);
                         }
-                        self.continue_startup_after_agent_reply(command_name.as_deref());
+                        self.continue_startup_after_agent_reply(&reply_for_startup);
                     }
                     Err(error) => {
                         self.replace_transcript_line_with_speaker_text(
@@ -395,6 +396,14 @@ impl App {
         &self.session_id
     }
 
+    fn session_label(&self) -> &str {
+        if self.session_id.trim().is_empty() {
+            UNRESOLVED_SESSION_LABEL
+        } else {
+            &self.session_id
+        }
+    }
+
     pub fn gateway_status(&self) -> &str {
         &self.gateway_status
     }
@@ -418,7 +427,7 @@ impl App {
     pub fn status_text(&self) -> String {
         let mut parts = vec![
             "SIM-ONE Alpha".to_string(),
-            format!("session: {}", self.session_id),
+            format!("session: {}", self.session_label()),
             format!("gateway: {}", self.gateway_status),
             format!("stream: {}", self.stream_status()),
         ];
@@ -635,12 +644,17 @@ impl App {
     fn handle_local_slash_command(&mut self, prompt: &str) -> bool {
         match prompt {
             "/exit" => {
-                self.exit_session_id = Some(self.session_id.clone());
+                if !self.session_id.trim().is_empty() {
+                    self.exit_session_id = Some(self.session_id.clone());
+                }
                 self.should_quit = true;
                 true
             }
             "/session" => {
-                self.push_speaker_text("system", &format!("current session {}", self.session_id));
+                self.push_speaker_text(
+                    "system",
+                    &format!("current session {}", self.session_label()),
+                );
                 true
             }
             "/help" => {
@@ -706,17 +720,19 @@ impl App {
         self.push_speaker_text("system", &format!("active session {}", self.session_id));
     }
 
-    fn continue_startup_after_agent_reply(&mut self, command_name: Option<&str>) {
+    fn continue_startup_after_agent_reply(&mut self, reply: &AgentReply) {
         match self.startup_phase {
             StartupPhase::CreatingSession => {
-                if command_name != Some("new") {
+                if reply.command_name.as_deref() != Some("session")
+                    || self.session_id.trim().is_empty()
+                {
                     self.fail_startup();
                     return;
                 }
 
                 self.push_speaker_text(
                     "preflight",
-                    &format!("created clean TUI session {}", self.session_id),
+                    &format!("active TUI session {}", self.session_id),
                 );
                 if self.startup_attach_stream {
                     self.start_stream();
@@ -896,7 +912,6 @@ fn initial_transcript() -> Vec<String> {
     vec![
         "system: SIM-ONE Alpha Ratatui TUI".to_string(),
         "preflight: waiting for gateway startup result".to_string(),
-        "preflight: clean startup will create a fresh TUI session".to_string(),
     ]
 }
 
@@ -956,6 +971,7 @@ fn agent_reply(text: impl Into<String>) -> AgentReply {
         text: text.into(),
         session_id: None,
         command_name: None,
+        session_created: None,
     }
 }
 

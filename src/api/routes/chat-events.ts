@@ -65,7 +65,7 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
       return c.json(createCommandResponse({
         eventId: event.id,
         command: slashCommand,
-        text: `Unknown command "${slashCommand.raw}". Supported commands are /new, /resume, /rename, and /compact.`,
+        text: `Unknown command "${slashCommand.raw}". Supported commands are /new, /clear, /resume, /rename, /compact, and /session.`,
       }));
     }
 
@@ -74,7 +74,7 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
       return c.json(createCommandResponse({
         eventId: event.id,
         command: slashCommand,
-        text: '/new is handled by the web client session controls. Use the new chat action instead.',
+        text: `${slashCommand.raw} is handled by the web client session controls. Use the new chat action instead.`,
       }));
     }
 
@@ -107,8 +107,10 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
       sessionResolution = resolveChatSession({
         event,
         requestedSessionId,
-        forceNew: slashCommand?.name === 'new',
-        title: slashCommand?.name === 'new' && slashCommand.args ? slashCommand.args : undefined,
+        forceNew: slashCommand ? isSessionCreationSlashCommand(slashCommand) : false,
+        title: slashCommand && isSessionCreationSlashCommand(slashCommand) && slashCommand.args
+          ? slashCommand.args
+          : undefined,
       });
     } catch (error) {
       goromboPersistenceRuntime.sessionDatabase.recordNormalizedMessageEvent({ event });
@@ -133,12 +135,30 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
       }));
     }
 
+    if (slashCommand?.name === 'clear') {
+      return c.json(createCommandResponse({
+        eventId: event.id,
+        sessionResolution,
+        command: slashCommand,
+        text: `Cleared conversation. Started new session ${sessionResolution.sessionId}.`,
+      }));
+    }
+
     if (slashCommand?.name === 'resume') {
       return c.json(createCommandResponse({
         eventId: event.id,
         sessionResolution,
         command: slashCommand,
         text: `Resumed session ${sessionResolution.sessionId}.`,
+      }));
+    }
+
+    if (slashCommand?.name === 'session') {
+      return c.json(createCommandResponse({
+        eventId: event.id,
+        sessionResolution,
+        command: slashCommand,
+        text: `Current session ${sessionResolution.sessionId}.`,
       }));
     }
 

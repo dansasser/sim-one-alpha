@@ -119,7 +119,7 @@ src/api/middleware/api-secret.ts
 
 src/api/routes/chat-events.ts
   App-owned /api/chat/events ingress alias.
-  Verifies API-secret middleware, exposes /api/chat/sessions for HTTP chat lists, normalizes the HTTP boundary, persists trusted event context, resolves the product session, handles pre-LLM slash commands (/new, /resume, /rename, /compact), and prompts the durable /agents/orchestrator/:sessionId route.
+  Verifies API-secret middleware, exposes /api/chat/sessions for HTTP chat lists, normalizes the HTTP boundary, persists trusted event context, resolves the product session, handles pre-LLM slash commands (/new, /clear, /resume, /rename, /compact, /session), and prompts the durable /agents/orchestrator/:sessionId route.
   Does not call c.executionCtx, a workflow route for normal chat execution, or a non-Flue orchestrator.
 
 sim-one-cli/src/cli.tsx
@@ -143,7 +143,7 @@ tui/ratatui/src/agent.rs
 
 tui/ratatui/src/app.rs
   TUI state reducer.
-  Owns prompt editing, transcript scroll state, pending spinner/status, TUI-local commands (`/session`, `/sessions`, `/help`, `/exit`), backend command response handling, active session switching, and stream restart.
+  Owns prompt editing, transcript scroll state, pending spinner/status, TUI-local commands (`/session`, `/sessions`, `/help`, `/exit`), backend command response handling for `/new`, `/clear`, `/resume`, `/rename`, `/compact`, active session switching, and stream restart.
 
 src/api/routes/knowledge.ts
   App-owned /api/knowledge and /api/knowledge/reindex routes.

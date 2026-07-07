@@ -25,7 +25,7 @@ fn typing_updates_prompt_without_changing_transcript_scroll() {
 #[test]
 fn enter_submits_prompt_to_agent_and_returns_to_tail() {
     let mut app = App::with_agent_sender(
-        "primary",
+        "tui-existing-1",
         "test gateway",
         "http://127.0.0.1:3940",
         Arc::new(|_, session, prompt| {
@@ -46,7 +46,7 @@ fn enter_submits_prompt_to_agent_and_returns_to_tail() {
     assert!(app
         .transcript_lines()
         .iter()
-        .any(|line| line.contains("assistant: session=primary; prompt=ship the tui")));
+        .any(|line| line.contains("assistant: session=tui-existing-1; prompt=ship the tui")));
     assert!(app.follow_tail());
     assert_eq!(app.transcript_scroll(), app.max_scroll());
     assert_eq!(app.agent_status(), "ready");
@@ -126,7 +126,7 @@ fn duplicate_submit_while_pending_is_visible_and_does_not_enqueue_again() {
 #[test]
 fn failed_response_settles_pending_state_and_renders_error() {
     let mut app = App::with_agent_sender(
-        "primary",
+        "tui-existing-1",
         "test gateway",
         "http://127.0.0.1:3940",
         Arc::new(|_, _, _| Err("synthetic failure".to_string())),
@@ -157,11 +157,11 @@ fn initial_transcript_is_clean_preflight_shell() {
 }
 
 #[test]
-fn startup_preflight_creates_fresh_session_and_sends_greeting_prompt() {
+fn startup_preflight_resolves_active_session_without_primary_and_sends_greeting_prompt() {
     let prompts = Arc::new(Mutex::new(Vec::<String>::new()));
     let sent_prompts = Arc::clone(&prompts);
     let mut app = App::with_agent_sender(
-        "primary",
+        "",
         "http://127.0.0.1:3940 started:false",
         "http://127.0.0.1:3940",
         Arc::new(move |_, _, prompt| {
@@ -169,11 +169,12 @@ fn startup_preflight_creates_fresh_session_and_sends_greeting_prompt() {
                 .lock()
                 .expect("prompt recorder should lock")
                 .push(prompt.clone());
-            if prompt.starts_with("/new ") {
+            if prompt == "/session" {
                 Ok(AgentReply {
-                    text: "Started new session tui-startup-1.".to_string(),
+                    text: "Current session tui-startup-1.".to_string(),
                     session_id: Some("tui-startup-1".to_string()),
-                    command_name: Some("new".to_string()),
+                    command_name: Some("session".to_string()),
+                    session_created: Some(true),
                 })
             } else {
                 Ok(agent_reply("Hello Daniel, I'm Ollie. All systems are go."))
@@ -187,7 +188,7 @@ fn startup_preflight_creates_fresh_session_and_sends_greeting_prompt() {
     assert_eq!(app.session_id(), "tui-startup-1");
     let prompts = prompts.lock().expect("prompt recorder should lock");
     assert_eq!(prompts.len(), 2);
-    assert!(prompts[0].starts_with("/new "));
+    assert_eq!(prompts[0], "/session");
     assert!(prompts[1].contains("greeting-preflight"));
     assert!(prompts[1].contains("Daniel T Sasser II"));
     assert!(prompts[1].contains("all systems go"));
@@ -196,10 +197,38 @@ fn startup_preflight_creates_fresh_session_and_sends_greeting_prompt() {
 
     let transcript = app.transcript_lines().join("\n");
     assert!(transcript.contains("preflight: gateway ready"));
-    assert!(transcript.contains("preflight: created clean TUI session tui-startup-1"));
+    assert!(transcript.contains("preflight: active TUI session tui-startup-1"));
     assert!(transcript.contains("preflight: all systems go"));
     assert!(transcript.contains("assistant: Hello Daniel, I'm Ollie."));
+    assert!(!transcript.contains("primary"));
     assert_eq!(app.agent_status(), "ready");
+}
+
+#[test]
+fn startup_preflight_fails_when_session_resolution_returns_no_session_id() {
+    let mut app = App::with_agent_sender(
+        "",
+        "http://127.0.0.1:3940 started:false",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, prompt| {
+            assert_eq!(prompt, "/session");
+            Ok(AgentReply {
+                text: "Unknown command \"/session\".".to_string(),
+                session_id: None,
+                command_name: Some("session".to_string()),
+                session_created: None,
+            })
+        }),
+    );
+
+    app.start_startup_preflight(false);
+    wait_for_agent(&mut app);
+
+    assert_eq!(app.session_id(), "");
+    let transcript = app.transcript_lines().join("\n");
+    assert!(transcript.contains("assistant: Unknown command \"/session\"."));
+    assert!(transcript.contains("preflight: startup preflight failed"));
+    assert!(!transcript.contains("preflight: all systems go"));
 }
 
 #[test]
@@ -311,7 +340,7 @@ fn multiline_agent_response_reindexes_stream_activity_rows() {
     let release_rx = Arc::new(Mutex::new(release_rx));
     let sender_release_rx = Arc::clone(&release_rx);
     let mut app = App::with_agent_sender(
-        "primary",
+        "tui-existing-1",
         "test gateway",
         "http://127.0.0.1:3940",
         Arc::new(move |_, _, _| {
@@ -497,14 +526,14 @@ fn ctrl_c_marks_app_for_clean_exit() {
 
 #[test]
 fn slash_exit_marks_app_for_clean_exit_and_preserves_session_id() {
-    let mut app = App::new_for_test();
+    let mut app = App::with_session("tui-existing-1", "test gateway", "http://127.0.0.1:3940");
 
     app.handle_event(AppEvent::Text("/exit".to_string()));
     app.handle_event(AppEvent::Submit);
 
     assert!(app.should_quit());
     assert_eq!(app.prompt(), "");
-    assert_eq!(app.exit_session_id(), Some("primary"));
+    assert_eq!(app.exit_session_id(), Some("tui-existing-1"));
 }
 
 #[test]
@@ -512,7 +541,7 @@ fn slash_session_renders_current_session_without_calling_agent() {
     let calls = Arc::new(AtomicUsize::new(0));
     let sender_calls = Arc::clone(&calls);
     let mut app = App::with_agent_sender(
-        "primary",
+        "tui-existing-1",
         "test gateway",
         "http://127.0.0.1:3940",
         Arc::new(move |_, _, _| {
@@ -529,7 +558,7 @@ fn slash_session_renders_current_session_without_calling_agent() {
     assert!(app
         .transcript_lines()
         .iter()
-        .any(|line| line == "system: current session primary"));
+        .any(|line| line == "system: current session tui-existing-1"));
 }
 
 #[test]
@@ -537,7 +566,7 @@ fn slash_help_renders_command_reference_without_calling_agent() {
     let calls = Arc::new(AtomicUsize::new(0));
     let sender_calls = Arc::clone(&calls);
     let mut app = App::with_agent_sender(
-        "primary",
+        "tui-existing-1",
         "test gateway",
         "http://127.0.0.1:3940",
         Arc::new(move |_, _, _| {
@@ -553,6 +582,7 @@ fn slash_help_renders_command_reference_without_calling_agent() {
     let help = app.transcript_lines().join("\n");
     for command in [
         "/new",
+        "/clear",
         "/resume",
         "/sessions",
         "/session",
@@ -570,7 +600,7 @@ fn slash_sessions_lists_recent_sessions_without_calling_agent() {
     let calls = Arc::new(AtomicUsize::new(0));
     let sender_calls = Arc::clone(&calls);
     let mut app = App::with_agent_sender_and_session_lister(
-        "primary",
+        "tui-existing-1",
         "test gateway",
         "http://127.0.0.1:3940",
         Arc::new(move |_, _, _| {
@@ -604,7 +634,7 @@ fn slash_sessions_lists_recent_sessions_without_calling_agent() {
 #[test]
 fn command_response_switches_active_session_and_announces_it() {
     let mut app = App::with_agent_sender(
-        "primary",
+        "tui-existing-1",
         "test gateway",
         "http://127.0.0.1:3940",
         Arc::new(|_, _, _| {
@@ -612,6 +642,7 @@ fn command_response_switches_active_session_and_announces_it() {
                 text: "Started new session tui-new-1.".to_string(),
                 session_id: Some("tui-new-1".to_string()),
                 command_name: Some("new".to_string()),
+                session_created: Some(true),
             })
         }),
     );
@@ -642,6 +673,7 @@ fn agent_reply(text: impl Into<String>) -> AgentReply {
         text: text.into(),
         session_id: None,
         command_name: None,
+        session_created: None,
     }
 }
 
@@ -660,7 +692,7 @@ fn app_with_blocked_sender(clock: &TestClock) -> (App, mpsc::Sender<()>, Arc<Ato
     let sender_calls = Arc::clone(&calls);
     let sender_release_rx = Arc::clone(&release_rx);
     let app = App::with_agent_sender_and_clock(
-        "primary",
+        "tui-existing-1",
         "test gateway",
         "http://127.0.0.1:3940",
         Arc::new(move |_, _, prompt| {

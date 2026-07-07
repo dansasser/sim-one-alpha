@@ -35,8 +35,9 @@ export function resolveChatSession(input: ResolveChatSessionInput): ChatSessionR
     threadId: input.event.conversation.threadId,
   };
   const explicitSessionId = cleanSessionId(input.requestedSessionId);
-  const existingActiveSessionId =
-    surface === 'connector' && !input.forceNew ? goromboPersistenceRuntime.sessionDatabase.getActiveSession(activeLookup) : null;
+  const existingActiveSessionId = isActiveSessionManagedSurface(surface) && !input.forceNew
+    ? goromboPersistenceRuntime.sessionDatabase.getActiveSession(activeLookup)
+    : null;
   const sessionId = explicitSessionId ?? existingActiveSessionId ?? undefined;
   const title = input.title ?? titleFromText(input.event.text);
 
@@ -54,7 +55,7 @@ export function resolveChatSession(input: ResolveChatSessionInput): ChatSessionR
       title,
     });
 
-    if (surface === 'connector') {
+    if (isActiveSessionManagedSurface(surface)) {
       goromboPersistenceRuntime.sessionDatabase.setActiveSession({
         ...activeLookup,
         sessionId,
@@ -77,7 +78,7 @@ export function resolveChatSession(input: ResolveChatSessionInput): ChatSessionR
     title,
   });
 
-  if (surface === 'connector') {
+  if (isActiveSessionManagedSurface(surface)) {
     goromboPersistenceRuntime.sessionDatabase.setActiveSession({
       ...activeLookup,
       sessionId: session.sessionId,
@@ -108,6 +109,10 @@ function surfaceForEvent(event: NormalizedMessageEvent): ChatSurface {
     return 'tui';
   }
   return 'connector';
+}
+
+function isActiveSessionManagedSurface(surface: ChatSurface): boolean {
+  return surface === 'connector' || surface === 'tui';
 }
 
 function cleanSessionId(value: string | undefined): string | undefined {

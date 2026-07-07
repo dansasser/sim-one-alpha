@@ -72,6 +72,46 @@ fn posts_prompt_to_tui_chat_event_endpoint_and_extracts_text() {
 }
 
 #[test]
+fn omits_session_field_when_tui_has_no_active_session_yet() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("test server should bind");
+    let port = listener
+        .local_addr()
+        .expect("test server should have address")
+        .port();
+    let (tx, rx) = mpsc::channel();
+
+    thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("client should connect");
+        let request = read_http_request(&mut stream);
+        tx.send(request).expect("request should be reported");
+
+        let body = r#"{"result":{"text":"Current session tui-123.","command":{"name":"session","handled":true}},"session":{"id":"tui-123","surface":"tui","created":true}}"#;
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .expect("response should be writable");
+    });
+
+    let response = send_agent_prompt_reply(&format!("http://127.0.0.1:{port}"), "", "/session")
+        .expect("session resolution should return metadata");
+
+    assert_eq!(response.session_id.as_deref(), Some("tui-123"));
+    let request = rx.recv().expect("request should be captured");
+    let body = request_body_json(&request);
+    assert_eq!(
+        body.get("text").and_then(|value| value.as_str()),
+        Some("/session")
+    );
+    assert!(
+        body.get("session").is_none(),
+        "TUI startup must let the gateway resolve the active session instead of sending a placeholder session"
+    );
+}
+
+#[test]
 fn extracts_command_session_metadata_from_chat_event_response() {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("test server should bind");
     let port = listener
@@ -93,13 +133,17 @@ fn extracts_command_session_metadata_from_chat_event_response() {
         .expect("response should be writable");
     });
 
-    let response =
-        send_agent_prompt_reply(&format!("http://127.0.0.1:{port}"), "primary", "/new Demo")
-            .expect("agent prompt should return response metadata");
+    let response = send_agent_prompt_reply(
+        &format!("http://127.0.0.1:{port}"),
+        "tui-existing-1",
+        "/new Demo",
+    )
+    .expect("agent prompt should return response metadata");
 
     assert_eq!(response.text, "Started new session tui-123.");
     assert_eq!(response.session_id.as_deref(), Some("tui-123"));
     assert_eq!(response.command_name.as_deref(), Some("new"));
+    assert_eq!(response.session_created, Some(true));
 }
 
 #[test]
@@ -140,7 +184,7 @@ fn decodes_chunked_agent_response_before_utf8_conversion() {
 
     let response = send_agent_prompt(
         &format!("http://127.0.0.1:{port}"),
-        "primary",
+        "tui-existing-1",
         "hello agent",
     )
     .expect("agent prompt should decode chunked response");

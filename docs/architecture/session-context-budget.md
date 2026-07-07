@@ -161,7 +161,7 @@ Slash commands are parsed before the LLM receives the prompt:
 - `/rename <title>` updates the active durable product session title and returns command telemetry without prompting the model.
 - `/compact` calls `session.compact()` for the resolved durable direct-agent Flue session and returns command telemetry without sending `/compact` to the model.
 
-The Ratatui TUI also owns local commands that do not require backend slash-command handling: `/session`, `/sessions [limit]`, `/help`, and `/exit`. `/sessions` reads the backend session list endpoint; the others are purely local UI behavior.
+The Ratatui TUI also owns local commands that do not require backend slash-command handling: `/session`, `/sessions [limit]`, `/help`, and `/exit`. `/sessions` reads the backend session list endpoint; the others are purely local UI behavior. Backend slash commands include `/new`, `/clear`, `/resume`, `/rename`, and `/compact`; `/clear` resets the connector-owned active thread by creating a new active durable session for the same TUI scope.
 
 Future commands can accept trailing instruction text through the same parser. Unsupported slash commands are handled by application code and are not sent to the LLM.
 

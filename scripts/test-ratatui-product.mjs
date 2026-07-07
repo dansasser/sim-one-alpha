@@ -86,6 +86,9 @@ try {
   assertOutputIncludes(stdout, 'preflight: gateway ready', 'startup smoke did not show gateway preflight');
   assertOutputIncludes(stdout, 'preflight: all systems go', 'startup smoke did not show all-systems-go preflight');
   assertOutputIncludes(stdout, 'assistant:', 'startup smoke did not render an agent greeting');
+  if (/session:\s*primary/i.test(stdout)) {
+    throw new Error(`Ratatui startup smoke rendered the old primary session default.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
+  }
   if (/context 0[1-9]|scroll test row|placeholder/i.test(stdout)) {
     throw new Error(`Ratatui startup smoke rendered scaffold or placeholder transcript content.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
   }
@@ -98,6 +101,8 @@ try {
         '/new Smoke Session',
         '/session',
         '/compact',
+        '/clear Smoke Cleared',
+        '/session',
         '/exit',
       ].join('\n'),
     },
@@ -112,14 +117,23 @@ try {
   const sessionId = sessionMatch[1];
   assertOutputIncludes(stdout, `system: current session ${sessionId}`, 'session command did not show the active session');
   assertOutputIncludes(stdout, `assistant: Compacted session ${sessionId}.`, 'compact command did not compact the active session');
-  assertOutputIncludes(stdout, `Exited SIM-ONE Alpha TUI. Session: ${sessionId}`, 'exit command did not print the active session id');
+  const clearMatch = /Cleared conversation\. Started new session (tui-[^.]+)\./.exec(stdout);
+  if (!clearMatch?.[1]) {
+    throw new Error(`Ratatui product session smoke did not clear into a new TUI session.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
+  }
+  const clearedSessionId = clearMatch[1];
+  if (clearedSessionId === sessionId) {
+    throw new Error(`Ratatui /clear reused the old session id ${sessionId}.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
+  }
+  assertOutputIncludes(stdout, `system: current session ${clearedSessionId}`, 'session command did not show the cleared active session');
+  assertOutputIncludes(stdout, `Exited SIM-ONE Alpha TUI. Session: ${clearedSessionId}`, 'exit command did not print the cleared active session id');
 
   const resumeSessionSmoke = await runProductCommand(
     ['--port', String(port)],
     {
       ...childEnv,
       SIM_ONE_TUI_TEST_PROMPTS: [
-        `/resume ${sessionId}`,
+        `/resume ${clearedSessionId}`,
         '/rename Smoke Session Renamed',
         '/exit',
       ].join('\n'),
@@ -128,12 +142,12 @@ try {
   );
   stdout = resumeSessionSmoke.stdout;
   stderr = resumeSessionSmoke.stderr;
-  assertOutputIncludes(stdout, `assistant: Resumed session ${sessionId}.`, 'resume command did not resume the created session');
-  assertOutputIncludes(stdout, `assistant: Renamed session ${sessionId} to "Smoke Session Renamed".`, 'rename command did not rename the active session');
-  assertOutputIncludes(stdout, `Exited SIM-ONE Alpha TUI. Session: ${sessionId}`, 'exit after resume did not print the active session id');
+  assertOutputIncludes(stdout, `assistant: Resumed session ${clearedSessionId}.`, 'resume command did not resume the cleared session');
+  assertOutputIncludes(stdout, `assistant: Renamed session ${clearedSessionId} to "Smoke Session Renamed".`, 'rename command did not rename the active session');
+  assertOutputIncludes(stdout, `Exited SIM-ONE Alpha TUI. Session: ${clearedSessionId}`, 'exit after resume did not print the active session id');
 
   console.log('[ratatui-product] sim-one ran startup preflight, created a clean TUI session, and received an agent greeting.');
-  console.log('[ratatui-product] sim-one session commands created, inspected, compacted, resumed, renamed, and exited a TUI session.');
+  console.log('[ratatui-product] sim-one session commands created, inspected, compacted, cleared, resumed, renamed, and exited a TUI session.');
 } finally {
   if (child && child.exitCode === null && child.signalCode === null) {
     child.kill('SIGKILL');
@@ -177,7 +191,7 @@ async function assertDefaultProductCommandStartsCleanStartup(env) {
   );
   const defaultArgs = parseForwardedArgs(defaultLaunch.stdout);
   if (defaultArgs.includes('--session')) {
-    throw new Error(`default sim-one launch forwarded --session and will resume old context instead of clean startup.\nstdout:\n${defaultLaunch.stdout}\nstderr:\n${defaultLaunch.stderr}`);
+    throw new Error(`default sim-one launch forwarded --session instead of letting the gateway resolve the active TUI connector session.\nstdout:\n${defaultLaunch.stdout}\nstderr:\n${defaultLaunch.stderr}`);
   }
 
   const explicitLaunch = await runProductCommand(

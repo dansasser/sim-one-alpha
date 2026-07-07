@@ -6,11 +6,11 @@ Implementation details live in `docs/architecture/tui-cli-session-flow.md`.
 
 ## Session Model
 
-The TUI sends chat events with connector `tui` and a stable local TUI actor/conversation scope. The active session id selects the durable SIM-ONE Alpha conversation to prompt, stream, compact, or resume.
+The TUI sends chat events with connector `tui` and a stable local TUI actor/conversation scope. The gateway owns active-session selection for that connector scope, the same way connector surfaces such as Telegram do. The active session id selects the durable SIM-ONE Alpha conversation to prompt, stream, compact, clear, or resume.
 
 When the active session changes, the TUI cancels the old stream handle, clears stream activity rows for the previous live session, and starts a new stream for the selected session.
 
-Normal no-argument launch creates a fresh startup session automatically before stream attach. This keeps the first screen clean and prevents old `primary` stream catch-up rows from appearing. Use `--session <id>` at launch or `/resume <session-id>` inside the TUI when you intentionally want prior session context.
+Normal no-argument launch does not use a default `primary` session. It starts unresolved, asks the gateway for the active TUI session for `connector=tui` and `local-tui` scope, then switches to the returned durable `tui-*` session. Use `--session <id>` at launch or `/resume <session-id>` inside the TUI only when you intentionally want a specific existing session.
 
 ## Current Session
 
@@ -46,6 +46,23 @@ Expected transcript shape:
 
 ```text
 assistant: Started new session tui-...
+system: active session tui-...
+```
+
+## Clear The Current Thread
+
+Use:
+
+```text
+/clear [title]
+```
+
+`/clear` is the connector-style reset command. The gateway creates a new active session for the same TUI connector scope and the TUI switches to it. Previous sessions remain stored and can be resumed by id.
+
+Expected transcript shape:
+
+```text
+assistant: Cleared conversation. Started new session tui-...
 system: active session tui-...
 ```
 
@@ -153,6 +170,7 @@ Use that id with `/resume <session-id>` the next time you launch the TUI.
 
 ```text
 /new [title]           create a new durable TUI session and switch to it
+/clear [title]         clear the active TUI thread by creating a new active session
 /resume <session-id>   resume an available durable session and switch to it
 /sessions [limit]      list recent sessions, default 10, max 50
 /session               show the current active session id

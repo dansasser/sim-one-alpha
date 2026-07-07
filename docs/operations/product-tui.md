@@ -66,15 +66,15 @@ Runtime data:
 .gorombo/db/structured-memory.sqlite
 ```
 
-Normal no-argument launch starts from an internal bootstrap session, then creates a fresh durable startup TUI session before attaching the live stream. This prevents stale `primary` context rows from appearing on the first screen. Passing `--session <id>` is an explicit existing-session attach. TUI session commands can then create, resume, or switch durable sessions inside the running app.
+Normal no-argument launch starts without an agent session id. The TUI asks the gateway to resolve the active durable TUI session for the local `tui` connector scope, switches to the returned `tui-*` session, then attaches the live stream. There is no default `primary` TUI session. Passing `--session <id>` is an explicit existing-session attach. TUI session commands can then clear, create, resume, or switch durable sessions inside the running app.
 
 ## Startup Preflight
 
 After the gateway is healthy, the TUI startup flow:
 
 ```text
-creates a fresh durable TUI session
-attaches the stream to that fresh session
+resolves the active durable TUI session through the gateway
+attaches the stream to that active session
 renders preflight rows in the transcript
 sends a startup greeting prompt to the orchestrator
 uses the built-in Flue greeting-preflight skill for the greeting behavior

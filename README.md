@@ -547,7 +547,7 @@ The TypeScript `sim-one` wrapper owns product command routing and capability sub
 - **Transcript/context pane** — prompts, assistant responses, stream activity, tool/status rows, and local system notices
 - **Prompt editor** — cursor movement, word movement, Home/End, delete/backspace, Ctrl+U, and submit
 - **Status bar** — gateway URL, active session, stream state, pending response state, elapsed thinking time, and spinner
-- **Session command output** — `/new`, `/resume`, `/rename`, `/compact`, `/session`, `/sessions`, `/help`, and `/exit`
+- **Session command output** — `/new`, `/clear`, `/resume`, `/rename`, `/compact`, `/session`, `/sessions`, `/help`, and `/exit`
 - **Scroll behavior** — PgUp/PgDown scrolls the transcript while prompt typing remains active
 
 ### First run — the wizard (planned)
@@ -587,6 +587,7 @@ Core TUI slash commands:
 
 ```text
 /new [title]           create a new durable TUI session and switch to it
+/clear [title]         clear the active TUI thread by creating a new active session
 /resume <session-id>   resume an available durable session and switch to it
 /sessions [limit]      list recent sessions, default 10, max 50
 /session               show the current active session id
@@ -1089,6 +1090,7 @@ Protected telemetry uses live in-memory Flue observer summaries when available a
 Slash commands are parsed before the prompt reaches the LLM:
 
 - `/new` starts a new trusted connector/TUI session. GUI-managed web chat should use the client new-chat control instead, and generic Web API payloads cannot opt into connector-only behavior by spoofing a connector name.
+- `/clear` resets the active connector/TUI thread by creating a new active durable session for the same connector scope.
 - `/resume <session-id>` resumes an available durable TUI session after access checks.
 - `/rename <title>` renames the active durable TUI session.
 - `/compact` calls Flue `session.compact()` for the resolved durable direct-agent session and returns command telemetry.

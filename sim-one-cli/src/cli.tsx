@@ -127,7 +127,7 @@ function waitForChild(child: ChildProcess): Promise<number> {
 }
 
 async function launchInkTui(opts: ProductTuiOptions): Promise<void> {
-  const session = opts.session ?? 'primary';
+  const session = opts.session ?? 'legacy-ink';
 
   if (opts.baseUrl) {
     const instance = render(<App baseUrl={opts.baseUrl} session={session} />, {

@@ -106,15 +106,16 @@ The launcher only stops a server child that it started. It does not stop a gatew
 
 ## Startup Preflight And Greeting
 
-A normal no-argument TUI launch does not attach directly to the default `primary` session. It starts with a clean local transcript, creates a fresh durable TUI session, attaches the stream to that new session, reports preflight status, then sends an automatic greeting prompt through `/api/chat/events`.
+A normal no-argument TUI launch does not attach to a default `primary` session. It starts with a clean local transcript and no agent session id, asks the gateway to resolve the active durable TUI session for the local `tui` connector scope, attaches the stream to that returned session, reports preflight status, then sends an automatic greeting prompt through `/api/chat/events`.
 
 ```text
 TUI opens
 -> render clean preflight shell
 -> confirm gateway startup/reuse result
--> POST /api/chat/events text="/new SIM-ONE Alpha TUI startup"
+-> POST /api/chat/events text="/session" with no session field
+-> gateway resolves or creates active tui-* session for connector=tui/local-tui
 -> switch to returned tui-* session
--> attach live stream for the fresh session
+-> attach live stream for the active session
 -> render "preflight: all systems go"
 -> POST /api/chat/events with startup report
 -> orchestrator activates built-in greeting-preflight skill
@@ -123,7 +124,7 @@ TUI opens
 
 The TUI owns only connector checks and transcript/status rendering. The greeting words are not hardcoded in Rust. The startup prompt instructs the main orchestrator to use the built-in Flue skill `greeting-preflight`, which lives at `src/skills/greeting-preflight/SKILL.md` and is registered in `src/agents/orchestrator.ts` through the documented `with { type: 'skill' }` import flow.
 
-Passing `--session <id>` is an explicit resume-style launch. In that mode the TUI attaches to the requested session stream instead of creating a new startup session.
+Passing `--session <id>` is an explicit resume-style launch. In that mode the TUI attaches to the requested session stream instead of asking the gateway to resolve the active session for the local TUI connector scope.
 
 ## Prompt Flow
 
@@ -136,7 +137,7 @@ TUI prompt submit
    actorId: "local-tui"
    conversationId: "local-tui"
    threadId: "local-tui"
-   session: <active-session-id>
+   session: <active-session-id> after startup resolution
 -> persist trusted normalized event context
 -> resolve product session
 -> POST /agents/orchestrator/:sessionId?wait=result
@@ -144,7 +145,7 @@ TUI prompt submit
 -> response text rendered in the transcript
 ```
 
-The stable `local-tui` actor/conversation/thread scope is intentional. The active session id selects the durable conversation, while the stable scope lets `/new`, `/resume`, `/rename`, and `/compact` operate across session switches without creating unreachable conversation scopes.
+The stable `local-tui` actor/conversation/thread scope is intentional. The gateway uses that connector scope to resolve the active durable TUI session, matching Telegram-style one-thread behavior. The active session id selects the durable conversation, while the stable scope lets `/new`, `/clear`, `/resume`, `/rename`, and `/compact` operate across session switches without creating unreachable conversation scopes.
 
 ## Slash Commands
 
@@ -155,15 +156,17 @@ Backend-owned commands:
 | Command | Owner | Behavior |
 | --- | --- | --- |
 | `/new [title]` | `src/api/routes/chat-events.ts` | Creates a new durable TUI session, returns its id, and the TUI switches to it. |
+| `/clear [title]` | `src/api/routes/chat-events.ts` | Clears the connector thread by creating a new active durable session for the same TUI scope. |
 | `/resume <session-id>` | `src/api/routes/chat-events.ts` | Validates session access for the TUI actor/conversation scope, returns the session, and the TUI switches to it. |
 | `/rename <title>` | `src/api/routes/chat-events.ts` | Renames the active durable session. |
 | `/compact` | `src/api/routes/chat-events.ts` | Opens the active durable Flue session and calls `session.compact()` without sending `/compact` to the model. |
+| `/session` | `src/api/routes/chat-events.ts` | Resolves and returns the active durable session for connector-owned surfaces. |
 
 TUI-local commands:
 
 | Command | Owner | Behavior |
 | --- | --- | --- |
-| `/session` | `tui/ratatui/src/app.rs` | Prints the current active session id. |
+| `/session` | `tui/ratatui/src/app.rs` | Prints the current resolved active session id inside the running TUI. |
 | `/sessions [limit]` | `tui/ratatui/src/app.rs` + `/api/chat/sessions` | Lists recent sessions. Default limit is 10, clamped from 1 to 50. |
 | `/help` | `tui/ratatui/src/app.rs` | Prints command help without reaching the gateway model path. |
 | `/exit` | `tui/ratatui/src/app.rs` + `tui/ratatui/src/main.rs` | Quits cleanly and prints the active session id after terminal restore. |
