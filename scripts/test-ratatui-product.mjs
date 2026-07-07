@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import {
+  chmodSync,
   existsSync,
   mkdtempSync,
   readFileSync,
@@ -70,6 +71,7 @@ try {
   }
 
   await assertProductCommandRouting(childEnv);
+  await assertDefaultProductCommandStartsCleanStartup(childEnv);
 
   const startupSmoke = await runProductCommand(
     ['--port', String(port)],
@@ -157,6 +159,48 @@ function productLikePath() {
   const currentPath = process.env.PATH || '';
   const nodeBin = dirname(process.env.SIM_ONE_NODE || process.execPath);
   return [nodeBin, currentPath].filter(Boolean).join(delimiter);
+}
+
+async function assertDefaultProductCommandStartsCleanStartup(env) {
+  const fakeTuiPath = join(codingWorkspaceRoot, process.platform === 'win32' ? 'fake-tui.cmd' : 'fake-tui');
+  if (process.platform === 'win32') {
+    writeFileSync(fakeTuiPath, `@echo off\r\n"${process.execPath}" -e "console.log(JSON.stringify(process.argv.slice(1)))" %*\r\n`);
+  } else {
+    writeFileSync(fakeTuiPath, `#!${process.execPath}\nconsole.log(JSON.stringify(process.argv.slice(2)));\n`);
+    chmodSync(fakeTuiPath, 0o755);
+  }
+
+  const defaultLaunch = await runProductCommand(
+    ['--port', String(port)],
+    { ...env, SIM_ONE_TUI_PATH: fakeTuiPath },
+    30_000,
+  );
+  const defaultArgs = parseForwardedArgs(defaultLaunch.stdout);
+  if (defaultArgs.includes('--session')) {
+    throw new Error(`default sim-one launch forwarded --session and will resume old context instead of clean startup.\nstdout:\n${defaultLaunch.stdout}\nstderr:\n${defaultLaunch.stderr}`);
+  }
+
+  const explicitLaunch = await runProductCommand(
+    ['--port', String(port), '--session', 'tui-explicit-session'],
+    { ...env, SIM_ONE_TUI_PATH: fakeTuiPath },
+    30_000,
+  );
+  const explicitArgs = parseForwardedArgs(explicitLaunch.stdout);
+  if (!explicitArgs.includes('--session') || !explicitArgs.includes('tui-explicit-session')) {
+    throw new Error(`explicit sim-one --session was not forwarded to Ratatui.\nstdout:\n${explicitLaunch.stdout}\nstderr:\n${explicitLaunch.stderr}`);
+  }
+}
+
+function parseForwardedArgs(stdout) {
+  const line = stdout.trim().split(/\r?\n/).filter(Boolean).at(-1);
+  if (!line) throw new Error(`fake TUI did not print forwarded args.\nstdout:\n${stdout}`);
+  try {
+    const args = JSON.parse(line);
+    if (!Array.isArray(args)) throw new Error('not an array');
+    return args;
+  } catch (error) {
+    throw new Error(`fake TUI printed invalid forwarded args: ${error.message}\nstdout:\n${stdout}`);
+  }
 }
 
 async function assertProductCommandRouting(env) {

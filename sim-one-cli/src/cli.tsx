@@ -39,7 +39,7 @@ const program = new Command();
 interface ProductTuiOptions {
   port?: string;
   baseUrl?: string;
-  session: string;
+  session?: string;
   serverPath?: string;
   envPath?: string;
   smokeStartup?: boolean;
@@ -51,7 +51,7 @@ program
   .description('SIM-ONE Alpha — interactive TUI coding interface + capability management.')
   .option('--port <number>', 'server port (when launching TUI)')
   .option('--base-url <url>', 'full base url (overrides --port, when launching TUI)')
-  .option('--session <id>', 'agent instance id (when launching TUI)', 'primary')
+  .option('--session <id>', 'agent instance id (when launching TUI)')
   .addOption(new Option('--server-path <path>', 'built SIM-ONE Alpha server.mjs path').hideHelp())
   .addOption(new Option('--env-path <path>', 'env file path').hideHelp())
   .addOption(new Option('--smoke-startup', 'start/connect gateway then exit').hideHelp())
@@ -127,7 +127,7 @@ function waitForChild(child: ChildProcess): Promise<number> {
 }
 
 async function launchInkTui(opts: ProductTuiOptions): Promise<void> {
-  const session = opts.session;
+  const session = opts.session ?? 'primary';
 
   if (opts.baseUrl) {
     const instance = render(<App baseUrl={opts.baseUrl} session={session} />, {
