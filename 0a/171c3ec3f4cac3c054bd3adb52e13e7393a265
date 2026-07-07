@@ -1,0 +1,78 @@
+docs/tui/session-management.md
+  s_a81fff26d52223::t_e929648f3fcfd9 9,13,52-68,173
+docs/operations/product-tui.md
+  s_a81fff26d52223::t_39fe5bc013b915 69,76-77
+sim-one-cli/src/cli.tsx
+  s_a81fff26d52223::t_1714a5921768aa 130
+src/api/routes/chat-events.ts
+  s_a81fff26d52223::t_a3cbd515ba683e 110-113
+  s_a81fff26d52223::t_6b4a78d5d8882f 68,77,138-146,156-161
+  s_a81fff26d52223::t_6f562dc5b4a9bd 162-164
+src/tests/http-endpoints.test.ts
+  s_a81fff26d52223::t_8e0e2b2a08aad4 689-694,697-705
+  s_a81fff26d52223::t_58b19422ec4048 695-696
+  s_a81fff26d52223::t_555286cf4d440d 13,29-44,348-422,424
+  s_a81fff26d52223::t_d5ca993a90db52 423
+  s_a81fff26d52223::t_a82fcd5024bf6a 425-427
+tui/ratatui/tests/agent_client.rs
+  s_a81fff26d52223::t_2031e4679ad87e 138
+  s_a81fff26d52223::t_6bd1e91ff4147a 75-113,137
+  s_a81fff26d52223::t_ae8821ee98f402 74,136,139-141,146,187
+tui/ratatui/src/main.rs
+  s_a81fff26d52223::t_4eca2563234081 246,308
+src/engine/commands/slash-commands.ts
+  s_a81fff26d52223::t_799970cf1497e0 1,9,36
+README.md
+  s_a81fff26d52223::t_1714a5921768aa 550,590,1093
+tui/ratatui/tests/ui_render.rs
+  s_a81fff26d52223::t_215fce3d32653f 31-32
+  s_a81fff26d52223::t_2031e4679ad87e 145
+  s_a81fff26d52223::t_2b467852abe6f9 153
+docs/architecture/gorombo-flue-map.md
+  s_a81fff26d52223::t_1714a5921768aa 122,146
+src/engine/session/session-routing.ts
+  s_a81fff26d52223::t_d3a5f15ea21e2f 38-40,58,81,114-115
+  s_a81fff26d52223::t_35bfc1a3b0fc7e 116-117
+scripts/test-ratatui-product.mjs
+  s_a81fff26d52223::t_44047e918564d5 89-91,104-105,120-129,136,145-147,150
+  s_a81fff26d52223::t_1714a5921768aa 194
+docs/tui/ratatui.md
+  s_a81fff26d52223::t_d3c1fbd6856301 26,31,42,90
+  s_a81fff26d52223::t_3fb7ddeb0afd79 71
+docs/architecture/tui-cli-session-flow.md
+  s_a81fff26d52223::t_6556e8a6f2136d 109,115-116,118,140,148,159,163,169
+  s_a81fff26d52223::t_c12b6f16ec295f 127
+tui/ratatui/src/app.rs
+  s_a81fff26d52223::t_005cbd50b85d53 726
+  s_a81fff26d52223::t_0832604e98f000 13,106,111,258-259,325,334
+  s_a81fff26d52223::t_1714a5921768aa 21
+  s_a81fff26d52223::t_c043b5b17fef83 399-406,430,647-649,654-657,723
+  s_a81fff26d52223::t_ac3f5df2a440ba 727-728,735,974
+tui/ratatui/src/agent.rs
+  s_a81fff26d52223::t_4e3416824e2032 16,38,45-49,156-159,165
+tui/ratatui/tests/app_state.rs
+  s_a81fff26d52223::t_1714a5921768aa 28,49,129,343,585,603,637,695
+  s_a81fff26d52223::t_764a89253a50e9 536,544,561
+  s_a81fff26d52223::t_2031e4679ad87e 569
+  s_a81fff26d52223::t_b7e8ea85e7a361 208-233,529
+  s_a81fff26d52223::t_a4907847f41a36 160,164,172,174,176-177,191,200,203,645,676
+  s_a81fff26d52223::t_a7f9751be479dd 207
+docs/architecture/session-context-budget.md
+  s_a81fff26d52223::t_1714a5921768aa 164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "0a171c3ec3f4cac3c054bd3adb52e13e7393a265",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
