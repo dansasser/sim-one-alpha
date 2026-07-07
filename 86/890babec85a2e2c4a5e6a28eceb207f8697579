@@ -1,0 +1,22 @@
+sim-one-cli/src/cli.tsx
+  s_a81fff26d52223::t_2ab2dcce0fada2 42,54,130
+scripts/test-ratatui-product.mjs
+  s_a81fff26d52223::t_36298b712e775c 3,74,164-204
+  s_a81fff26d52223::t_eb06807babb2ef 205
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "86890babec85a2e2c4a5e6a28eceb207f8697579",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
