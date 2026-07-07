@@ -25,7 +25,6 @@ SIM-ONE Alpha is a protocol-governed AI employee from [Gorombo](https://gorombo.
 - [Extensibility](#extensibility)
 - [Documentation](#documentation)
 - [Development](#development)
-- [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [Maintainers / Author](#maintainers--author)
 - [Code of Conduct](#code-of-conduct)
@@ -92,7 +91,46 @@ That is the SIM-ONE Alpha difference: security and governance are part of the ru
 
 ## Features
 
-<!-- Scannable grouped bullets: protocols, memory/RAG, workers, tools, connectors, TUI/API, approvals, extensibility. -->
+### Governed Runtime
+
+- Protocol-governed orchestrator that loads runtime rules before reasoning, tool execution, worker delegation, or response generation.
+- SQLite-backed protocols for global, connector, client, project, workflow, task, output, and safety rules.
+- Gateway-centered ingress for connector messages, API requests, schedules, approvals, telemetry, and durable sessions.
+- Approval-gated mutation paths for risky local, coding, MCP, and external side effects.
+
+### Memory, RAG, And Research
+
+- Rust/WASM structured memory helper for durable checklists, todos, session notes, and task continuity.
+- Session memory, project context, user preferences, task history, and document records through the memory/RAG layer.
+- Web research through the researcher worker with query planning, fetch budgets, source packing, cache support, confidence, and provider-failure reporting.
+- Local and cloud embedding support with LanceDB-backed vector retrieval.
+
+### Workers And Execution
+
+- First-class researcher worker for current, external, source-backed, and web research tasks.
+- First-class coding worker with triage, implementation, test/debug, code review, and GitHub workflow support.
+- Worker-local subagents that report back to the orchestrator instead of owning final authority.
+- Progress, validation, and approval events that make long-running work visible through connector surfaces.
+
+### Capabilities And Extensibility
+
+- Dual-layer capability model: Flue-native built-ins plus SIM-ONE runtime registry.
+- Runtime-managed skills, tools, workers, and MCP servers through SQLite-backed capability records.
+- `sim-one` capability subcommands for skills, tools, workers, and MCP servers.
+- Collision detection and enablement rules for built-in and user-added capabilities.
+
+### Interfaces And Operations
+
+- Product `sim-one` CLI for launching the local experience and managing capabilities.
+- Ratatui terminal UI with separate transcript/context pane, editable prompt pane, status bar, live progress rows, and durable session controls.
+- TUI slash commands for `/session`, `/sessions`, `/new`, `/clear`, `/resume`, `/rename`, `/compact`, `/help`, and `/exit`.
+- Web UI, gateway API, Telegram connector, scheduled jobs, and app-owned HTTP routes for chat events, sessions, knowledge, approvals, telemetry, and schedules.
+
+### Models, Tools, And Local Actions
+
+- Model-card system for provider selection, context budgets, output budgets, and compaction behavior.
+- Built-in tools for protocols, memory, knowledge, schedules, image generation, and governed capability management.
+- Local computer control through governed tools, workers, approvals, and runtime protocols.
 
 ## Quick Start
 
@@ -125,10 +163,6 @@ That is the SIM-ONE Alpha difference: security and governance are part of the ru
 ## Development
 
 <!-- Setup, build, test, typecheck, useful scripts, worktree expectations. -->
-
-## Roadmap
-
-<!-- Short future direction section. Keep release features out of roadmap. -->
 
 ## Contributing
 
