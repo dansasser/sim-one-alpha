@@ -22,6 +22,7 @@ fn backslash_enter_remains_multiline_when_terminal_reports_enter_repeat() {
             Ok(AgentReply {
                 text: format!("done: {prompt}"),
                 session_id: None,
+                session_title: None,
                 command_name: None,
                 session_created: None,
             })

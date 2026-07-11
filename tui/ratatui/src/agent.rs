@@ -12,6 +12,7 @@ const LOCAL_TUI_SCOPE_ID: &str = "local-tui";
 pub struct AgentReply {
     pub text: String,
     pub session_id: Option<String>,
+    pub session_title: Option<String>,
     pub command_name: Option<String>,
     pub session_created: Option<bool>,
 }
@@ -146,6 +147,11 @@ fn extract_agent_reply(value: &serde_json::Value) -> Option<AgentReply> {
         .and_then(|session| session.get("id"))
         .and_then(|id| id.as_str())
         .map(str::to_string);
+    let session_title = value
+        .get("session")
+        .and_then(|session| session.get("title"))
+        .and_then(|title| title.as_str())
+        .map(str::to_string);
 
     let command_name = value
         .get("result")
@@ -161,6 +167,7 @@ fn extract_agent_reply(value: &serde_json::Value) -> Option<AgentReply> {
     Some(AgentReply {
         text,
         session_id,
+        session_title,
         command_name,
         session_created,
     })

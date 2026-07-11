@@ -173,6 +173,7 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
         sessionResolution,
         command: slashCommand,
         text: `Renamed session ${sessionResolution.sessionId} to "${slashCommand.args}".`,
+        sessionTitle: slashCommand.args,
       }));
     }
 
@@ -228,6 +229,7 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
           id: sessionResolution.sessionId,
           surface: sessionResolution.surface,
           created: sessionResolution.created,
+          ...(sessionResolution.session.title ? { title: sessionResolution.session.title } : {}),
         },
       }, agentResponse.status as never);
     }
@@ -244,6 +246,7 @@ function createCommandResponse(input: {
   command: ParsedSlashCommand;
   text: string;
   sessionResolution?: ChatSessionResolution;
+  sessionTitle?: string;
   contextBudget?: DurableChatContextBudget;
 }): {
   result: {
@@ -261,8 +264,10 @@ function createCommandResponse(input: {
     id: string;
     surface: ChatSessionResolution['surface'];
     created: boolean;
+    title?: string;
   };
 } {
+  const sessionTitle = input.sessionTitle ?? input.sessionResolution?.session.title;
   return {
     result: {
       text: input.text,
@@ -281,6 +286,7 @@ function createCommandResponse(input: {
             id: input.sessionResolution.sessionId,
             surface: input.sessionResolution.surface,
             created: input.sessionResolution.created,
+            ...(sessionTitle ? { title: sessionTitle } : {}),
           },
         }
       : {}),

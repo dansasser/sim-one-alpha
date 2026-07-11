@@ -37,7 +37,9 @@ scripts/test-ratatui-visible-final.py
   POSIX PTY regression that delivers nested worker output, a root assistant text delta, and a multiline root message_end while holding the HTTP result open. Verifies the packaged TUI keeps worker payloads internal and renders the consolidated root answer immediately.
 ```
 
-The prompt editor opens a filtered command drop-up when its first token begins with `/`. The palette is capped at six visible rows and overlays the transcript above the status line, so it does not change transcript viewport height or prompt geometry. Up/Down navigate the palette while it is open and retain their transcript line-scroll behavior otherwise. Enter or Tab inserts the selected command; Esc dismisses the palette before retaining its normal exit behavior. An unescaped trailing `\` followed by Enter inserts a prompt newline, while doubled trailing backslashes remain literal.
+The prompt editor opens a filtered command drop-up when its first token begins with `/`. The palette is capped at six visible rows and overlays the transcript above the status line, so it does not change transcript viewport height or prompt geometry. Up/Down navigate the palette while it is open, move vertically through wrapped/explicit prompt rows when prompt text is present, and retain transcript line scrolling when the prompt is empty. PgUp/PgDown and mouse-wheel events always scroll transcript context. Enter or Tab inserts the selected command; Esc dismisses the palette before retaining its normal exit behavior. An unescaped trailing `\` followed by Enter inserts a prompt newline, while doubled trailing backslashes remain literal.
+
+Chat-event responses carry the authoritative session title alongside the session id. Ratatui clears stale titles when switching sessions and refreshes the status label when `/rename` confirms a title for the current id. The transcript command response remains human-readable, but state synchronization never parses that response text.
 
 The TUI is a connector surface, not an agent runtime. It must not own orchestration, protocol loading, tool selection, model execution, worker behavior, or memory/RAG decisions.
 

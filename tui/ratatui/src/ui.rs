@@ -154,7 +154,7 @@ fn transcript_content_width(visible_width: usize) -> usize {
         .max(1)
 }
 
-fn render_bottom(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Rect) {
+fn render_bottom(frame: &mut Frame<'_>, app: &mut App, area: ratatui::layout::Rect) {
     let [status_area, prompt_area] = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(1), Constraint::Min(3)])
@@ -168,6 +168,7 @@ fn render_bottom(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Rect) 
     ));
     frame.render_widget(Paragraph::new(status), status_area);
 
+    app.set_prompt_viewport_width(prompt_text_width(prompt_area.width as usize));
     render_prompt(frame, app, prompt_area);
     render_command_palette(frame, app, status_area, prompt_area);
 }

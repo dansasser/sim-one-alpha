@@ -123,7 +123,7 @@ fn extracts_command_session_metadata_from_chat_event_response() {
         let (mut stream, _) = listener.accept().expect("client should connect");
         let _ = read_http_request(&mut stream);
 
-        let body = r#"{"result":{"text":"Started new session tui-123.","command":{"name":"new","handled":true}},"session":{"id":"tui-123","surface":"tui","created":true}}"#;
+        let body = r#"{"result":{"text":"Started new session tui-123.","command":{"name":"new","handled":true}},"session":{"id":"tui-123","surface":"tui","created":true,"title":"Demo"}}"#;
         write!(
             stream,
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -142,6 +142,7 @@ fn extracts_command_session_metadata_from_chat_event_response() {
 
     assert_eq!(response.text, "Started new session tui-123.");
     assert_eq!(response.session_id.as_deref(), Some("tui-123"));
+    assert_eq!(response.session_title.as_deref(), Some("Demo"));
     assert_eq!(response.command_name.as_deref(), Some("new"));
     assert_eq!(response.session_created, Some(true));
 }

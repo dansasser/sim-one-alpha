@@ -127,7 +127,9 @@ agent greeting through the built-in greeting-preflight skill path
 packaged interactive PTY input through the sim-one wrapper
 slash-command palette display and keyboard selection
 backslash-Enter newline preservation when the terminal reports an Enter repeat
+vertical arrow editing across packaged multiline prompt rows
 exact multiline prompt payload submitted to the gateway
+renamed session title and stable session id in final TUI status
 /new
 /session
 /compact

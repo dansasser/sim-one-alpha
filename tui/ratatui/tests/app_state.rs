@@ -539,6 +539,7 @@ fn startup_preflight_resolves_active_session_without_primary_and_sends_greeting_
                 Ok(AgentReply {
                     text: "Current session tui-startup-1.".to_string(),
                     session_id: Some("tui-startup-1".to_string()),
+                    session_title: None,
                     command_name: Some("session".to_string()),
                     session_created: Some(true),
                 })
@@ -581,6 +582,7 @@ fn startup_preflight_fails_when_session_resolution_returns_no_session_id() {
             Ok(AgentReply {
                 text: "Unknown command \"/session\".".to_string(),
                 session_id: None,
+                session_title: None,
                 command_name: Some("session".to_string()),
                 session_created: None,
             })
@@ -951,6 +953,106 @@ fn prompt_cursor_allows_insertion_navigation_and_word_delete() {
 }
 
 #[test]
+fn prompt_arrows_move_across_explicit_lines_and_preserve_preferred_column() {
+    let mut app = App::new_for_test();
+    app.set_prompt_viewport_width(40);
+    app.handle_event(AppEvent::Text("abcdef\nx\nuvwxyz".to_string()));
+    app.handle_event(AppEvent::MovePromptStart);
+    for _ in 0..5 {
+        app.handle_event(AppEvent::MovePromptRight);
+    }
+
+    app.handle_event(AppEvent::NavigateDown);
+    assert_eq!(&app.prompt()[..app.prompt_cursor()], "abcdef\nx");
+    app.handle_event(AppEvent::NavigateDown);
+    assert_eq!(&app.prompt()[..app.prompt_cursor()], "abcdef\nx\nuvwxy");
+    app.handle_event(AppEvent::NavigateUp);
+    assert_eq!(&app.prompt()[..app.prompt_cursor()], "abcdef\nx");
+    app.handle_event(AppEvent::NavigateUp);
+    assert_eq!(&app.prompt()[..app.prompt_cursor()], "abcde");
+}
+
+#[test]
+fn prompt_arrows_follow_wrapped_rows_and_unicode_display_columns() {
+    let mut app = App::new_for_test();
+    app.set_prompt_viewport_width(10);
+    app.handle_event(AppEvent::Text("alpha bravo charlie".to_string()));
+    app.handle_event(AppEvent::MovePromptStart);
+    for _ in 0..3 {
+        app.handle_event(AppEvent::MovePromptRight);
+    }
+
+    app.handle_event(AppEvent::NavigateDown);
+    assert_eq!(&app.prompt()[..app.prompt_cursor()], "alpha bra");
+    app.handle_event(AppEvent::NavigateDown);
+    assert_eq!(&app.prompt()[..app.prompt_cursor()], "alpha bravo cha");
+
+    app.handle_event(AppEvent::ClearPrompt);
+    app.set_prompt_viewport_width(20);
+    app.handle_event(AppEvent::Text("界界\nabcdef".to_string()));
+    app.handle_event(AppEvent::MovePromptStart);
+    app.handle_event(AppEvent::MovePromptRight);
+    app.handle_event(AppEvent::NavigateDown);
+    assert_eq!(&app.prompt()[..app.prompt_cursor()], "界界\nab");
+}
+
+#[test]
+fn prompt_arrows_do_not_steal_transcript_page_or_mouse_scrolling() {
+    let mut app = App::new_for_test();
+    for index in 0..20 {
+        app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+            serde_json::json!({
+                "type":"log",
+                "eventIndex":700 + index,
+                "text":format!("history row {index}")
+            }),
+        )]));
+    }
+    app.set_transcript_viewport_size(4, 80);
+    app.jump_to_tail();
+    let tail = app.transcript_scroll();
+    app.handle_event(AppEvent::Text("line one\nline two".to_string()));
+
+    app.handle_event(AppEvent::NavigateUp);
+    assert_eq!(app.transcript_scroll(), tail);
+    app.handle_event(AppEvent::ScrollPageUp);
+    assert!(app.transcript_scroll() < tail);
+    let page_scroll = app.transcript_scroll();
+    app.handle_event(AppEvent::ScrollLineUp);
+    assert_eq!(app.transcript_scroll(), page_scroll.saturating_sub(1));
+}
+
+#[test]
+fn rename_reply_updates_status_title_without_changing_session_id() {
+    let mut app = App::with_agent_sender(
+        "tui-existing-1",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| {
+            Ok(AgentReply {
+                text: "Renamed session tui-existing-1 to \"Release Work\".".to_string(),
+                session_id: Some("tui-existing-1".to_string()),
+                session_title: Some("Release Work".to_string()),
+                command_name: Some("rename".to_string()),
+                session_created: Some(false),
+            })
+        }),
+    );
+    app.handle_event(AppEvent::Text("/rename Release Work".to_string()));
+    app.handle_event(AppEvent::Submit);
+    wait_for_agent(&mut app);
+
+    assert_eq!(app.session_id(), "tui-existing-1");
+    assert_eq!(app.session_title(), Some("Release Work"));
+    assert!(
+        app.status_text()
+            .contains("session: Release Work (tui-existing-1)"),
+        "{}",
+        app.status_text()
+    );
+}
+
+#[test]
 fn slash_command_palette_filters_navigates_and_inserts_without_submitting() {
     let calls = Arc::new(AtomicUsize::new(0));
     let sender_calls = Arc::clone(&calls);
@@ -972,8 +1074,8 @@ fn slash_command_palette_filters_navigates_and_inserts_without_submitting() {
         Some("/new [title]")
     );
 
-    app.handle_event(AppEvent::ScrollLineDown);
-    app.handle_event(AppEvent::ScrollLineDown);
+    app.handle_event(AppEvent::NavigateDown);
+    app.handle_event(AppEvent::NavigateDown);
     assert_eq!(
         app.selected_command().map(|item| item.usage),
         Some("/resume <session-id>")
@@ -1211,6 +1313,7 @@ fn command_response_switches_active_session_and_announces_it() {
             Ok(AgentReply {
                 text: "Started new session tui-new-1.".to_string(),
                 session_id: Some("tui-new-1".to_string()),
+                session_title: None,
                 command_name: Some("new".to_string()),
                 session_created: Some(true),
             })
@@ -1242,6 +1345,7 @@ fn agent_reply(text: impl Into<String>) -> AgentReply {
     AgentReply {
         text: text.into(),
         session_id: None,
+        session_title: None,
         command_name: None,
         session_created: None,
     }

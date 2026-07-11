@@ -325,12 +325,13 @@ test('chat event TUI session commands create resume and rename without prompting
       const renameBody = await renameResponse.json() as {
         result?: { command?: { name?: string }; text?: string };
         event?: { id?: string };
-        session?: { id?: string };
+        session?: { id?: string; title?: string };
       };
       if (renameBody.event?.id) eventIds.push(renameBody.event.id);
       assert.equal(renameBody.result?.command?.name, 'rename');
       assert.equal(renameBody.result?.text, `Renamed session ${sessionId} to "Demo Session".`);
       assert.equal(renameBody.session?.id, sessionId);
+      assert.equal(renameBody.session?.title, 'Demo Session');
 
       const storedSession = goromboPersistenceRuntime.sessionDatabase.getChatSession(sessionId ?? '');
       assert.equal(storedSession?.title, 'Demo Session');

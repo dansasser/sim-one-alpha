@@ -1,4 +1,4 @@
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind};
 
 use crate::app::AppEvent;
 
@@ -8,6 +8,11 @@ pub fn map_terminal_event(event: Event) -> Option<AppEvent> {
         Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
             map_key_event(key)
         }
+        Event::Mouse(mouse) => match mouse.kind {
+            MouseEventKind::ScrollUp => Some(AppEvent::ScrollLineUp),
+            MouseEventKind::ScrollDown => Some(AppEvent::ScrollLineDown),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -43,8 +48,8 @@ pub fn map_key_event(key: KeyEvent) -> Option<AppEvent> {
         KeyCode::End => Some(AppEvent::MovePromptEnd),
         KeyCode::PageUp => Some(AppEvent::ScrollPageUp),
         KeyCode::PageDown => Some(AppEvent::ScrollPageDown),
-        KeyCode::Up => Some(AppEvent::ScrollLineUp),
-        KeyCode::Down => Some(AppEvent::ScrollLineDown),
+        KeyCode::Up => Some(AppEvent::NavigateUp),
+        KeyCode::Down => Some(AppEvent::NavigateDown),
         KeyCode::Esc => Some(AppEvent::Cancel),
         _ => None,
     }

@@ -59,6 +59,7 @@ Supported editing keys include:
 
 ```text
 Left / Right
+Up / Down (wrapped or explicit prompt rows)
 Ctrl+Left / Ctrl+Right
 Home / End
 Ctrl+A / Ctrl+E
@@ -70,7 +71,7 @@ Ctrl+C
 
 ## Scrolling
 
-Use `PgUp` and `PgDown` to scroll the transcript. Scrolling away from the tail does not block typing. New activity does not snap the viewport back to the bottom until tail-following is restored.
+Use `PgUp`, `PgDown`, or the mouse wheel to scroll the transcript while the prompt remains focused. `Up` and `Down` move through wrapped or explicit prompt rows whenever prompt text is present, preserving the intended terminal display column across shorter rows. With an empty prompt they retain transcript line scrolling. Scrolling away from the tail does not block typing. New activity does not snap the viewport back to the bottom until tail-following is restored.
 
 Transcript lines use the same word-boundary wrapping as the prompt. When the next word does not fit, the complete word moves to the next row; the renderer does not split it at the pane edge.
 
@@ -84,7 +85,7 @@ Live tail includes one blank visual margin row after the final transcript conten
 
 ## Status Bar
 
-The status area shows the gateway connection, active session, stream state, pending response state, elapsed thinking time, and a spinner while the agent is working.
+The status area shows the gateway connection, active session title and id, stream state, pending response state, elapsed thinking time, and a spinner while the agent is working. `/rename` refreshes the title immediately from authoritative gateway response metadata without changing the session id.
 
 During startup, status and transcript rows show gateway readiness, active TUI session resolution, stream attach, and the greeting turn. After preflight completes, normal prompt entry is available.
 

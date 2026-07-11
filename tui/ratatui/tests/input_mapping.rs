@@ -1,4 +1,6 @@
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent, MouseEventKind,
+};
 use sim_one_ratatui_tui::app::AppEvent;
 use sim_one_ratatui_tui::input::{map_key_event, map_terminal_event};
 
@@ -86,11 +88,11 @@ fn maps_transcript_scroll_and_exit_keys() {
     );
     assert_eq!(
         map_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)),
-        Some(AppEvent::ScrollLineUp)
+        Some(AppEvent::NavigateUp)
     );
     assert_eq!(
         map_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)),
-        Some(AppEvent::ScrollLineDown)
+        Some(AppEvent::NavigateDown)
     );
     assert_eq!(
         map_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
@@ -137,4 +139,22 @@ fn terminal_mapper_ignores_release_events_and_enter_repeats() {
         None
     );
     assert_eq!(map_terminal_event(Event::Resize(80, 24)), None);
+    assert_eq!(
+        map_terminal_event(Event::Mouse(MouseEvent {
+            kind: MouseEventKind::ScrollUp,
+            column: 10,
+            row: 5,
+            modifiers: KeyModifiers::NONE,
+        })),
+        Some(AppEvent::ScrollLineUp)
+    );
+    assert_eq!(
+        map_terminal_event(Event::Mouse(MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: 10,
+            row: 5,
+            modifiers: KeyModifiers::NONE,
+        })),
+        Some(AppEvent::ScrollLineDown)
+    );
 }

@@ -137,18 +137,22 @@ def main():
                 f"backslash-Enter repeat submitted prematurely: {REQUESTS!r}"
             )
 
-        os.write(master_fd, b"second line\r")
+        os.write(master_fd, b"second line")
+        os.write(master_fd, b"\x1b[A")
+        os.write(master_fd, b" updated")
+        os.write(master_fd, b"\x1b[B")
+        os.write(master_fd, b"\r")
         if wait_for_request_count(1, 5) != 1:
             raise AssertionError(f"completed multiline prompt was not submitted: {REQUESTS!r}")
 
         prompt = REQUESTS[0].get("text")
-        if prompt != "first line\nsecond line":
+        if prompt != "first line updated\nsecond line":
             raise AssertionError(
-                f"multiline prompt payload mismatch: expected 'first line\\nsecond line', got {prompt!r}"
+                f"multiline prompt payload mismatch: expected 'first line updated\\nsecond line', got {prompt!r}"
             )
 
         print(
-            "[ratatui-interactive] packaged sim-one displayed and selected the slash-command palette, preserved backslash-Enter newline through an Enter repeat, and submitted the exact multiline payload."
+            "[ratatui-interactive] packaged sim-one displayed and selected the slash-command palette, preserved backslash-Enter newline through an Enter repeat, moved vertically to edit the multiline prompt, and submitted the exact payload."
         )
     finally:
         stop_child(pid, master_fd)

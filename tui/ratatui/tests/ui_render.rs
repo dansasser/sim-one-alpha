@@ -99,7 +99,7 @@ fn slash_command_palette_filters_and_scrolls_selected_command_into_view() {
     app.handle_event(AppEvent::ClearPrompt);
     app.handle_event(AppEvent::Text("/".to_string()));
     for _ in 0..8 {
-        app.handle_event(AppEvent::ScrollLineDown);
+        app.handle_event(AppEvent::NavigateDown);
     }
     terminal
         .draw(|frame| render(frame, &mut app))
@@ -199,6 +199,61 @@ fn renders_prompt_cursor_at_edit_position() {
         .expect("shell should render with cursor");
 
     assert_eq!(terminal.backend().cursor_position(), Position::new(9, 25));
+}
+
+#[test]
+fn multiline_prompt_arrows_move_the_visible_cursor_without_scrolling_transcript() {
+    let backend = TestBackend::new(40, 14);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    app.handle_event(AppEvent::Text("first line\nsecond line".to_string()));
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("multiline prompt should render");
+    let transcript_scroll = app.transcript_scroll();
+    let lower_cursor = terminal.backend().cursor_position();
+
+    app.handle_event(AppEvent::NavigateUp);
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("moved multiline prompt should render");
+    let upper_cursor = terminal.backend().cursor_position();
+
+    assert!(upper_cursor.y < lower_cursor.y);
+    assert_eq!(app.transcript_scroll(), transcript_scroll);
+}
+
+#[test]
+fn renamed_session_title_is_rendered_in_status_bar() {
+    let backend = TestBackend::new(120, 18);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::with_agent_sender(
+        "tui-existing-1",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| {
+            Ok(AgentReply {
+                text: "Renamed session tui-existing-1 to \"Release Work\".".to_string(),
+                session_id: Some("tui-existing-1".to_string()),
+                session_title: Some("Release Work".to_string()),
+                command_name: Some("rename".to_string()),
+                session_created: Some(false),
+            })
+        }),
+    );
+    app.handle_event(AppEvent::Text("/rename Release Work".to_string()));
+    app.handle_event(AppEvent::Submit);
+    wait_for_agent(&mut app);
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("renamed session status should render");
+    let frame = terminal_buffer_lines(&terminal);
+    assert!(
+        frame.contains("session: Release Work (tui-existing-1)"),
+        "{frame}"
+    );
 }
 
 #[test]
@@ -509,6 +564,7 @@ fn retry_completion_renders_final_response_at_live_tail() {
             Ok(AgentReply {
                 text: "retry completed and the final response is visible at TAIL_OK".to_string(),
                 session_id: None,
+                session_title: None,
                 command_name: None,
                 session_created: None,
             })
@@ -581,6 +637,7 @@ fn flue_final_message_is_visible_before_http_request_settles() {
             Ok(AgentReply {
                 text: "FINAL_VISIBLE_MARKER".to_string(),
                 session_id: None,
+                session_title: None,
                 command_name: None,
                 session_created: None,
             })
@@ -656,6 +713,7 @@ fn live_assistant_stream_is_dimmed_until_final_message_replaces_it() {
             Ok(AgentReply {
                 text: "Live **answer** finalized.".to_string(),
                 session_id: None,
+                session_title: None,
                 command_name: None,
                 session_created: None,
             })
@@ -1016,6 +1074,7 @@ fn semantic_prefix_formatting_preserves_body_and_continuation_styles() {
             Ok(AgentReply {
                 text: "alpha bravo charlie delta echo".to_string(),
                 session_id: None,
+                session_title: None,
                 command_name: None,
                 session_created: None,
             })
@@ -1075,6 +1134,7 @@ fn assistant_markdown_renders_inline_styles_without_source_markers() {
             Ok(AgentReply {
                 text: "Plain **bold** *italic* `code` [docs](https://example.com)".to_string(),
                 session_id: None,
+                session_title: None,
                 command_name: None,
                 session_created: None,
             })
@@ -1150,6 +1210,7 @@ fn assistant_markdown_renders_blocks_and_preserves_word_wrapping() {
                 text: "# Summary\n\n- alpha bravo charlie delta echo\n- second item\n\n```rust\nlet value = 1;\n```"
                     .to_string(),
                 session_id: None,
+                session_title: None,
                 command_name: None,
                 session_created: None,
             })
@@ -1394,6 +1455,7 @@ fn streamed_final_remains_visible_across_terminal_and_prompt_sizes() {
                 Ok(AgentReply {
                     text: "TAIL_OK".to_string(),
                     session_id: None,
+                    session_title: None,
                     command_name: None,
                     session_created: None,
                 })
@@ -1445,6 +1507,7 @@ fn app_with_pending_response() -> App {
             Ok(AgentReply {
                 text: format!("done: {prompt}"),
                 session_id: None,
+                session_title: None,
                 command_name: None,
                 session_created: None,
             })

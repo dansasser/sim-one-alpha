@@ -174,6 +174,7 @@ fn run_scripted_prompts(
     for line in app.transcript_lines() {
         println!("{line}");
     }
+    println!("{}", app.status_text());
     if let Some(session_id) = app.exit_session_id() {
         println!("Exited SIM-ONE Alpha TUI. Session: {session_id}");
     }

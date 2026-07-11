@@ -11,8 +11,8 @@ use crate::flue::events::FlueEvent;
 use crate::flue::reducer::{extract_role, extract_text, DisplayRow, EventTranscript};
 use crate::flue::stream::{spawn_agent_stream, AgentStreamHandle, AgentStreamUpdate};
 use crate::markdown::render_markdown;
-use crate::text_wrap::display_width;
-use crate::text_wrap::wrap_words;
+use crate::text_wrap::{display_width, display_width_between, wrap_words, WrappedLine};
+use unicode_width::UnicodeWidthChar;
 
 pub const SCROLL_PAGE_LINES: usize = 8;
 const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
@@ -100,6 +100,8 @@ pub enum AppEvent {
     MovePromptRight,
     MovePromptWordLeft,
     MovePromptWordRight,
+    NavigateUp,
+    NavigateDown,
     MovePromptStart,
     MovePromptEnd,
     DeletePromptWordLeft,
@@ -159,6 +161,8 @@ pub struct RenderedTranscriptRow {
 pub struct App {
     prompt: String,
     prompt_cursor: usize,
+    prompt_vertical_column: Option<usize>,
+    prompt_viewport_width: usize,
     command_palette_selected: usize,
     command_palette_dismissed: bool,
     transcript_lines: Vec<String>,
@@ -167,6 +171,7 @@ pub struct App {
     should_quit: bool,
     exit_session_id: Option<String>,
     session_id: String,
+    session_title: Option<String>,
     gateway_status: String,
     base_url: String,
     agent_status: String,
@@ -292,6 +297,8 @@ impl App {
         let mut app = Self {
             prompt: String::new(),
             prompt_cursor: 0,
+            prompt_vertical_column: None,
+            prompt_viewport_width: 80,
             command_palette_selected: 0,
             command_palette_dismissed: false,
             transcript_lines: initial_transcript(),
@@ -300,6 +307,7 @@ impl App {
             should_quit: false,
             exit_session_id: None,
             session_id: session_id.into(),
+            session_title: None,
             gateway_status: gateway_status.into(),
             base_url: base_url.into(),
             agent_status: "ready".to_string(),
@@ -333,20 +341,29 @@ impl App {
             AppEvent::MovePromptRight => self.move_prompt_right(),
             AppEvent::MovePromptWordLeft => self.move_prompt_word_left(),
             AppEvent::MovePromptWordRight => self.move_prompt_word_right(),
-            AppEvent::MovePromptStart => self.prompt_cursor = 0,
-            AppEvent::MovePromptEnd => self.prompt_cursor = self.prompt.len(),
+            AppEvent::NavigateUp => self.navigate_up(),
+            AppEvent::NavigateDown => self.navigate_down(),
+            AppEvent::MovePromptStart => {
+                self.prompt_cursor = 0;
+                self.prompt_vertical_column = None;
+            }
+            AppEvent::MovePromptEnd => {
+                self.prompt_cursor = self.prompt.len();
+                self.prompt_vertical_column = None;
+            }
             AppEvent::DeletePromptWordLeft => self.delete_prompt_word_left(),
             AppEvent::ClearPrompt => {
                 self.prompt.clear();
                 self.prompt_cursor = 0;
+                self.prompt_vertical_column = None;
                 self.reset_command_palette();
             }
             AppEvent::SelectCommand => {
                 self.select_command();
             }
             AppEvent::Cancel => self.cancel_or_quit(),
-            AppEvent::ScrollLineUp => self.command_previous_or_scroll(),
-            AppEvent::ScrollLineDown => self.command_next_or_scroll(),
+            AppEvent::ScrollLineUp => self.scroll_lines_up(1),
+            AppEvent::ScrollLineDown => self.scroll_lines_down(1),
             AppEvent::ScrollPageUp => self.scroll_page_up(),
             AppEvent::ScrollPageDown => self.scroll_page_down(),
             AppEvent::JumpToTail => self.jump_to_tail(),
@@ -474,6 +491,7 @@ impl App {
                 match response.result {
                     Ok(reply) => {
                         let session_id = reply.session_id.clone();
+                        let session_title = reply.session_title.clone();
                         let reply_for_startup = reply.clone();
                         self.settle_pending_response_line(
                             transcript_line,
@@ -481,7 +499,11 @@ impl App {
                             reply.text.trim(),
                         );
                         if let Some(session_id) = session_id {
+                            let session_changed = self.session_id != session_id;
                             self.switch_session(session_id);
+                            if session_changed || session_title.is_some() {
+                                self.session_title = clean_session_title(session_title);
+                            }
                         }
                         self.continue_startup_after_agent_reply(&reply_for_startup);
                     }
@@ -519,6 +541,14 @@ impl App {
 
     pub fn prompt_cursor_chars(&self) -> usize {
         self.prompt[..self.prompt_cursor].chars().count()
+    }
+
+    pub fn set_prompt_viewport_width(&mut self, width: usize) {
+        let width = width.max(1);
+        if self.prompt_viewport_width != width {
+            self.prompt_viewport_width = width;
+            self.prompt_vertical_column = None;
+        }
     }
 
     pub fn command_palette_open(&self) -> bool {
@@ -574,12 +604,23 @@ impl App {
         &self.session_id
     }
 
+    pub fn session_title(&self) -> Option<&str> {
+        self.session_title.as_deref()
+    }
+
     fn session_label(&self) -> &str {
         if self.session_id.trim().is_empty() {
             UNRESOLVED_SESSION_LABEL
         } else {
             &self.session_id
         }
+    }
+
+    fn status_session_label(&self) -> String {
+        self.session_title.as_ref().map_or_else(
+            || self.session_label().to_string(),
+            |title| format!("{title} ({})", self.session_label()),
+        )
     }
 
     pub fn gateway_status(&self) -> &str {
@@ -605,7 +646,7 @@ impl App {
     pub fn status_text(&self) -> String {
         let mut parts = vec![
             "SIM-ONE Alpha".to_string(),
-            format!("session: {}", self.session_label()),
+            format!("session: {}", self.status_session_label()),
             format!("gateway: {}", self.gateway_status),
             format!("stream: {}", self.stream_status()),
         ];
@@ -731,6 +772,7 @@ impl App {
     fn insert_prompt_text(&mut self, text: &str) {
         self.prompt.insert_str(self.prompt_cursor, text);
         self.prompt_cursor += text.len();
+        self.prompt_vertical_column = None;
         self.reset_command_palette();
     }
 
@@ -740,6 +782,7 @@ impl App {
         };
         self.prompt.drain(previous..self.prompt_cursor);
         self.prompt_cursor = previous;
+        self.prompt_vertical_column = None;
         self.reset_command_palette();
     }
 
@@ -748,33 +791,39 @@ impl App {
             return;
         };
         self.prompt.drain(self.prompt_cursor..next);
+        self.prompt_vertical_column = None;
         self.reset_command_palette();
     }
 
     fn move_prompt_left(&mut self) {
         if let Some(previous) = previous_char_boundary(&self.prompt, self.prompt_cursor) {
             self.prompt_cursor = previous;
+            self.prompt_vertical_column = None;
         }
     }
 
     fn move_prompt_right(&mut self) {
         if let Some(next) = next_char_boundary(&self.prompt, self.prompt_cursor) {
             self.prompt_cursor = next;
+            self.prompt_vertical_column = None;
         }
     }
 
     fn move_prompt_word_left(&mut self) {
         self.prompt_cursor = previous_word_boundary(&self.prompt, self.prompt_cursor);
+        self.prompt_vertical_column = None;
     }
 
     fn move_prompt_word_right(&mut self) {
         self.prompt_cursor = next_word_boundary(&self.prompt, self.prompt_cursor);
+        self.prompt_vertical_column = None;
     }
 
     fn delete_prompt_word_left(&mut self) {
         let start = previous_word_boundary(&self.prompt, self.prompt_cursor);
         self.prompt.drain(start..self.prompt_cursor);
         self.prompt_cursor = start;
+        self.prompt_vertical_column = None;
         self.reset_command_palette();
     }
 
@@ -810,6 +859,7 @@ impl App {
         if self.handle_local_slash_command(&prompt) {
             self.prompt.clear();
             self.prompt_cursor = 0;
+            self.prompt_vertical_column = None;
             self.reset_command_palette();
             self.after_transcript_changed();
             return;
@@ -825,6 +875,7 @@ impl App {
         if prompt.is_empty() {
             self.prompt.clear();
             self.prompt_cursor = 0;
+            self.prompt_vertical_column = None;
             self.reset_command_palette();
             return;
         }
@@ -834,6 +885,7 @@ impl App {
         let transcript_line = self.transcript_lines.len();
         self.prompt.clear();
         self.prompt_cursor = 0;
+        self.prompt_vertical_column = None;
         self.reset_command_palette();
         self.agent_status = "thinking".to_string();
 
@@ -909,6 +961,7 @@ impl App {
         self.prompt
             .replace_range(previous..self.prompt_cursor, "\n");
         self.prompt_cursor = previous + 1;
+        self.prompt_vertical_column = None;
         self.reset_command_palette();
         true
     }
@@ -924,6 +977,7 @@ impl App {
         };
         self.prompt = command.insertion.to_string();
         self.prompt_cursor = self.prompt.len();
+        self.prompt_vertical_column = None;
         self.command_palette_selected = 0;
         self.command_palette_dismissed = true;
         true
@@ -937,24 +991,59 @@ impl App {
         }
     }
 
-    fn command_previous_or_scroll(&mut self) {
+    fn navigate_up(&mut self) {
         if self.command_palette_open() {
             self.command_palette_selected = self.command_palette_selected.saturating_sub(1);
-        } else {
+        } else if self.prompt.is_empty() {
             self.scroll_lines_up(1);
+        } else {
+            self.move_prompt_vertical(-1);
         }
     }
 
-    fn command_next_or_scroll(&mut self) {
+    fn navigate_down(&mut self) {
         if self.command_palette_open() {
             let max_selected = self.command_palette_items().len().saturating_sub(1);
             self.command_palette_selected = self
                 .command_palette_selected
                 .saturating_add(1)
                 .min(max_selected);
-        } else {
+        } else if self.prompt.is_empty() {
             self.scroll_lines_down(1);
+        } else {
+            self.move_prompt_vertical(1);
         }
+    }
+
+    fn move_prompt_vertical(&mut self, direction: isize) {
+        let rows = wrap_words(&self.prompt, self.prompt_viewport_width);
+        if rows.len() < 2 {
+            return;
+        }
+
+        let cursor_char = self.prompt_cursor_chars();
+        let current_row = prompt_row_index(&rows, cursor_char);
+        let target_row = current_row
+            .saturating_add_signed(direction)
+            .min(rows.len().saturating_sub(1));
+        if target_row == current_row {
+            return;
+        }
+
+        let current = &rows[current_row];
+        let preferred_column = *self.prompt_vertical_column.get_or_insert_with(|| {
+            display_width_between(&self.prompt, current.start_char, cursor_char)
+                .min(display_width(&current.text))
+        });
+        let target = &rows[target_row];
+        let target_end = target.start_char + target.text.chars().count();
+        let target_char = char_index_at_display_column(
+            &self.prompt,
+            target.start_char,
+            target_end,
+            preferred_column,
+        );
+        self.prompt_cursor = byte_index_at_char(&self.prompt, target_char);
     }
 
     fn handle_local_slash_command(&mut self, prompt: &str) -> bool {
@@ -1029,6 +1118,7 @@ impl App {
         };
 
         self.session_id = session_id;
+        self.session_title = None;
         self.event_transcript = EventTranscript::default();
         self.event_row_lines.clear();
         self.final_response_range = None;
@@ -1574,6 +1664,7 @@ fn agent_reply(text: impl Into<String>) -> AgentReply {
     AgentReply {
         text: text.into(),
         session_id: None,
+        session_title: None,
         command_name: None,
         session_created: None,
     }
@@ -1641,6 +1732,53 @@ fn next_word_boundary(value: &str, cursor: usize) -> usize {
     }
 
     position
+}
+
+fn prompt_row_index(rows: &[WrappedLine], cursor_char: usize) -> usize {
+    rows.iter()
+        .enumerate()
+        .rev()
+        .find(|(_, row)| cursor_char >= row.start_char && cursor_char <= row.end_char)
+        .map(|(index, _)| index)
+        .unwrap_or_else(|| rows.len().saturating_sub(1))
+}
+
+fn char_index_at_display_column(
+    value: &str,
+    start_char: usize,
+    end_char: usize,
+    target_column: usize,
+) -> usize {
+    let mut column = 0;
+    let mut index = start_char;
+    for ch in value
+        .chars()
+        .skip(start_char)
+        .take(end_char.saturating_sub(start_char))
+    {
+        let next_column = column + UnicodeWidthChar::width(ch).unwrap_or_default();
+        if next_column > target_column {
+            break;
+        }
+        column = next_column;
+        index += 1;
+    }
+    index
+}
+
+fn byte_index_at_char(value: &str, char_index: usize) -> usize {
+    value
+        .char_indices()
+        .nth(char_index)
+        .map(|(index, _)| index)
+        .unwrap_or(value.len())
+}
+
+fn clean_session_title(title: Option<String>) -> Option<String> {
+    title.and_then(|title| {
+        let title = title.trim();
+        (!title.is_empty()).then(|| title.to_string())
+    })
 }
 
 fn previous_char(value: &str, cursor: usize) -> Option<(usize, char)> {

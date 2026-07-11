@@ -30,6 +30,8 @@ The TUI prints the current active session id into the transcript:
 system: current session <session-id>
 ```
 
+The status bar shows a titled session as `session: <title> (<session-id>)`. Renaming updates that label as soon as the gateway confirms the new title.
+
 ## Start A New Session
 
 Use:
