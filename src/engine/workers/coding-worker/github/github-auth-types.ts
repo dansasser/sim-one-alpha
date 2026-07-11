@@ -29,3 +29,27 @@ export interface GithubAuthResult {
   checkedAt: string;
   failureCode?: string;
 }
+
+export interface GithubAuthAudience {
+  connector: string;
+  actorId: string;
+  conversationId: string;
+  eventId: string;
+}
+
+export interface GithubAuthChallenge {
+  sessionId: string;
+  audience: GithubAuthAudience;
+  verificationUri: 'https://github.com/login/device';
+  userCode: string;
+  expiresAt: string;
+}
+
+export interface GithubAuthStartInput extends GithubAuthProfileRef {
+  audience: GithubAuthAudience;
+  deliverChallenge(challenge: GithubAuthChallenge): void | Promise<void>;
+}
+
+export interface GithubAuthCancelInput {
+  authSessionId: string;
+}

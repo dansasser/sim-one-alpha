@@ -6,6 +6,7 @@ import test from 'node:test';
 import {
   createGithubAuthService,
   type GithubAuthCommandRunner,
+  type GithubAuthLoginRunner,
 } from '../engine/workers/coding-worker/github/github-auth-service.js';
 
 test('GitHub auth status uses an empty managed profile instead of ambient host credentials', async () => {
@@ -35,6 +36,100 @@ test('GitHub auth status uses an empty managed profile instead of ambient host c
     assert.equal(commands[0]?.env.GH_TOKEN, undefined);
     assert.equal(commands[0]?.env.GITHUB_TOKEN, undefined);
     assert.equal(commands[0]?.env.HOME, undefined);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmSync(authRoot, { recursive: true, force: true });
+  }
+});
+
+test('GitHub auth start relays a device challenge privately and returns only opaque session state', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'github-auth-workspace-'));
+  const authRoot = mkdtempSync(join(tmpdir(), 'github-auth-root-'));
+  const challenges: unknown[] = [];
+  let cancelled = false;
+  const runner: GithubAuthCommandRunner = async () => ({ exitCode: 1, stdout: '', stderr: 'not logged in' });
+  const loginRunner: GithubAuthLoginRunner = {
+    start: async (args, env, onOutput) => {
+      assert.deepEqual(args, [
+        'auth',
+        'login',
+        '--hostname',
+        'github.com',
+        '--git-protocol',
+        'https',
+        '--web',
+        '--skip-ssh-key',
+        '--scopes',
+        'workflow',
+      ]);
+      assert.equal(env.GH_CONFIG_DIR, join(authRoot, 'profiles', 'default', 'gh'));
+      onOutput('First copy your one-time code: WXYZ-1234\nPress Enter to open https://github.com/login/device in your browser.');
+      return {
+        completion: new Promise(() => undefined),
+        cancel: () => {
+          cancelled = true;
+        },
+      };
+    },
+  };
+
+  try {
+    const service = await createGithubAuthService({ workspaceRoot, authRoot, runner, loginRunner });
+
+    const result = await service.start({
+      audience: { connector: 'web-api', actorId: 'actor-1', conversationId: 'conversation-1', eventId: 'event-1' },
+      deliverChallenge: (challenge) => {
+        challenges.push(challenge);
+      },
+    });
+
+    assert.equal(result.state, 'authorization_pending');
+    assert.equal(result.profile, 'default');
+    assert.ok(result.authSessionId);
+    assert.equal('userCode' in result, false);
+    assert.equal('verificationUri' in result, false);
+    assert.deepEqual(challenges, [{
+      sessionId: result.authSessionId,
+      audience: { connector: 'web-api', actorId: 'actor-1', conversationId: 'conversation-1', eventId: 'event-1' },
+      verificationUri: 'https://github.com/login/device',
+      userCode: 'WXYZ-1234',
+      expiresAt: result.expiresAt,
+    }]);
+
+    const cancelledResult = await service.cancel({ authSessionId: result.authSessionId! });
+    assert.equal(cancelledResult.state, 'cancelled');
+    assert.equal(cancelled, true);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmSync(authRoot, { recursive: true, force: true });
+  }
+});
+
+test('GitHub auth reports authenticated only after managed CLI status, API identity, and HTTPS protocol checks succeed', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'github-auth-workspace-'));
+  const authRoot = mkdtempSync(join(tmpdir(), 'github-auth-root-'));
+  const calls: string[][] = [];
+  const runner: GithubAuthCommandRunner = async (args) => {
+    calls.push(args);
+    if (args[0] === 'auth') return { exitCode: 0, stdout: 'Logged in', stderr: '' };
+    if (args[0] === 'api') return { exitCode: 0, stdout: 'octocat\n', stderr: '' };
+    return { exitCode: 0, stdout: 'https\n', stderr: '' };
+  };
+
+  try {
+    const service = await createGithubAuthService({ workspaceRoot, authRoot, runner });
+
+    const result = await service.status();
+
+    assert.equal(result.state, 'authenticated');
+    assert.equal(result.credentialSource, 'managed_profile');
+    assert.equal(result.accountLogin, 'octocat');
+    assert.equal(result.gitProtocol, 'https');
+    assert.deepEqual(calls, [
+      ['auth', 'status', '--active', '--hostname', 'github.com'],
+      ['api', 'user', '--jq', '.login'],
+      ['config', 'get', 'git_protocol', '--host', 'github.com'],
+    ]);
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
     rmSync(authRoot, { recursive: true, force: true });
