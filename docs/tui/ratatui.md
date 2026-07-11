@@ -85,7 +85,7 @@ Live tail includes one blank visual margin row after the final transcript conten
 
 ## Status Bar
 
-The status area shows the gateway connection, active session title and id, stream state, pending response state, elapsed thinking time, and a spinner while the agent is working. `/rename` refreshes the title immediately from authoritative gateway response metadata without changing the session id.
+The status area shows the gateway connection, active session label, stream state, pending response state, elapsed thinking time, and a spinner while the agent is working. The label starts as the durable session id. A confirmed `/rename`, `/new <title>`, or `/clear <title>` replaces that same field with the explicit name. Automatic prompt-derived titles are never displayed there; `/session` and `/exit` retain access to the durable id.
 
 During startup, status and transcript rows show gateway readiness, active TUI session resolution, stream attach, and the greeting turn. After preflight completes, normal prompt entry is available.
 

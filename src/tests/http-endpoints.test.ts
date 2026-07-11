@@ -143,12 +143,13 @@ test('chat event ingress enters the durable orchestrator agent route', async () 
     const body = await response.json() as {
       result?: { text?: string };
       event?: { id?: string };
-      session?: { id?: string; surface?: string; created?: boolean };
+      session?: { id?: string; surface?: string; created?: boolean; title?: string };
     };
     assert.equal(promptedAgent, true);
     assert.equal(body.result?.text, 'direct-agent-ok');
     assert.equal(body.session?.surface, 'web');
     assert.equal(body.session?.created, true);
+    assert.equal(body.session?.title, undefined);
     assert.equal(typeof body.session?.id, 'string');
     assert.equal(typeof body.event?.id, 'string');
 
@@ -217,7 +218,7 @@ test('chat event compact command compacts the durable orchestrator session witho
           contextBudget?: { compactedBeforePrompt?: boolean; modelSpecifier?: string };
         };
         event?: { id?: string };
-        session?: { id?: string; surface?: string; created?: boolean };
+        session?: { id?: string; surface?: string; created?: boolean; title?: string };
       };
 
       assert.equal(openedSessionId, requestedSessionId);
@@ -272,7 +273,7 @@ test('chat event TUI session commands create resume and rename without prompting
       const createBody = await createResponse.json() as {
         result?: { command?: { name?: string }; text?: string };
         event?: { id?: string };
-        session?: { id?: string; surface?: string; created?: boolean };
+        session?: { id?: string; surface?: string; created?: boolean; title?: string };
       };
       if (createBody.event?.id) eventIds.push(createBody.event.id);
       sessionId = createBody.session?.id;
@@ -281,6 +282,7 @@ test('chat event TUI session commands create resume and rename without prompting
       assert.equal(typeof sessionId, 'string');
       assert.equal(createBody.session?.surface, 'tui');
       assert.equal(createBody.session?.created, true);
+      assert.equal(createBody.session?.title, 'Release testing');
 
       const resumeResponse = await testApp.request('/api/chat/events', {
         method: 'POST',

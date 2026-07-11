@@ -146,6 +146,7 @@ fn run_scripted_startup(
     for line in app.transcript_lines() {
         println!("{line}");
     }
+    println!("{}", app.status_text());
 
     Ok(())
 }

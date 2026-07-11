@@ -544,7 +544,16 @@ fn startup_preflight_resolves_active_session_without_primary_and_sends_greeting_
                     session_created: Some(true),
                 })
             } else {
-                Ok(agent_reply("Hello Daniel, I'm Ollie. All systems are go."))
+                Ok(AgentReply {
+                    text: "Hello Daniel, I'm Ollie. All systems are go.".to_string(),
+                    session_id: Some("tui-startup-1".to_string()),
+                    session_title: Some(
+                        "This is an automatic SIM-ONE Alpha local Ratatui TUI startup event"
+                            .to_string(),
+                    ),
+                    command_name: None,
+                    session_created: Some(false),
+                })
             }
         }),
     );
@@ -569,6 +578,8 @@ fn startup_preflight_resolves_active_session_without_primary_and_sends_greeting_
     assert!(transcript.contains("assistant: Hello Daniel, I'm Ollie."));
     assert!(!transcript.contains("primary"));
     assert_eq!(app.agent_status(), "ready");
+    assert!(app.status_text().contains("session: tui-startup-1"));
+    assert!(!app.status_text().contains("automatic SIM-ONE"));
 }
 
 #[test]
@@ -1045,11 +1056,11 @@ fn rename_reply_updates_status_title_without_changing_session_id() {
     assert_eq!(app.session_id(), "tui-existing-1");
     assert_eq!(app.session_title(), Some("Release Work"));
     assert!(
-        app.status_text()
-            .contains("session: Release Work (tui-existing-1)"),
+        app.status_text().contains("session: Release Work"),
         "{}",
         app.status_text()
     );
+    assert!(!app.status_text().contains("Release Work ("));
 }
 
 #[test]

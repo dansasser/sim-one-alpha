@@ -98,6 +98,9 @@ try {
   if (/context 0[1-9]|scroll test row|placeholder/i.test(stdout)) {
     throw new Error(`Ratatui startup smoke rendered scaffold or placeholder transcript content.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
   }
+  if (stdout.includes('This is an automatic SIM-ONE Alpha local Ratatui TUI startup event')) {
+    throw new Error(`Ratatui status exposed the internal startup prompt as a session title.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
+  }
 
   const createSessionSmoke = await runProductCommand(
     ['--port', String(port)],
@@ -150,7 +153,7 @@ try {
   stderr = resumeSessionSmoke.stderr;
   assertOutputIncludes(stdout, `assistant: Resumed session ${clearedSessionId}.`, 'resume command did not resume the cleared session');
   assertOutputIncludes(stdout, `assistant: Renamed session ${clearedSessionId} to "Smoke Session Renamed".`, 'rename command did not rename the active session');
-  assertOutputIncludes(stdout, `session: Smoke Session Renamed (${clearedSessionId})`, 'rename command did not refresh the status-bar session title');
+  assertOutputIncludes(stdout, 'session: Smoke Session Renamed', 'rename command did not replace the status-bar session id with the explicit title');
   assertOutputIncludes(stdout, `Exited SIM-ONE Alpha TUI. Session: ${clearedSessionId}`, 'exit after resume did not print the active session id');
 
   console.log('[ratatui-product] sim-one ran startup preflight, created a clean TUI session, and received an agent greeting.');

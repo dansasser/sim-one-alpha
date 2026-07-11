@@ -250,10 +250,8 @@ fn renamed_session_title_is_rendered_in_status_bar() {
         .draw(|frame| render(frame, &mut app))
         .expect("renamed session status should render");
     let frame = terminal_buffer_lines(&terminal);
-    assert!(
-        frame.contains("session: Release Work (tui-existing-1)"),
-        "{frame}"
-    );
+    assert!(frame.contains("session: Release Work"), "{frame}");
+    assert!(!frame.contains("Release Work (tui-existing-1)"), "{frame}");
 }
 
 #[test]

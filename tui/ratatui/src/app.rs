@@ -491,7 +491,12 @@ impl App {
                 match response.result {
                     Ok(reply) => {
                         let session_id = reply.session_id.clone();
-                        let session_title = reply.session_title.clone();
+                        let explicit_session_title = matches!(
+                            reply.command_name.as_deref(),
+                            Some("rename" | "new" | "clear")
+                        )
+                        .then(|| clean_session_title(reply.session_title.clone()))
+                        .flatten();
                         let reply_for_startup = reply.clone();
                         self.settle_pending_response_line(
                             transcript_line,
@@ -501,8 +506,10 @@ impl App {
                         if let Some(session_id) = session_id {
                             let session_changed = self.session_id != session_id;
                             self.switch_session(session_id);
-                            if session_changed || session_title.is_some() {
-                                self.session_title = clean_session_title(session_title);
+                            if explicit_session_title.is_some() {
+                                self.session_title = explicit_session_title;
+                            } else if session_changed {
+                                self.session_title = None;
                             }
                         }
                         self.continue_startup_after_agent_reply(&reply_for_startup);
@@ -617,10 +624,10 @@ impl App {
     }
 
     fn status_session_label(&self) -> String {
-        self.session_title.as_ref().map_or_else(
-            || self.session_label().to_string(),
-            |title| format!("{title} ({})", self.session_label()),
-        )
+        self.session_title
+            .as_deref()
+            .unwrap_or_else(|| self.session_label())
+            .to_string()
     }
 
     pub fn gateway_status(&self) -> &str {
