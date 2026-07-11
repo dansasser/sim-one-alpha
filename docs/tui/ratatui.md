@@ -41,7 +41,7 @@ The top pane is the transcript and context viewport. It contains user prompts, a
 
 Submitted user prompts render as full-width gray bands, including wrapped and explicit-newline continuation rows. Recognized transcript labels include the colon and use bold semantic accents: `assistant:` cyan, `operation:` yellow, `tool:` blue, `task:` magenta, `turn:` green, `system:` and `preflight:` light green, `log:` dark gray, and `error:` light red. Only the label is accented; assistant and activity bodies retain the normal terminal foreground. Thinking labels are bold gray italic, and thinking bodies remain lower-contrast gray italic. Terminals without italic support still retain the gray distinction.
 
-Word-wrapped and explicit multiline continuation rows keep their semantic body style without repeating or extending the label accent. Submitted `you:` rows remain full-width gray bands instead of receiving a separate prefix color.
+All transcript text uses a two-column left margin inside the pane border. The margin is deducted from the available wrap width so text wraps before the right edge; on extremely narrow terminals it contracts to preserve at least one content column. Word-wrapped and explicit multiline continuation rows keep the same margin and their semantic body style without repeating or extending the label accent. Submitted `you:` rows remain full-width gray bands, including the margin cells, instead of receiving a separate prefix color.
 
 The initial transcript should contain startup/preflight rows, the gateway-resolved active TUI session, and the agent greeting. It should not contain scaffold scroll-test rows or a default `primary` session; specific old sessions are shown only after an explicit `--session` launch or `/resume`.
 

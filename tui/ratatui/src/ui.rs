@@ -17,6 +17,7 @@ use crate::theme::{
 const PROMPT_GUTTER_WIDTH: usize = 2;
 const PROMPT_MIN_VISIBLE_ROWS: usize = 2;
 const PROMPT_MAX_VISIBLE_ROWS: usize = 5;
+const TRANSCRIPT_LEFT_MARGIN_WIDTH: usize = 2;
 
 #[derive(Debug, Clone, Copy)]
 struct PromptCursorPosition {
@@ -31,9 +32,10 @@ pub fn render(frame: &mut Frame<'_>, app: &mut App) {
         .constraints([Constraint::Min(5), Constraint::Length(bottom_height)])
         .areas(frame.area());
 
+    let transcript_inner_width = transcript_area.width.saturating_sub(2) as usize;
     app.set_transcript_viewport_size(
         transcript_area.height.saturating_sub(2) as usize,
-        transcript_area.width.saturating_sub(2) as usize,
+        transcript_content_width(transcript_inner_width),
     );
     render_transcript(frame, app, transcript_area);
     render_bottom(frame, app, bottom_area);
@@ -74,8 +76,14 @@ fn render_transcript(frame: &mut Frame<'_>, app: &mut App, area: ratatui::layout
 }
 
 fn rendered_transcript_line(row: RenderedTranscriptRow, visible_width: usize) -> Line<'static> {
+    let margin_width = transcript_left_margin_width(visible_width);
+    let margin = " ".repeat(margin_width);
     if row.kind == TranscriptRowKind::User {
-        return Line::styled(pad_to_width(&row.text, visible_width), user_prompt_style());
+        let content_width = visible_width.saturating_sub(margin_width);
+        return Line::styled(
+            format!("{margin}{}", pad_to_width(&row.text, content_width)),
+            user_prompt_style(),
+        );
     }
 
     let body_style = if row.kind == TranscriptRowKind::Thinking {
@@ -84,19 +92,30 @@ fn rendered_transcript_line(row: RenderedTranscriptRow, visible_width: usize) ->
         Style::default()
     };
     let Some(prefix) = row.kind.prefix() else {
-        return Line::styled(row.text, body_style);
+        return Line::from(vec![Span::raw(margin), Span::styled(row.text, body_style)]);
     };
     let Some(body) = row.text.strip_prefix(prefix) else {
-        return Line::styled(row.text, body_style);
+        return Line::from(vec![Span::raw(margin), Span::styled(row.text, body_style)]);
     };
     let Some(prefix_style) = transcript_prefix_style(row.kind) else {
-        return Line::styled(row.text, body_style);
+        return Line::from(vec![Span::raw(margin), Span::styled(row.text, body_style)]);
     };
 
     Line::from(vec![
+        Span::raw(margin),
         Span::styled(prefix.to_string(), prefix_style),
         Span::styled(body.to_string(), body_style),
     ])
+}
+
+fn transcript_left_margin_width(visible_width: usize) -> usize {
+    TRANSCRIPT_LEFT_MARGIN_WIDTH.min(visible_width.saturating_sub(1))
+}
+
+fn transcript_content_width(visible_width: usize) -> usize {
+    visible_width
+        .saturating_sub(transcript_left_margin_width(visible_width))
+        .max(1)
 }
 
 fn render_bottom(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Rect) {

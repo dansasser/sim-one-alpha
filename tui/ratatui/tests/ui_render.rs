@@ -40,6 +40,46 @@ fn renders_static_shell_with_transcript_status_and_prompt() {
 }
 
 #[test]
+fn transcript_text_starts_after_two_column_left_margin() {
+    let backend = TestBackend::new(80, 16);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("indented transcript shell should render");
+
+    let row = find_buffer_row(&terminal, "system: SIM-ONE Alpha");
+    assert_eq!(
+        terminal
+            .backend()
+            .buffer()
+            .cell(Position::new(1, row))
+            .expect("first transcript margin cell should exist")
+            .symbol(),
+        " "
+    );
+    assert_eq!(
+        terminal
+            .backend()
+            .buffer()
+            .cell(Position::new(2, row))
+            .expect("second transcript margin cell should exist")
+            .symbol(),
+        " "
+    );
+    assert_eq!(
+        terminal
+            .backend()
+            .buffer()
+            .cell(Position::new(3, row))
+            .expect("first transcript text cell should exist")
+            .symbol(),
+        "s"
+    );
+}
+
+#[test]
 fn active_prompt_editor_has_gray_background_across_visible_rows() {
     let backend = TestBackend::new(40, 12);
     let mut terminal = Terminal::new(backend).expect("test backend should initialize");
@@ -105,6 +145,18 @@ fn submitted_prompt_and_wrapped_continuation_have_gray_background() {
     let first_row = find_buffer_row(&terminal, "you: alpha bravo");
     let continuation_row = find_buffer_row(&terminal, "charlie delta");
     for row in [first_row, continuation_row] {
+        for x in [1, 2] {
+            assert_eq!(
+                terminal
+                    .backend()
+                    .buffer()
+                    .cell(Position::new(x, row))
+                    .expect("submitted-prompt margin cell should exist")
+                    .symbol(),
+                " ",
+                "submitted-prompt text should start after the margin"
+            );
+        }
         for x in 1..23 {
             let cell = terminal
                 .backend()
@@ -118,6 +170,32 @@ fn submitted_prompt_and_wrapped_continuation_have_gray_background() {
             );
         }
     }
+}
+
+#[test]
+fn transcript_wrap_width_excludes_the_left_margin() {
+    let backend = TestBackend::new(24, 16);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("margin-aware transcript shell should render");
+
+    let first_row = find_buffer_row(&terminal, "system: SIM-ONE");
+    let first_row_text = buffer_row_text(&terminal, first_row);
+    assert!(!first_row_text.contains("Alpha"), "{first_row_text}");
+
+    let continuation_row = find_buffer_row(&terminal, "Alpha Ratatui TUI");
+    assert_eq!(
+        terminal
+            .backend()
+            .buffer()
+            .cell(Position::new(3, continuation_row))
+            .expect("wrapped continuation text cell should exist")
+            .symbol(),
+        "A"
+    );
 }
 
 #[test]
@@ -640,7 +718,7 @@ fn renders_thinking_and_tool_activity_rows() {
     let thinking_cell = terminal
         .backend()
         .buffer()
-        .cell(Position::new(1, thinking_row))
+        .cell(Position::new(3, thinking_row))
         .expect("thinking cell should exist");
     assert_eq!(thinking_cell.style().fg, Some(Color::DarkGray));
     assert!(
@@ -655,7 +733,7 @@ fn renders_thinking_and_tool_activity_rows() {
     let tool_cell = terminal
         .backend()
         .buffer()
-        .cell(Position::new(1, tool_row))
+        .cell(Position::new(3, tool_row))
         .expect("tool cell should exist");
     assert!(!tool_cell.style().add_modifier.contains(Modifier::ITALIC));
 }
@@ -766,7 +844,7 @@ fn semantic_prefix_formatting_preserves_body_and_continuation_styles() {
     let assistant_body = terminal
         .backend()
         .buffer()
-        .cell(Position::new(12, assistant_row))
+        .cell(Position::new(14, assistant_row))
         .expect("assistant body cell should exist");
     assert_eq!(assistant_body.style().fg, Some(Color::Reset));
     assert!(!assistant_body.style().add_modifier.contains(Modifier::BOLD));
@@ -775,7 +853,7 @@ fn semantic_prefix_formatting_preserves_body_and_continuation_styles() {
     let continuation_cell = terminal
         .backend()
         .buffer()
-        .cell(Position::new(1, continuation_row))
+        .cell(Position::new(3, continuation_row))
         .expect("assistant continuation cell should exist");
     assert_eq!(continuation_cell.style().fg, Some(Color::Reset));
     assert!(!continuation_cell
@@ -1079,6 +1157,14 @@ fn terminal_buffer_lines(terminal: &Terminal<TestBackend>) -> String {
         .join("\n")
 }
 
+fn buffer_row_text(terminal: &Terminal<TestBackend>, row: u16) -> String {
+    let buffer = terminal.backend().buffer();
+    (0..buffer.area.width)
+        .filter_map(|x| buffer.cell(Position::new(x, row)))
+        .map(|cell| cell.symbol())
+        .collect()
+}
+
 fn find_buffer_row(terminal: &Terminal<TestBackend>, needle: &str) -> u16 {
     let buffer = terminal.backend().buffer();
     (0..buffer.area.height)
@@ -1108,7 +1194,7 @@ fn assert_prefix_style(
         let cell = terminal
             .backend()
             .buffer()
-            .cell(Position::new(1 + offset as u16, row))
+            .cell(Position::new(3 + offset as u16, row))
             .expect("prefix cell should exist");
         assert_eq!(
             cell.style().fg,
@@ -1124,7 +1210,7 @@ fn assert_prefix_style(
     let body_cell = terminal
         .backend()
         .buffer()
-        .cell(Position::new(2 + prefix.len() as u16, row))
+        .cell(Position::new(4 + prefix.len() as u16, row))
         .expect("body cell should exist");
     if prefix == "thinking:" {
         assert_eq!(body_cell.style().fg, Some(Color::DarkGray));
