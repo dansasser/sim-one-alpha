@@ -1,0 +1,50 @@
+docs/tui/ratatui.md
+  s_a81fff26d52223::t_0934593a6df76d 44-45,132
+tui/ratatui/tests/app_state.rs
+  s_a81fff26d52223::t_408feeda9d33fe 57-85
+  s_a81fff26d52223::t_c1a96666fc86be 56
+tui/ratatui/src/lib.rs
+  s_a81fff26d52223::t_5371c5561b5f7f 7
+tui/ratatui/tests/ui_render.rs
+  s_a81fff26d52223::t_489663a858cf5a 630-635,668-673
+  s_a81fff26d52223::t_61d5a8b1e65c3e 1071,1079,1097-1098,1100
+  s_a81fff26d52223::t_d9b01ebccf688e 586,601,636-643,651,674-681
+  s_a81fff26d52223::t_408feeda9d33fe 995-1070,1072-1078,1080-1096,1099,1101-1123,1415-1427
+  s_a81fff26d52223::t_31b55f214e5515 1428
+scripts/test-ratatui-visible-final.py
+  s_a81fff26d52223::t_0934593a6df76d 30-32,241-245,255
+tui/ratatui/src/theme.rs
+  s_a81fff26d52223::t_5371c5561b5f7f 8-47
+tui/ratatui/Cargo.toml
+  s_a81fff26d52223::t_5371c5561b5f7f 14
+tui/ratatui/src/ui.rs
+  s_a81fff26d52223::t_1bfeb2c1ac105c 98-100,103-105,107,114-116,119,122-140
+docs/architecture/gorombo-flue-map.md
+  s_a81fff26d52223::t_b5d3cb4e42d060 77,152-154
+  s_a81fff26d52223::t_c7a51d7dbe5159 155
+tui/ratatui/src/markdown.rs
+  s_a81fff26d52223::t_61d5a8b1e65c3e 174
+  s_a81fff26d52223::t_5371c5561b5f7f 1-173,175-193
+tui/ratatui/src/app.rs
+  s_a81fff26d52223::t_62efb1f9f7c6b8 7-8,13-14,91,590,1214,1216-1217,1222-1258,1266,1269,1275-1305
+README.md
+  s_a81fff26d52223::t_0934593a6df76d 28,541
+Cargo.lock
+  s_a81fff26d52223::t_ec125c4a4fae69 5-13,186-191,235-291,336-345,377-385,555-560,573-591,601-619,652,699,718-781,910,914-919,1011-1091,1110,1209-1223
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "b4a2d35d6003bb64aa05fe4ecdb43d1d5b308979",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
