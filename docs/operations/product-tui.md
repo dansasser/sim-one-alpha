@@ -124,6 +124,9 @@ sim-one mcp list
 startup preflight through the Ratatui product path
 clean startup transcript without scaffold rows
 agent greeting through the built-in greeting-preflight skill path
+packaged interactive PTY input through the sim-one wrapper
+slash-Enter newline preservation when the terminal reports an Enter repeat
+exact multiline prompt payload submitted to the gateway
 /new
 /session
 /compact

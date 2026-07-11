@@ -45,7 +45,7 @@ The bottom pane contains gateway/session/model status and the editable prompt li
 
 ## Prompt Editing
 
-Press `Enter` to submit the prompt. To insert a newline, type `/` at the cursor and press `Enter`; the TUI removes the trailing slash and starts the next prompt line without submitting. Slash commands such as `/new` and `/compact` still submit normally because their final character is not `/`.
+Press `Enter` to submit the prompt. To insert a newline, type `/` at the cursor and press `Enter`; the TUI removes the trailing slash and starts the next prompt line without submitting. Enter key-repeat events are ignored so one physical Enter produces one submit or newline action. Slash commands such as `/new` and `/compact` still submit normally because their final character is not `/`.
 
 The editor wraps long input, grows to five visible rows, and then scrolls its own contents while keeping the cursor visible. Transcript tail-following is recalculated as the editor grows, so the latest response remains directly above the prompt. While a prompt is pending, a duplicate submit is shown as a visible status instead of queueing a second prompt.
 
@@ -112,6 +112,8 @@ If the gateway fails to start, run the product smoke:
 ```sh
 pnpm run test:tui:ratatui
 ```
+
+On POSIX systems, this smoke launches the packaged `sim-one` command in a real PTY and verifies slash-Enter multiline input against a local gateway stub. Cross-platform Rust integration tests exercise the same crossterm event sequence, including Enter repeats, through input mapping, app state, and rendering.
 
 If the TUI exits after `/exit`, use the printed session id to resume:
 

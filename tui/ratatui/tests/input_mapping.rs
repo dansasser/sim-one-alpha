@@ -99,7 +99,7 @@ fn maps_transcript_scroll_and_exit_keys() {
 }
 
 #[test]
-fn terminal_mapper_ignores_release_events_and_accepts_repeats() {
+fn terminal_mapper_ignores_release_events_and_enter_repeats() {
     assert_eq!(
         map_terminal_event(Event::Key(KeyEvent::new_with_kind(
             KeyCode::Char('a'),
@@ -115,6 +115,14 @@ fn terminal_mapper_ignores_release_events_and_accepts_repeats() {
             KeyEventKind::Repeat,
         ))),
         Some(AppEvent::Text("a".to_string()))
+    );
+    assert_eq!(
+        map_terminal_event(Event::Key(KeyEvent::new_with_kind(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+            KeyEventKind::Repeat,
+        ))),
+        None
     );
     assert_eq!(
         map_terminal_event(Event::Key(KeyEvent::new_with_kind(

@@ -72,6 +72,7 @@ try {
 
   await assertProductCommandRouting(childEnv);
   await assertDefaultProductCommandStartsCleanStartup(childEnv);
+  await assertInteractivePromptInput(childEnv);
 
   const startupSmoke = await runProductCommand(
     ['--port', String(port)],
@@ -207,6 +208,32 @@ async function assertDefaultProductCommandStartsCleanStartup(env) {
   if (!explicitArgs.includes('--session') || !explicitArgs.includes('tui-explicit-session')) {
     throw new Error(`explicit sim-one --session was not forwarded to Ratatui.\nstdout:\n${explicitLaunch.stdout}\nstderr:\n${explicitLaunch.stderr}`);
   }
+}
+
+async function assertInteractivePromptInput(env) {
+  if (process.platform === 'win32') {
+    console.log('[ratatui-interactive] PTY smoke skipped on Windows; Rust terminal-event integration tests remain active.');
+    return;
+  }
+
+  const command = spawn('python3', ['scripts/test-ratatui-interactive.py'], {
+    cwd: process.cwd(),
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let commandStdout = '';
+  let commandStderr = '';
+  command.stdout.on('data', (chunk) => {
+    commandStdout += String(chunk);
+  });
+  command.stderr.on('data', (chunk) => {
+    commandStderr += String(chunk);
+  });
+  const exitCode = await waitForClose(command, 30_000);
+  if (exitCode !== 0) {
+    throw new Error(`Ratatui interactive product smoke failed with exit ${exitCode}\nstdout:\n${commandStdout}\nstderr:\n${commandStderr}`);
+  }
+  process.stdout.write(commandStdout);
 }
 
 function parseForwardedArgs(stdout) {

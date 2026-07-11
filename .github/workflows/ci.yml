@@ -60,14 +60,14 @@ jobs:
       - name: Build Ratatui TUI
         run: pnpm run build:tui:ratatui
 
+      - name: Build CLI
+        run: pnpm run build:cli
+
       - name: Ratatui TUI product smoke
         run: pnpm run test:tui:ratatui
         env:
           GOROMBO_TEST_MODE: '1'
           OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
-
-      - name: Build CLI
-        run: pnpm run build:cli
 
       - name: Verify CLI binary
         run: test -f .gorombo/sim-one-cli/cli.js

@@ -4,6 +4,7 @@ use crate::app::AppEvent;
 
 pub fn map_terminal_event(event: Event) -> Option<AppEvent> {
     match event {
+        Event::Key(key) if key.kind == KeyEventKind::Repeat && key.code == KeyCode::Enter => None,
         Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
             map_key_event(key)
         }
