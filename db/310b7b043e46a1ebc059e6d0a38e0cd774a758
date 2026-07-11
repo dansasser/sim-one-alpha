@@ -1,0 +1,42 @@
+src/engine/workers/coding-worker/github/gh-cli-client.ts
+  s_65db8ffa7c9620::t_a268001f4f28ef 548,554-555
+src/tests/architecture-contract.test.ts
+  s_65db8ffa7c9620::t_759b0ff85d47ce 161-162,189-193
+  s_65db8ffa7c9620::t_76a8803bd748f0 194
+src/engine/workers/coding-worker/coding-worker.ts
+  s_65db8ffa7c9620::t_39d2d57c9d2f0c 17-18,49-50,92-101,117,127,137,148,162-167,191,214,277,281-294
+  s_65db8ffa7c9620::t_fd3eb8ddd35964 295-296
+src/engine/workers/coding-worker/github/github-auth-runtime.ts
+  s_65db8ffa7c9620::t_ba1692fd95c06b 1-26
+src/engine/workers/coding-worker/approvals/approval-types.ts
+  s_65db8ffa7c9620::t_ba1692fd95c06b 22-23
+src/engine/workers/coding-worker/approvals/approval-policy.ts
+  s_65db8ffa7c9620::t_ba1692fd95c06b 31-32
+src/tests/github-auth-tools.test.ts
+  s_65db8ffa7c9620::t_a1762a2746661e 1-41,43-49,51-80,85-91,93,95-108,115-123,125-130,135,137
+  s_65db8ffa7c9620::t_270c44dce2387c 42,50,124
+  s_65db8ffa7c9620::t_f79b6ded84af0c 81-84,92,94,109-114
+  s_65db8ffa7c9620::t_c36d735cf08eab 132-133,136
+  s_65db8ffa7c9620::t_eddf838daedac2 131,134
+src/engine/workers/coding-worker/github/github-auth-types.ts
+  s_65db8ffa7c9620::t_ba1692fd95c06b 49
+src/engine/workers/coding-worker/github/github-auth-tools.ts
+  s_65db8ffa7c9620::t_ba1692fd95c06b 1-3,5-109,111
+  s_65db8ffa7c9620::t_818d888bd921ed 4,110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "db310b7b043e46a1ebc059e6d0a38e0cd774a758",
+  "prompts": {},
+  "sessions": {
+    "s_65db8ffa7c9620": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f51b3-89d7-7d02-973d-9679f07254a1",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
