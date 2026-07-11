@@ -221,6 +221,10 @@ src/workflows/research.ts
   Finite direct research harness for testing or direct research runs.
   Initializes the researcher.
 
+src/workflows/github-auth.ts
+  Finite admitted operator/UI workflow for Coding Worker managed GitHub auth.
+  Shares the worker auth runtime, returns no device code, and never waits for browser completion.
+
 src/workflows/retrieval.ts
   Shared retrieval machinery.
   Web-search provider access is restricted to the researcher/research workflow caller boundary.

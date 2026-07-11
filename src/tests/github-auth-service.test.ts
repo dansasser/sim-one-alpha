@@ -135,3 +135,53 @@ test('GitHub auth reports authenticated only after managed CLI status, API ident
     rmSync(authRoot, { recursive: true, force: true });
   }
 });
+
+test('an invalid explicitly configured GitHub token does not fall back to a managed profile', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'github-auth-workspace-'));
+  const authRoot = mkdtempSync(join(tmpdir(), 'github-auth-root-'));
+  const runner: GithubAuthCommandRunner = async (_args, env) => {
+    assert.equal(env.GH_TOKEN, 'invalid-explicit-token');
+    return { exitCode: 1, stdout: '', stderr: 'bad credentials' };
+  };
+
+  try {
+    const service = await createGithubAuthService({
+      workspaceRoot,
+      authRoot,
+      env: { GH_TOKEN: 'invalid-explicit-token' },
+      runner,
+    });
+
+    const result = await service.status();
+
+    assert.equal(result.state, 'invalid');
+    assert.equal(result.credentialSource, 'gh_token');
+    assert.equal(result.failureCode, 'github_auth_status_failed');
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmSync(authRoot, { recursive: true, force: true });
+  }
+});
+
+test('GitHub git credential environment is managed, HTTPS-only, and not shell-wide', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'github-auth-workspace-'));
+  const authRoot = mkdtempSync(join(tmpdir(), 'github-auth-root-'));
+  try {
+    const service = await createGithubAuthService({ workspaceRoot, authRoot });
+
+    const env = await service.createGitCredentialEnv();
+
+    assert.equal(env.GH_CONFIG_DIR, join(authRoot, 'profiles', 'default', 'gh'));
+    assert.equal(env.HOME, undefined);
+    assert.equal(env.GH_TOKEN, undefined);
+    assert.equal(env.GITHUB_TOKEN, undefined);
+    assert.equal(env.GIT_CONFIG_COUNT, '2');
+    assert.equal(env.GIT_CONFIG_KEY_0, 'credential.https://github.com.helper');
+    assert.equal(env.GIT_CONFIG_VALUE_0, '');
+    assert.equal(env.GIT_CONFIG_KEY_1, 'credential.https://github.com.helper');
+    assert.equal(env.GIT_CONFIG_VALUE_1, '!gh auth git-credential');
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmSync(authRoot, { recursive: true, force: true });
+  }
+});
