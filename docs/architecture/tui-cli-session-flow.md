@@ -15,7 +15,7 @@ sim-one-cli/
 
 tui/ratatui/
   Rust/Ratatui terminal client.
-  Owns terminal drawing, input mapping, transcript scroll state, prompt editing, local TUI commands, gateway launch/reuse, stream attach/restart, and packaged binary behavior.
+  Owns terminal drawing, input mapping, transcript scroll state, prompt editing, the slash-command palette, local TUI commands, gateway launch/reuse, stream attach/restart, and packaged binary behavior.
 
 src/api/routes/chat-events.ts
   App-owned connector-style chat ingress.
@@ -36,6 +36,8 @@ scripts/test-ratatui-product.mjs
 scripts/test-ratatui-visible-final.py
   POSIX PTY regression that delivers nested worker output, a root assistant text delta, and a multiline root message_end while holding the HTTP result open. Verifies the packaged TUI keeps worker payloads internal and renders the consolidated root answer immediately.
 ```
+
+The prompt editor opens a filtered command drop-up when its first token begins with `/`. The palette is capped at six visible rows and overlays the transcript above the status line, so it does not change transcript viewport height or prompt geometry. Up/Down navigate the palette while it is open and retain their transcript line-scroll behavior otherwise. Enter or Tab inserts the selected command; Esc dismisses the palette before retaining its normal exit behavior. An unescaped trailing `\` followed by Enter inserts a prompt newline, while doubled trailing backslashes remain literal.
 
 The TUI is a connector surface, not an agent runtime. It must not own orchestration, protocol loading, tool selection, model execution, worker behavior, or memory/RAG decisions.
 

@@ -951,7 +951,7 @@ fn prompt_cursor_allows_insertion_navigation_and_word_delete() {
 }
 
 #[test]
-fn trailing_slash_enter_inserts_newline_without_submitting() {
+fn slash_command_palette_filters_navigates_and_inserts_without_submitting() {
     let calls = Arc::new(AtomicUsize::new(0));
     let sender_calls = Arc::clone(&calls);
     let mut app = App::with_agent_sender(
@@ -964,13 +964,97 @@ fn trailing_slash_enter_inserts_newline_without_submitting() {
         }),
     );
 
-    app.handle_event(AppEvent::Text("first line/".to_string()));
+    app.handle_event(AppEvent::Text("/".to_string()));
+    assert!(app.command_palette_open());
+    assert_eq!(app.command_palette_items().len(), 9);
+    assert_eq!(
+        app.selected_command().map(|item| item.usage),
+        Some("/new [title]")
+    );
+
+    app.handle_event(AppEvent::ScrollLineDown);
+    app.handle_event(AppEvent::ScrollLineDown);
+    assert_eq!(
+        app.selected_command().map(|item| item.usage),
+        Some("/resume <session-id>")
+    );
+    app.handle_event(AppEvent::Submit);
+
+    assert_eq!(app.prompt(), "/resume ");
+    assert!(!app.command_palette_open());
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+    app.handle_event(AppEvent::ClearPrompt);
+    app.handle_event(AppEvent::Text("/res".to_string()));
+    let filtered = app.command_palette_items();
+    assert_eq!(filtered.len(), 1);
+    assert_eq!(filtered[0].usage, "/resume <session-id>");
+}
+
+#[test]
+fn command_palette_cancel_dismisses_before_escape_quits() {
+    let mut app = App::new_for_test();
+    app.handle_event(AppEvent::Text("/".to_string()));
+
+    app.handle_event(AppEvent::Cancel);
+    assert!(!app.command_palette_open());
+    assert!(!app.should_quit());
+
+    app.handle_event(AppEvent::Cancel);
+    assert!(app.should_quit());
+}
+
+#[test]
+fn trailing_backslash_enter_inserts_newline_without_submitting() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let sender_calls = Arc::clone(&calls);
+    let mut app = App::with_agent_sender(
+        "tui-existing-1",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(move |_, _, _| {
+            sender_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(agent_reply("should not submit"))
+        }),
+    );
+
+    app.handle_event(AppEvent::Text("first line\\".to_string()));
     app.handle_event(AppEvent::Submit);
 
     assert_eq!(calls.load(Ordering::SeqCst), 0);
     assert_eq!(app.prompt(), "first line\n");
     assert_eq!(app.prompt_cursor(), app.prompt().len());
     assert!(!app.is_agent_pending());
+}
+
+#[test]
+fn doubled_trailing_backslash_submits_as_literal_text() {
+    let submitted = Arc::new(Mutex::new(Vec::new()));
+    let sender_submitted = Arc::clone(&submitted);
+    let mut app = App::with_agent_sender(
+        "tui-existing-1",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(move |_, _, prompt| {
+            sender_submitted
+                .lock()
+                .expect("submitted prompts should lock")
+                .push(prompt);
+            Ok(agent_reply("literal received"))
+        }),
+    );
+
+    app.handle_event(AppEvent::Text(r"literal\\".to_string()));
+    app.handle_event(AppEvent::Submit);
+    wait_for_agent(&mut app);
+
+    assert_eq!(
+        submitted
+            .lock()
+            .expect("submitted prompts should lock")
+            .as_slice(),
+        [r"literal\\"]
+    );
 }
 
 #[test]

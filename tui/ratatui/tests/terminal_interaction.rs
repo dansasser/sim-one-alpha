@@ -10,7 +10,7 @@ use sim_one_ratatui_tui::input::map_terminal_event;
 use sim_one_ratatui_tui::ui::render;
 
 #[test]
-fn slash_enter_remains_multiline_when_terminal_reports_enter_repeat() {
+fn backslash_enter_remains_multiline_when_terminal_reports_enter_repeat() {
     let calls = Arc::new(AtomicUsize::new(0));
     let sender_calls = Arc::clone(&calls);
     let mut app = App::with_agent_sender(
@@ -28,7 +28,7 @@ fn slash_enter_remains_multiline_when_terminal_reports_enter_repeat() {
         }),
     );
 
-    for ch in "first line/".chars() {
+    for ch in "first line\\".chars() {
         deliver_key(&mut app, KeyCode::Char(ch), KeyEventKind::Press);
     }
     deliver_key(&mut app, KeyCode::Enter, KeyEventKind::Press);

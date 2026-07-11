@@ -36,6 +36,7 @@ pub fn map_key_event(key: KeyEvent) -> Option<AppEvent> {
         KeyCode::Backspace => Some(AppEvent::Backspace),
         KeyCode::Delete => Some(AppEvent::Delete),
         KeyCode::Enter => Some(AppEvent::Submit),
+        KeyCode::Tab => Some(AppEvent::SelectCommand),
         KeyCode::Left => Some(AppEvent::MovePromptLeft),
         KeyCode::Right => Some(AppEvent::MovePromptRight),
         KeyCode::Home => Some(AppEvent::MovePromptStart),
@@ -44,7 +45,7 @@ pub fn map_key_event(key: KeyEvent) -> Option<AppEvent> {
         KeyCode::PageDown => Some(AppEvent::ScrollPageDown),
         KeyCode::Up => Some(AppEvent::ScrollLineUp),
         KeyCode::Down => Some(AppEvent::ScrollLineDown),
-        KeyCode::Esc => Some(AppEvent::Quit),
+        KeyCode::Esc => Some(AppEvent::Cancel),
         _ => None,
     }
 }

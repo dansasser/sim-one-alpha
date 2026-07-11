@@ -25,7 +25,70 @@ pub type SessionLister =
     Arc<dyn Fn(String, usize) -> Result<Vec<SessionSummary>, String> + Send + Sync + 'static>;
 pub type Clock = Arc<dyn Fn() -> Instant + Send + Sync + 'static>;
 
-const TUI_COMMAND_HELP: &str = "/new [title]\n/clear [title]\n/resume <session-id>\n/sessions [limit]\n/session\n/rename <title>\n/compact\n/help\n/exit";
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SlashCommand {
+    pub command: &'static str,
+    pub usage: &'static str,
+    pub description: &'static str,
+    pub insertion: &'static str,
+}
+
+const TUI_COMMANDS: [SlashCommand; 9] = [
+    SlashCommand {
+        command: "/new",
+        usage: "/new [title]",
+        description: "Start a new session",
+        insertion: "/new ",
+    },
+    SlashCommand {
+        command: "/clear",
+        usage: "/clear [title]",
+        description: "Clear and start a new session",
+        insertion: "/clear ",
+    },
+    SlashCommand {
+        command: "/resume",
+        usage: "/resume <session-id>",
+        description: "Resume a durable session",
+        insertion: "/resume ",
+    },
+    SlashCommand {
+        command: "/sessions",
+        usage: "/sessions [limit]",
+        description: "List recent sessions",
+        insertion: "/sessions ",
+    },
+    SlashCommand {
+        command: "/session",
+        usage: "/session",
+        description: "Show the active session",
+        insertion: "/session",
+    },
+    SlashCommand {
+        command: "/rename",
+        usage: "/rename <title>",
+        description: "Rename the active session",
+        insertion: "/rename ",
+    },
+    SlashCommand {
+        command: "/compact",
+        usage: "/compact",
+        description: "Compact the active session",
+        insertion: "/compact",
+    },
+    SlashCommand {
+        command: "/help",
+        usage: "/help",
+        description: "Show command help",
+        insertion: "/help",
+    },
+    SlashCommand {
+        command: "/exit",
+        usage: "/exit",
+        description: "Exit and print the session id",
+        insertion: "/exit",
+    },
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppEvent {
@@ -41,6 +104,8 @@ pub enum AppEvent {
     MovePromptEnd,
     DeletePromptWordLeft,
     ClearPrompt,
+    SelectCommand,
+    Cancel,
     ScrollLineUp,
     ScrollLineDown,
     ScrollPageUp,
@@ -94,6 +159,8 @@ pub struct RenderedTranscriptRow {
 pub struct App {
     prompt: String,
     prompt_cursor: usize,
+    command_palette_selected: usize,
+    command_palette_dismissed: bool,
     transcript_lines: Vec<String>,
     transcript_scroll: usize,
     follow_tail: bool,
@@ -225,6 +292,8 @@ impl App {
         let mut app = Self {
             prompt: String::new(),
             prompt_cursor: 0,
+            command_palette_selected: 0,
+            command_palette_dismissed: false,
             transcript_lines: initial_transcript(),
             transcript_scroll: 0,
             follow_tail: true,
@@ -270,9 +339,14 @@ impl App {
             AppEvent::ClearPrompt => {
                 self.prompt.clear();
                 self.prompt_cursor = 0;
+                self.reset_command_palette();
             }
-            AppEvent::ScrollLineUp => self.scroll_lines_up(1),
-            AppEvent::ScrollLineDown => self.scroll_lines_down(1),
+            AppEvent::SelectCommand => {
+                self.select_command();
+            }
+            AppEvent::Cancel => self.cancel_or_quit(),
+            AppEvent::ScrollLineUp => self.command_previous_or_scroll(),
+            AppEvent::ScrollLineDown => self.command_next_or_scroll(),
             AppEvent::ScrollPageUp => self.scroll_page_up(),
             AppEvent::ScrollPageDown => self.scroll_page_down(),
             AppEvent::JumpToTail => self.jump_to_tail(),
@@ -445,6 +519,35 @@ impl App {
 
     pub fn prompt_cursor_chars(&self) -> usize {
         self.prompt[..self.prompt_cursor].chars().count()
+    }
+
+    pub fn command_palette_open(&self) -> bool {
+        !self.command_palette_dismissed
+            && self.prompt.starts_with('/')
+            && !self.prompt.chars().any(char::is_whitespace)
+    }
+
+    pub fn command_palette_items(&self) -> Vec<SlashCommand> {
+        if !self.command_palette_open() {
+            return Vec::new();
+        }
+        let mut items = TUI_COMMANDS
+            .iter()
+            .copied()
+            .filter(|item| item.command.starts_with(&self.prompt))
+            .collect::<Vec<_>>();
+        items.sort_by_key(|item| item.command != self.prompt);
+        items
+    }
+
+    pub fn command_palette_selected(&self) -> usize {
+        self.command_palette_selected
+    }
+
+    pub fn selected_command(&self) -> Option<SlashCommand> {
+        self.command_palette_items()
+            .get(self.command_palette_selected)
+            .copied()
     }
 
     pub fn transcript_lines(&self) -> &[String] {
@@ -628,6 +731,7 @@ impl App {
     fn insert_prompt_text(&mut self, text: &str) {
         self.prompt.insert_str(self.prompt_cursor, text);
         self.prompt_cursor += text.len();
+        self.reset_command_palette();
     }
 
     fn backspace_prompt(&mut self) {
@@ -636,6 +740,7 @@ impl App {
         };
         self.prompt.drain(previous..self.prompt_cursor);
         self.prompt_cursor = previous;
+        self.reset_command_palette();
     }
 
     fn delete_prompt_char(&mut self) {
@@ -643,6 +748,7 @@ impl App {
             return;
         };
         self.prompt.drain(self.prompt_cursor..next);
+        self.reset_command_palette();
     }
 
     fn move_prompt_left(&mut self) {
@@ -669,6 +775,7 @@ impl App {
         let start = previous_word_boundary(&self.prompt, self.prompt_cursor);
         self.prompt.drain(start..self.prompt_cursor);
         self.prompt_cursor = start;
+        self.reset_command_palette();
     }
 
     fn scroll_lines_up(&mut self, amount: usize) {
@@ -685,7 +792,12 @@ impl App {
     }
 
     fn submit_prompt(&mut self) {
-        if self.insert_newline_after_slash() {
+        let should_complete_command = self
+            .selected_command()
+            .is_some_and(|command| self.prompt != command.command);
+        if (should_complete_command && self.select_command())
+            || self.insert_newline_after_backslash()
+        {
             return;
         }
 
@@ -698,6 +810,7 @@ impl App {
         if self.handle_local_slash_command(&prompt) {
             self.prompt.clear();
             self.prompt_cursor = 0;
+            self.reset_command_palette();
             self.after_transcript_changed();
             return;
         }
@@ -712,6 +825,7 @@ impl App {
         if prompt.is_empty() {
             self.prompt.clear();
             self.prompt_cursor = 0;
+            self.reset_command_palette();
             return;
         }
 
@@ -720,6 +834,7 @@ impl App {
         let transcript_line = self.transcript_lines.len();
         self.prompt.clear();
         self.prompt_cursor = 0;
+        self.reset_command_palette();
         self.agent_status = "thinking".to_string();
 
         let base_url = self.base_url.clone();
@@ -774,18 +889,72 @@ impl App {
         self.jump_to_tail();
     }
 
-    fn insert_newline_after_slash(&mut self) -> bool {
+    fn insert_newline_after_backslash(&mut self) -> bool {
         let Some(previous) = previous_char_boundary(&self.prompt, self.prompt_cursor) else {
             return false;
         };
-        if &self.prompt[previous..self.prompt_cursor] != "/" {
+        if &self.prompt[previous..self.prompt_cursor] != "\\" {
+            return false;
+        }
+
+        let trailing_backslashes = self.prompt[..self.prompt_cursor]
+            .chars()
+            .rev()
+            .take_while(|ch| *ch == '\\')
+            .count();
+        if trailing_backslashes % 2 == 0 {
             return false;
         }
 
         self.prompt
             .replace_range(previous..self.prompt_cursor, "\n");
         self.prompt_cursor = previous + 1;
+        self.reset_command_palette();
         true
+    }
+
+    fn reset_command_palette(&mut self) {
+        self.command_palette_selected = 0;
+        self.command_palette_dismissed = false;
+    }
+
+    fn select_command(&mut self) -> bool {
+        let Some(command) = self.selected_command() else {
+            return false;
+        };
+        self.prompt = command.insertion.to_string();
+        self.prompt_cursor = self.prompt.len();
+        self.command_palette_selected = 0;
+        self.command_palette_dismissed = true;
+        true
+    }
+
+    fn cancel_or_quit(&mut self) {
+        if self.command_palette_open() {
+            self.command_palette_dismissed = true;
+        } else {
+            self.should_quit = true;
+        }
+    }
+
+    fn command_previous_or_scroll(&mut self) {
+        if self.command_palette_open() {
+            self.command_palette_selected = self.command_palette_selected.saturating_sub(1);
+        } else {
+            self.scroll_lines_up(1);
+        }
+    }
+
+    fn command_next_or_scroll(&mut self) {
+        if self.command_palette_open() {
+            let max_selected = self.command_palette_items().len().saturating_sub(1);
+            self.command_palette_selected = self
+                .command_palette_selected
+                .saturating_add(1)
+                .min(max_selected);
+        } else {
+            self.scroll_lines_down(1);
+        }
     }
 
     fn handle_local_slash_command(&mut self, prompt: &str) -> bool {
@@ -805,7 +974,12 @@ impl App {
                 true
             }
             "/help" => {
-                self.push_speaker_text("system", TUI_COMMAND_HELP);
+                let help = TUI_COMMANDS
+                    .iter()
+                    .map(|item| format!("{} - {}", item.usage, item.description))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                self.push_speaker_text("system", &help);
                 true
             }
             command if command == "/sessions" || command.starts_with("/sessions ") => {

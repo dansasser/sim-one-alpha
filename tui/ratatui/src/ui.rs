@@ -1,8 +1,8 @@
-use ratatui::layout::{Constraint, Direction, Layout, Margin, Position};
+use ratatui::layout::{Constraint, Direction, Layout, Margin, Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{
-    Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+    Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
 };
 use ratatui::Frame;
 
@@ -11,14 +11,18 @@ use crate::text_wrap::{
     display_width, display_width_between, pad_to_width, wrap_words, WrappedLine,
 };
 use crate::theme::{
-    live_assistant_body_style, live_assistant_prefix_style, prompt_editor_style, thinking_style,
-    transcript_prefix_style, user_prompt_style,
+    command_palette_command_style, command_palette_description_style,
+    command_palette_selected_style, command_palette_style, live_assistant_body_style,
+    live_assistant_prefix_style, prompt_editor_style, thinking_style, transcript_prefix_style,
+    user_prompt_style,
 };
 
 const PROMPT_GUTTER_WIDTH: usize = 2;
 const PROMPT_MIN_VISIBLE_ROWS: usize = 2;
 const PROMPT_MAX_VISIBLE_ROWS: usize = 5;
 const TRANSCRIPT_LEFT_MARGIN_WIDTH: usize = 2;
+const COMMAND_PALETTE_MAX_ROWS: usize = 6;
+const COMMAND_PALETTE_USAGE_WIDTH: usize = 28;
 
 #[derive(Debug, Clone, Copy)]
 struct PromptCursorPosition {
@@ -165,6 +169,84 @@ fn render_bottom(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Rect) 
     frame.render_widget(Paragraph::new(status), status_area);
 
     render_prompt(frame, app, prompt_area);
+    render_command_palette(frame, app, status_area, prompt_area);
+}
+
+fn render_command_palette(frame: &mut Frame<'_>, app: &App, status_area: Rect, prompt_area: Rect) {
+    if !app.command_palette_open() {
+        return;
+    }
+
+    let items = app.command_palette_items();
+    let available_height = status_area.y.saturating_sub(frame.area().y) as usize;
+    if available_height < 3 {
+        return;
+    }
+
+    let visible_rows = items
+        .len()
+        .clamp(1, COMMAND_PALETTE_MAX_ROWS)
+        .min(available_height.saturating_sub(2).max(1));
+    let selected = app
+        .command_palette_selected()
+        .min(items.len().saturating_sub(1));
+    let max_start = items.len().saturating_sub(visible_rows);
+    let start = selected
+        .saturating_sub(visible_rows.saturating_sub(1))
+        .min(max_start);
+    let end = (start + visible_rows).min(items.len());
+    let title = if items.is_empty() {
+        "Commands 0/0".to_string()
+    } else {
+        format!("Commands {}-{}/{}", start + 1, end, items.len())
+    };
+
+    let lines = if items.is_empty() {
+        vec![Line::styled(
+            " No matching commands",
+            command_palette_description_style(),
+        )]
+    } else {
+        items[start..end]
+            .iter()
+            .enumerate()
+            .map(|(offset, item)| {
+                let row_index = start + offset;
+                let row_style = if row_index == selected {
+                    command_palette_selected_style()
+                } else {
+                    command_palette_style()
+                };
+                Line::from(vec![
+                    Span::styled(
+                        format!(
+                            " {:<width$}",
+                            item.usage,
+                            width = COMMAND_PALETTE_USAGE_WIDTH
+                        ),
+                        command_palette_command_style(),
+                    ),
+                    Span::styled(item.description, command_palette_description_style()),
+                ])
+                .style(row_style)
+            })
+            .collect()
+    };
+
+    let height = (visible_rows + 2) as u16;
+    let area = Rect::new(
+        prompt_area.x,
+        status_area.y.saturating_sub(height),
+        prompt_area.width,
+        height,
+    );
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(lines)
+            .style(command_palette_style())
+            .block(Block::default().borders(Borders::ALL).title(title)),
+        area,
+    );
 }
 
 fn render_prompt(frame: &mut Frame<'_>, app: &App, prompt_area: ratatui::layout::Rect) {

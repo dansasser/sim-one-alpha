@@ -40,6 +40,77 @@ fn renders_static_shell_with_transcript_status_and_prompt() {
 }
 
 #[test]
+fn slash_command_palette_overlays_transcript_without_moving_prompt() {
+    let backend = TestBackend::new(100, 24);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("static shell should render");
+    let prompt_row_before = find_buffer_row(&terminal, "Prompt");
+    let status_row_before = find_buffer_row(&terminal, "SIM-ONE Alpha | session:");
+
+    app.handle_event(AppEvent::Text("/".to_string()));
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("command palette should render");
+
+    let frame = terminal_buffer_lines(&terminal);
+    assert!(frame.contains("Commands 1-6/9"), "{frame}");
+    assert!(frame.contains("/new [title]"), "{frame}");
+    assert!(frame.contains("Start a new session"), "{frame}");
+    assert!(frame.contains("/rename <title>"), "{frame}");
+    assert!(!frame.contains("/compact"), "{frame}");
+    assert_eq!(find_buffer_row(&terminal, "Prompt"), prompt_row_before);
+    assert_eq!(
+        find_buffer_row(&terminal, "SIM-ONE Alpha | session:"),
+        status_row_before
+    );
+
+    let selected = find_buffer_text_position(&terminal, "/new [title]");
+    assert_eq!(
+        terminal
+            .backend()
+            .buffer()
+            .cell(selected)
+            .expect("selected command cell should exist")
+            .style()
+            .bg,
+        Some(Color::Rgb(58, 64, 72))
+    );
+}
+
+#[test]
+fn slash_command_palette_filters_and_scrolls_selected_command_into_view() {
+    let backend = TestBackend::new(100, 24);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    app.handle_event(AppEvent::Text("/res".to_string()));
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("filtered command palette should render");
+    let filtered = terminal_buffer_lines(&terminal);
+    assert!(filtered.contains("Commands 1-1/1"), "{filtered}");
+    assert!(filtered.contains("/resume <session-id>"), "{filtered}");
+    assert!(!filtered.contains("/new [title]"), "{filtered}");
+
+    app.handle_event(AppEvent::ClearPrompt);
+    app.handle_event(AppEvent::Text("/".to_string()));
+    for _ in 0..8 {
+        app.handle_event(AppEvent::ScrollLineDown);
+    }
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("scrolled command palette should render");
+    let scrolled = terminal_buffer_lines(&terminal);
+    assert!(scrolled.contains("Commands 4-9/9"), "{scrolled}");
+    assert!(scrolled.contains("/exit"), "{scrolled}");
+    assert!(!scrolled.contains("/new [title]"), "{scrolled}");
+}
+
+#[test]
 fn transcript_text_starts_after_two_column_left_margin() {
     let backend = TestBackend::new(80, 16);
     let mut terminal = Terminal::new(backend).expect("test backend should initialize");

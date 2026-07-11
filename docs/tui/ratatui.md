@@ -51,7 +51,7 @@ The bottom pane contains gateway/session/model status and the editable prompt li
 
 ## Prompt Editing
 
-Press `Enter` to submit the prompt. To insert a newline, type `/` at the cursor and press `Enter`; the TUI removes the trailing slash and starts the next prompt line without submitting. Enter key-repeat events are ignored so one physical Enter produces one submit or newline action. Slash commands such as `/new` and `/compact` still submit normally because their final character is not `/`.
+Press `Enter` to submit the prompt. To insert a newline, type an unescaped `\` at the cursor and press `Enter`; the TUI removes that trailing backslash and starts the next prompt line without submitting. A doubled trailing backslash remains literal. Enter key-repeat events are ignored so one physical Enter produces one submit or newline action. `Shift+Enter` remains available on terminals that report it distinctly.
 
 The editor wraps long input before the word that no longer fits, grows to five visible rows, and then scrolls its own contents while keeping the cursor visible. Words are never split across rows. Wrapping, row padding, and cursor placement use terminal display columns, so emoji, CJK characters, and combining marks do not corrupt row boundaries. Transcript tail-following is recalculated as the editor grows, so the latest response remains directly above the prompt. While a prompt is pending, a duplicate submit is shown as a visible status instead of queueing a second prompt.
 
@@ -91,6 +91,8 @@ During startup, status and transcript rows show gateway readiness, active TUI se
 If a live stream disconnects, the status changes to reconnecting or failed. Prompt submission still uses the gateway request path and reports errors into the transcript.
 
 ## Slash Commands
+
+Typing `/` as the first prompt character opens a command palette above the status line without resizing the prompt or transcript. Continue typing to filter by command name. `Up` and `Down` move the highlight and scroll the six-row palette while it is open; `Enter` or `Tab` inserts the highlighted command without executing it. Press `Enter` again after supplying any arguments. `Esc` dismisses the palette first and exits the TUI only when the palette is closed. A complete command typed directly still submits normally.
 
 TUI-local commands:
 

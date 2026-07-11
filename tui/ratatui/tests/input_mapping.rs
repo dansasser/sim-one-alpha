@@ -64,6 +64,10 @@ fn maps_prompt_editing_and_submit_keys() {
         map_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT)),
         Some(AppEvent::Text("\n".to_string()))
     );
+    assert_eq!(
+        map_key_event(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)),
+        Some(AppEvent::SelectCommand)
+    );
 }
 
 #[test]
@@ -90,7 +94,7 @@ fn maps_transcript_scroll_and_exit_keys() {
     );
     assert_eq!(
         map_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
-        Some(AppEvent::Quit)
+        Some(AppEvent::Cancel)
     );
     assert_eq!(
         map_key_event(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)),

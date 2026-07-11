@@ -4,6 +4,8 @@ use crate::app::TranscriptRowKind;
 
 pub const USER_PROMPT_BACKGROUND: Color = Color::Rgb(52, 52, 56);
 pub const PROMPT_EDITOR_BACKGROUND: Color = Color::Rgb(38, 38, 40);
+pub const COMMAND_PALETTE_BACKGROUND: Color = Color::Rgb(30, 30, 32);
+pub const COMMAND_PALETTE_SELECTED_BACKGROUND: Color = Color::Rgb(58, 64, 72);
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct TranscriptMarkdownStyleSheet;
@@ -51,6 +53,24 @@ pub(crate) fn user_prompt_style() -> Style {
 
 pub(crate) fn prompt_editor_style() -> Style {
     Style::default().bg(PROMPT_EDITOR_BACKGROUND)
+}
+
+pub(crate) fn command_palette_style() -> Style {
+    Style::default().bg(COMMAND_PALETTE_BACKGROUND)
+}
+
+pub(crate) fn command_palette_selected_style() -> Style {
+    Style::default().bg(COMMAND_PALETTE_SELECTED_BACKGROUND)
+}
+
+pub(crate) fn command_palette_command_style() -> Style {
+    Style::default()
+        .fg(Color::LightCyan)
+        .add_modifier(Modifier::BOLD)
+}
+
+pub(crate) fn command_palette_description_style() -> Style {
+    Style::default().fg(Color::Gray)
 }
 
 pub(crate) fn thinking_style() -> Style {

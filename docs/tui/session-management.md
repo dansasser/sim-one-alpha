@@ -12,6 +12,10 @@ When the active session changes, the TUI cancels the old stream handle, clears s
 
 Normal no-argument launch does not use a default `primary` session. It starts unresolved, asks the gateway for the active TUI session for `connector=tui` and `local-tui` scope, then switches to the returned durable `tui-*` session. Use `--session <id>` at launch or `/resume <session-id>` inside the TUI only when you intentionally want a specific existing session.
 
+## Discover Session Commands
+
+Type `/` at the beginning of the prompt to open the TUI command palette. Continue typing to filter commands, use `Up` and `Down` to change the highlighted command, then press `Enter` or `Tab` to insert it. The palette lists each session command with its arguments and purpose. It overlays the transcript and does not change the current scroll position.
+
 ## Current Session
 
 Use:

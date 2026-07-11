@@ -119,12 +119,22 @@ def main():
         fcntl.ioctl(master_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 100, 0, 0))
         read_until(master_fd, b"Prompt", 10)
 
-        os.write(master_fd, b"first line/\r")
+        os.write(master_fd, b"/res")
+        read_until(master_fd, b"Resume a durable session", 5)
+        os.write(master_fd, b"\t")
+        time.sleep(0.2)
+        if REQUESTS:
+            raise AssertionError(
+                f"command palette selection submitted prematurely: {REQUESTS!r}"
+            )
+        os.write(master_fd, b"\x15")
+
+        os.write(master_fd, b"first line\\\r")
         os.write(master_fd, b"\x1b[13;1:2u")
         time.sleep(0.5)
         if REQUESTS:
             raise AssertionError(
-                f"slash-Enter repeat submitted prematurely: {REQUESTS!r}"
+                f"backslash-Enter repeat submitted prematurely: {REQUESTS!r}"
             )
 
         os.write(master_fd, b"second line\r")
@@ -138,7 +148,7 @@ def main():
             )
 
         print(
-            "[ratatui-interactive] packaged sim-one preserved slash-Enter newline through an Enter repeat and submitted the exact multiline payload."
+            "[ratatui-interactive] packaged sim-one displayed and selected the slash-command palette, preserved backslash-Enter newline through an Enter repeat, and submitted the exact multiline payload."
         )
     finally:
         stop_child(pid, master_fd)
