@@ -14,6 +14,8 @@ import {
   resolveWorkspaceDirectory,
 } from '../../../workspace-loader.js';
 import { createDefaultGitHubClient } from '../../../engine/workers/coding-worker/github/gh-cli-client.js';
+import { getGithubAuthService } from '../../../engine/workers/coding-worker/github/github-auth-runtime.js';
+import { createCodingGithubAuthTools } from '../../../engine/workers/coding-worker/github/github-auth-tools.js';
 import { createCodingGitHubTools } from '../../../engine/workers/coding-worker/github/github-tools.js';
 import type { GitHubClient } from '../../../engine/workers/coding-worker/github/github-client.js';
 import { createCodingWorkerRuntimeCapabilityBlock } from '../../../engine/workers/coding-worker/runtime-capabilities.js';
@@ -44,6 +46,8 @@ export interface CodingWorkerSubagentOptions extends CodingWorkspaceTargetInput 
    * Falls back to a sibling of workspaceRoot when omitted.
    */
   approvalRoot?: string;
+  /** Root for product-owned managed GitHub credentials. Must be outside workspaceRoot. */
+  githubAuthRoot?: string;
 }
 
 export const codingWorkerInstructions = [
@@ -85,7 +89,16 @@ export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOp
   }
   await assertApprovalRootOutsideWorkspace(approvalRoot, workspaceRoot);
   const approvalService = createSharedCodingApprovalService({ GOROMBO_APPROVAL_ROOT: approvalRoot });
-  const githubClient = resolvedOptions.githubClient ?? createDefaultGitHubClient(resolvedOptions.env, resolvedOptions.repoPath ?? resolvedOptions.workspaceRoot);
+  const githubAuthService = await getGithubAuthService({
+    workspaceRoot,
+    authRoot: resolvedOptions.githubAuthRoot ?? readOptionalEnv(resolvedOptions.env ?? {}, 'GOROMBO_GITHUB_AUTH_ROOT'),
+    env: resolvedOptions.env,
+  });
+  const githubClient = resolvedOptions.githubClient ?? createDefaultGitHubClient(
+    await githubAuthService.createGhEnv(),
+    resolvedOptions.repoPath ?? resolvedOptions.workspaceRoot,
+  );
+  const executionEnv = withoutGithubCredentials(resolvedOptions.env);
 
   return defineAgentProfile({
     name: codingWorkerAgentName,
@@ -101,7 +114,7 @@ export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOp
         projectSlug: resolvedOptions.projectSlug,
         projectRelativePath: resolvedOptions.projectRelativePath,
         repoPath: resolvedOptions.repoPath,
-        env: resolvedOptions.env,
+        env: executionEnv,
         sessionId: 'coding-worker-profile-tools',
       }),
       ...createCodingCodeIntelligenceTools({
@@ -111,7 +124,7 @@ export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOp
         projectSlug: resolvedOptions.projectSlug,
         projectRelativePath: resolvedOptions.projectRelativePath,
         repoPath: resolvedOptions.repoPath,
-        env: resolvedOptions.env,
+        env: executionEnv,
         sessionId: 'coding-worker-code-intelligence-tools',
       }),
       ...createCodingGitTools({
@@ -121,7 +134,7 @@ export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOp
         projectSlug: resolvedOptions.projectSlug,
         projectRelativePath: resolvedOptions.projectRelativePath,
         repoPath: resolvedOptions.repoPath,
-        env: resolvedOptions.env,
+        env: executionEnv,
         sessionId: 'coding-worker-git-tools',
         approvalService,
       }),
@@ -132,7 +145,7 @@ export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOp
         projectSlug: resolvedOptions.projectSlug,
         projectRelativePath: resolvedOptions.projectRelativePath,
         repoPath: resolvedOptions.repoPath,
-        env: resolvedOptions.env,
+        env: executionEnv,
         sessionId: 'coding-worker-repo-workflow-tools',
         approvalService,
       }),
@@ -145,6 +158,12 @@ export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOp
         repoPath: resolvedOptions.repoPath,
         client: githubClient,
         approvalService,
+      }),
+      ...createCodingGithubAuthTools({
+        workspaceRoot,
+        authRoot: resolvedOptions.githubAuthRoot ?? readOptionalEnv(resolvedOptions.env ?? {}, 'GOROMBO_GITHUB_AUTH_ROOT'),
+        approvalService,
+        authService: githubAuthService,
       }),
       ...createCodingPlanningTools(),
       ...createCodingTaskMemoryTools({
@@ -169,7 +188,7 @@ export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOp
       projectSlug: resolvedOptions.projectSlug,
       projectRelativePath: resolvedOptions.projectRelativePath,
       repoPath: resolvedOptions.repoPath,
-      env: resolvedOptions.env,
+      env: executionEnv,
       approvalService,
       githubClient,
     }),
@@ -192,10 +211,7 @@ export default createAgent(async ({ env }) => {
     cwd: workspaceRoot,
     sandbox: local({
       cwd: workspaceRoot,
-      env: {
-        GH_TOKEN: readOptionalEnv(env, 'GH_TOKEN'),
-        GITHUB_TOKEN: readOptionalEnv(env, 'GITHUB_TOKEN'),
-      },
+      env: {},
     }),
   };
 });
@@ -258,7 +274,24 @@ function createCodingWorkerToolEnv(env: Record<string, unknown>): Record<string,
   return {
     GH_TOKEN: readOptionalEnv(env, 'GH_TOKEN'),
     GITHUB_TOKEN: readOptionalEnv(env, 'GITHUB_TOKEN'),
+    GOROMBO_GITHUB_AUTH_ROOT: readOptionalEnv(env, 'GOROMBO_GITHUB_AUTH_ROOT'),
   };
+}
+
+function withoutGithubCredentials(
+  env: Record<string, string | undefined> | undefined,
+): Record<string, string | undefined> | undefined {
+  if (!env) return undefined;
+  const filtered = { ...env };
+  delete filtered.GH_TOKEN;
+  delete filtered.GITHUB_TOKEN;
+  delete filtered.GH_CONFIG_DIR;
+  delete filtered.GIT_CONFIG_COUNT;
+  delete filtered.GIT_CONFIG_KEY_0;
+  delete filtered.GIT_CONFIG_VALUE_0;
+  delete filtered.GIT_CONFIG_KEY_1;
+  delete filtered.GIT_CONFIG_VALUE_1;
+  return filtered;
 }
 
 export { createCodingWorkerLoopDelegate } from '../../../engine/workers/coding-worker/workflow/loop.js';

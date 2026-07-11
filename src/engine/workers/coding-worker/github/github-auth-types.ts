@@ -46,6 +46,7 @@ export interface GithubAuthChallenge {
 }
 
 export interface GithubAuthStartInput extends GithubAuthProfileRef {
+  authSessionId?: string;
   audience: GithubAuthAudience;
   deliverChallenge(challenge: GithubAuthChallenge): void | Promise<void>;
 }

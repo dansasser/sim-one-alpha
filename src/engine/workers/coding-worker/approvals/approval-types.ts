@@ -19,6 +19,8 @@ export type CodingApprovalActionType =
   | 'github.review_comment'
   | 'github.check.rerun'
   | 'github.fork_repo'
+  | 'github.auth.login'
+  | 'github.auth.logout'
   | 'memory.write'
   | 'memory.handoff';
 
@@ -67,4 +69,3 @@ export interface CodingApprovalRecord {
   decision?: CodingApprovalDecision;
   updatedAt: string;
 }
-

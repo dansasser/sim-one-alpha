@@ -158,7 +158,8 @@ test('coding worker owns its workspace-backed lead profile', async () => {
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_repo_sync'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_shell_run'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_git_commit'), true);
-  assert.equal(subagent.tools?.some((tool) => tool.name === 'github_auth_start'), false);
+  assert.equal(subagent.tools?.some((tool) => tool.name === 'github_auth_status'), true);
+  assert.equal(subagent.tools?.some((tool) => tool.name === 'github_auth_start'), true);
   assert.equal(
     subagent.subagents?.find((agent) => agent.name === 'coding-worker-implementer')?.tools?.some(
       (tool) => tool.name === 'coding_repo_apply_patch',
@@ -184,6 +185,12 @@ test('coding worker owns its workspace-backed lead profile', async () => {
       (tool) => tool.name === 'coding_github_update_pr',
     ),
     true,
+  );
+  assert.equal(
+    subagent.subagents?.find((agent) => agent.name === 'coding-worker-github')?.tools?.some(
+      (tool) => tool.name === 'github_auth_start',
+    ),
+    false,
   );
   assert.equal(subagent.skills?.some((skill) => skill.name === 'coding-worker.code-change-loop'), true);
   assert.equal(existsSync('src/workflows/coding-task.ts'), false);
