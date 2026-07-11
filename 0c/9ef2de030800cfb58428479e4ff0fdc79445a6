@@ -1,0 +1,50 @@
+tui/ratatui/Cargo.toml
+  s_a81fff26d52223::t_ae3f22ed11e819 11
+tui/ratatui/src/terminal.rs
+  s_a81fff26d52223::t_96a63db951f3eb 1,30-48
+  s_a81fff26d52223::t_ae3f22ed11e819 4,28-29
+tui/ratatui/src/app.rs
+  s_a81fff26d52223::t_847158b130bd9d 942-1033,1041,1765
+  s_a81fff26d52223::t_458760b33cf06e 829,833,839,1042,1769,1772,2014-2098,2100,2108,2115
+  s_a81fff26d52223::t_fdac778bbd3393 1697-1721,1731-1737,1745-1751,1755,1761-1764
+  s_a81fff26d52223::t_43a5cf2459a372 7-8,118,162-210,243-245,382-384,428,808-809,813-821,825-828
+  s_a81fff26d52223::t_db89f92814afc1 830-832,834-838,1034-1040,1043,1680,1766-1768,1770-1771,1773,1775-1777,2099,2101-2107,2109-2114,2116
+tui/ratatui/tests/ui_render.rs
+  s_a81fff26d52223::t_96a63db951f3eb 1491-1535,1772
+  s_a81fff26d52223::t_8b7fbda11cb8a2 5,1430-1445,1448-1490,1536-1573,1704-1709,1768,1773
+  s_a81fff26d52223::t_7ef9ca73ffb540 1446-1447,1758-1766
+  s_a81fff26d52223::t_1f2ff06efc3636 1710-1712,1767,1769-1771,1774-1776
+tui/ratatui/src/main.rs
+  s_a81fff26d52223::t_ae3f22ed11e819 12-14,133-135
+tui/ratatui/tests/input_mapping.rs
+  s_a81fff26d52223::t_8b7fbda11cb8a2 142-147,152-153,155-168,170-182
+tui/ratatui/tests/app_state.rs
+  s_a81fff26d52223::t_96a63db951f3eb 6-7,9,27-62
+  s_a81fff26d52223::t_43d5ad2dbcc613 63-64
+tui/ratatui/src/markdown.rs
+  s_a81fff26d52223::t_2115939b944d22 12-15,33,35,41-48,55-58,84-85,92-95,114,117,121,140-147,157-158,180-183
+tui/ratatui/src/ui.rs
+  s_a81fff26d52223::t_965dc05f584993 9,37-40,43-44,49-65,67,105-111,113-115,125-145,149-178
+  s_a81fff26d52223::t_1dcef3c3dcae53 10
+  s_a81fff26d52223::t_7746d3b504c0f4 179-183,210
+tui/ratatui/src/input.rs
+  s_a81fff26d52223::t_8c09c80deaf21b 1,11
+Cargo.lock
+  s_a81fff26d52223::t_4c464d37a73e45 35-40,109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "0c9ef2de030800cfb58428479e4ff0fdc79445a6",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
