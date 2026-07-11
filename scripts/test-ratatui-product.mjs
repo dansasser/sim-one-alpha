@@ -51,10 +51,6 @@ let child;
 try {
   const config = JSON.parse(originalConfig);
   config.gateway = { ...(config.gateway ?? {}), port };
-  config.storage = {
-    ...(config.storage ?? {}),
-    sessionDatabasePath: join(codingWorkspaceRoot, 'sessions.sqlite'),
-  };
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
   const childEnv = {
@@ -105,9 +101,6 @@ try {
   if (stdout.includes('This is an automatic SIM-ONE Alpha local Ratatui TUI startup event')) {
     throw new Error(`Ratatui status exposed the internal startup prompt as a session title.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
   }
-  if (!/SIM-ONE Alpha - tui-/.test(stdout)) {
-    throw new Error(`Ratatui startup smoke did not expose the active session in the transcript title.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
-  }
 
   const createSessionSmoke = await runProductCommand(
     ['--port', String(port)],
@@ -144,21 +137,6 @@ try {
   assertOutputIncludes(stdout, `system: current session ${clearedSessionId}`, 'session command did not show the cleared active session');
   assertOutputIncludes(stdout, `Exited SIM-ONE Alpha TUI. Session: ${clearedSessionId}`, 'exit command did not print the cleared active session id');
 
-  const resumeNamedSessionSmoke = await runProductCommand(
-    ['--port', String(port)],
-    {
-      ...childEnv,
-      SIM_ONE_TUI_TEST_PROMPTS: [
-        `/resume ${clearedSessionId}`,
-        '/exit',
-      ].join('\n'),
-    },
-    240_000,
-  );
-  stdout = resumeNamedSessionSmoke.stdout;
-  stderr = resumeNamedSessionSmoke.stderr;
-  assertOutputIncludes(stdout, 'SIM-ONE Alpha - Smoke Cleared', 'resume did not restore the explicit session name in the transcript title');
-
   const resumeSessionSmoke = await runProductCommand(
     ['--port', String(port)],
     {
@@ -175,7 +153,7 @@ try {
   stderr = resumeSessionSmoke.stderr;
   assertOutputIncludes(stdout, `assistant: Resumed session ${clearedSessionId}.`, 'resume command did not resume the cleared session');
   assertOutputIncludes(stdout, `assistant: Renamed session ${clearedSessionId} to "Smoke Session Renamed".`, 'rename command did not rename the active session');
-  assertOutputIncludes(stdout, 'SIM-ONE Alpha - Smoke Session Renamed', 'rename command did not replace the transcript title session id with the explicit title');
+  assertOutputIncludes(stdout, 'session: Smoke Session Renamed', 'rename command did not replace the status-bar session id with the explicit title');
   assertOutputIncludes(stdout, `Exited SIM-ONE Alpha TUI. Session: ${clearedSessionId}`, 'exit after resume did not print the active session id');
 
   console.log('[ratatui-product] sim-one ran startup preflight, created a clean TUI session, and received an agent greeting.');

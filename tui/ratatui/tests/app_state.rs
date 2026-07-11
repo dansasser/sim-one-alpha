@@ -578,8 +578,7 @@ fn startup_preflight_resolves_active_session_without_primary_and_sends_greeting_
     assert!(transcript.contains("assistant: Hello Daniel, I'm Ollie."));
     assert!(!transcript.contains("primary"));
     assert_eq!(app.agent_status(), "ready");
-    assert_eq!(app.transcript_title(), "SIM-ONE Alpha - tui-startup-1");
-    assert!(!app.status_text().contains("session:"));
+    assert!(app.status_text().contains("session: tui-startup-1"));
     assert!(!app.status_text().contains("automatic SIM-ONE"));
 }
 
@@ -1035,7 +1034,7 @@ fn prompt_arrows_do_not_steal_transcript_page_or_mouse_scrolling() {
 }
 
 #[test]
-fn rename_reply_updates_transcript_title_without_changing_session_id() {
+fn rename_reply_updates_status_title_without_changing_session_id() {
     let mut app = App::with_agent_sender(
         "tui-existing-1",
         "test gateway",
@@ -1056,65 +1055,12 @@ fn rename_reply_updates_transcript_title_without_changing_session_id() {
 
     assert_eq!(app.session_id(), "tui-existing-1");
     assert_eq!(app.session_title(), Some("Release Work"));
-    assert_eq!(app.transcript_title(), "SIM-ONE Alpha - Release Work");
-    assert!(!app.status_text().contains("Release Work"));
-}
-
-#[test]
-fn resume_reply_restores_persisted_session_title() {
-    let mut app = App::with_agent_sender(
-        "tui-current-1",
-        "test gateway",
-        "http://127.0.0.1:3940",
-        Arc::new(|_, _, _| {
-            Ok(AgentReply {
-                text: "Resumed session tui-named-1.".to_string(),
-                session_id: Some("tui-named-1".to_string()),
-                session_title: Some("Release Work".to_string()),
-                command_name: Some("resume".to_string()),
-                session_created: Some(false),
-            })
-        }),
-    );
-    app.handle_event(AppEvent::Text("/resume tui-named-1".to_string()));
-    app.handle_event(AppEvent::Submit);
-    wait_for_agent(&mut app);
-
-    assert_eq!(app.session_id(), "tui-named-1");
-    assert_eq!(app.session_title(), Some("Release Work"));
-    assert_eq!(app.transcript_title(), "SIM-ONE Alpha - Release Work");
-}
-
-#[test]
-fn status_only_announces_manual_scrollback() {
-    let mut app = App::new_for_test();
-    app.set_transcript_viewport_size(3, 40);
-    app.jump_to_tail();
-
     assert!(
-        !app.status_text().contains("view:"),
+        app.status_text().contains("session: Release Work"),
         "{}",
         app.status_text()
     );
-    assert!(
-        !app.status_text().contains("tail:"),
-        "{}",
-        app.status_text()
-    );
-
-    app.scroll_page_up();
-    assert!(
-        app.status_text().contains("view: scrolled back"),
-        "{}",
-        app.status_text()
-    );
-
-    app.jump_to_tail();
-    assert!(
-        !app.status_text().contains("view:"),
-        "{}",
-        app.status_text()
-    );
+    assert!(!app.status_text().contains("Release Work ("));
 }
 
 #[test]

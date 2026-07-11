@@ -30,7 +30,7 @@ The TUI prints the current active session id into the transcript:
 system: current session <session-id>
 ```
 
-The transcript border starts as `SIM-ONE Alpha - <session-id>`. Renaming changes it to `SIM-ONE Alpha - <name>` as soon as the gateway confirms the explicit name. A later startup or `/resume` restores that explicit name. Automatic prompt-derived conversation titles are not used as display names. `/session` still prints the durable id into the transcript.
+The status bar starts with `session: <session-id>`. Renaming replaces that same field with `session: <title>` as soon as the gateway confirms the explicit name. `/session` still prints the durable id into the transcript.
 
 ## Start A New Session
 
@@ -81,7 +81,6 @@ Use:
 ```
 
 The gateway validates that the session belongs to the local TUI actor/conversation scope. If it is available, the TUI switches to it and restarts the stream.
-If the session has an explicit display name, the transcript border restores that name after resume; otherwise it shows the durable session id.
 
 Example:
 

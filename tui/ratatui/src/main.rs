@@ -30,14 +30,15 @@ fn main() -> io::Result<()> {
     let mut gateway = ensure_server_running(&cli.gateway).map_err(io::Error::other)?;
     let base_url = gateway.base_url.clone();
     let started = gateway.started;
-    run_client(
+    let result = run_client(
         base_url,
         started,
         cli.session_id,
         cli.session_explicit,
         cli.smoke_startup,
         || gateway.cleanup(),
-    )
+    );
+    result
 }
 
 fn run_client(
@@ -145,7 +146,6 @@ fn run_scripted_startup(
     for line in app.transcript_lines() {
         println!("{line}");
     }
-    println!("{}", app.transcript_title());
     println!("{}", app.status_text());
 
     Ok(())
@@ -175,7 +175,6 @@ fn run_scripted_prompts(
     for line in app.transcript_lines() {
         println!("{line}");
     }
-    println!("{}", app.transcript_title());
     println!("{}", app.status_text());
     if let Some(session_id) = app.exit_session_id() {
         println!("Exited SIM-ONE Alpha TUI. Session: {session_id}");
@@ -232,13 +231,25 @@ fn read_app_event() -> io::Result<Option<AppEvent>> {
     Ok(map_terminal_event(event::read()?))
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct CliOptions {
     gateway: GatewayOptions,
     base_url: Option<String>,
     session_id: String,
     session_explicit: bool,
     smoke_startup: bool,
+}
+
+impl Default for CliOptions {
+    fn default() -> Self {
+        Self {
+            gateway: GatewayOptions::default(),
+            base_url: None,
+            session_id: String::new(),
+            session_explicit: false,
+            smoke_startup: false,
+        }
+    }
 }
 
 impl CliOptions {

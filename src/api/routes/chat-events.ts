@@ -111,9 +111,6 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
         title: slashCommand && isSessionCreationSlashCommand(slashCommand) && slashCommand.args
           ? slashCommand.args
           : undefined,
-        displayName: slashCommand && isSessionCreationSlashCommand(slashCommand) && slashCommand.args
-          ? slashCommand.args
-          : undefined,
       });
     } catch (error) {
       goromboPersistenceRuntime.sessionDatabase.recordNormalizedMessageEvent({ event });
@@ -170,7 +167,6 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
     if (slashCommand?.name === 'rename') {
       goromboPersistenceRuntime.sessionDatabase.touchChatSession(
         sessionResolution.sessionId,
-        slashCommand.args,
         slashCommand.args,
       );
 
@@ -272,7 +268,7 @@ function createCommandResponse(input: {
     title?: string;
   };
 } {
-  const sessionTitle = input.sessionTitle ?? input.sessionResolution?.session.displayName;
+  const sessionTitle = input.sessionTitle;
   return {
     result: {
       text: input.text,

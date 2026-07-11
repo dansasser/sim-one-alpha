@@ -30,11 +30,9 @@ fn renders_static_shell_with_transcript_status_and_prompt() {
         .iter()
         .map(|cell| cell.symbol())
         .collect::<String>();
-    assert!(terminal_buffer_lines(&terminal).starts_with("┌SIM-ONE Alpha"));
-    assert!(!buffer.contains("Transcript"));
-    assert!(!buffer.contains("live tail"));
-    assert!(!buffer.contains("scrolled back"));
-    assert!(!buffer.contains("session: resolving"));
+    assert!(buffer.contains("Transcript"));
+    assert!(buffer.contains("SIM-ONE Alpha"));
+    assert!(buffer.contains("session: resolving"));
     assert!(!buffer.contains("session: primary"));
     assert!(buffer.contains("> Type a message"));
     assert!(buffer.contains("preflight"), "{buffer}");
@@ -51,7 +49,7 @@ fn slash_command_palette_overlays_transcript_without_moving_prompt() {
         .draw(|frame| render(frame, &mut app))
         .expect("static shell should render");
     let prompt_row_before = find_buffer_row(&terminal, "Prompt");
-    let status_row_before = find_buffer_row(&terminal, "gateway: offline placeholder");
+    let status_row_before = find_buffer_row(&terminal, "SIM-ONE Alpha | session:");
 
     app.handle_event(AppEvent::Text("/".to_string()));
     terminal
@@ -66,7 +64,7 @@ fn slash_command_palette_overlays_transcript_without_moving_prompt() {
     assert!(!frame.contains("/compact"), "{frame}");
     assert_eq!(find_buffer_row(&terminal, "Prompt"), prompt_row_before);
     assert_eq!(
-        find_buffer_row(&terminal, "gateway: offline placeholder"),
+        find_buffer_row(&terminal, "SIM-ONE Alpha | session:"),
         status_row_before
     );
 
@@ -227,7 +225,7 @@ fn multiline_prompt_arrows_move_the_visible_cursor_without_scrolling_transcript(
 }
 
 #[test]
-fn renamed_session_title_is_rendered_in_transcript_border() {
+fn renamed_session_title_is_rendered_in_status_bar() {
     let backend = TestBackend::new(120, 18);
     let mut terminal = Terminal::new(backend).expect("test backend should initialize");
     let mut app = App::with_agent_sender(
@@ -250,47 +248,10 @@ fn renamed_session_title_is_rendered_in_transcript_border() {
 
     terminal
         .draw(|frame| render(frame, &mut app))
-        .expect("renamed session title should render");
+        .expect("renamed session status should render");
     let frame = terminal_buffer_lines(&terminal);
-    assert!(frame.contains("SIM-ONE Alpha - Release Work"), "{frame}");
-    assert!(!frame.contains("session: Release Work"), "{frame}");
+    assert!(frame.contains("session: Release Work"), "{frame}");
     assert!(!frame.contains("Release Work (tui-existing-1)"), "{frame}");
-}
-
-#[test]
-fn transcript_border_uses_session_id_and_status_marks_only_scrollback() {
-    let backend = TestBackend::new(100, 18);
-    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
-    let mut app = App::with_session("tui-existing-1", "test gateway", "http://127.0.0.1:3940");
-
-    terminal
-        .draw(|frame| render(frame, &mut app))
-        .expect("session title should render");
-    let live_frame = terminal_buffer_lines(&terminal);
-    assert!(
-        live_frame.contains("SIM-ONE Alpha - tui-existing-1"),
-        "{live_frame}"
-    );
-    assert!(!live_frame.contains("live tail"), "{live_frame}");
-    assert!(!live_frame.contains("view:"), "{live_frame}");
-
-    app.scroll_page_up();
-    terminal
-        .draw(|frame| render(frame, &mut app))
-        .expect("scrollback status should render");
-    let scrolled_frame = terminal_buffer_lines(&terminal);
-    assert!(
-        scrolled_frame.contains("SIM-ONE Alpha - tui-existing-1"),
-        "{scrolled_frame}"
-    );
-    assert!(
-        scrolled_frame.contains("view: scrolled back"),
-        "{scrolled_frame}"
-    );
-    assert!(
-        !scrolled_frame.contains("Transcript - scrolled back"),
-        "{scrolled_frame}"
-    );
 }
 
 #[test]

@@ -301,14 +301,13 @@ test('chat event TUI session commands create resume and rename without prompting
       const resumeBody = await resumeResponse.json() as {
         result?: { command?: { name?: string }; text?: string };
         event?: { id?: string };
-        session?: { id?: string; surface?: string; created?: boolean; title?: string };
+        session?: { id?: string; surface?: string; created?: boolean };
       };
       if (resumeBody.event?.id) eventIds.push(resumeBody.event.id);
       assert.equal(resumeBody.result?.command?.name, 'resume');
       assert.equal(resumeBody.result?.text, `Resumed session ${sessionId}.`);
       assert.equal(resumeBody.session?.id, sessionId);
       assert.equal(resumeBody.session?.created, false);
-      assert.equal(resumeBody.session?.title, 'Release testing');
 
       const renameResponse = await testApp.request('/api/chat/events', {
         method: 'POST',
@@ -338,29 +337,6 @@ test('chat event TUI session commands create resume and rename without prompting
 
       const storedSession = goromboPersistenceRuntime.sessionDatabase.getChatSession(sessionId ?? '');
       assert.equal(storedSession?.title, 'Demo Session');
-      assert.equal(storedSession?.displayName, 'Demo Session');
-
-      const renamedResumeResponse = await testApp.request('/api/chat/events', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-secret': 'test-secret',
-        },
-        body: JSON.stringify({
-          connector: 'tui',
-          text: `/resume ${sessionId}`,
-          actorId,
-          conversationId,
-        }),
-      });
-      const renamedResumeBody = await renamedResumeResponse.json() as {
-        event?: { id?: string };
-        session?: { id?: string; title?: string };
-      };
-      if (renamedResumeBody.event?.id) eventIds.push(renamedResumeBody.event.id);
-      assert.equal(renamedResumeResponse.status, 200);
-      assert.equal(renamedResumeBody.session?.id, sessionId);
-      assert.equal(renamedResumeBody.session?.title, 'Demo Session');
     });
   } finally {
     for (const eventId of eventIds) {
