@@ -100,7 +100,7 @@ class DefaultGithubAuthService implements GithubAuthService {
     }
 
     const session: AuthSession = {
-      id: randomUUID(),
+      id: input.authSessionId ?? randomUUID(),
       profile,
       state: 'authorization_pending',
       expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),

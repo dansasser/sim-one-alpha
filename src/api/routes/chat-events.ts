@@ -28,6 +28,7 @@ import {
   type ChatSessionResolution,
 } from '../../engine/session/session-routing.js';
 import { createChatPrompt } from '../../api/routes/chat-prompt.js';
+import { getGithubAuthChallengeRelay, githubAuthAudienceFromEvent } from '../../api/ingress/github-auth-challenge-relay.js';
 
 export interface ChatEventRouteOptions {
   openDurableSession?: DurableOrchestratorSessionOpener;
@@ -141,6 +142,7 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
 
     const body = await readJsonResponse(agentResponse.clone());
     if (isRecord(body)) {
+      const githubAuthChallenge = getGithubAuthChallengeRelay().consume(githubAuthAudienceFromEvent(event));
       const deliveryId = readDeliveryId(body);
       if (deliveryId) {
         goromboPersistenceRuntime.sessionDatabase.recordNormalizedMessageEvent({
@@ -164,6 +166,7 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
           surface: sessionResolution.surface,
           created: sessionResolution.created,
         },
+        ...(githubAuthChallenge ? { githubAuthChallenge } : {}),
       }, agentResponse.status as never);
     }
 

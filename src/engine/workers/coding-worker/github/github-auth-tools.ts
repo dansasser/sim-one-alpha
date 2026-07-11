@@ -72,6 +72,14 @@ export function createCodingGithubAuthTools(options: CodingGithubAuthToolsOption
           },
         });
         if (!approval.evaluation.allowed) {
+          options.reporter?.emit({
+            type: 'coding.github.auth.requested',
+            taskId: event.id,
+            action: 'github.auth.login',
+            status: approval.evaluation.status,
+            summary: 'GitHub authorization requires an approved request.',
+            evidence: [approval.request.id],
+          });
           return JSON.stringify({ blocked: true, request: approval.request, evaluation: approval.evaluation }, null, 2);
         }
         const result = await (await getService()).start({
@@ -84,6 +92,16 @@ export function createCodingGithubAuthTools(options: CodingGithubAuthToolsOption
             eventId: event.id,
           },
           deliverChallenge: (challenge) => relay.deliver(challenge),
+        });
+        options.reporter?.emit({
+          type: result.state === 'authorization_pending' ? 'coding.github.auth.challenge_available' : 'coding.github.auth.failed',
+          taskId: event.id,
+          status: result.state,
+          summary: result.state === 'authorization_pending'
+            ? 'GitHub browser authorization challenge is available to the initiating connector.'
+            : 'GitHub browser authorization could not start.',
+          evidence: result.authSessionId ? [result.authSessionId] : [],
+          ...(result.failureCode ? { decision: result.failureCode } : {}),
         });
         return JSON.stringify(result, null, 2);
       },

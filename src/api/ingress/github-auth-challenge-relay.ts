@@ -2,6 +2,7 @@ import type {
   GithubAuthAudience,
   GithubAuthChallenge,
 } from '../../engine/workers/coding-worker/github/github-auth-types.js';
+import type { NormalizedMessageEvent } from '../../core/types/index.js';
 
 export interface DeliveredGithubAuthChallenge {
   sessionId: string;
@@ -49,6 +50,15 @@ const defaultRelay = new InMemoryGithubAuthChallengeRelay();
 
 export function getGithubAuthChallengeRelay(): GithubAuthChallengeRelay {
   return defaultRelay;
+}
+
+export function githubAuthAudienceFromEvent(event: NormalizedMessageEvent): GithubAuthAudience {
+  return {
+    connector: event.connector,
+    actorId: event.actor.id,
+    conversationId: event.conversation.id,
+    eventId: event.id,
+  };
 }
 
 function sameAudience(left: GithubAuthAudience, right: GithubAuthAudience): boolean {
