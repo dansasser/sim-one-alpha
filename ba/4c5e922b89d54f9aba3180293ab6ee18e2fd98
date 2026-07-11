@@ -1,0 +1,27 @@
+docs/architecture/flue-architecture.md
+  s_65db8ffa7c9620::t_0d2f755a17d0c2 110-111
+src/tests/github-private-clone.test.ts
+  s_65db8ffa7c9620::t_e4058e94fe833f 1-83
+src/tests/github-auth-service.test.ts
+  s_65db8ffa7c9620::t_4a009afe6df7bc 138-187
+docs/architecture/gorombo-flue-map.md
+  s_65db8ffa7c9620::t_b8d1afe2de6175 224-227
+docs/architecture/github-auth-system.md
+  s_65db8ffa7c9620::t_0d2f755a17d0c2 1-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "ba4c5e922b89d54f9aba3180293ab6ee18e2fd98",
+  "prompts": {},
+  "sessions": {
+    "s_65db8ffa7c9620": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f51b3-89d7-7d02-973d-9679f07254a1",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
