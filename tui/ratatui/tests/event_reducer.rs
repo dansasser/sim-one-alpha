@@ -38,6 +38,36 @@ fn reduces_text_delta_then_authoritative_final_message() {
 }
 
 #[test]
+fn nested_worker_text_delta_does_not_enter_the_root_assistant_stream() {
+    let mut transcript = EventTranscript::default();
+
+    transcript.apply_events(&[
+        event(
+            1,
+            serde_json::json!({
+                "type":"text_delta",
+                "text":"CHILD_RAW_OUTPUT",
+                "session":"task:default:worker-1",
+                "parentSession":"default"
+            }),
+        ),
+        event(
+            2,
+            serde_json::json!({"type":"text_delta","text":"root answer","session":"default"}),
+        ),
+    ]);
+
+    assert_eq!(
+        transcript.current_assistant_stream_text(),
+        Some("root answer")
+    );
+    assert!(!transcript
+        .rows()
+        .iter()
+        .any(|row| row.text.contains("CHILD_RAW_OUTPUT")));
+}
+
+#[test]
 fn reduces_thinking_lifecycle_as_progress_row() {
     let mut transcript = EventTranscript::default();
 

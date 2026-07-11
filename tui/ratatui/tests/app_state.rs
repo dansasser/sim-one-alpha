@@ -229,6 +229,191 @@ fn streamed_final_response_reconciles_in_place_after_late_activity() {
 }
 
 #[test]
+fn multiline_stream_final_and_http_result_consolidate_without_orphaned_lines() {
+    let answer = "Good catch - the researcher reports to me.\n\nA bit more detail follows.\n\nSo: I shape the result for you.";
+    let (release_tx, release_rx) = mpsc::channel();
+    let release_rx = Arc::new(Mutex::new(release_rx));
+    let sender_release_rx = Arc::clone(&release_rx);
+    let sender_answer = answer.to_string();
+    let mut app = App::with_agent_sender(
+        "tui-multiline-consolidation",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(move |_, _, _| {
+            sender_release_rx
+                .lock()
+                .expect("release receiver should lock")
+                .recv_timeout(Duration::from_secs(5))
+                .expect("test should release blocked sender");
+            Ok(agent_reply(sender_answer.clone()))
+        }),
+    );
+
+    app.handle_event(AppEvent::Text("explain the research handoff".to_string()));
+    app.handle_event(AppEvent::Submit);
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![
+        FlueEvent::from_value(serde_json::json!({
+            "type":"message_end",
+            "eventIndex":21,
+            "message":{"role":"assistant","content":[{"type":"text","text":answer}]}
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"turn",
+            "eventIndex":23,
+            "isError":false
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"operation",
+            "eventIndex":25,
+            "name":"operation",
+            "isError":false
+        })),
+    ]));
+    app.tick();
+    release_tx.send(()).expect("pending sender should release");
+    wait_for_agent(&mut app);
+
+    let lines = app.transcript_lines();
+    assert_eq!(
+        lines
+            .iter()
+            .filter(|line| {
+                line.as_str() == "assistant: Good catch - the researcher reports to me."
+            })
+            .count(),
+        1,
+        "{lines:?}"
+    );
+    assert_eq!(
+        lines
+            .iter()
+            .filter(|line| line.as_str() == "  A bit more detail follows.")
+            .count(),
+        1,
+        "{lines:?}"
+    );
+    assert_eq!(
+        lines
+            .iter()
+            .filter(|line| line.as_str() == "  So: I shape the result for you.")
+            .count(),
+        1,
+        "{lines:?}"
+    );
+    assert!(!lines
+        .iter()
+        .any(|line| line.contains("waiting for final response")));
+}
+
+#[test]
+fn root_assistant_stream_reuses_one_block_and_nested_worker_output_stays_internal() {
+    let final_answer = "Root answer complete.";
+    let (release_tx, release_rx) = mpsc::channel();
+    let release_rx = Arc::new(Mutex::new(release_rx));
+    let sender_release_rx = Arc::clone(&release_rx);
+    let mut app = App::with_agent_sender(
+        "tui-root-stream",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(move |_, _, _| {
+            sender_release_rx
+                .lock()
+                .expect("release receiver should lock")
+                .recv_timeout(Duration::from_secs(5))
+                .expect("test should release blocked sender");
+            Ok(agent_reply(final_answer))
+        }),
+    );
+
+    app.handle_event(AppEvent::Text("delegate and answer".to_string()));
+    app.handle_event(AppEvent::Submit);
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![
+        FlueEvent::from_value(serde_json::json!({
+            "type":"text_delta",
+            "eventIndex":50,
+            "timestamp":"2026-07-11T18:35:00Z",
+            "session":"task:default:worker-1",
+            "parentSession":"default",
+            "text":"CHILD_RAW_OUTPUT"
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"message_end",
+            "eventIndex":51,
+            "timestamp":"2026-07-11T18:35:01Z",
+            "session":"task:default:worker-1",
+            "parentSession":"default",
+            "message":{"role":"assistant","content":[{"type":"text","text":"CHILD_FINAL_OUTPUT"}]}
+        })),
+    ]));
+    let nested_output_visible = app
+        .transcript_lines()
+        .iter()
+        .any(|line| line.contains("CHILD_RAW_OUTPUT") || line.contains("CHILD_FINAL_OUTPUT"));
+
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![
+        FlueEvent::from_value(serde_json::json!({
+            "type":"text_delta",
+            "eventIndex":5,
+            "timestamp":"2026-07-11T18:37:02Z",
+            "session":"default",
+            "text":"Root answer "
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"text_delta",
+            "eventIndex":6,
+            "timestamp":"2026-07-11T18:37:03Z",
+            "session":"default",
+            "text":"streaming."
+        })),
+    ]));
+    let live_root_count = app
+        .transcript_lines()
+        .iter()
+        .filter(|line| line.as_str() == "assistant: Root answer streaming.")
+        .count();
+
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"message_end",
+            "eventIndex":21,
+            "timestamp":"2026-07-11T18:37:09Z",
+            "session":"default",
+            "message":{"role":"assistant","content":[{"type":"text","text":final_answer}]}
+        }),
+    )]));
+    assert_eq!(
+        app.transcript_lines()
+            .iter()
+            .filter(|line| line.as_str() == "assistant: Root answer complete.")
+            .count(),
+        1,
+        "{:?}",
+        app.transcript_lines()
+    );
+    assert!(!app
+        .transcript_lines()
+        .iter()
+        .any(|line| line.contains("Root answer streaming.")));
+
+    release_tx.send(()).expect("pending sender should release");
+    wait_for_agent(&mut app);
+    assert!(
+        !nested_output_visible,
+        "nested worker output reached the chat"
+    );
+    assert_eq!(live_root_count, 1, "{:?}", app.transcript_lines());
+    assert_eq!(
+        app.transcript_lines()
+            .iter()
+            .filter(|line| line.as_str() == "assistant: Root answer complete.")
+            .count(),
+        1,
+        "{:?}",
+        app.transcript_lines()
+    );
+}
+
+#[test]
 fn pending_tick_advances_spinner_and_elapsed_time() {
     let clock = TestClock::new();
     let (mut app, release, calls) = app_with_blocked_sender(&clock);

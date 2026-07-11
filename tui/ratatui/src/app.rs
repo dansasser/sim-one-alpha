@@ -83,6 +83,7 @@ impl TranscriptRowKind {
 pub struct RenderedTranscriptRow {
     pub text: String,
     pub kind: TranscriptRowKind,
+    pub is_streaming: bool,
 }
 
 pub struct App {
@@ -107,6 +108,7 @@ pub struct App {
     event_transcript: EventTranscript,
     event_row_lines: BTreeMap<String, usize>,
     final_response_range: Option<(usize, usize)>,
+    response_is_streaming: bool,
     transcript_viewport_height: usize,
     transcript_viewport_width: usize,
     startup_phase: StartupPhase,
@@ -237,6 +239,7 @@ impl App {
             event_transcript: EventTranscript::default(),
             event_row_lines: BTreeMap::new(),
             final_response_range: None,
+            response_is_streaming: false,
             transcript_viewport_height: SCROLL_PAGE_LINES,
             transcript_viewport_width: 80,
             startup_phase: StartupPhase::Idle,
@@ -299,6 +302,7 @@ impl App {
         self.startup_attach_stream = attach_stream;
         self.agent_status = "preflight".to_string();
         self.final_response_range = None;
+        self.response_is_streaming = false;
         self.push_speaker_text(
             "preflight",
             &format!("gateway ready ({})", self.gateway_status),
@@ -339,10 +343,23 @@ impl App {
                     .pending_response
                     .as_ref()
                     .and_then(|_| final_assistant_message(&events));
+                let has_root_text_delta = self.pending_response.is_some()
+                    && events
+                        .iter()
+                        .any(|event| event.event_type == "text_delta" && !event.is_nested());
                 self.event_transcript.apply_events(&events);
+                let stream_preview = if final_message.is_none() && has_root_text_delta {
+                    self.event_transcript
+                        .current_assistant_stream_text()
+                        .map(str::to_string)
+                } else {
+                    None
+                };
                 self.sync_event_transcript_rows();
                 if let Some(final_message) = final_message {
                     self.settle_pending_stream_response(&final_message);
+                } else if let Some(stream_preview) = stream_preview {
+                    self.settle_pending_stream_preview(&stream_preview);
                 }
             }
             AgentStreamUpdate::Control(control) => {
@@ -373,6 +390,7 @@ impl App {
             Ok(response) => {
                 let transcript_line = pending.transcript_line;
                 self.pending_response = None;
+                self.response_is_streaming = false;
                 self.agent_status = "ready".to_string();
                 match response.result {
                     Ok(reply) => {
@@ -399,6 +417,7 @@ impl App {
             Err(TryRecvError::Disconnected) => {
                 let transcript_line = pending.transcript_line;
                 self.pending_response = None;
+                self.response_is_streaming = false;
                 self.agent_status = "error".to_string();
                 self.settle_pending_response_line(
                     transcript_line,
@@ -548,11 +567,21 @@ impl App {
     }
 
     pub fn transcript_rendered_rows(&self) -> Vec<RenderedTranscriptRow> {
-        let mut rows = wrap_transcript_rows(&self.transcript_lines, self.transcript_viewport_width);
+        let streaming_range = if self.response_is_streaming {
+            self.final_response_range
+        } else {
+            None
+        };
+        let mut rows = wrap_transcript_rows(
+            &self.transcript_lines,
+            self.transcript_viewport_width,
+            streaming_range,
+        );
         rows.extend(std::iter::repeat_n(
             RenderedTranscriptRow {
                 text: String::new(),
                 kind: TranscriptRowKind::Other,
+                is_streaming: false,
             },
             TRANSCRIPT_TAIL_MARGIN_ROWS,
         ));
@@ -657,6 +686,7 @@ impl App {
         let prompt = self.prompt.trim().to_string();
         if !prompt.is_empty() && self.pending_response.is_none() {
             self.final_response_range = None;
+            self.response_is_streaming = false;
         }
 
         if self.handle_local_slash_command(&prompt) {
@@ -822,6 +852,7 @@ impl App {
         self.event_transcript = EventTranscript::default();
         self.event_row_lines.clear();
         self.final_response_range = None;
+        self.response_is_streaming = false;
         self.last_stream_event = None;
         if had_stream {
             self.stream_status = StreamStatus::Connecting;
@@ -899,9 +930,29 @@ Use the workspace identity and user context already loaded for this agent. Greet
     }
 
     fn settle_pending_response_line(&mut self, line_index: usize, speaker: &str, text: &str) {
-        self.final_response_range = None;
+        let existing_range = self.final_response_range.take();
         let replacement = speaker_lines(speaker, text);
         let replacement_len = replacement.len();
+
+        if let Some((range_start, range_len)) = existing_range.filter(|(range_start, range_len)| {
+            *range_len > 0
+                && *range_start < self.transcript_lines.len()
+                && line_index >= *range_start
+                && line_index < range_start.saturating_add(*range_len)
+        }) {
+            let range_end = range_start
+                .saturating_add(range_len)
+                .min(self.transcript_lines.len());
+            self.transcript_lines
+                .splice(range_start..range_end, replacement);
+            self.reindex_event_rows_after_splice(
+                range_start,
+                range_end.saturating_sub(range_start),
+                replacement_len,
+            );
+            self.final_response_range = Some((range_start, replacement_len));
+            return;
+        }
 
         if line_index + 1 == self.transcript_lines.len() {
             self.transcript_lines
@@ -930,12 +981,33 @@ Use the workspace identity and user context already loaded for this agent. Greet
         };
 
         self.settle_pending_response_line(line_index, "assistant", text.trim());
+        self.response_is_streaming = false;
         if let (Some(pending), Some((final_start, _))) =
             (&mut self.pending_response, self.final_response_range)
         {
             pending.transcript_line = final_start;
         }
         self.agent_status = "finalizing".to_string();
+        self.after_transcript_changed();
+    }
+
+    fn settle_pending_stream_preview(&mut self, text: &str) {
+        let Some(line_index) = self
+            .pending_response
+            .as_ref()
+            .map(|pending| pending.transcript_line)
+        else {
+            return;
+        };
+
+        self.settle_pending_response_line(line_index, "assistant", text);
+        self.response_is_streaming = true;
+        if let (Some(pending), Some((response_start, _))) =
+            (&mut self.pending_response, self.final_response_range)
+        {
+            pending.transcript_line = response_start;
+        }
+        self.agent_status = "responding".to_string();
         self.after_transcript_changed();
     }
 
@@ -946,6 +1018,9 @@ Use the workspace identity and user context already loaded for this agent. Greet
     }
 
     fn update_pending_transcript_line(&mut self) {
+        if self.final_response_range.is_some() {
+            return;
+        }
         let Some(pending) = &self.pending_response else {
             return;
         };
@@ -1123,12 +1198,19 @@ fn initial_transcript() -> Vec<String> {
     ]
 }
 
-fn wrap_transcript_rows(lines: &[String], width: usize) -> Vec<RenderedTranscriptRow> {
+fn wrap_transcript_rows(
+    lines: &[String],
+    width: usize,
+    streaming_range: Option<(usize, usize)>,
+) -> Vec<RenderedTranscriptRow> {
     let mut wrapped = Vec::new();
     let mut previous_kind = TranscriptRowKind::Other;
 
-    for line in lines {
+    for (line_index, line) in lines.iter().enumerate() {
         let kind = transcript_row_kind(line, previous_kind);
+        let is_streaming = streaming_range.is_some_and(|(start, len)| {
+            line_index >= start && line_index < start.saturating_add(len)
+        });
         if kind != TranscriptRowKind::Other {
             previous_kind = kind;
         }
@@ -1138,6 +1220,7 @@ fn wrap_transcript_rows(lines: &[String], width: usize) -> Vec<RenderedTranscrip
                 .map(|row| RenderedTranscriptRow {
                     text: row.text,
                     kind,
+                    is_streaming,
                 }),
         );
     }
@@ -1195,6 +1278,7 @@ fn final_assistant_message(events: &[FlueEvent]) -> Option<String> {
     events.iter().rev().find_map(|event| {
         if event.event_type != "message_end"
             || extract_role(&event.value).unwrap_or("assistant") != "assistant"
+            || event.is_nested()
         {
             return None;
         }

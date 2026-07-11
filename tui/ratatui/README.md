@@ -2,7 +2,7 @@
 
 This directory contains the production local terminal client for SIM-ONE Alpha.
 
-It is a local gateway client, not the agent runtime. It connects to the same SIM-ONE Alpha gateway used by other connectors and clients, starts the built server when needed, sends prompts to the Flue orchestrator agent, and renders the returned assistant text in the transcript.
+It is a local gateway client, not the agent runtime. It connects to the same SIM-ONE Alpha gateway used by other connectors and clients, starts the built server when needed, sends prompts to the Flue orchestrator agent, and consolidates root-orchestrator live/final assistant output into one transcript block. Nested worker response payloads remain internal to the orchestrator.
 
 The repo-level implementation guide is `docs/architecture/tui-cli-session-flow.md`.
 

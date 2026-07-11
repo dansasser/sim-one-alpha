@@ -19,6 +19,16 @@ pub(crate) fn thinking_style() -> Style {
         .add_modifier(Modifier::ITALIC)
 }
 
+pub(crate) fn live_assistant_body_style() -> Style {
+    Style::default().add_modifier(Modifier::DIM)
+}
+
+pub(crate) fn live_assistant_prefix_style() -> Style {
+    Style::default()
+        .fg(Color::Cyan)
+        .add_modifier(Modifier::BOLD | Modifier::DIM)
+}
+
 pub(crate) fn transcript_prefix_style(kind: TranscriptRowKind) -> Option<Style> {
     let color = match kind {
         TranscriptRowKind::Assistant => Color::Cyan,

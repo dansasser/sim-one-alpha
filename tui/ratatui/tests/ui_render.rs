@@ -566,6 +566,96 @@ fn flue_final_message_is_visible_before_http_request_settles() {
 }
 
 #[test]
+fn live_assistant_stream_is_dimmed_until_final_message_replaces_it() {
+    let backend = TestBackend::new(80, 20);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let (release_tx, release_rx) = mpsc::channel();
+    let release_rx = Arc::new(Mutex::new(release_rx));
+    let sender_release_rx = Arc::clone(&release_rx);
+    let mut app = App::with_agent_sender(
+        "tui-live-assistant-style",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(move |_, _, _| {
+            sender_release_rx
+                .lock()
+                .expect("release receiver should lock")
+                .recv_timeout(Duration::from_secs(2))
+                .expect("test should release blocked sender");
+            Ok(AgentReply {
+                text: "Live answer finalized.".to_string(),
+                session_id: None,
+                command_name: None,
+                session_created: None,
+            })
+        }),
+    );
+    app.handle_event(AppEvent::Text("stream the answer".to_string()));
+    app.handle_event(AppEvent::Submit);
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![
+        FlueEvent::from_value(serde_json::json!({
+            "type":"text_delta",
+            "eventIndex":5,
+            "timestamp":"2026-07-11T18:37:02Z",
+            "session":"default",
+            "text":"Live answer "
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"text_delta",
+            "eventIndex":6,
+            "timestamp":"2026-07-11T18:37:03Z",
+            "session":"default",
+            "text":"streaming."
+        })),
+    ]));
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("live assistant stream should render");
+    release_tx.send(()).expect("pending sender should release");
+    let live_row = find_buffer_row(&terminal, "assistant: Live answer streaming.");
+    for x in [3, 14] {
+        assert!(
+            terminal
+                .backend()
+                .buffer()
+                .cell(Position::new(x, live_row))
+                .expect("live assistant cell should exist")
+                .style()
+                .add_modifier
+                .contains(Modifier::DIM),
+            "live assistant cell at x={x} should be dimmed"
+        );
+    }
+
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"message_end",
+            "eventIndex":21,
+            "timestamp":"2026-07-11T18:37:09Z",
+            "session":"default",
+            "message":{"role":"assistant","content":[{"type":"text","text":"Live answer finalized."}]}
+        }),
+    )]));
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("final assistant message should render");
+    let final_row = find_buffer_row(&terminal, "assistant: Live answer finalized.");
+    for x in [3, 14] {
+        assert!(!terminal
+            .backend()
+            .buffer()
+            .cell(Position::new(x, final_row))
+            .expect("final assistant cell should exist")
+            .style()
+            .add_modifier
+            .contains(Modifier::DIM));
+    }
+
+    wait_for_agent(&mut app);
+}
+
+#[test]
 fn render_preserves_manual_scrollback_after_transcript_growth() {
     let backend = TestBackend::new(40, 12);
     let mut terminal = Terminal::new(backend).expect("test backend should initialize");

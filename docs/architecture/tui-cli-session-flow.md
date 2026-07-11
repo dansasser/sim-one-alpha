@@ -34,7 +34,7 @@ scripts/test-ratatui-product.mjs
   Packaged product smoke for the exact built `sim-one` path.
 
 scripts/test-ratatui-visible-final.py
-  POSIX PTY regression that delivers Flue message_end while holding the HTTP result open and verifies the packaged TUI renders the answer immediately.
+  POSIX PTY regression that delivers nested worker output, a root assistant text delta, and a multiline root message_end while holding the HTTP result open. Verifies the packaged TUI keeps worker payloads internal and renders the consolidated root answer immediately.
 ```
 
 The TUI is a connector surface, not an agent runtime. It must not own orchestration, protocol loading, tool selection, model execution, worker behavior, or memory/RAG decisions.
@@ -150,21 +150,25 @@ TUI prompt submit
 
 Prompt editing is local TUI state. Enter submits normally; when the character immediately before the cursor is `/`, Enter consumes that slash and inserts a newline instead. Enter repeat events are discarded at the crossterm mapping boundary so the newline press cannot become an immediate second submit. Transcript and prompt rendering share one word-boundary row layout: a word that does not fit moves intact to the next row and is never split across rows. Prompt rows retain source character ranges while wrapping and cursor placement use Unicode terminal display columns. This keeps emoji, CJK double-width glyphs, and combining marks aligned without changing byte-safe prompt editing. The editor grows to five visible rows and then scrolls locally. Prompt-height changes recalculate the transcript viewport while preserving live-tail or scrolled-back state; they do not alter the connector session or Flue stream offset.
 
-Before drawing, canonical transcript strings are converted into semantic rendered rows (`User`, `Assistant`, `Thinking`, tool/task/activity kinds, errors, system/preflight, and fallback rows). The transcript reserves a two-column left margin and deducts it from the row-layout width before wrapping; the margin contracts only when necessary to keep one content column on extremely narrow terminals. Wrapped rows inherit the semantic kind and margin of their source line, including multiline user and assistant continuations. The renderer splits a recognized first-row label, including its colon, into a bold semantic `Span`; the body remains in its normal semantic style, and continuation rows do not repeat the label accent. `theme.rs` owns the terminal palette: assistant cyan, operation yellow, tool blue, task magenta, turn green, system/preflight light green, log dark gray, and error light red. User rows retain a full-width gray background across the margin, the active prompt editor receives a darker gray background, and thinking uses gray italic body text with a bold gray italic label. Italics are additive terminal metadata; gray remains the visual fallback when a terminal ignores that modifier.
+Before drawing, canonical transcript strings are converted into semantic rendered rows (`User`, `Assistant`, `Thinking`, tool/task/activity kinds, errors, system/preflight, and fallback rows). The transcript reserves a two-column left margin and deducts it from the row-layout width before wrapping; the margin contracts only when necessary to keep one content column on extremely narrow terminals. Wrapped rows inherit the semantic kind, streaming state, and margin of their source line, including multiline user and assistant continuations. The renderer splits a recognized first-row label, including its colon, into a bold semantic `Span`; the body remains in its normal semantic style, and continuation rows do not repeat the label accent. `theme.rs` owns the terminal palette: assistant cyan, operation yellow, tool blue, task magenta, turn green, system/preflight light green, log dark gray, and error light red. Root assistant rows add the dim modifier while live text is incomplete and remove it at finalization. User rows retain a full-width gray background across the margin, the active prompt editor receives a darker gray background, and thinking uses gray italic body text with a bold gray italic label. Italics and dimming are additive terminal metadata; color and labels remain the fallback distinctions when a terminal ignores those modifiers.
 
 Live-tail is a render-time invariant, not a best-effort side effect of individual transcript mutations. After wrapping transcript lines for the current frame width, the renderer sets the scroll offset to the exact maximum whenever `follow_tail` is active. When the user has scrolled back, the renderer only clamps out-of-range offsets and does not snap to the tail.
 
-Final response display has two coordinated inputs:
+Assistant response display has two coordinated inputs:
 
 ```text
-Flue live stream emits assistant message_end
--> App replaces the pending spinner row with the final assistant text immediately
+Flue live stream emits root assistant text_delta
+-> App replaces the pending spinner with one dimmed assistant range
+-> later root text_delta events replace that complete range in place
+-> nested worker/subagent text_delta and message_end remain internal
+-> Flue emits authoritative root assistant message_end
+-> App replaces the complete live range and removes dimming
 -> later activity rows are inserted before the anchored final response
 -> POST /api/chat/events settles
--> App reconciles response/session/command metadata into the same final row
+-> App reconciles response/session/command metadata over the same complete range
 ```
 
-The live Flue `message_end` event is the immediate display source. The synchronous HTTP result remains authoritative for request errors and session/command metadata, but the TUI must not hide an already-completed Flue answer while waiting for that second transport to close. Pending-row indices and the final-response anchor are reindexed together when activity rows are inserted, preventing late operation events from overwriting or moving the answer.
+The TUI accepts response text only from root-orchestrator events, identified by the absence of Flue's nested `parentSession` metadata. This preserves the connector boundary: workers return results to the orchestrator, while the orchestrator returns the chat response. The synchronous HTTP result remains authoritative for request errors and session/command metadata, but response reconciliation is idempotent across the full multiline range. Pending-row indices and the response anchor are reindexed together when activity rows are inserted, preventing late operation events, pending ticks, or HTTP settlement from overwriting the first line, orphaning continuations, or duplicating the answer.
 
 `transcript_rendered_lines()` appends one virtual blank tail-margin row after wrapping. This sentinel gives the live-tail calculation a deterministic final row and leaves visual space below the newest response. It never enters `transcript_lines`, durable session history, copied context, or Flue persistence.
 

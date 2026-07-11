@@ -39,7 +39,7 @@ Use `--session <id>` only when you intentionally want to attach to an existing s
 
 The top pane is the transcript and context viewport. It contains user prompts, assistant responses, stream activity rows, and local system notices.
 
-Submitted user prompts render as full-width gray bands, including wrapped and explicit-newline continuation rows. Recognized transcript labels include the colon and use bold semantic accents: `assistant:` cyan, `operation:` yellow, `tool:` blue, `task:` magenta, `turn:` green, `system:` and `preflight:` light green, `log:` dark gray, and `error:` light red. Only the label is accented; assistant and activity bodies retain the normal terminal foreground. Thinking labels are bold gray italic, and thinking bodies remain lower-contrast gray italic. Terminals without italic support still retain the gray distinction.
+Submitted user prompts render as full-width gray bands, including wrapped and explicit-newline continuation rows. Recognized transcript labels include the colon and use bold semantic accents: `assistant:` cyan, `operation:` yellow, `tool:` blue, `task:` magenta, `turn:` green, `system:` and `preflight:` light green, `log:` dark gray, and `error:` light red. Only the label is accented; assistant and activity bodies retain the normal terminal foreground. Root-agent assistant text is dimmed while `text_delta` events are still arriving, then returns to normal intensity when the authoritative final arrives. Thinking labels are bold gray italic, and thinking bodies remain lower-contrast gray italic. Terminals without italic or dim support still retain their color and label distinctions.
 
 All transcript text uses a two-column left margin inside the pane border. The margin is deducted from the available wrap width so text wraps before the right edge; on extremely narrow terminals it contracts to preserve at least one content column. Word-wrapped and explicit multiline continuation rows keep the same margin and their semantic body style without repeating or extending the label accent. Submitted `you:` rows remain full-width gray bands, including the margin cells, instead of receiving a separate prefix color.
 
@@ -74,7 +74,9 @@ Transcript lines use the same word-boundary wrapping as the prompt. When the nex
 
 While the title shows `Transcript - live tail`, every rendered frame anchors the viewport to the actual last wrapped transcript row. Final responses, retries, activity updates, and prompt-height changes therefore keep the newest line visible. Manual scrollback disables that anchoring until the user returns to the tail.
 
-The final assistant message is rendered as soon as Flue emits its authoritative `message_end` event. The still-running HTTP prompt request then reconciles command/session metadata or an error into that same transcript row instead of creating a duplicate response. Tool, turn, and operation rows that arrive afterward remain above the final response.
+Only root-orchestrator assistant output becomes a chat response. Nested worker/subagent `text_delta` and `message_end` payloads remain internal to the parent agent; task and tool activity can still be represented by their structured activity rows. Root-agent `text_delta` events replace the pending spinner with one dimmed `assistant:` block and update that block in place.
+
+The final assistant message is rendered as soon as Flue emits its authoritative root `message_end` event. It replaces the complete live block, including every multiline continuation, and removes dimming. The still-running HTTP prompt request then reconciles command/session metadata, errors, and response text over that same complete range instead of creating a duplicate response or leaving orphaned continuation lines. Tool, turn, and operation rows that arrive afterward remain above the final response.
 
 Live tail includes one blank visual margin row after the final transcript content. This row is a rendering sentinel only: it is not persisted in the session, included in agent context, or added to transcript history. The newest response should always appear directly above it.
 
@@ -125,7 +127,7 @@ If the gateway fails to start, run the product smoke:
 pnpm run test:tui:ratatui
 ```
 
-On POSIX systems, this smoke launches the packaged `sim-one` command in a real PTY and verifies slash-Enter multiline input against a local gateway stub. It also holds the HTTP prompt response open after sending a final Flue `message_end` event and verifies that the packaged TUI already rendered the answer. Cross-platform Rust integration tests exercise the same input, app-state, ordering, terminal-size, and framebuffer behavior.
+On POSIX systems, this smoke launches the packaged `sim-one` command in a real PTY and verifies slash-Enter multiline input against a local gateway stub. It also sends nested worker output, a root live assistant delta, and a multiline root `message_end` while holding the HTTP prompt response open. The smoke verifies worker payloads remain internal and the packaged TUI renders the root live/final answer before HTTP settles. Cross-platform Rust integration tests exercise exact multiline consolidation, style transitions, input, app-state, ordering, terminal-size, and framebuffer behavior.
 
 If the TUI exits after `/exit`, use the printed session id to resume:
 

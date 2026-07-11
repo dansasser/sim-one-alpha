@@ -11,7 +11,8 @@ use crate::text_wrap::{
     display_width, display_width_between, pad_to_width, wrap_words, WrappedLine,
 };
 use crate::theme::{
-    prompt_editor_style, thinking_style, transcript_prefix_style, user_prompt_style,
+    live_assistant_body_style, live_assistant_prefix_style, prompt_editor_style, thinking_style,
+    transcript_prefix_style, user_prompt_style,
 };
 
 const PROMPT_GUTTER_WIDTH: usize = 2;
@@ -86,7 +87,9 @@ fn rendered_transcript_line(row: RenderedTranscriptRow, visible_width: usize) ->
         );
     }
 
-    let body_style = if row.kind == TranscriptRowKind::Thinking {
+    let body_style = if row.kind == TranscriptRowKind::Assistant && row.is_streaming {
+        live_assistant_body_style()
+    } else if row.kind == TranscriptRowKind::Thinking {
         thinking_style()
     } else {
         Style::default()
@@ -97,7 +100,12 @@ fn rendered_transcript_line(row: RenderedTranscriptRow, visible_width: usize) ->
     let Some(body) = row.text.strip_prefix(prefix) else {
         return Line::from(vec![Span::raw(margin), Span::styled(row.text, body_style)]);
     };
-    let Some(prefix_style) = transcript_prefix_style(row.kind) else {
+    let prefix_style = if row.kind == TranscriptRowKind::Assistant && row.is_streaming {
+        Some(live_assistant_prefix_style())
+    } else {
+        transcript_prefix_style(row.kind)
+    };
+    let Some(prefix_style) = prefix_style else {
         return Line::from(vec![Span::raw(margin), Span::styled(row.text, body_style)]);
     };
 

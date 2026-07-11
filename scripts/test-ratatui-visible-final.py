@@ -23,9 +23,15 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
 SIM_ONE = ROOT / ".gorombo" / "sim-one-cli" / "sim-one"
+LIVE_MARKER = b"LIVE_ASSISTANT_STREAM_MARKER"
+CHILD_MARKER = b"CHILD_RAW_OUTPUT_MARKER"
 FINAL_MARKER = b"FINAL_VISIBLE_MARKER"
+FINAL_CONTINUATION_MARKER = b"FINAL_CONTINUATION_MARKER"
+FINAL_TEXT = f"{FINAL_MARKER.decode()}\n\n{FINAL_CONTINUATION_MARKER.decode()}"
 LIVE_CONNECTED = threading.Event()
 PROMPT_RECEIVED = threading.Event()
+LIVE_DELTA_SENT = threading.Event()
+ALLOW_FINAL = threading.Event()
 SSE_SENT = threading.Event()
 RELEASE_HTTP = threading.Event()
 
@@ -49,22 +55,60 @@ class GatewayHandler(BaseHTTPRequestHandler):
             LIVE_CONNECTED.set()
             if not PROMPT_RECEIVED.wait(5):
                 return
-            events = [
+            live_events = [
+                {
+                    "type": "text_delta",
+                    "eventIndex": 50,
+                    "timestamp": "2026-07-11T18:35:00Z",
+                    "session": "task:default:worker-1",
+                    "parentSession": "default",
+                    "text": CHILD_MARKER.decode(),
+                },
                 {
                     "type": "message_end",
-                    "eventIndex": 200,
-                    "role": "assistant",
-                    "text": FINAL_MARKER.decode(),
+                    "eventIndex": 51,
+                    "timestamp": "2026-07-11T18:35:01Z",
+                    "session": "task:default:worker-1",
+                    "parentSession": "default",
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": CHILD_MARKER.decode()}],
+                    },
                 },
-                {"type": "turn", "eventIndex": 201, "isError": False},
+                {
+                    "type": "text_delta",
+                    "eventIndex": 5,
+                    "timestamp": "2026-07-11T18:37:02Z",
+                    "session": "default",
+                    "text": LIVE_MARKER.decode(),
+                },
+            ]
+            live_frame = f"event: data\ndata: {json.dumps(live_events)}\n\n".encode()
+            self.wfile.write(live_frame)
+            self.wfile.flush()
+            LIVE_DELTA_SENT.set()
+            if not ALLOW_FINAL.wait(5):
+                return
+            final_events = [
+                {
+                    "type": "message_end",
+                    "eventIndex": 21,
+                    "timestamp": "2026-07-11T18:37:09Z",
+                    "session": "default",
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": FINAL_TEXT}],
+                    },
+                },
+                {"type": "turn", "eventIndex": 23, "isError": False},
                 {
                     "type": "operation",
-                    "eventIndex": 202,
+                    "eventIndex": 25,
                     "name": "operation",
                     "isError": False,
                 },
             ]
-            frame = f"event: data\ndata: {json.dumps(events)}\n\n".encode()
+            frame = f"event: data\ndata: {json.dumps(final_events)}\n\n".encode()
             self.wfile.write(frame)
             self.wfile.flush()
             SSE_SENT.set()
@@ -90,7 +134,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
         PROMPT_RECEIVED.set()
         if not RELEASE_HTTP.wait(10):
             return
-        response = json.dumps({"result": {"text": FINAL_MARKER.decode()}}).encode()
+        response = json.dumps({"result": {"text": FINAL_TEXT}}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(response)))
@@ -179,21 +223,29 @@ def main():
         if not LIVE_CONNECTED.wait(5):
             raise AssertionError("packaged TUI did not attach its Flue live stream")
         os.write(master_fd, b"show the final response\r")
+        if not LIVE_DELTA_SENT.wait(5):
+            raise AssertionError("mock gateway did not deliver the live assistant delta")
+        live_output = read_until(master_fd, LIVE_MARKER, 5)
+        if CHILD_MARKER in live_output:
+            raise AssertionError(
+                "packaged TUI exposed nested worker output as a chat response; "
+                f"output tail={bytes(live_output[-3000:])!r}"
+            )
+        ALLOW_FINAL.set()
         if not SSE_SENT.wait(5):
             raise AssertionError("mock gateway did not deliver the final Flue event frame")
-        output = read_for(master_fd, 1.5)
-        visible_before_http = FINAL_MARKER in output
+        output = read_until(master_fd, FINAL_CONTINUATION_MARKER, 5)
+        visible_before_http = FINAL_MARKER in output and FINAL_CONTINUATION_MARKER in output
         RELEASE_HTTP.set()
-        output_after_http = read_until(master_fd, FINAL_MARKER, 5)
+        output_after_http = read_for(master_fd, 1.0)
         if not visible_before_http:
             raise AssertionError(
-                "packaged TUI did not render Flue's final message before the HTTP request settled; "
-                "the same final marker appeared immediately after the HTTP response was released; "
+                "packaged TUI did not render Flue's multiline final message before the HTTP request settled; "
                 f"before-HTTP output tail={bytes(output[-3000:])!r}; "
                 f"after-HTTP output tail={bytes(output_after_http[-1000:])!r}"
             )
         print(
-            "[ratatui-visible-final] packaged sim-one rendered Flue's final message before the HTTP request settled."
+            "[ratatui-visible-final] packaged sim-one kept nested worker output internal, rendered a live root assistant block, and consolidated Flue's multiline final before HTTP settled."
         )
     finally:
         RELEASE_HTTP.set()

@@ -92,6 +92,9 @@ impl EventTranscript {
                 }
             }
             "text_delta" => {
+                if event.is_nested() {
+                    return;
+                }
                 self.current_turn.state = TurnState::ModelActive;
                 let text = extract_text(&event.value).unwrap_or_default();
                 self.current_turn.activity = Some("assistant text".to_string());
@@ -243,6 +246,12 @@ impl EventTranscript {
 
     pub fn current_turn(&self) -> &CurrentTurn {
         &self.current_turn
+    }
+
+    pub fn current_assistant_stream_text(&self) -> Option<&str> {
+        let id = self.ephemeral_row_id("assistant-stream");
+        let index = self.row_index.get(&id).copied()?;
+        self.rows.get(index)?.text.strip_prefix("assistant: ")
     }
 
     fn has_row(&self, id: &str) -> bool {
