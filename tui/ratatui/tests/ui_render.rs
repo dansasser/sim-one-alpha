@@ -661,6 +661,168 @@ fn renders_thinking_and_tool_activity_rows() {
 }
 
 #[test]
+fn semantic_transcript_prefixes_are_bold_and_color_coded() {
+    let backend = TestBackend::new(120, 40);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = app_with_pending_response();
+    app.handle_event(AppEvent::Text("format this response".to_string()));
+    app.handle_event(AppEvent::Submit);
+    wait_for_agent(&mut app);
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![
+        FlueEvent::from_value(serde_json::json!({
+            "type":"thinking_delta",
+            "eventIndex":100,
+            "text":"checking styles"
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"tool_start",
+            "eventIndex":101,
+            "toolCallId":"format-tool",
+            "toolName":"formatter"
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"task_start",
+            "eventIndex":102,
+            "taskId":"format-task",
+            "taskName":"reviewer"
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"operation_start",
+            "eventIndex":103,
+            "name":"render"
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"log",
+            "eventIndex":104,
+            "text":"frame ready"
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"turn_start",
+            "eventIndex":105
+        })),
+    ]));
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("semantic transcript shell should render");
+
+    assert_prefix_style(
+        &terminal,
+        "system: SIM-ONE Alpha",
+        "system:",
+        Color::LightGreen,
+    );
+    assert_prefix_style(
+        &terminal,
+        "preflight: waiting",
+        "preflight:",
+        Color::LightGreen,
+    );
+    assert_prefix_style(&terminal, "assistant: done", "assistant:", Color::Cyan);
+    assert_prefix_style(
+        &terminal,
+        "thinking: checking styles",
+        "thinking:",
+        Color::DarkGray,
+    );
+    assert_prefix_style(&terminal, "tool: formatter running", "tool:", Color::Blue);
+    assert_prefix_style(&terminal, "task: reviewer running", "task:", Color::Magenta);
+    assert_prefix_style(
+        &terminal,
+        "operation: render running",
+        "operation:",
+        Color::Yellow,
+    );
+    assert_prefix_style(&terminal, "turn: model active", "turn:", Color::Green);
+    assert_prefix_style(&terminal, "log: frame ready", "log:", Color::DarkGray);
+}
+
+#[test]
+fn semantic_prefix_formatting_preserves_body_and_continuation_styles() {
+    let backend = TestBackend::new(24, 16);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::with_agent_sender(
+        "tui-prefix-wrap",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| {
+            Ok(AgentReply {
+                text: "alpha bravo charlie delta echo".to_string(),
+                session_id: None,
+                command_name: None,
+                session_created: None,
+            })
+        }),
+    );
+    app.handle_event(AppEvent::Text("wrap it".to_string()));
+    app.handle_event(AppEvent::Submit);
+    wait_for_agent(&mut app);
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("wrapped semantic transcript shell should render");
+
+    let assistant_row = find_buffer_row(&terminal, "assistant: alpha");
+    let assistant_body = terminal
+        .backend()
+        .buffer()
+        .cell(Position::new(12, assistant_row))
+        .expect("assistant body cell should exist");
+    assert_eq!(assistant_body.style().fg, Some(Color::Reset));
+    assert!(!assistant_body.style().add_modifier.contains(Modifier::BOLD));
+
+    let continuation_row = find_buffer_row(&terminal, "bravo charlie delta");
+    let continuation_cell = terminal
+        .backend()
+        .buffer()
+        .cell(Position::new(1, continuation_row))
+        .expect("assistant continuation cell should exist");
+    assert_eq!(continuation_cell.style().fg, Some(Color::Reset));
+    assert!(!continuation_cell
+        .style()
+        .add_modifier
+        .contains(Modifier::BOLD));
+
+    let user_row = find_buffer_row(&terminal, "you: wrap it");
+    assert_eq!(
+        terminal
+            .backend()
+            .buffer()
+            .cell(Position::new(1, user_row))
+            .expect("user row cell should exist")
+            .style()
+            .bg,
+        Some(Color::Rgb(52, 52, 56))
+    );
+}
+
+#[test]
+fn error_prefix_is_bold_light_red() {
+    let backend = TestBackend::new(80, 16);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::with_agent_sender(
+        "tui-prefix-error",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| Err("gateway rejected the prompt".to_string())),
+    );
+    app.handle_event(AppEvent::Text("trigger error".to_string()));
+    app.handle_event(AppEvent::Submit);
+    wait_for_agent(&mut app);
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("error transcript shell should render");
+
+    assert_prefix_style(
+        &terminal,
+        "error: gateway rejected",
+        "error:",
+        Color::LightRed,
+    );
+}
+
+#[test]
 fn narrow_transcript_tail_reaches_wrapped_bottom_row() {
     let backend = TestBackend::new(24, 10);
     let mut terminal = Terminal::new(backend).expect("test backend should initialize");
@@ -933,4 +1095,42 @@ fn find_buffer_row(terminal: &Terminal<TestBackend>, needle: &str) -> u16 {
                 terminal_buffer_lines(terminal)
             )
         })
+}
+
+fn assert_prefix_style(
+    terminal: &Terminal<TestBackend>,
+    row_needle: &str,
+    prefix: &str,
+    expected_color: Color,
+) {
+    let row = find_buffer_row(terminal, row_needle);
+    for offset in 0..prefix.len() {
+        let cell = terminal
+            .backend()
+            .buffer()
+            .cell(Position::new(1 + offset as u16, row))
+            .expect("prefix cell should exist");
+        assert_eq!(
+            cell.style().fg,
+            Some(expected_color),
+            "wrong prefix color for {row_needle:?} at offset {offset}"
+        );
+        assert!(
+            cell.style().add_modifier.contains(Modifier::BOLD),
+            "prefix should be bold for {row_needle:?} at offset {offset}"
+        );
+    }
+
+    let body_cell = terminal
+        .backend()
+        .buffer()
+        .cell(Position::new(2 + prefix.len() as u16, row))
+        .expect("body cell should exist");
+    if prefix == "thinking:" {
+        assert_eq!(body_cell.style().fg, Some(Color::DarkGray));
+        assert!(body_cell.style().add_modifier.contains(Modifier::ITALIC));
+    } else {
+        assert_eq!(body_cell.style().fg, Some(Color::Reset));
+        assert!(!body_cell.style().add_modifier.contains(Modifier::BOLD));
+    }
 }

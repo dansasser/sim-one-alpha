@@ -61,6 +61,24 @@ pub enum TranscriptRowKind {
     Other,
 }
 
+impl TranscriptRowKind {
+    pub fn prefix(self) -> Option<&'static str> {
+        match self {
+            Self::Assistant => Some("assistant:"),
+            Self::Thinking => Some("thinking:"),
+            Self::Tool => Some("tool:"),
+            Self::Task => Some("task:"),
+            Self::Operation => Some("operation:"),
+            Self::Progress => Some("turn:"),
+            Self::Log => Some("log:"),
+            Self::Error => Some("error:"),
+            Self::System => Some("system:"),
+            Self::Preflight => Some("preflight:"),
+            Self::User | Self::Other => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderedTranscriptRow {
     pub text: String,

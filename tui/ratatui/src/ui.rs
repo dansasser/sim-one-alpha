@@ -6,11 +6,13 @@ use ratatui::widgets::{
 };
 use ratatui::Frame;
 
-use crate::app::{App, TranscriptRowKind};
+use crate::app::{App, RenderedTranscriptRow, TranscriptRowKind};
 use crate::text_wrap::{
     display_width, display_width_between, pad_to_width, wrap_words, WrappedLine,
 };
-use crate::theme::{prompt_editor_style, thinking_style, user_prompt_style};
+use crate::theme::{
+    prompt_editor_style, thinking_style, transcript_prefix_style, user_prompt_style,
+};
 
 const PROMPT_GUTTER_WIDTH: usize = 2;
 const PROMPT_MIN_VISIBLE_ROWS: usize = 2;
@@ -47,13 +49,7 @@ fn render_transcript(frame: &mut Frame<'_>, app: &mut App, area: ratatui::layout
         .into_iter()
         .skip(start)
         .take(visible_height)
-        .map(|row| match row.kind {
-            TranscriptRowKind::User => {
-                Line::styled(pad_to_width(&row.text, visible_width), user_prompt_style())
-            }
-            TranscriptRowKind::Thinking => Line::styled(row.text, thinking_style()),
-            _ => Line::raw(row.text),
-        })
+        .map(|row| rendered_transcript_line(row, visible_width))
         .collect::<Vec<_>>();
     let title = if app.follow_tail() {
         "Transcript - live tail"
@@ -75,6 +71,32 @@ fn render_transcript(frame: &mut Frame<'_>, app: &mut App, area: ratatui::layout
         area,
         &mut scrollbar_state,
     );
+}
+
+fn rendered_transcript_line(row: RenderedTranscriptRow, visible_width: usize) -> Line<'static> {
+    if row.kind == TranscriptRowKind::User {
+        return Line::styled(pad_to_width(&row.text, visible_width), user_prompt_style());
+    }
+
+    let body_style = if row.kind == TranscriptRowKind::Thinking {
+        thinking_style()
+    } else {
+        Style::default()
+    };
+    let Some(prefix) = row.kind.prefix() else {
+        return Line::styled(row.text, body_style);
+    };
+    let Some(body) = row.text.strip_prefix(prefix) else {
+        return Line::styled(row.text, body_style);
+    };
+    let Some(prefix_style) = transcript_prefix_style(row.kind) else {
+        return Line::styled(row.text, body_style);
+    };
+
+    Line::from(vec![
+        Span::styled(prefix.to_string(), prefix_style),
+        Span::styled(body.to_string(), body_style),
+    ])
 }
 
 fn render_bottom(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Rect) {

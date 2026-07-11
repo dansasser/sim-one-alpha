@@ -74,7 +74,7 @@ Top-level non-`src/` directories:
 | --- | --- |
 | `crates/gorombo-memory/` | Rust engine compiled to WebAssembly via `wasm-pack`. Owns the structured-memory data model, validation (scope non-empty, slug uniqueness, checklist cycle/depth), the in-memory inverted index, and the query planner. Never exposed to the model or agents directly — only via `src/engine/memory/rust-memory-engine.ts`. The TypeScript shim generates ids/timestamps/audit fields (Rust owns no clock/RNG in the WASM target) and passes fully-formed records to the WASM exports. The WASM module keeps a `thread_local` store hydrated by `reconcile_index` from the durable SQLite store on cold start. |
 | `sim-one-cli/` | Product command wrapper. Owns `sim-one` command routing, capability subcommands, and the legacy `--ink` fallback. No-argument `sim-one` launches the packaged Ratatui binary instead of owning terminal UI state itself. |
-| `tui/ratatui/` | Production local terminal client. Owns semantic transcript-row formatting, the centralized terminal palette, Unicode display-width-aware word wrapping for transcript and prompt rows, multiline prompt editing (including local `/` then Enter newline insertion), immediate display of Flue `message_end`, HTTP-result reconciliation, frame-level transcript live-tail enforcement, the virtual blank tail margin, manual scrollback, TUI-local slash commands, gateway launch/reuse, stream attach/restart, and the packaged `sim-one-ratatui-tui` binary. It is a connector surface, not an agent runtime. |
+| `tui/ratatui/` | Production local terminal client. Owns semantic transcript-row formatting, bold prefix-only color accents, the centralized terminal palette, Unicode display-width-aware word wrapping for transcript and prompt rows, multiline prompt editing (including local `/` then Enter newline insertion), immediate display of Flue `message_end`, HTTP-result reconciliation, frame-level transcript live-tail enforcement, the virtual blank tail margin, manual scrollback, TUI-local slash commands, gateway launch/reuse, stream attach/restart, and the packaged `sim-one-ratatui-tui` binary. It is a connector surface, not an agent runtime. |
 | `scripts/` | Build, smoke, and admin scripts. TUI-relevant scripts include `build-ratatui-tui.mjs`, `check-sim-one-product-command.mjs`, `test-ratatui-product.mjs`, `test-ratatui-interactive.py`, `test-ratatui-visible-final.py`, `test-tui-e2e.mjs`, `test-built-http.mjs`, and `capability-admin.mjs`. |
 | `docs/tui/` | User-facing TUI guides. Keep command and behavior descriptions aligned with `docs/architecture/tui-cli-session-flow.md`. |
 | `docs/operations/` | Operator runbooks for packaged runtime and connectors. `product-tui.md` owns packaged launch, runtime paths, env files, and smoke commands. |
@@ -151,7 +151,7 @@ tui/ratatui/src/text_wrap.rs
 
 tui/ratatui/src/theme.rs
   Central Ratatui palette.
-  Owns submitted-user gray bands, the darker prompt-editor background, and gray italic thinking style so visual semantics are not scattered through state code.
+  Owns submitted-user gray bands, the darker prompt-editor background, gray italic thinking style, and bold semantic prefix colors for assistant, activity, system, preflight, log, and error rows so visual semantics are not scattered through state code.
 
 src/api/routes/knowledge.ts
   App-owned /api/knowledge and /api/knowledge/reindex routes.
