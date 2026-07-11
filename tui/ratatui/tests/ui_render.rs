@@ -228,6 +228,217 @@ fn multiline_prompt_arrows_move_the_visible_cursor_without_scrolling_transcript(
 }
 
 #[test]
+fn prompt_mouse_click_places_cursor_and_drag_selection_replaces_text() {
+    let backend = TestBackend::new(50, 16);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    app.handle_event(AppEvent::Text("alpha bravo charlie".to_string()));
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("editable prompt should render");
+    let bravo = find_buffer_cell_text_position(&terminal, "bravo");
+
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Down(MouseButton::Left),
+        bravo,
+    )));
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Up(MouseButton::Left),
+        bravo,
+    )));
+    app.handle_event(AppEvent::Text("X".to_string()));
+    assert_eq!(app.prompt(), "alpha Xbravo charlie");
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("updated prompt should render");
+    let alpha = find_buffer_cell_text_position(&terminal, "alpha");
+    let xbravo = find_buffer_cell_text_position(&terminal, "Xbravo");
+    let selection_end = Position::new(xbravo.x + "Xbravo".len() as u16 - 1, xbravo.y);
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Down(MouseButton::Left),
+        alpha,
+    )));
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Drag(MouseButton::Left),
+        selection_end,
+    )));
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Up(MouseButton::Left),
+        selection_end,
+    )));
+    assert_eq!(app.prompt_selection_text().as_deref(), Some("alpha Xbravo"));
+    assert_eq!(app.take_clipboard_text().as_deref(), Some("alpha Xbravo"));
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("selected prompt should render");
+    assert!(terminal
+        .backend()
+        .buffer()
+        .cell(alpha)
+        .expect("selected prompt cell should exist")
+        .modifier
+        .contains(Modifier::REVERSED));
+
+    app.handle_event(AppEvent::Text("replaced".to_string()));
+    assert_eq!(app.prompt(), "replaced charlie");
+    assert!(app.prompt_selection_text().is_none());
+}
+
+#[test]
+fn prompt_selection_supports_copy_cut_and_delete_without_quitting() {
+    let backend = TestBackend::new(50, 16);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    app.handle_event(AppEvent::Text("keep remove tail".to_string()));
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("prompt selection shell should render");
+
+    select_buffer_text(&mut app, &terminal, "remove");
+    let _ = app.take_clipboard_text();
+    app.handle_event(AppEvent::Quit);
+    assert!(!app.should_quit());
+    assert_eq!(app.take_clipboard_text().as_deref(), Some("remove"));
+
+    app.handle_event(AppEvent::CutPromptSelection);
+    assert_eq!(app.prompt(), "keep  tail");
+    assert_eq!(app.take_clipboard_text().as_deref(), Some("remove"));
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("prompt should rerender after cut");
+    select_buffer_text(&mut app, &terminal, "tail");
+    app.handle_event(AppEvent::Backspace);
+    assert_eq!(app.prompt(), "keep  ");
+}
+
+#[test]
+fn prompt_reverse_mouse_selection_edits_unicode_on_char_boundaries() {
+    let backend = TestBackend::new(50, 16);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    app.handle_event(AppEvent::Text("go 界界 now".to_string()));
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("Unicode prompt should render");
+    let glyphs = find_buffer_symbol_positions(&terminal, "界");
+    assert_eq!(glyphs.len(), 2, "{}", terminal_buffer_lines(&terminal));
+
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Down(MouseButton::Left),
+        glyphs[1],
+    )));
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Drag(MouseButton::Left),
+        glyphs[0],
+    )));
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Up(MouseButton::Left),
+        glyphs[0],
+    )));
+    assert_eq!(app.prompt_selection_text().as_deref(), Some("界界"));
+
+    app.handle_event(AppEvent::Text("OK".to_string()));
+    assert_eq!(app.prompt(), "go OK now");
+}
+
+#[test]
+fn prompt_mouse_wheel_scrolls_only_the_prompt_viewport() {
+    let backend = TestBackend::new(50, 16);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    app.handle_event(AppEvent::Text(
+        "one\ntwo\nthree\nfour\nfive\nsix\nseven".to_string(),
+    ));
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("scrollable prompt should render");
+    let transcript_scroll = app.transcript_scroll();
+    let prompt_scroll = app.prompt_scroll();
+    let prompt = find_buffer_text_position(&terminal, "Prompt");
+
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::ScrollUp,
+        Position::new(prompt.x + 3, prompt.y + 1),
+    )));
+
+    assert_eq!(app.transcript_scroll(), transcript_scroll);
+    assert_eq!(app.prompt_scroll(), prompt_scroll.saturating_sub(1));
+}
+
+#[test]
+fn transcript_scrollbar_click_and_drag_cover_full_scroll_range() {
+    let backend = TestBackend::new(50, 16);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    for index in 0..30 {
+        app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+            serde_json::json!({
+                "type":"log",
+                "eventIndex":9_000 + index,
+                "text":format!("scrollbar row {index}")
+            }),
+        )]));
+    }
+    app.jump_to_tail();
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("scrollbar shell should render");
+    let status_row = find_buffer_row(&terminal, "SIM-ONE Alpha | session:");
+    let top = Position::new(49, 1);
+    let bottom = Position::new(49, status_row.saturating_sub(2));
+
+    click_mouse(&mut app, top);
+    assert_eq!(app.transcript_scroll(), 0);
+    assert!(!app.follow_tail());
+
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Down(MouseButton::Left),
+        top,
+    )));
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Drag(MouseButton::Left),
+        bottom,
+    )));
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Up(MouseButton::Left),
+        bottom,
+    )));
+    assert_eq!(app.transcript_scroll(), app.max_scroll());
+    assert!(app.follow_tail());
+}
+
+#[test]
+fn slash_palette_mouse_scroll_click_and_outside_dismiss_are_routed_first() {
+    let backend = TestBackend::new(80, 20);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    app.handle_event(AppEvent::Text("/".to_string()));
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("mouse palette should render");
+    let first = find_buffer_cell_text_position(&terminal, "/new [title]");
+
+    app.handle_event(AppEvent::Mouse(mouse_at(MouseEventKind::ScrollDown, first)));
+    assert_eq!(app.command_palette_selected(), 1);
+
+    let resume = find_buffer_cell_text_position(&terminal, "/resume <session-id>");
+    click_mouse(&mut app, resume);
+    assert_eq!(app.prompt(), "/resume ");
+    assert!(!app.command_palette_open());
+
+    app.handle_event(AppEvent::ClearPrompt);
+    app.handle_event(AppEvent::Text("/".to_string()));
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("palette should reopen");
+    click_mouse(&mut app, Position::new(5, 1));
+    assert!(!app.command_palette_open());
+}
+
+#[test]
 fn renamed_session_title_is_rendered_in_header_without_changing_status_bar() {
     let backend = TestBackend::new(120, 18);
     let mut terminal = Terminal::new(backend).expect("test backend should initialize");
@@ -1710,6 +1921,34 @@ fn mouse_at(kind: MouseEventKind, position: Position) -> MouseEvent {
     }
 }
 
+fn click_mouse(app: &mut App, position: Position) {
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Down(MouseButton::Left),
+        position,
+    )));
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Up(MouseButton::Left),
+        position,
+    )));
+}
+
+fn select_buffer_text(app: &mut App, terminal: &Terminal<TestBackend>, text: &str) {
+    let start = find_buffer_cell_text_position(terminal, text);
+    let end = Position::new(start.x + text.len() as u16 - 1, start.y);
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Down(MouseButton::Left),
+        start,
+    )));
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Drag(MouseButton::Left),
+        end,
+    )));
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Up(MouseButton::Left),
+        end,
+    )));
+}
+
 fn wait_for_agent(app: &mut App) {
     let deadline = Instant::now() + Duration::from_secs(2);
     while app.is_agent_pending() && Instant::now() < deadline {
@@ -1772,6 +2011,22 @@ fn find_buffer_cell_text_position(terminal: &Terminal<TestBackend>, needle: &str
         "could not find {needle:?} in:\n{}",
         terminal_buffer_lines(terminal)
     );
+}
+
+fn find_buffer_symbol_positions(terminal: &Terminal<TestBackend>, symbol: &str) -> Vec<Position> {
+    let buffer = terminal.backend().buffer();
+    let mut positions = Vec::new();
+    for y in 0..buffer.area.height {
+        for x in 0..buffer.area.width {
+            if buffer
+                .cell(Position::new(x, y))
+                .is_some_and(|cell| cell.symbol() == symbol)
+            {
+                positions.push(Position::new(x, y));
+            }
+        }
+    }
+    positions
 }
 
 fn find_buffer_row(terminal: &Terminal<TestBackend>, needle: &str) -> u16 {

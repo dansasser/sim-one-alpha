@@ -39,6 +39,10 @@ fn maps_prompt_editing_and_submit_keys() {
         Some(AppEvent::DeletePromptWordLeft)
     );
     assert_eq!(
+        map_key_event(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL)),
+        Some(AppEvent::CutPromptSelection)
+    );
+    assert_eq!(
         map_key_event(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL)),
         Some(AppEvent::MovePromptStart)
     );

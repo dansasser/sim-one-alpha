@@ -25,6 +25,7 @@ pub fn map_key_event(key: KeyEvent) -> Option<AppEvent> {
             KeyCode::Char('e') => Some(AppEvent::MovePromptEnd),
             KeyCode::Char('u') => Some(AppEvent::ClearPrompt),
             KeyCode::Char('w') => Some(AppEvent::DeletePromptWordLeft),
+            KeyCode::Char('x') => Some(AppEvent::CutPromptSelection),
             KeyCode::Left => Some(AppEvent::MovePromptWordLeft),
             KeyCode::Right => Some(AppEvent::MovePromptWordRight),
             KeyCode::End => Some(AppEvent::JumpToTail),

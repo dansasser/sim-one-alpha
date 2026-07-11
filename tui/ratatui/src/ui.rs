@@ -6,7 +6,10 @@ use ratatui::widgets::{
 };
 use ratatui::Frame;
 
-use crate::app::{App, MouseRegions, RenderedTranscriptRow, TranscriptRowKind};
+use crate::app::{
+    App, CommandPaletteMouseRegion, MouseRegions, PromptMouseRegion, RenderedTranscriptRow,
+    TranscriptRowKind,
+};
 use crate::text_wrap::{display_width, display_width_between, wrap_words, WrappedLine};
 use crate::theme::{
     command_palette_command_style, command_palette_description_style,
@@ -60,7 +63,7 @@ pub fn render(frame: &mut Frame<'_>, app: &mut App) {
             transcript_area.height.saturating_sub(2),
         )),
         status: Some(status_area),
-        prompt: Some(prompt_area.inner(Margin::new(1, 1))),
+        prompt: None,
         command_palette: None,
     });
     render_transcript(frame, app, transcript_area);
@@ -221,14 +224,21 @@ fn render_bottom(frame: &mut Frame<'_>, app: &mut App, status_area: Rect, prompt
     render_command_palette(frame, app, status_area, prompt_area);
 }
 
-fn render_command_palette(frame: &mut Frame<'_>, app: &App, status_area: Rect, prompt_area: Rect) {
+fn render_command_palette(
+    frame: &mut Frame<'_>,
+    app: &mut App,
+    status_area: Rect,
+    prompt_area: Rect,
+) {
     if !app.command_palette_open() {
+        app.set_command_palette_mouse_region(None);
         return;
     }
 
     let items = app.command_palette_items();
     let available_height = status_area.y.saturating_sub(frame.area().y) as usize;
     if available_height < 3 {
+        app.set_command_palette_mouse_region(None);
         return;
     }
 
@@ -289,6 +299,11 @@ fn render_command_palette(frame: &mut Frame<'_>, app: &App, status_area: Rect, p
         prompt_area.width,
         height,
     );
+    app.set_command_palette_mouse_region(Some(CommandPaletteMouseRegion {
+        area: area.inner(Margin::new(1, 1)),
+        start,
+        item_count: end.saturating_sub(start),
+    }));
     frame.render_widget(Clear, area);
     frame.render_widget(
         Paragraph::new(lines)
@@ -298,19 +313,27 @@ fn render_command_palette(frame: &mut Frame<'_>, app: &App, status_area: Rect, p
     );
 }
 
-fn render_prompt(frame: &mut Frame<'_>, app: &App, prompt_area: ratatui::layout::Rect) {
+fn render_prompt(frame: &mut Frame<'_>, app: &mut App, prompt_area: ratatui::layout::Rect) {
     let prompt_width = prompt_text_width(prompt_area.width as usize);
     let visible_rows = prompt_area.height.saturating_sub(2).max(1) as usize;
     let prompt_rows = wrap_prompt_rows(app.prompt(), prompt_width);
     let cursor_chars = app.prompt_cursor_chars();
     let cursor = prompt_cursor_position(&prompt_rows, app.prompt(), cursor_chars, prompt_width);
-    let view_start = prompt_view_start(cursor.row, prompt_rows.len(), visible_rows);
+    let view_start = app.sync_prompt_view_for_render(prompt_rows.len(), cursor.row, visible_rows);
+    let prompt_inner = prompt_area.inner(Margin::new(1, 1));
+    app.set_prompt_mouse_region(PromptMouseRegion {
+        area: prompt_inner,
+        view_start,
+        width: prompt_width,
+        visible_rows,
+    });
     let prompt_lines = visible_prompt_lines(
         app.prompt(),
         &prompt_rows,
         view_start,
         visible_rows,
         prompt_width,
+        app.prompt_selection_chars(),
     );
     let prompt =
         Paragraph::new(prompt_lines).block(Block::default().borders(Borders::ALL).title("Prompt"));
@@ -320,20 +343,22 @@ fn render_prompt(frame: &mut Frame<'_>, app: &App, prompt_area: ratatui::layout:
         .buffer_mut()
         .set_style(prompt_area.inner(Margin::new(1, 1)), prompt_editor_style());
 
-    let cursor_offset = cursor.col.min(prompt_width) as u16;
-    let cursor_row = cursor.row.saturating_sub(view_start).min(visible_rows - 1) as u16;
-    let cursor_x = prompt_area
-        .x
-        .saturating_add(1)
-        .saturating_add(PROMPT_GUTTER_WIDTH as u16)
-        .saturating_add(cursor_offset)
-        .min(prompt_area.right().saturating_sub(2));
-    let cursor_y = prompt_area
-        .y
-        .saturating_add(1)
-        .saturating_add(cursor_row)
-        .min(prompt_area.bottom().saturating_sub(2));
-    frame.set_cursor_position(Position::new(cursor_x, cursor_y));
+    if cursor.row >= view_start && cursor.row < view_start + visible_rows {
+        let cursor_offset = cursor.col.min(prompt_width) as u16;
+        let cursor_row = cursor.row.saturating_sub(view_start) as u16;
+        let cursor_x = prompt_area
+            .x
+            .saturating_add(1)
+            .saturating_add(PROMPT_GUTTER_WIDTH as u16)
+            .saturating_add(cursor_offset)
+            .min(prompt_area.right().saturating_sub(2));
+        let cursor_y = prompt_area
+            .y
+            .saturating_add(1)
+            .saturating_add(cursor_row)
+            .min(prompt_area.bottom().saturating_sub(2));
+        frame.set_cursor_position(Position::new(cursor_x, cursor_y));
+    }
 }
 
 fn visible_status_text(status: &str, width: usize) -> String {
@@ -404,23 +429,13 @@ fn prompt_cursor_position(
     }
 }
 
-fn prompt_view_start(cursor_row: usize, row_count: usize, visible_rows: usize) -> usize {
-    if row_count <= visible_rows {
-        return 0;
-    }
-
-    let max_start = row_count - visible_rows;
-    cursor_row
-        .saturating_sub(visible_rows.saturating_sub(1))
-        .min(max_start)
-}
-
 fn visible_prompt_lines(
     prompt: &str,
     rows: &[WrappedLine],
     start: usize,
     visible_rows: usize,
     prompt_width: usize,
+    selection: Option<(usize, usize)>,
 ) -> Vec<Line<'static>> {
     let mut lines = if prompt.is_empty() {
         vec![styled_prompt_line(
@@ -440,11 +455,20 @@ fn visible_prompt_lines(
             .skip(start)
             .take(visible_rows)
             .map(|(index, row)| {
-                styled_prompt_line(
-                    vec![prompt_gutter(index), Span::raw(row.text.clone())],
-                    display_width(&row.text),
-                    prompt_width,
-                )
+                let row_end = row.start_char + row.text.chars().count();
+                let selection = selection.and_then(|(start, end)| {
+                    let selected_start = start.max(row.start_char).min(row_end);
+                    let selected_end = end.max(row.start_char).min(row_end);
+                    (selected_start < selected_end).then_some((
+                        selected_start - row.start_char,
+                        selected_end - row.start_char,
+                    ))
+                });
+                let mut text_spans =
+                    apply_selection_style(vec![Span::raw(row.text.clone())], selection);
+                let mut spans = vec![prompt_gutter(index)];
+                spans.append(&mut text_spans);
+                styled_prompt_line(spans, display_width(&row.text), prompt_width)
             })
             .collect()
     };

@@ -107,6 +107,7 @@ pub enum AppEvent {
     MovePromptStart,
     MovePromptEnd,
     DeletePromptWordLeft,
+    CutPromptSelection,
     ClearPrompt,
     SelectCommand,
     Cancel,
@@ -191,6 +192,41 @@ struct TranscriptSelection {
     dragged: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PromptSelection {
+    origin_start: usize,
+    origin_end: usize,
+    active_start: usize,
+    active_end: usize,
+    origin_screen: (u16, u16),
+    dragged: bool,
+}
+
+impl PromptSelection {
+    fn range(self) -> (usize, usize) {
+        if self.origin_start <= self.active_start {
+            (self.origin_start, self.active_end)
+        } else {
+            (self.active_start, self.origin_end)
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PromptMouseRegion {
+    pub area: Rect,
+    pub view_start: usize,
+    pub width: usize,
+    pub visible_rows: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CommandPaletteMouseRegion {
+    pub area: Rect,
+    pub start: usize,
+    pub item_count: usize,
+}
+
 impl TranscriptSelection {
     fn range(self) -> (TranscriptTextPosition, TranscriptTextPosition) {
         if self.active.start >= self.origin.start {
@@ -206,8 +242,8 @@ pub struct MouseRegions {
     pub transcript_text: Option<Rect>,
     pub transcript_scrollbar: Option<Rect>,
     pub status: Option<Rect>,
-    pub prompt: Option<Rect>,
-    pub command_palette: Option<Rect>,
+    pub prompt: Option<PromptMouseRegion>,
+    pub command_palette: Option<CommandPaletteMouseRegion>,
 }
 
 pub struct App {
@@ -215,6 +251,10 @@ pub struct App {
     prompt_cursor: usize,
     prompt_vertical_column: Option<usize>,
     prompt_viewport_width: usize,
+    prompt_viewport_height: usize,
+    prompt_scroll: usize,
+    prompt_follow_cursor: bool,
+    prompt_selection: Option<PromptSelection>,
     command_palette_selected: usize,
     command_palette_dismissed: bool,
     transcript_lines: Vec<String>,
@@ -243,6 +283,8 @@ pub struct App {
     mouse_regions: MouseRegions,
     transcript_selection: Option<TranscriptSelection>,
     clipboard_text: Option<String>,
+    scrollbar_dragging: bool,
+    palette_pressed: Option<usize>,
     startup_phase: StartupPhase,
     startup_attach_stream: bool,
 }
@@ -354,6 +396,10 @@ impl App {
             prompt_cursor: 0,
             prompt_vertical_column: None,
             prompt_viewport_width: 80,
+            prompt_viewport_height: 2,
+            prompt_scroll: 0,
+            prompt_follow_cursor: true,
+            prompt_selection: None,
             command_palette_selected: 0,
             command_palette_dismissed: false,
             transcript_lines: initial_transcript(),
@@ -382,6 +428,8 @@ impl App {
             mouse_regions: MouseRegions::default(),
             transcript_selection: None,
             clipboard_text: None,
+            scrollbar_dragging: false,
+            palette_pressed: None,
             startup_phase: StartupPhase::Idle,
             startup_attach_stream: false,
         };
@@ -404,16 +452,24 @@ impl App {
             AppEvent::MovePromptStart => {
                 self.prompt_cursor = 0;
                 self.prompt_vertical_column = None;
+                self.prompt_selection = None;
+                self.prompt_follow_cursor = true;
             }
             AppEvent::MovePromptEnd => {
                 self.prompt_cursor = self.prompt.len();
                 self.prompt_vertical_column = None;
+                self.prompt_selection = None;
+                self.prompt_follow_cursor = true;
             }
             AppEvent::DeletePromptWordLeft => self.delete_prompt_word_left(),
+            AppEvent::CutPromptSelection => self.cut_prompt_selection(),
             AppEvent::ClearPrompt => {
                 self.prompt.clear();
                 self.prompt_cursor = 0;
                 self.prompt_vertical_column = None;
+                self.prompt_selection = None;
+                self.prompt_scroll = 0;
+                self.prompt_follow_cursor = true;
                 self.reset_command_palette();
             }
             AppEvent::SelectCommand => {
@@ -426,7 +482,7 @@ impl App {
             AppEvent::ScrollPageDown => self.scroll_page_down(),
             AppEvent::JumpToTail => self.jump_to_tail(),
             AppEvent::Mouse(mouse) => self.handle_mouse(mouse),
-            AppEvent::Quit => self.should_quit = true,
+            AppEvent::Quit => self.copy_prompt_selection_or_quit(),
         }
     }
 
@@ -614,7 +670,49 @@ impl App {
         if self.prompt_viewport_width != width {
             self.prompt_viewport_width = width;
             self.prompt_vertical_column = None;
+            self.prompt_follow_cursor = true;
         }
+    }
+
+    pub fn sync_prompt_view_for_render(
+        &mut self,
+        row_count: usize,
+        cursor_row: usize,
+        visible_rows: usize,
+    ) -> usize {
+        self.prompt_viewport_height = visible_rows.max(1);
+        let max_start = row_count.saturating_sub(self.prompt_viewport_height);
+        if self.prompt_follow_cursor {
+            self.prompt_scroll = cursor_row
+                .saturating_sub(self.prompt_viewport_height.saturating_sub(1))
+                .min(max_start);
+        } else {
+            self.prompt_scroll = self.prompt_scroll.min(max_start);
+        }
+        self.prompt_scroll
+    }
+
+    pub fn prompt_scroll(&self) -> usize {
+        self.prompt_scroll
+    }
+
+    pub fn prompt_selection_text(&self) -> Option<String> {
+        let selection = self
+            .prompt_selection
+            .filter(|selection| selection.dragged)?;
+        let (start, end) = selection.range();
+        (start < end).then(|| self.prompt[start..end].to_string())
+    }
+
+    pub fn prompt_selection_chars(&self) -> Option<(usize, usize)> {
+        let selection = self
+            .prompt_selection
+            .filter(|selection| selection.dragged)?;
+        let (start, end) = selection.range();
+        Some((
+            self.prompt[..start].chars().count(),
+            self.prompt[..end].chars().count(),
+        ))
     }
 
     pub fn command_palette_open(&self) -> bool {
@@ -826,6 +924,14 @@ impl App {
         self.mouse_regions = regions;
     }
 
+    pub fn set_prompt_mouse_region(&mut self, region: PromptMouseRegion) {
+        self.mouse_regions.prompt = Some(region);
+    }
+
+    pub fn set_command_palette_mouse_region(&mut self, region: Option<CommandPaletteMouseRegion>) {
+        self.mouse_regions.command_palette = region;
+    }
+
     pub fn transcript_selection_text(&self) -> Option<String> {
         let selection = self
             .transcript_selection
@@ -869,61 +975,139 @@ impl App {
     }
 
     fn insert_prompt_text(&mut self, text: &str) {
+        self.delete_prompt_selection();
         self.prompt.insert_str(self.prompt_cursor, text);
         self.prompt_cursor += text.len();
         self.prompt_vertical_column = None;
+        self.prompt_follow_cursor = true;
         self.reset_command_palette();
     }
 
     fn backspace_prompt(&mut self) {
+        if self.delete_prompt_selection().is_some() {
+            self.prompt_follow_cursor = true;
+            self.reset_command_palette();
+            return;
+        }
         let Some(previous) = previous_char_boundary(&self.prompt, self.prompt_cursor) else {
             return;
         };
         self.prompt.drain(previous..self.prompt_cursor);
         self.prompt_cursor = previous;
         self.prompt_vertical_column = None;
+        self.prompt_follow_cursor = true;
         self.reset_command_palette();
     }
 
     fn delete_prompt_char(&mut self) {
+        if self.delete_prompt_selection().is_some() {
+            self.prompt_follow_cursor = true;
+            self.reset_command_palette();
+            return;
+        }
         let Some(next) = next_char_boundary(&self.prompt, self.prompt_cursor) else {
             return;
         };
         self.prompt.drain(self.prompt_cursor..next);
         self.prompt_vertical_column = None;
+        self.prompt_follow_cursor = true;
         self.reset_command_palette();
     }
 
     fn move_prompt_left(&mut self) {
+        if let Some(selection) = self
+            .prompt_selection
+            .take()
+            .filter(|selection| selection.dragged)
+        {
+            self.prompt_cursor = selection.range().0;
+            self.prompt_vertical_column = None;
+            self.prompt_follow_cursor = true;
+            return;
+        }
         if let Some(previous) = previous_char_boundary(&self.prompt, self.prompt_cursor) {
             self.prompt_cursor = previous;
             self.prompt_vertical_column = None;
+            self.prompt_follow_cursor = true;
         }
     }
 
     fn move_prompt_right(&mut self) {
+        if let Some(selection) = self
+            .prompt_selection
+            .take()
+            .filter(|selection| selection.dragged)
+        {
+            self.prompt_cursor = selection.range().1;
+            self.prompt_vertical_column = None;
+            self.prompt_follow_cursor = true;
+            return;
+        }
         if let Some(next) = next_char_boundary(&self.prompt, self.prompt_cursor) {
             self.prompt_cursor = next;
             self.prompt_vertical_column = None;
+            self.prompt_follow_cursor = true;
         }
     }
 
     fn move_prompt_word_left(&mut self) {
+        self.prompt_selection = None;
         self.prompt_cursor = previous_word_boundary(&self.prompt, self.prompt_cursor);
         self.prompt_vertical_column = None;
+        self.prompt_follow_cursor = true;
     }
 
     fn move_prompt_word_right(&mut self) {
+        self.prompt_selection = None;
         self.prompt_cursor = next_word_boundary(&self.prompt, self.prompt_cursor);
         self.prompt_vertical_column = None;
+        self.prompt_follow_cursor = true;
     }
 
     fn delete_prompt_word_left(&mut self) {
+        if self.delete_prompt_selection().is_some() {
+            self.prompt_follow_cursor = true;
+            self.reset_command_palette();
+            return;
+        }
         let start = previous_word_boundary(&self.prompt, self.prompt_cursor);
         self.prompt.drain(start..self.prompt_cursor);
         self.prompt_cursor = start;
         self.prompt_vertical_column = None;
+        self.prompt_follow_cursor = true;
         self.reset_command_palette();
+    }
+
+    fn delete_prompt_selection(&mut self) -> Option<String> {
+        let selection = self
+            .prompt_selection
+            .take()
+            .filter(|selection| selection.dragged)?;
+        let (start, end) = selection.range();
+        if start >= end {
+            return None;
+        }
+        let removed = self.prompt[start..end].to_string();
+        self.prompt.drain(start..end);
+        self.prompt_cursor = start;
+        self.prompt_vertical_column = None;
+        Some(removed)
+    }
+
+    fn cut_prompt_selection(&mut self) {
+        if let Some(text) = self.delete_prompt_selection() {
+            self.clipboard_text = Some(text);
+            self.prompt_follow_cursor = true;
+            self.reset_command_palette();
+        }
+    }
+
+    fn copy_prompt_selection_or_quit(&mut self) {
+        if let Some(text) = self.prompt_selection_text() {
+            self.clipboard_text = Some(text);
+        } else {
+            self.should_quit = true;
+        }
     }
 
     fn scroll_lines_up(&mut self, amount: usize) {
@@ -940,7 +1124,17 @@ impl App {
     }
 
     fn handle_mouse(&mut self, mouse: MouseEvent) {
+        if self.handle_command_palette_mouse(mouse) {
+            return;
+        }
+
         match mouse.kind {
+            MouseEventKind::ScrollUp if self.mouse_over_prompt(mouse.column, mouse.row) => {
+                self.scroll_prompt_up();
+            }
+            MouseEventKind::ScrollDown if self.mouse_over_prompt(mouse.column, mouse.row) => {
+                self.scroll_prompt_down();
+            }
             MouseEventKind::ScrollUp if self.mouse_over_transcript(mouse.column, mouse.row) => {
                 self.scroll_lines_up(1);
             }
@@ -948,7 +1142,41 @@ impl App {
                 self.scroll_lines_down(1);
             }
             MouseEventKind::Down(MouseButton::Left)
-                if self.mouse_over_transcript(mouse.column, mouse.row) =>
+                if self.mouse_over_scrollbar(mouse.column, mouse.row) =>
+            {
+                self.scrollbar_dragging = true;
+                self.transcript_selection = None;
+                self.prompt_selection = None;
+                self.set_transcript_scroll_from_mouse(mouse.row);
+            }
+            MouseEventKind::Drag(MouseButton::Left) if self.scrollbar_dragging => {
+                self.set_transcript_scroll_from_mouse(mouse.row);
+            }
+            MouseEventKind::Up(MouseButton::Left) if self.scrollbar_dragging => {
+                self.set_transcript_scroll_from_mouse(mouse.row);
+                self.scrollbar_dragging = false;
+            }
+            MouseEventKind::Down(MouseButton::Left)
+                if self.mouse_over_prompt(mouse.column, mouse.row) =>
+            {
+                self.begin_prompt_selection(mouse.column, mouse.row);
+            }
+            MouseEventKind::Drag(MouseButton::Left) if self.prompt_selection.is_some() => {
+                self.update_prompt_selection(mouse.column, mouse.row, true);
+            }
+            MouseEventKind::Up(MouseButton::Left) if self.prompt_selection.is_some() => {
+                self.update_prompt_selection(mouse.column, mouse.row, false);
+                if self
+                    .prompt_selection
+                    .is_some_and(|selection| selection.dragged)
+                {
+                    self.clipboard_text = self.prompt_selection_text();
+                } else {
+                    self.prompt_selection = None;
+                }
+            }
+            MouseEventKind::Down(MouseButton::Left)
+                if self.mouse_over_transcript_text(mouse.column, mouse.row) =>
             {
                 self.begin_transcript_selection(mouse.column, mouse.row);
             }
@@ -968,19 +1196,173 @@ impl App {
             }
             MouseEventKind::Down(MouseButton::Left) => {
                 self.transcript_selection = None;
+                self.prompt_selection = None;
             }
             _ => {}
         }
     }
 
-    fn mouse_over_transcript(&self, column: u16, row: u16) -> bool {
+    fn handle_command_palette_mouse(&mut self, mouse: MouseEvent) -> bool {
+        if !self.command_palette_open() {
+            self.palette_pressed = None;
+            return false;
+        }
+        let item = self.command_palette_item_at(mouse.column, mouse.row);
+        if self
+            .mouse_regions
+            .command_palette
+            .is_some_and(|region| rect_contains(region.area, mouse.column, mouse.row))
+        {
+            match mouse.kind {
+                MouseEventKind::ScrollUp => self.navigate_up(),
+                MouseEventKind::ScrollDown => self.navigate_down(),
+                MouseEventKind::Down(MouseButton::Left) => {
+                    if let Some(index) = item {
+                        self.command_palette_selected = index;
+                        self.palette_pressed = Some(index);
+                    }
+                }
+                MouseEventKind::Up(MouseButton::Left) => {
+                    match (item, self.palette_pressed.take()) {
+                        (Some(index), Some(pressed)) if index == pressed => {
+                            self.command_palette_selected = index;
+                            self.select_command();
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+            return true;
+        }
+        if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            self.command_palette_dismissed = true;
+            self.palette_pressed = None;
+            return true;
+        }
+        false
+    }
+
+    fn command_palette_item_at(&self, column: u16, row: u16) -> Option<usize> {
+        let region = self.mouse_regions.command_palette?;
+        if !rect_contains(region.area, column, row) {
+            return None;
+        }
+        let offset = row.saturating_sub(region.area.y) as usize;
+        (offset < region.item_count).then_some(region.start + offset)
+    }
+
+    fn mouse_over_prompt(&self, column: u16, row: u16) -> bool {
+        self.mouse_regions
+            .prompt
+            .is_some_and(|region| rect_contains(region.area, column, row))
+    }
+
+    fn mouse_over_scrollbar(&self, column: u16, row: u16) -> bool {
+        self.mouse_regions
+            .transcript_scrollbar
+            .is_some_and(|area| rect_contains(area, column, row))
+    }
+
+    fn mouse_over_transcript_text(&self, column: u16, row: u16) -> bool {
         self.mouse_regions
             .transcript_text
             .is_some_and(|area| rect_contains(area, column, row))
-            || self
-                .mouse_regions
-                .transcript_scrollbar
-                .is_some_and(|area| rect_contains(area, column, row))
+    }
+
+    fn mouse_over_transcript(&self, column: u16, row: u16) -> bool {
+        self.mouse_over_transcript_text(column, row) || self.mouse_over_scrollbar(column, row)
+    }
+
+    fn set_transcript_scroll_from_mouse(&mut self, row: u16) {
+        let Some(area) = self.mouse_regions.transcript_scrollbar else {
+            return;
+        };
+        let track = area.height.saturating_sub(1) as usize;
+        let relative = row
+            .saturating_sub(area.y)
+            .min(area.height.saturating_sub(1)) as usize;
+        self.transcript_scroll = relative
+            .saturating_mul(self.max_scroll())
+            .checked_div(track)
+            .unwrap_or_default();
+        self.follow_tail = self.transcript_scroll == self.max_scroll();
+    }
+
+    fn scroll_prompt_up(&mut self) {
+        self.prompt_scroll = self.prompt_scroll.saturating_sub(1);
+        self.prompt_follow_cursor = false;
+    }
+
+    fn scroll_prompt_down(&mut self) {
+        let max_scroll = wrap_words(&self.prompt, self.prompt_viewport_width)
+            .len()
+            .saturating_sub(self.prompt_viewport_height.max(1));
+        self.prompt_scroll = self.prompt_scroll.saturating_add(1).min(max_scroll);
+        self.prompt_follow_cursor = false;
+    }
+
+    fn begin_prompt_selection(&mut self, column: u16, row: u16) {
+        let Some((cursor, cursor_end)) = self.prompt_cell_at_screen(column, row) else {
+            return;
+        };
+        self.prompt_cursor = cursor;
+        self.prompt_vertical_column = None;
+        self.prompt_follow_cursor = true;
+        self.transcript_selection = None;
+        self.prompt_selection = Some(PromptSelection {
+            origin_start: cursor,
+            origin_end: cursor_end,
+            active_start: cursor,
+            active_end: cursor_end,
+            origin_screen: (column, row),
+            dragged: false,
+        });
+    }
+
+    fn update_prompt_selection(&mut self, column: u16, row: u16, is_drag: bool) {
+        let Some(region) = self.mouse_regions.prompt else {
+            return;
+        };
+        if is_drag {
+            if row <= region.area.y {
+                self.scroll_prompt_up();
+            } else if row >= region.area.bottom().saturating_sub(1) {
+                self.scroll_prompt_down();
+            }
+        }
+        let Some((cursor, cursor_end)) = self.prompt_cell_at_screen(column, row) else {
+            return;
+        };
+        if let Some(selection) = &mut self.prompt_selection {
+            selection.active_start = cursor;
+            selection.active_end = cursor_end;
+            selection.dragged |= is_drag || selection.origin_screen != (column, row);
+            self.prompt_cursor = if !selection.dragged {
+                cursor
+            } else if cursor >= selection.origin_start {
+                cursor_end
+            } else {
+                cursor
+            };
+        }
+    }
+
+    fn prompt_cell_at_screen(&self, column: u16, row: u16) -> Option<(usize, usize)> {
+        let region = self.mouse_regions.prompt?;
+        let rows = wrap_words(&self.prompt, region.width);
+        let logical_row = region.view_start
+            + row
+                .saturating_sub(region.area.y)
+                .min(region.area.height.saturating_sub(1)) as usize;
+        let row = rows.get(logical_row).or_else(|| rows.last())?;
+        let column = column.saturating_sub(region.area.x.saturating_add(2)) as usize;
+        let row_end = row.start_char + row.text.chars().count();
+        let char_index =
+            char_index_at_display_column(&self.prompt, row.start_char, row_end, column);
+        let start = byte_index_at_char(&self.prompt, char_index);
+        let end = next_char_boundary(&self.prompt, start).unwrap_or(start);
+        Some((start, end))
     }
 
     fn begin_transcript_selection(&mut self, column: u16, row: u16) {
@@ -1061,6 +1443,9 @@ impl App {
             self.prompt.clear();
             self.prompt_cursor = 0;
             self.prompt_vertical_column = None;
+            self.prompt_selection = None;
+            self.prompt_scroll = 0;
+            self.prompt_follow_cursor = true;
             self.reset_command_palette();
             self.after_transcript_changed();
             return;
@@ -1077,6 +1462,9 @@ impl App {
             self.prompt.clear();
             self.prompt_cursor = 0;
             self.prompt_vertical_column = None;
+            self.prompt_selection = None;
+            self.prompt_scroll = 0;
+            self.prompt_follow_cursor = true;
             self.reset_command_palette();
             return;
         }
@@ -1087,6 +1475,9 @@ impl App {
         self.prompt.clear();
         self.prompt_cursor = 0;
         self.prompt_vertical_column = None;
+        self.prompt_selection = None;
+        self.prompt_scroll = 0;
+        self.prompt_follow_cursor = true;
         self.reset_command_palette();
         self.agent_status = "thinking".to_string();
 
@@ -1163,6 +1554,8 @@ impl App {
             .replace_range(previous..self.prompt_cursor, "\n");
         self.prompt_cursor = previous + 1;
         self.prompt_vertical_column = None;
+        self.prompt_selection = None;
+        self.prompt_follow_cursor = true;
         self.reset_command_palette();
         true
     }
@@ -1179,6 +1572,8 @@ impl App {
         self.prompt = command.insertion.to_string();
         self.prompt_cursor = self.prompt.len();
         self.prompt_vertical_column = None;
+        self.prompt_selection = None;
+        self.prompt_follow_cursor = true;
         self.command_palette_selected = 0;
         self.command_palette_dismissed = true;
         true
@@ -1187,6 +1582,10 @@ impl App {
     fn cancel_or_quit(&mut self) {
         if self.command_palette_open() {
             self.command_palette_dismissed = true;
+        } else if self.prompt_selection.take().is_some() {
+            self.prompt_follow_cursor = true;
+        } else if self.transcript_selection.is_some() {
+            self.transcript_selection = None;
         } else {
             self.should_quit = true;
         }
@@ -1245,6 +1644,8 @@ impl App {
             preferred_column,
         );
         self.prompt_cursor = byte_index_at_char(&self.prompt, target_char);
+        self.prompt_selection = None;
+        self.prompt_follow_cursor = true;
     }
 
     fn handle_local_slash_command(&mut self, prompt: &str) -> bool {
