@@ -1,0 +1,42 @@
+tui/ratatui/src/input.rs
+  s_a81fff26d52223::t_85f8e3f236edbe 7
+scripts/test-ratatui-product.mjs
+  s_a81fff26d52223::t_d3d499191998a1 75,213-236
+  s_a81fff26d52223::t_5ae86c7b893d09 237-238
+docs/operations/product-tui.md
+  s_a81fff26d52223::t_b516bad2e2bbb3 127-129
+docs/tui/ratatui.md
+  s_a81fff26d52223::t_b516bad2e2bbb3 48,116
+  s_a81fff26d52223::t_610f6791509a65 117
+.github/workflows/ci.yml
+  s_a81fff26d52223::t_b89b814c0560d8 63-65
+docs/architecture/tui-cli-session-flow.md
+  s_a81fff26d52223::t_b516bad2e2bbb3 148
+tui/ratatui/tests/input_mapping.rs
+  s_a81fff26d52223::t_f36b6605d71300 119-125
+  s_a81fff26d52223::t_a101341ad2e38b 102
+  s_a81fff26d52223::t_2f0a253fb6b6c6 126
+tui/ratatui/tests/terminal_interaction.rs
+  s_a81fff26d52223::t_f36b6605d71300 1-61
+scripts/test-ratatui-interactive.py
+  s_a81fff26d52223::t_b516bad2e2bbb3 104
+  s_a81fff26d52223::t_d3d499191998a1 1-103,105-151
+docs/architecture/gorombo-flue-map.md
+  s_a81fff26d52223::t_b516bad2e2bbb3 78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "7cd6f4fc7a7ca584c52860380b478c52b195f67e",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
