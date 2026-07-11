@@ -6,10 +6,8 @@ use ratatui::widgets::{
 };
 use ratatui::Frame;
 
-use crate::app::{App, RenderedTranscriptRow, TranscriptRowKind};
-use crate::text_wrap::{
-    display_width, display_width_between, pad_to_width, wrap_words, WrappedLine,
-};
+use crate::app::{App, MouseRegions, RenderedTranscriptRow, TranscriptRowKind};
+use crate::text_wrap::{display_width, display_width_between, wrap_words, WrappedLine};
 use crate::theme::{
     command_palette_command_style, command_palette_description_style,
     command_palette_selected_style, command_palette_style, live_assistant_body_style,
@@ -36,14 +34,37 @@ pub fn render(frame: &mut Frame<'_>, app: &mut App) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(5), Constraint::Length(bottom_height)])
         .areas(frame.area());
+    let [status_area, prompt_area] = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(3)])
+        .areas(bottom_area);
 
     let transcript_inner_width = transcript_area.width.saturating_sub(2) as usize;
+    let transcript_margin = transcript_left_margin_width(transcript_inner_width) as u16;
+    let transcript_inner = transcript_area.inner(Margin::new(1, 1));
     app.set_transcript_viewport_size(
         transcript_area.height.saturating_sub(2) as usize,
         transcript_content_width(transcript_inner_width),
     );
+    app.set_mouse_regions(MouseRegions {
+        transcript_text: Some(Rect::new(
+            transcript_inner.x.saturating_add(transcript_margin),
+            transcript_inner.y,
+            transcript_inner.width.saturating_sub(transcript_margin),
+            transcript_inner.height,
+        )),
+        transcript_scrollbar: Some(Rect::new(
+            transcript_area.right().saturating_sub(1),
+            transcript_area.y.saturating_add(1),
+            1,
+            transcript_area.height.saturating_sub(2),
+        )),
+        status: Some(status_area),
+        prompt: Some(prompt_area.inner(Margin::new(1, 1))),
+        command_palette: None,
+    });
     render_transcript(frame, app, transcript_area);
-    render_bottom(frame, app, bottom_area);
+    render_bottom(frame, app, status_area, prompt_area);
 }
 
 fn render_transcript(frame: &mut Frame<'_>, app: &mut App, area: ratatui::layout::Rect) {
@@ -81,10 +102,17 @@ fn rendered_transcript_line(row: RenderedTranscriptRow, visible_width: usize) ->
     let margin = " ".repeat(margin_width);
     if row.kind == TranscriptRowKind::User {
         let content_width = visible_width.saturating_sub(margin_width);
-        return Line::styled(
-            format!("{margin}{}", pad_to_width(&row.text, content_width)),
-            user_prompt_style(),
+        let padding = " ".repeat(content_width.saturating_sub(display_width(&row.text)));
+        let mut content = apply_selection_style(
+            vec![
+                Span::styled(row.text, user_prompt_style()),
+                Span::styled(padding, user_prompt_style()),
+            ],
+            row.selection_range,
         );
+        let mut spans = vec![Span::styled(margin, user_prompt_style())];
+        spans.append(&mut content);
+        return Line::from(spans);
     }
 
     let body_style = if row.kind == TranscriptRowKind::Assistant && row.is_streaming {
@@ -94,34 +122,63 @@ fn rendered_transcript_line(row: RenderedTranscriptRow, visible_width: usize) ->
     } else {
         Style::default()
     };
-    let Some(prefix) = row.kind.prefix() else {
-        let mut spans = vec![Span::raw(margin)];
-        spans.extend(styled_body_spans(row.styled_spans, row.text, body_style));
-        return Line::from(spans);
-    };
-    let Some(body) = row.text.strip_prefix(prefix) else {
-        let mut spans = vec![Span::raw(margin)];
-        spans.extend(styled_body_spans(row.styled_spans, row.text, body_style));
-        return Line::from(spans);
-    };
-    let body = body.to_string();
-    let prefix_style = if row.kind == TranscriptRowKind::Assistant && row.is_streaming {
-        Some(live_assistant_prefix_style())
-    } else {
-        transcript_prefix_style(row.kind)
-    };
-    let Some(prefix_style) = prefix_style else {
-        let mut spans = vec![Span::raw(margin)];
-        spans.extend(styled_body_spans(row.styled_spans, row.text, body_style));
-        return Line::from(spans);
-    };
-
-    let mut spans = vec![
-        Span::raw(margin),
-        Span::styled(prefix.to_string(), prefix_style),
-    ];
-    spans.extend(styled_body_spans(row.styled_spans, body, body_style));
+    let content = row.kind.prefix().and_then(|prefix| {
+        let body = row.text.strip_prefix(prefix)?.to_string();
+        let prefix_style = if row.kind == TranscriptRowKind::Assistant && row.is_streaming {
+            Some(live_assistant_prefix_style())
+        } else {
+            transcript_prefix_style(row.kind)
+        }?;
+        let mut spans = vec![Span::styled(prefix.to_string(), prefix_style)];
+        spans.extend(styled_body_spans(
+            row.styled_spans.clone(),
+            body,
+            body_style,
+        ));
+        Some(spans)
+    });
+    let mut content = apply_selection_style(
+        content.unwrap_or_else(|| styled_body_spans(row.styled_spans, row.text, body_style)),
+        row.selection_range,
+    );
+    let mut spans = vec![Span::raw(margin)];
+    spans.append(&mut content);
     Line::from(spans)
+}
+
+fn apply_selection_style(
+    spans: Vec<Span<'static>>,
+    selection: Option<(usize, usize)>,
+) -> Vec<Span<'static>> {
+    let Some((selection_start, selection_end)) = selection else {
+        return spans;
+    };
+    let mut result = Vec::new();
+    let mut span_start = 0;
+    for span in spans {
+        let chars = span.content.chars().collect::<Vec<_>>();
+        let span_end = span_start + chars.len();
+        let selected_start = selection_start.max(span_start).min(span_end) - span_start;
+        let selected_end = selection_end.max(span_start).min(span_end) - span_start;
+        for (start, end, selected) in [
+            (0, selected_start, false),
+            (selected_start, selected_end, true),
+            (selected_end, chars.len(), false),
+        ] {
+            if start == end {
+                continue;
+            }
+            let text = chars[start..end].iter().collect::<String>();
+            let style = if selected {
+                span.style.add_modifier(Modifier::REVERSED)
+            } else {
+                span.style
+            };
+            result.push(Span::styled(text, style));
+        }
+        span_start = span_end;
+    }
+    result
 }
 
 fn styled_body_spans(
@@ -150,12 +207,7 @@ fn transcript_content_width(visible_width: usize) -> usize {
         .max(1)
 }
 
-fn render_bottom(frame: &mut Frame<'_>, app: &mut App, area: ratatui::layout::Rect) {
-    let [status_area, prompt_area] = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(3)])
-        .areas(area);
-
+fn render_bottom(frame: &mut Frame<'_>, app: &mut App, status_area: Rect, prompt_area: Rect) {
     let status = Line::from(Span::styled(
         visible_status_text(&app.status_text(), status_area.width as usize),
         Style::default()

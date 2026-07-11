@@ -2,6 +2,7 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::backend::TestBackend;
 use ratatui::layout::Position;
 use ratatui::style::{Color, Modifier};
@@ -1427,6 +1428,150 @@ fn transcript_scrollbar_thumb_reaches_bottom_at_tail() {
 }
 
 #[test]
+fn transcript_mouse_drag_highlights_and_copies_logical_text_across_wraps() {
+    let backend = TestBackend::new(50, 16);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"log",
+            "eventIndex":450,
+            "text":"alpha bravo charlie delta echo foxtrot golf hotel india juliet"
+        }),
+    )]));
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("selectable transcript should render");
+    let start = find_buffer_cell_text_position(&terminal, "alpha");
+    let hotel = find_buffer_cell_text_position(&terminal, "hotel");
+    let end = Position::new(hotel.x + "hotel".len() as u16 - 1, hotel.y);
+
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Down(MouseButton::Left),
+        start,
+    )));
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Drag(MouseButton::Left),
+        end,
+    )));
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Up(MouseButton::Left),
+        end,
+    )));
+
+    assert_eq!(
+        app.transcript_selection_text().as_deref(),
+        Some("alpha bravo charlie delta echo foxtrot golf hotel")
+    );
+    assert_eq!(
+        app.take_clipboard_text().as_deref(),
+        Some("alpha bravo charlie delta echo foxtrot golf hotel")
+    );
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("selected transcript should render");
+    for position in [start, end] {
+        assert!(
+            terminal
+                .backend()
+                .buffer()
+                .cell(position)
+                .expect("selected cell should exist")
+                .modifier
+                .contains(Modifier::REVERSED),
+            "{}",
+            terminal_buffer_lines(&terminal)
+        );
+    }
+}
+
+#[test]
+fn transcript_reverse_drag_copies_rendered_markdown_text_without_markers() {
+    let backend = TestBackend::new(40, 16);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::with_agent_sender(
+        "tui-markdown-selection",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| {
+            Ok(AgentReply {
+                text: "Use **bold words** and `code sample` for this test.".to_string(),
+                session_id: None,
+                session_title: None,
+                command_name: None,
+                session_created: None,
+            })
+        }),
+    );
+    app.handle_event(AppEvent::Text("render markdown".to_string()));
+    app.handle_event(AppEvent::Submit);
+    wait_for_agent(&mut app);
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("markdown transcript should render");
+    let bold = find_buffer_cell_text_position(&terminal, "bold");
+    let sample = find_buffer_cell_text_position(&terminal, "sample");
+    let sample_end = Position::new(sample.x + "sample".len() as u16 - 1, sample.y);
+
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Down(MouseButton::Left),
+        sample_end,
+    )));
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Drag(MouseButton::Left),
+        bold,
+    )));
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::Up(MouseButton::Left),
+        bold,
+    )));
+
+    assert_eq!(
+        app.take_clipboard_text().as_deref(),
+        Some("bold words and code sample")
+    );
+}
+
+#[test]
+fn mouse_wheel_routes_by_pane_without_changing_keyboard_scroll_behavior() {
+    let backend = TestBackend::new(50, 16);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    for index in 0..30 {
+        app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+            serde_json::json!({
+                "type":"log",
+                "eventIndex":500 + index,
+                "text":format!("mouse routing row {index}")
+            }),
+        )]));
+    }
+    app.jump_to_tail();
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("pane routing shell should render");
+
+    let tail = app.transcript_scroll();
+    let prompt_title = find_buffer_text_position(&terminal, "Prompt");
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::ScrollUp,
+        Position::new(prompt_title.x + 2, prompt_title.y + 1),
+    )));
+    assert_eq!(app.transcript_scroll(), tail);
+
+    app.handle_event(AppEvent::Mouse(mouse_at(
+        MouseEventKind::ScrollUp,
+        Position::new(10, 2),
+    )));
+    assert_eq!(app.transcript_scroll(), tail.saturating_sub(1));
+
+    app.handle_event(AppEvent::ScrollLineDown);
+    assert_eq!(app.transcript_scroll(), tail);
+}
+
+#[test]
 fn live_tail_renders_final_content_above_blank_margin_row() {
     let backend = TestBackend::new(40, 12);
     let mut terminal = Terminal::new(backend).expect("test backend should initialize");
@@ -1556,6 +1701,15 @@ fn app_with_pending_response() -> App {
     )
 }
 
+fn mouse_at(kind: MouseEventKind, position: Position) -> MouseEvent {
+    MouseEvent {
+        kind,
+        column: position.x,
+        row: position.y,
+        modifiers: KeyModifiers::NONE,
+    }
+}
+
 fn wait_for_agent(app: &mut App) {
     let deadline = Instant::now() + Duration::from_secs(2);
     while app.is_agent_pending() && Instant::now() < deadline {
@@ -1593,6 +1747,25 @@ fn find_buffer_text_position(terminal: &Terminal<TestBackend>, needle: &str) -> 
         let row = buffer_row_text(terminal, y);
         if let Some(x) = row.find(needle) {
             return Position::new(x as u16, y);
+        }
+    }
+    panic!(
+        "could not find {needle:?} in:\n{}",
+        terminal_buffer_lines(terminal)
+    );
+}
+
+fn find_buffer_cell_text_position(terminal: &Terminal<TestBackend>, needle: &str) -> Position {
+    let buffer = terminal.backend().buffer();
+    for y in 0..buffer.area.height {
+        for x in 0..buffer.area.width {
+            let suffix = (x..buffer.area.width)
+                .filter_map(|column| buffer.cell(Position::new(column, y)))
+                .map(|cell| cell.symbol())
+                .collect::<String>();
+            if suffix.starts_with(needle) {
+                return Position::new(x, y);
+            }
         }
     }
     panic!(

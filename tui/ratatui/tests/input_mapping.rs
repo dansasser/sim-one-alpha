@@ -139,22 +139,45 @@ fn terminal_mapper_ignores_release_events_and_enter_repeats() {
         None
     );
     assert_eq!(map_terminal_event(Event::Resize(80, 24)), None);
-    assert_eq!(
-        map_terminal_event(Event::Mouse(MouseEvent {
+}
+
+#[test]
+fn terminal_mapper_preserves_mouse_kind_coordinates_and_modifiers() {
+    for mouse in [
+        MouseEvent {
             kind: MouseEventKind::ScrollUp,
             column: 10,
             row: 5,
             modifiers: KeyModifiers::NONE,
-        })),
-        Some(AppEvent::ScrollLineUp)
-    );
-    assert_eq!(
-        map_terminal_event(Event::Mouse(MouseEvent {
+        },
+        MouseEvent {
             kind: MouseEventKind::ScrollDown,
-            column: 10,
-            row: 5,
+            column: 11,
+            row: 6,
+            modifiers: KeyModifiers::CONTROL,
+        },
+        MouseEvent {
+            kind: MouseEventKind::Down(crossterm::event::MouseButton::Left),
+            column: 12,
+            row: 7,
+            modifiers: KeyModifiers::SHIFT,
+        },
+        MouseEvent {
+            kind: MouseEventKind::Drag(crossterm::event::MouseButton::Left),
+            column: 13,
+            row: 8,
             modifiers: KeyModifiers::NONE,
-        })),
-        Some(AppEvent::ScrollLineDown)
-    );
+        },
+        MouseEvent {
+            kind: MouseEventKind::Up(crossterm::event::MouseButton::Left),
+            column: 14,
+            row: 9,
+            modifiers: KeyModifiers::NONE,
+        },
+    ] {
+        assert_eq!(
+            map_terminal_event(Event::Mouse(mouse)),
+            Some(AppEvent::Mouse(mouse))
+        );
+    }
 }

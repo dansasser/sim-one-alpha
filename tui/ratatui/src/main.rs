@@ -9,7 +9,9 @@ use sim_one_ratatui_tui::agent::send_agent_prompt;
 use sim_one_ratatui_tui::app::{App, AppEvent};
 use sim_one_ratatui_tui::gateway::{ensure_server_running, GatewayOptions};
 use sim_one_ratatui_tui::input::map_terminal_event;
-use sim_one_ratatui_tui::terminal::{init_terminal, install_panic_restore_hook, restore_terminal};
+use sim_one_ratatui_tui::terminal::{
+    copy_to_clipboard, init_terminal, install_panic_restore_hook, restore_terminal,
+};
 use sim_one_ratatui_tui::ui;
 
 fn main() -> io::Result<()> {
@@ -128,6 +130,9 @@ fn run(
         terminal.draw(|frame| ui::render(frame, &mut app))?;
         if let Some(app_event) = read_app_event()? {
             app.handle_event(app_event);
+            if let Some(text) = app.take_clipboard_text() {
+                let _ = copy_to_clipboard(&text);
+            }
         }
     }
 

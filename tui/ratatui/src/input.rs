@@ -1,4 +1,4 @@
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::app::AppEvent;
 
@@ -8,11 +8,7 @@ pub fn map_terminal_event(event: Event) -> Option<AppEvent> {
         Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
             map_key_event(key)
         }
-        Event::Mouse(mouse) => match mouse.kind {
-            MouseEventKind::ScrollUp => Some(AppEvent::ScrollLineUp),
-            MouseEventKind::ScrollDown => Some(AppEvent::ScrollLineDown),
-            _ => None,
-        },
+        Event::Mouse(mouse) => Some(AppEvent::Mouse(mouse)),
         _ => None,
     }
 }

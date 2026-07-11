@@ -4,6 +4,8 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+use ratatui::layout::Rect;
 use ratatui::text::Span;
 
 use crate::agent::{list_chat_sessions, send_agent_prompt_reply, AgentReply, SessionSummary};
@@ -113,6 +115,7 @@ pub enum AppEvent {
     ScrollPageUp,
     ScrollPageDown,
     JumpToTail,
+    Mouse(MouseEvent),
     Quit,
 }
 
@@ -156,6 +159,55 @@ pub struct RenderedTranscriptRow {
     pub kind: TranscriptRowKind,
     pub is_streaming: bool,
     pub styled_spans: Option<Vec<Span<'static>>>,
+    pub selection_range: Option<(usize, usize)>,
+    source: Option<TranscriptSourceSpan>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TranscriptSourceSpan {
+    line: usize,
+    text: String,
+    start_char: usize,
+    end_char: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct TranscriptTextPosition {
+    line: usize,
+    char_index: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TranscriptTextCell {
+    start: TranscriptTextPosition,
+    end: TranscriptTextPosition,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TranscriptSelection {
+    origin: TranscriptTextCell,
+    active: TranscriptTextCell,
+    origin_screen: (u16, u16),
+    dragged: bool,
+}
+
+impl TranscriptSelection {
+    fn range(self) -> (TranscriptTextPosition, TranscriptTextPosition) {
+        if self.active.start >= self.origin.start {
+            (self.origin.start, self.active.end)
+        } else {
+            (self.active.start, self.origin.end)
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MouseRegions {
+    pub transcript_text: Option<Rect>,
+    pub transcript_scrollbar: Option<Rect>,
+    pub status: Option<Rect>,
+    pub prompt: Option<Rect>,
+    pub command_palette: Option<Rect>,
 }
 
 pub struct App {
@@ -188,6 +240,9 @@ pub struct App {
     response_is_streaming: bool,
     transcript_viewport_height: usize,
     transcript_viewport_width: usize,
+    mouse_regions: MouseRegions,
+    transcript_selection: Option<TranscriptSelection>,
+    clipboard_text: Option<String>,
     startup_phase: StartupPhase,
     startup_attach_stream: bool,
 }
@@ -324,6 +379,9 @@ impl App {
             response_is_streaming: false,
             transcript_viewport_height: SCROLL_PAGE_LINES,
             transcript_viewport_width: 80,
+            mouse_regions: MouseRegions::default(),
+            transcript_selection: None,
+            clipboard_text: None,
             startup_phase: StartupPhase::Idle,
             startup_attach_stream: false,
         };
@@ -367,6 +425,7 @@ impl App {
             AppEvent::ScrollPageUp => self.scroll_page_up(),
             AppEvent::ScrollPageDown => self.scroll_page_down(),
             AppEvent::JumpToTail => self.jump_to_tail(),
+            AppEvent::Mouse(mouse) => self.handle_mouse(mouse),
             AppEvent::Quit => self.should_quit = true,
         }
     }
@@ -746,10 +805,36 @@ impl App {
                 kind: TranscriptRowKind::Other,
                 is_streaming: false,
                 styled_spans: None,
+                selection_range: None,
+                source: None,
             },
             TRANSCRIPT_TAIL_MARGIN_ROWS,
         ));
+        if let Some(selection) = self
+            .transcript_selection
+            .filter(|selection| selection.dragged)
+        {
+            let range = selection.range();
+            for row in &mut rows {
+                row.selection_range = selection_range_for_row(row.source.as_ref(), range);
+            }
+        }
         rows
+    }
+
+    pub fn set_mouse_regions(&mut self, regions: MouseRegions) {
+        self.mouse_regions = regions;
+    }
+
+    pub fn transcript_selection_text(&self) -> Option<String> {
+        let selection = self
+            .transcript_selection
+            .filter(|selection| selection.dragged)?;
+        selected_transcript_text(&self.transcript_rendered_rows(), selection.range())
+    }
+
+    pub fn take_clipboard_text(&mut self) -> Option<String> {
+        self.clipboard_text.take()
     }
 
     pub(crate) fn sync_transcript_scroll_for_render(&mut self, rendered_row_count: usize) -> usize {
@@ -852,6 +937,108 @@ impl App {
             .saturating_add(amount)
             .min(self.max_scroll());
         self.follow_tail = self.transcript_scroll == self.max_scroll();
+    }
+
+    fn handle_mouse(&mut self, mouse: MouseEvent) {
+        match mouse.kind {
+            MouseEventKind::ScrollUp if self.mouse_over_transcript(mouse.column, mouse.row) => {
+                self.scroll_lines_up(1);
+            }
+            MouseEventKind::ScrollDown if self.mouse_over_transcript(mouse.column, mouse.row) => {
+                self.scroll_lines_down(1);
+            }
+            MouseEventKind::Down(MouseButton::Left)
+                if self.mouse_over_transcript(mouse.column, mouse.row) =>
+            {
+                self.begin_transcript_selection(mouse.column, mouse.row);
+            }
+            MouseEventKind::Drag(MouseButton::Left) if self.transcript_selection.is_some() => {
+                self.update_transcript_selection(mouse.column, mouse.row, true);
+            }
+            MouseEventKind::Up(MouseButton::Left) if self.transcript_selection.is_some() => {
+                self.update_transcript_selection(mouse.column, mouse.row, false);
+                if self
+                    .transcript_selection
+                    .is_some_and(|selection| selection.dragged)
+                {
+                    self.clipboard_text = self.transcript_selection_text();
+                } else {
+                    self.transcript_selection = None;
+                }
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                self.transcript_selection = None;
+            }
+            _ => {}
+        }
+    }
+
+    fn mouse_over_transcript(&self, column: u16, row: u16) -> bool {
+        self.mouse_regions
+            .transcript_text
+            .is_some_and(|area| rect_contains(area, column, row))
+            || self
+                .mouse_regions
+                .transcript_scrollbar
+                .is_some_and(|area| rect_contains(area, column, row))
+    }
+
+    fn begin_transcript_selection(&mut self, column: u16, row: u16) {
+        let Some(cell) = self.transcript_cell_at_screen(column, row) else {
+            self.transcript_selection = None;
+            return;
+        };
+        self.transcript_selection = Some(TranscriptSelection {
+            origin: cell,
+            active: cell,
+            origin_screen: (column, row),
+            dragged: false,
+        });
+    }
+
+    fn update_transcript_selection(&mut self, column: u16, row: u16, is_drag: bool) {
+        let Some(area) = self.mouse_regions.transcript_text else {
+            return;
+        };
+        if is_drag {
+            if row <= area.y {
+                self.scroll_lines_up(1);
+            } else if row >= area.bottom().saturating_sub(1) {
+                self.scroll_lines_down(1);
+            }
+        }
+        let Some(cell) = self.transcript_cell_at_screen(column, row) else {
+            return;
+        };
+        if let Some(selection) = &mut self.transcript_selection {
+            selection.active = cell;
+            selection.dragged |= is_drag || selection.origin_screen != (column, row);
+        }
+    }
+
+    fn transcript_cell_at_screen(&self, column: u16, row: u16) -> Option<TranscriptTextCell> {
+        let area = self.mouse_regions.transcript_text?;
+        if area.width == 0 || area.height == 0 {
+            return None;
+        }
+        let local_row = row
+            .saturating_sub(area.y)
+            .min(area.height.saturating_sub(1)) as usize;
+        let rendered_row = self.transcript_scroll.saturating_add(local_row);
+        let rows = self.transcript_rendered_rows();
+        let row = rows
+            .get(rendered_row)
+            .filter(|row| row.source.is_some())
+            .or_else(|| {
+                rows[..rendered_row.min(rows.len())]
+                    .iter()
+                    .rev()
+                    .find(|row| row.source.is_some())
+            })?;
+        let display_column = column
+            .saturating_sub(area.x)
+            .min(area.width.saturating_sub(1)) as usize;
+        transcript_text_cell(row, display_column)
     }
 
     fn submit_prompt(&mut self) {
@@ -1490,6 +1677,7 @@ fn wrap_transcript_rows(
     let mut wrapped = Vec::new();
     let mut previous_kind = TranscriptRowKind::Other;
     let mut line_index = 0;
+    let mut source_line = 0;
 
     while line_index < lines.len() {
         let line = &lines[line_index];
@@ -1506,10 +1694,31 @@ fn wrap_transcript_rows(
                 .prefix()
                 .expect("assistant rows have a prefix");
             let first_width = width.saturating_sub(display_width(prefix) + 1).max(1);
-            for (markdown_index, markdown_row) in render_markdown(&markdown, first_width, width)
-                .into_iter()
-                .enumerate()
-            {
+            let markdown_rows = render_markdown(&markdown, first_width, width);
+            let source_line_count = markdown_rows
+                .iter()
+                .map(|row| row.source_line)
+                .max()
+                .unwrap_or_default()
+                + 1;
+            for (markdown_index, markdown_row) in markdown_rows.into_iter().enumerate() {
+                let source_id = source_line + markdown_row.source_line;
+                let prefix_offset = if markdown_row.source_line == 0 {
+                    prefix.chars().count() + 1
+                } else {
+                    0
+                };
+                let source_text = if markdown_row.source_line == 0 {
+                    format!("{prefix} {}", markdown_row.source_text)
+                } else {
+                    markdown_row.source_text.clone()
+                };
+                let source_start = if markdown_index == 0 {
+                    0
+                } else {
+                    prefix_offset + markdown_row.start_char
+                };
+                let source_end = prefix_offset + markdown_row.end_char;
                 if markdown_index == 0 {
                     let mut spans = Vec::with_capacity(markdown_row.spans.len() + 1);
                     spans.push(Span::raw(" "));
@@ -1519,6 +1728,13 @@ fn wrap_transcript_rows(
                         kind,
                         is_streaming,
                         styled_spans: Some(spans),
+                        selection_range: None,
+                        source: Some(TranscriptSourceSpan {
+                            line: source_id,
+                            text: source_text,
+                            start_char: source_start,
+                            end_char: source_end,
+                        }),
                     });
                 } else {
                     wrapped.push(RenderedTranscriptRow {
@@ -1526,24 +1742,39 @@ fn wrap_transcript_rows(
                         kind,
                         is_streaming,
                         styled_spans: Some(markdown_row.spans),
+                        selection_range: None,
+                        source: Some(TranscriptSourceSpan {
+                            line: source_id,
+                            text: source_text,
+                            start_char: source_start,
+                            end_char: source_end,
+                        }),
                     });
                 }
             }
+            source_line += source_line_count;
             line_index = block_end;
             continue;
         }
 
         let is_streaming = range_intersects(streaming_range, line_index, line_index + 1);
-        wrapped.extend(
-            wrap_words(line, width)
-                .into_iter()
-                .map(|row| RenderedTranscriptRow {
-                    text: row.text,
-                    kind,
-                    is_streaming,
-                    styled_spans: None,
+        wrapped.extend(wrap_words(line, width).into_iter().map(|row| {
+            let visible_char_count = row.text.chars().count();
+            RenderedTranscriptRow {
+                text: row.text,
+                kind,
+                is_streaming,
+                styled_spans: None,
+                selection_range: None,
+                source: Some(TranscriptSourceSpan {
+                    line: source_line,
+                    text: line.clone(),
+                    start_char: row.start_char,
+                    end_char: row.start_char + visible_char_count,
                 }),
-        );
+            }
+        }));
+        source_line += 1;
         line_index += 1;
     }
 
@@ -1778,6 +2009,109 @@ fn char_index_at_display_column(
         index += 1;
     }
     index
+}
+
+fn transcript_text_cell(
+    row: &RenderedTranscriptRow,
+    target_column: usize,
+) -> Option<TranscriptTextCell> {
+    let source = row.source.as_ref()?;
+    let chars = row.text.chars().collect::<Vec<_>>();
+    let mut display_column = 0;
+    for (index, ch) in chars.iter().copied().enumerate() {
+        let width = UnicodeWidthChar::width(ch).unwrap_or_default();
+        let next_column = display_column + width;
+        if target_column < next_column || (width == 0 && target_column == display_column) {
+            let mut end_index = index + 1;
+            while end_index < chars.len()
+                && UnicodeWidthChar::width(chars[end_index]).unwrap_or_default() == 0
+            {
+                end_index += 1;
+            }
+            return Some(TranscriptTextCell {
+                start: TranscriptTextPosition {
+                    line: source.line,
+                    char_index: source.start_char + index,
+                },
+                end: TranscriptTextPosition {
+                    line: source.line,
+                    char_index: source.start_char + end_index,
+                },
+            });
+        }
+        display_column = next_column;
+    }
+
+    let end = TranscriptTextPosition {
+        line: source.line,
+        char_index: source.end_char,
+    };
+    Some(TranscriptTextCell { start: end, end })
+}
+
+fn selection_range_for_row(
+    source: Option<&TranscriptSourceSpan>,
+    selection: (TranscriptTextPosition, TranscriptTextPosition),
+) -> Option<(usize, usize)> {
+    let source = source?;
+    let row_start = TranscriptTextPosition {
+        line: source.line,
+        char_index: source.start_char,
+    };
+    let row_end = TranscriptTextPosition {
+        line: source.line,
+        char_index: source.end_char,
+    };
+    let start = selection.0.max(row_start);
+    let end = selection.1.min(row_end);
+    if start >= end || start.line != source.line || end.line != source.line {
+        return None;
+    }
+    Some((
+        start.char_index.saturating_sub(source.start_char),
+        end.char_index.saturating_sub(source.start_char),
+    ))
+}
+
+fn selected_transcript_text(
+    rows: &[RenderedTranscriptRow],
+    selection: (TranscriptTextPosition, TranscriptTextPosition),
+) -> Option<String> {
+    if selection.0 >= selection.1 {
+        return None;
+    }
+    let mut sources = BTreeMap::new();
+    for source in rows.iter().filter_map(|row| row.source.as_ref()) {
+        sources
+            .entry(source.line)
+            .or_insert_with(|| source.text.clone());
+    }
+
+    let mut selected = Vec::new();
+    for (&line, text) in sources.range(selection.0.line..=selection.1.line) {
+        let char_count = text.chars().count();
+        let start = if line == selection.0.line {
+            selection.0.char_index.min(char_count)
+        } else {
+            0
+        };
+        let end = if line == selection.1.line {
+            selection.1.char_index.min(char_count)
+        } else {
+            char_count
+        };
+        selected.push(
+            text.chars()
+                .skip(start)
+                .take(end.saturating_sub(start))
+                .collect::<String>(),
+        );
+    }
+    (!selected.is_empty()).then(|| selected.join("\n"))
+}
+
+fn rect_contains(area: Rect, column: u16, row: u16) -> bool {
+    column >= area.x && column < area.right() && row >= area.y && row < area.bottom()
 }
 
 fn byte_index_at_char(value: &str, char_index: usize) -> usize {

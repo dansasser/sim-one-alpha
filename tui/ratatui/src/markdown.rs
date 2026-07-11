@@ -9,6 +9,10 @@ use crate::theme::TranscriptMarkdownStyleSheet;
 pub(crate) struct StyledMarkdownLine {
     pub text: String,
     pub spans: Vec<Span<'static>>,
+    pub source_line: usize,
+    pub source_text: String,
+    pub start_char: usize,
+    pub end_char: usize,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -26,20 +30,32 @@ pub(crate) fn render_markdown(
     let markdown = from_str_with_options(input, &options);
     let mut rows = Vec::new();
 
-    for line in markdown.lines {
+    for (source_line, line) in markdown.lines.into_iter().enumerate() {
         let chars = styled_chars(line);
+        let source_text = chars.iter().map(|styled| styled.ch).collect::<String>();
         let width = if rows.is_empty() {
             first_line_width
         } else {
             continuation_width
         };
-        wrap_styled_line(&chars, width.max(1), continuation_width.max(1), &mut rows);
+        wrap_styled_line(
+            &chars,
+            width.max(1),
+            continuation_width.max(1),
+            source_line,
+            &source_text,
+            &mut rows,
+        );
     }
 
     if rows.is_empty() {
         rows.push(StyledMarkdownLine {
             text: String::new(),
             spans: Vec::new(),
+            source_line: 0,
+            source_text: String::new(),
+            start_char: 0,
+            end_char: 0,
         });
     }
 
@@ -65,12 +81,18 @@ fn wrap_styled_line(
     chars: &[StyledChar],
     first_width: usize,
     continuation_width: usize,
+    source_line: usize,
+    source_text: &str,
     rows: &mut Vec<StyledMarkdownLine>,
 ) {
     if chars.is_empty() {
         rows.push(StyledMarkdownLine {
             text: String::new(),
             spans: Vec::new(),
+            source_line,
+            source_text: source_text.to_string(),
+            start_char: 0,
+            end_char: 0,
         });
         return;
     }
@@ -89,14 +111,14 @@ fn wrap_styled_line(
             row_width += UnicodeWidthChar::width(ch).unwrap_or_default();
             if row_width > row_width_limit {
                 if let Some(break_at) = last_break {
-                    push_row(chars, row_start, break_at, rows);
+                    push_row(chars, row_start, break_at, source_line, source_text, rows);
                     row_start = consume_whitespace(chars, break_at);
                 } else if ch.is_whitespace() {
-                    push_row(chars, row_start, cursor, rows);
+                    push_row(chars, row_start, cursor, source_line, source_text, rows);
                     row_start = consume_whitespace(chars, cursor);
                 } else {
                     let word_end = consume_word(chars, cursor);
-                    push_row(chars, row_start, word_end, rows);
+                    push_row(chars, row_start, word_end, source_line, source_text, rows);
                     row_start = consume_whitespace(chars, word_end);
                 }
                 row_width_limit = continuation_width;
@@ -115,7 +137,14 @@ fn wrap_styled_line(
         }
 
         if !emitted {
-            push_row(chars, row_start, chars.len(), rows);
+            push_row(
+                chars,
+                row_start,
+                chars.len(),
+                source_line,
+                source_text,
+                rows,
+            );
             break;
         }
     }
@@ -125,6 +154,8 @@ fn push_row(
     chars: &[StyledChar],
     start: usize,
     display_end: usize,
+    source_line: usize,
+    source_text: &str,
     rows: &mut Vec<StyledMarkdownLine>,
 ) {
     let mut visible_end = display_end;
@@ -146,6 +177,10 @@ fn push_row(
             .map(|styled| styled.ch)
             .collect(),
         spans,
+        source_line,
+        source_text: source_text.to_string(),
+        start_char: start,
+        end_char: visible_end,
     });
 }
 

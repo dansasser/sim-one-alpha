@@ -3,8 +3,10 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use ratatui::layout::Rect;
 use sim_one_ratatui_tui::agent::{AgentReply, SessionSummary};
-use sim_one_ratatui_tui::app::{App, AppEvent, Clock, SCROLL_PAGE_LINES};
+use sim_one_ratatui_tui::app::{App, AppEvent, Clock, MouseRegions, SCROLL_PAGE_LINES};
 use sim_one_ratatui_tui::flue::events::{FlueEvent, StreamControl};
 use sim_one_ratatui_tui::flue::stream::AgentStreamUpdate;
 
@@ -20,6 +22,44 @@ fn typing_updates_prompt_without_changing_transcript_scroll() {
     assert_eq!(app.prompt(), "hello world");
     assert_eq!(app.transcript_scroll(), before_scroll);
     assert!(!app.should_quit());
+}
+
+#[test]
+fn transcript_drag_at_viewport_edge_autoscrolls_without_losing_selection() {
+    let mut app = App::new_for_test();
+    for index in 0..20 {
+        app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+            serde_json::json!({
+                "type":"log",
+                "eventIndex":8_000 + index,
+                "text":format!("selection history row {index}")
+            }),
+        )]));
+    }
+    app.set_transcript_viewport_size(3, 24);
+    app.set_mouse_regions(MouseRegions {
+        transcript_text: Some(Rect::new(4, 10, 24, 3)),
+        ..MouseRegions::default()
+    });
+    app.jump_to_tail();
+    app.scroll_page_up();
+    let before_drag = app.transcript_scroll();
+
+    app.handle_event(AppEvent::Mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: 8,
+        row: 11,
+        modifiers: KeyModifiers::NONE,
+    }));
+    app.handle_event(AppEvent::Mouse(MouseEvent {
+        kind: MouseEventKind::Drag(MouseButton::Left),
+        column: 8,
+        row: 10,
+        modifiers: KeyModifiers::NONE,
+    }));
+
+    assert_eq!(app.transcript_scroll(), before_drag.saturating_sub(1));
+    assert!(app.transcript_selection_text().is_some());
 }
 
 #[test]

@@ -35,15 +35,6 @@ pub(crate) fn display_width_between(text: &str, start_char: usize, end_char: usi
         .sum()
 }
 
-pub(crate) fn pad_to_width(text: &str, width: usize) -> String {
-    let mut padded = text.to_string();
-    padded.extend(std::iter::repeat_n(
-        ' ',
-        width.saturating_sub(display_width(text)),
-    ));
-    padded
-}
-
 fn wrap_logical_line(
     chars: &[char],
     start: usize,
