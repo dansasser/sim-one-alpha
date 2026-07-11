@@ -1,0 +1,28 @@
+src/engine/workers/coding-worker/tools/coding-git-tools.ts
+  s_65db8ffa7c9620::t_a35b1464548679 27,153,333-353
+  s_65db8ffa7c9620::t_10e5975a62de22 354
+src/engine/workers/coding-worker/coding-worker.ts
+  s_65db8ffa7c9620::t_3fead93b69de87 140,152,299-302
+  s_65db8ffa7c9620::t_7ea2773cf359a8 303-304
+src/engine/workers/coding-worker/tools/coding-repo-workflow-tools.ts
+  s_65db8ffa7c9620::t_a35b1464548679 35,187-192,261,298-301,309-312,479-499
+  s_65db8ffa7c9620::t_9453e507214909 500
+src/workflows/github-auth.ts
+  s_65db8ffa7c9620::t_1855fd1ba021d4 1-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "4a82d4d5b018f2b6c63db71c83c957eec9133245",
+  "prompts": {},
+  "sessions": {
+    "s_65db8ffa7c9620": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f51b3-89d7-7d02-973d-9679f07254a1",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
