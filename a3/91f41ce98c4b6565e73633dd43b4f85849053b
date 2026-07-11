@@ -1,0 +1,21 @@
+src/tests/github-auth-challenge-relay.test.ts
+  s_65db8ffa7c9620::t_812e2f0bf94728 1-32
+src/api/ingress/github-auth-challenge-relay.ts
+  s_65db8ffa7c9620::t_e77faf06b7e3d4 1-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "a391f41ce98c4b6565e73633dd43b4f85849053b",
+  "prompts": {},
+  "sessions": {
+    "s_65db8ffa7c9620": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f51b3-89d7-7d02-973d-9679f07254a1",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
