@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 
 use ratatui::backend::TestBackend;
 use ratatui::layout::Position;
+use ratatui::style::{Color, Modifier};
 use ratatui::symbols::scrollbar;
 use ratatui::Terminal;
 use sim_one_ratatui_tui::agent::AgentReply;
@@ -39,6 +40,42 @@ fn renders_static_shell_with_transcript_status_and_prompt() {
 }
 
 #[test]
+fn active_prompt_editor_has_gray_background_across_visible_rows() {
+    let backend = TestBackend::new(40, 12);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("prompt background shell should render");
+
+    for y in [9, 10] {
+        for x in 1..39 {
+            let cell = terminal
+                .backend()
+                .buffer()
+                .cell(Position::new(x, y))
+                .expect("prompt editor cell should exist");
+            assert_eq!(
+                cell.style().bg,
+                Some(Color::Rgb(38, 38, 40)),
+                "missing prompt-editor background at ({x}, {y})"
+            );
+        }
+    }
+    assert_eq!(
+        terminal
+            .backend()
+            .buffer()
+            .cell(Position::new(0, 9))
+            .expect("prompt border cell should exist")
+            .style()
+            .bg,
+        Some(Color::Reset)
+    );
+}
+
+#[test]
 fn renders_prompt_cursor_at_edit_position() {
     let backend = TestBackend::new(96, 28);
     let mut terminal = Terminal::new(backend).expect("test backend should initialize");
@@ -51,6 +88,36 @@ fn renders_prompt_cursor_at_edit_position() {
         .expect("shell should render with cursor");
 
     assert_eq!(terminal.backend().cursor_position(), Position::new(9, 25));
+}
+
+#[test]
+fn submitted_prompt_and_wrapped_continuation_have_gray_background() {
+    let backend = TestBackend::new(24, 16);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = app_with_pending_response();
+    app.handle_event(AppEvent::Text("alpha bravo charlie delta".to_string()));
+    app.handle_event(AppEvent::Submit);
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("submitted prompt shell should render");
+
+    let first_row = find_buffer_row(&terminal, "you: alpha bravo");
+    let continuation_row = find_buffer_row(&terminal, "charlie delta");
+    for row in [first_row, continuation_row] {
+        for x in 1..23 {
+            let cell = terminal
+                .backend()
+                .buffer()
+                .cell(Position::new(x, row))
+                .expect("prompt background cell should exist");
+            assert_eq!(
+                cell.style().bg,
+                Some(Color::Rgb(52, 52, 56)),
+                "missing submitted-prompt background at ({x}, {row})"
+            );
+        }
+    }
 }
 
 #[test]
@@ -100,6 +167,59 @@ fn prompt_wraps_before_a_word_that_does_not_fit() {
         .draw(|frame| render(frame, &mut app))
         .expect("word-wrapped prompt cursor should render");
     assert_eq!(terminal.backend().cursor_position(), Position::new(3, 10));
+}
+
+#[test]
+fn unicode_prompt_wraps_and_places_cursor_by_terminal_columns() {
+    let backend = TestBackend::new(12, 12);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    app.handle_event(AppEvent::Text("test 界界".to_string()));
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("Unicode prompt shell should render");
+
+    let frame = terminal_buffer_lines(&terminal);
+    let rows = frame.lines().collect::<Vec<_>>();
+    assert!(rows[9].contains("> test"), "{frame}");
+    assert_eq!(
+        terminal
+            .backend()
+            .buffer()
+            .cell(Position::new(3, 10))
+            .expect("first CJK glyph cell should exist")
+            .symbol(),
+        "界"
+    );
+    assert_eq!(
+        terminal
+            .backend()
+            .buffer()
+            .cell(Position::new(5, 10))
+            .expect("second CJK glyph cell should exist")
+            .symbol(),
+        "界"
+    );
+    assert_eq!(terminal.backend().cursor_position(), Position::new(7, 10));
+    for y in [9, 10] {
+        for x in 1..11 {
+            if y == 10 && matches!(x, 4 | 6) {
+                continue;
+            }
+            assert_eq!(
+                terminal
+                    .backend()
+                    .buffer()
+                    .cell(Position::new(x, y))
+                    .expect("Unicode prompt background cell should exist")
+                    .style()
+                    .bg,
+                Some(Color::Rgb(38, 38, 40)),
+                "missing Unicode prompt background at ({x}, {y})"
+            );
+        }
+    }
 }
 
 #[test]
@@ -515,6 +635,29 @@ fn renders_thinking_and_tool_activity_rows() {
         buffer.contains("tool: list_capabilities running"),
         "{buffer}"
     );
+
+    let thinking_row = find_buffer_row(&terminal, "thinking: checking protocol");
+    let thinking_cell = terminal
+        .backend()
+        .buffer()
+        .cell(Position::new(1, thinking_row))
+        .expect("thinking cell should exist");
+    assert_eq!(thinking_cell.style().fg, Some(Color::DarkGray));
+    assert!(
+        thinking_cell
+            .style()
+            .add_modifier
+            .contains(Modifier::ITALIC),
+        "thinking row should be italic"
+    );
+
+    let tool_row = find_buffer_row(&terminal, "tool: list_capabilities running");
+    let tool_cell = terminal
+        .backend()
+        .buffer()
+        .cell(Position::new(1, tool_row))
+        .expect("tool cell should exist");
+    assert!(!tool_cell.style().add_modifier.contains(Modifier::ITALIC));
 }
 
 #[test]
@@ -772,4 +915,22 @@ fn terminal_buffer_lines(terminal: &Terminal<TestBackend>) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn find_buffer_row(terminal: &Terminal<TestBackend>, needle: &str) -> u16 {
+    let buffer = terminal.backend().buffer();
+    (0..buffer.area.height)
+        .find(|&y| {
+            (0..buffer.area.width)
+                .filter_map(|x| buffer.cell(Position::new(x, y)))
+                .map(|cell| cell.symbol())
+                .collect::<String>()
+                .contains(needle)
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "could not find {needle:?} in:\n{}",
+                terminal_buffer_lines(terminal)
+            )
+        })
 }

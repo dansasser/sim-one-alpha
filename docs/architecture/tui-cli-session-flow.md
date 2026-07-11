@@ -148,7 +148,9 @@ TUI prompt submit
 -> response text rendered in the transcript
 ```
 
-Prompt editing is local TUI state. Enter submits normally; when the character immediately before the cursor is `/`, Enter consumes that slash and inserts a newline instead. Enter repeat events are discarded at the crossterm mapping boundary so the newline press cannot become an immediate second submit. Transcript and prompt rendering share one word-boundary row layout: a word that does not fit moves intact to the next row and is never split across rows. Prompt rows retain source character ranges so cursor navigation remains accurate after a wrap. The editor grows to five visible rows and then scrolls locally. Prompt-height changes recalculate the transcript viewport while preserving live-tail or scrolled-back state; they do not alter the connector session or Flue stream offset.
+Prompt editing is local TUI state. Enter submits normally; when the character immediately before the cursor is `/`, Enter consumes that slash and inserts a newline instead. Enter repeat events are discarded at the crossterm mapping boundary so the newline press cannot become an immediate second submit. Transcript and prompt rendering share one word-boundary row layout: a word that does not fit moves intact to the next row and is never split across rows. Prompt rows retain source character ranges while wrapping and cursor placement use Unicode terminal display columns. This keeps emoji, CJK double-width glyphs, and combining marks aligned without changing byte-safe prompt editing. The editor grows to five visible rows and then scrolls locally. Prompt-height changes recalculate the transcript viewport while preserving live-tail or scrolled-back state; they do not alter the connector session or Flue stream offset.
+
+Before drawing, canonical transcript strings are converted into semantic rendered rows (`User`, `Assistant`, `Thinking`, tool/task/activity kinds, errors, system/preflight, and fallback rows). Wrapped rows inherit the semantic kind of their source line, including multiline user and assistant continuations. `theme.rs` owns the terminal palette: user rows receive a full-width gray background, the active prompt editor receives a darker gray background, and thinking rows receive gray italic styling. Italics are additive terminal metadata; gray remains the visual fallback when a terminal ignores that modifier.
 
 Live-tail is a render-time invariant, not a best-effort side effect of individual transcript mutations. After wrapping transcript lines for the current frame width, the renderer sets the scroll offset to the exact maximum whenever `follow_tail` is active. When the user has scrolled back, the renderer only clamps out-of-range offsets and does not snap to the tail.
 
@@ -272,6 +274,12 @@ Change TUI command handling or session switching:
 Change transcript or prompt word wrapping:
   tui/ratatui/src/text_wrap.rs
   tui/ratatui/tests/app_state.rs
+  tui/ratatui/tests/ui_render.rs
+
+Change transcript or prompt styling:
+  tui/ratatui/src/theme.rs
+  tui/ratatui/src/app.rs
+  tui/ratatui/src/ui.rs
   tui/ratatui/tests/ui_render.rs
 
 Change TUI request payloads or response parsing:

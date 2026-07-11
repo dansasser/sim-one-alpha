@@ -1,13 +1,16 @@
-use ratatui::layout::{Constraint, Direction, Layout, Position};
+use ratatui::layout::{Constraint, Direction, Layout, Margin, Position};
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::{Line, Span};
+use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{
     Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
 };
 use ratatui::Frame;
 
-use crate::app::App;
-use crate::text_wrap::{wrap_words, WrappedLine};
+use crate::app::{App, TranscriptRowKind};
+use crate::text_wrap::{
+    display_width, display_width_between, pad_to_width, wrap_words, WrappedLine,
+};
+use crate::theme::{prompt_editor_style, thinking_style, user_prompt_style};
 
 const PROMPT_GUTTER_WIDTH: usize = 2;
 const PROMPT_MIN_VISIBLE_ROWS: usize = 2;
@@ -35,23 +38,31 @@ pub fn render(frame: &mut Frame<'_>, app: &mut App) {
 }
 
 fn render_transcript(frame: &mut Frame<'_>, app: &mut App, area: ratatui::layout::Rect) {
-    let rendered_lines = app.transcript_rendered_lines();
+    let rendered_rows = app.transcript_rendered_rows();
     let visible_height = area.height.saturating_sub(2) as usize;
-    let max_scroll = app.sync_transcript_scroll_for_render(rendered_lines.len());
-    let start = app.transcript_scroll().min(rendered_lines.len());
-    let text = rendered_lines
+    let visible_width = area.width.saturating_sub(2) as usize;
+    let max_scroll = app.sync_transcript_scroll_for_render(rendered_rows.len());
+    let start = app.transcript_scroll().min(rendered_rows.len());
+    let lines = rendered_rows
         .into_iter()
         .skip(start)
         .take(visible_height)
-        .collect::<Vec<_>>()
-        .join("\n");
+        .map(|row| match row.kind {
+            TranscriptRowKind::User => {
+                Line::styled(pad_to_width(&row.text, visible_width), user_prompt_style())
+            }
+            TranscriptRowKind::Thinking => Line::styled(row.text, thinking_style()),
+            _ => Line::raw(row.text),
+        })
+        .collect::<Vec<_>>();
     let title = if app.follow_tail() {
         "Transcript - live tail"
     } else {
         "Transcript - scrolled back"
     };
 
-    let paragraph = Paragraph::new(text).block(Block::default().borders(Borders::ALL).title(title));
+    let paragraph = Paragraph::new(Text::from(lines))
+        .block(Block::default().borders(Borders::ALL).title(title));
 
     frame.render_widget(paragraph, area);
 
@@ -88,13 +99,22 @@ fn render_prompt(frame: &mut Frame<'_>, app: &App, prompt_area: ratatui::layout:
     let visible_rows = prompt_area.height.saturating_sub(2).max(1) as usize;
     let prompt_rows = wrap_prompt_rows(app.prompt(), prompt_width);
     let cursor_chars = app.prompt_cursor_chars();
-    let cursor = prompt_cursor_position(&prompt_rows, cursor_chars, prompt_width);
+    let cursor = prompt_cursor_position(&prompt_rows, app.prompt(), cursor_chars, prompt_width);
     let view_start = prompt_view_start(cursor.row, prompt_rows.len(), visible_rows);
-    let prompt_lines = visible_prompt_lines(app.prompt(), &prompt_rows, view_start, visible_rows);
+    let prompt_lines = visible_prompt_lines(
+        app.prompt(),
+        &prompt_rows,
+        view_start,
+        visible_rows,
+        prompt_width,
+    );
     let prompt =
         Paragraph::new(prompt_lines).block(Block::default().borders(Borders::ALL).title("Prompt"));
 
     frame.render_widget(prompt, prompt_area);
+    frame
+        .buffer_mut()
+        .set_style(prompt_area.inner(Margin::new(1, 1)), prompt_editor_style());
 
     let cursor_offset = cursor.col.min(prompt_width) as u16;
     let cursor_row = cursor.row.saturating_sub(view_start).min(visible_rows - 1) as u16;
@@ -154,14 +174,14 @@ fn wrap_prompt_rows(prompt: &str, width: usize) -> Vec<WrappedLine> {
 
 fn prompt_cursor_position(
     rows: &[WrappedLine],
+    prompt: &str,
     cursor_chars: usize,
     width: usize,
 ) -> PromptCursorPosition {
     for (row_index, row) in rows.iter().enumerate().rev() {
         if cursor_chars >= row.start_char && cursor_chars <= row.end_char {
-            let col = cursor_chars
-                .saturating_sub(row.start_char)
-                .min(row.text.chars().count())
+            let col = display_width_between(prompt, row.start_char, cursor_chars)
+                .min(display_width(&row.text))
                 .min(width);
             return PromptCursorPosition {
                 row: row_index,
@@ -175,7 +195,7 @@ fn prompt_cursor_position(
         row: last_row,
         col: rows
             .get(last_row)
-            .map(|row| row.text.chars().count().min(width))
+            .map(|row| display_width(&row.text).min(width))
             .unwrap_or_default(),
     }
 }
@@ -196,23 +216,53 @@ fn visible_prompt_lines(
     rows: &[WrappedLine],
     start: usize,
     visible_rows: usize,
+    prompt_width: usize,
 ) -> Vec<Line<'static>> {
-    if prompt.is_empty() {
-        return vec![Line::from(vec![
-            prompt_gutter(0),
-            Span::styled(
-                "Type a message and press Enter...",
-                Style::default().fg(Color::DarkGray),
-            ),
-        ])];
-    }
+    let mut lines = if prompt.is_empty() {
+        vec![styled_prompt_line(
+            vec![
+                prompt_gutter(0),
+                Span::styled(
+                    "Type a message and press Enter...",
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ],
+            display_width("Type a message and press Enter..."),
+            prompt_width,
+        )]
+    } else {
+        rows.iter()
+            .enumerate()
+            .skip(start)
+            .take(visible_rows)
+            .map(|(index, row)| {
+                styled_prompt_line(
+                    vec![prompt_gutter(index), Span::raw(row.text.clone())],
+                    display_width(&row.text),
+                    prompt_width,
+                )
+            })
+            .collect()
+    };
 
-    rows.iter()
-        .enumerate()
-        .skip(start)
-        .take(visible_rows)
-        .map(|(index, row)| Line::from(vec![prompt_gutter(index), Span::raw(row.text.clone())]))
-        .collect()
+    while lines.len() < visible_rows {
+        lines.push(Line::styled(
+            " ".repeat(PROMPT_GUTTER_WIDTH + prompt_width),
+            prompt_editor_style(),
+        ));
+    }
+    lines
+}
+
+fn styled_prompt_line(
+    mut spans: Vec<Span<'static>>,
+    text_width: usize,
+    prompt_width: usize,
+) -> Line<'static> {
+    spans.push(Span::raw(
+        " ".repeat(prompt_width.saturating_sub(text_width)),
+    ));
+    Line::from(spans).style(prompt_editor_style())
 }
 
 fn prompt_gutter(row_index: usize) -> Span<'static> {

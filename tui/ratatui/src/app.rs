@@ -45,6 +45,28 @@ pub enum AppEvent {
     Quit,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TranscriptRowKind {
+    User,
+    Assistant,
+    Thinking,
+    Tool,
+    Task,
+    Operation,
+    Progress,
+    Log,
+    Error,
+    System,
+    Preflight,
+    Other,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RenderedTranscriptRow {
+    pub text: String,
+    pub kind: TranscriptRowKind,
+}
+
 pub struct App {
     prompt: String,
     prompt_cursor: usize,
@@ -497,17 +519,26 @@ impl App {
     }
 
     pub fn transcript_rendered_row_count(&self) -> usize {
-        self.transcript_rendered_lines().len()
+        self.transcript_rendered_rows().len()
     }
 
     pub fn transcript_rendered_lines(&self) -> Vec<String> {
-        let mut lines =
-            wrap_transcript_lines(&self.transcript_lines, self.transcript_viewport_width);
-        lines.extend(std::iter::repeat_n(
-            String::new(),
+        self.transcript_rendered_rows()
+            .into_iter()
+            .map(|row| row.text)
+            .collect()
+    }
+
+    pub fn transcript_rendered_rows(&self) -> Vec<RenderedTranscriptRow> {
+        let mut rows = wrap_transcript_rows(&self.transcript_lines, self.transcript_viewport_width);
+        rows.extend(std::iter::repeat_n(
+            RenderedTranscriptRow {
+                text: String::new(),
+                kind: TranscriptRowKind::Other,
+            },
             TRANSCRIPT_TAIL_MARGIN_ROWS,
         ));
-        lines
+        rows
     }
 
     pub(crate) fn sync_transcript_scroll_for_render(&mut self, rendered_row_count: usize) -> usize {
@@ -1074,14 +1105,56 @@ fn initial_transcript() -> Vec<String> {
     ]
 }
 
-fn wrap_transcript_lines(lines: &[String], width: usize) -> Vec<String> {
+fn wrap_transcript_rows(lines: &[String], width: usize) -> Vec<RenderedTranscriptRow> {
     let mut wrapped = Vec::new();
+    let mut previous_kind = TranscriptRowKind::Other;
 
     for line in lines {
-        wrapped.extend(wrap_words(line, width).into_iter().map(|row| row.text));
+        let kind = transcript_row_kind(line, previous_kind);
+        if kind != TranscriptRowKind::Other {
+            previous_kind = kind;
+        }
+        wrapped.extend(
+            wrap_words(line, width)
+                .into_iter()
+                .map(|row| RenderedTranscriptRow {
+                    text: row.text,
+                    kind,
+                }),
+        );
     }
 
     wrapped
+}
+
+fn transcript_row_kind(line: &str, previous: TranscriptRowKind) -> TranscriptRowKind {
+    if line.starts_with("you:") {
+        TranscriptRowKind::User
+    } else if line.starts_with("assistant:") {
+        TranscriptRowKind::Assistant
+    } else if line.starts_with("thinking:") {
+        TranscriptRowKind::Thinking
+    } else if line.starts_with("tool:") {
+        TranscriptRowKind::Tool
+    } else if line.starts_with("task:") {
+        TranscriptRowKind::Task
+    } else if line.starts_with("operation:") {
+        TranscriptRowKind::Operation
+    } else if line.starts_with("turn:") {
+        TranscriptRowKind::Progress
+    } else if line.starts_with("log:") {
+        TranscriptRowKind::Log
+    } else if line.starts_with("error:") {
+        TranscriptRowKind::Error
+    } else if line.starts_with("system:") {
+        TranscriptRowKind::System
+    } else if line.starts_with("preflight:") {
+        TranscriptRowKind::Preflight
+    } else if line.starts_with("  ") {
+        previous
+    } else {
+        TranscriptRowKind::Other
+    }
 }
 
 fn speaker_lines(speaker: &str, text: &str) -> Vec<String> {
