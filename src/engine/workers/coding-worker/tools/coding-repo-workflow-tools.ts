@@ -32,6 +32,7 @@ export interface CodingRepoWorkflowToolsOptions extends CodingWorkspaceTargetInp
   approvalService?: CodingApprovalService;
   repoRegistry?: CodingRepoRegistry;
   reporter?: CodingProgressReporter;
+  githubGitEnv?: () => Promise<Record<string, string>>;
 }
 
 export function createCodingRepoWorkflowTools(options: CodingRepoWorkflowToolsOptions): ToolDefinition[] {
@@ -183,7 +184,12 @@ export function createCodingRepoWorkflowTools(options: CodingRepoWorkflowToolsOp
         const clone = await sandbox.execFile(
           'git',
           ['clone', ...(branch ? ['--branch', branch] : []), '--', remoteUrl, repoPath],
-          { timeoutSeconds: 300 },
+          {
+            timeoutSeconds: 300,
+            ...(isManagedGithubHttpsRemote(remoteUrl) && options.githubGitEnv
+              ? { env: await options.githubGitEnv() }
+              : {}),
+          },
         );
         let record: CodingRegisteredRepo | undefined;
         if (clone.exitCode === 0) {
@@ -252,6 +258,7 @@ export function createCodingRepoWorkflowTools(options: CodingRepoWorkflowToolsOp
         const sandbox = await getSandbox();
         const fetch = await sandbox.execFile('git', ['fetch', ...(args.prune === true ? ['--prune'] : []), remote], {
           timeoutSeconds: 120,
+          ...(await githubCredentialOptions(sandbox, remote, options.githubGitEnv)),
         });
         return toToolJson({ status: fetch.exitCode === 0 ? 'fetched' : 'failed', fetch });
       },
@@ -288,7 +295,10 @@ export function createCodingRepoWorkflowTools(options: CodingRepoWorkflowToolsOp
         }
         const sandbox = await getSandbox();
         const fetch = args.prune === true
-          ? await sandbox.execFile('git', ['fetch', '--prune', remote], { timeoutSeconds: 120 })
+          ? await sandbox.execFile('git', ['fetch', '--prune', remote], {
+              timeoutSeconds: 120,
+              ...(await githubCredentialOptions(sandbox, remote, options.githubGitEnv)),
+            })
           : undefined;
         if (fetch && fetch.exitCode !== 0) {
           return toToolJson({ status: 'failed', step: 'fetch', fetch });
@@ -296,7 +306,10 @@ export function createCodingRepoWorkflowTools(options: CodingRepoWorkflowToolsOp
         const pull = await sandbox.execFile(
           'git',
           ['pull', '--ff-only', remote, ...(branch ? [branch] : [])],
-          { timeoutSeconds: 120 },
+          {
+            timeoutSeconds: 120,
+            ...(await githubCredentialOptions(sandbox, remote, options.githubGitEnv)),
+          },
         );
         return toToolJson({ status: pull.exitCode === 0 ? 'synced' : 'failed', fetch, pull });
       },
@@ -461,6 +474,28 @@ function rejectGitOperand(value: string | undefined, name: string): string | und
 
 function toInvalidOperandResult(name: string, value: string): ReturnType<typeof toToolJson> {
   return toToolJson({ blocked: true, reason: `invalid git operand for ${name}: ${value}` });
+}
+
+async function githubCredentialOptions(
+  sandbox: CodingSandboxRuntime,
+  remote: string,
+  githubGitEnv: (() => Promise<Record<string, string>>) | undefined,
+): Promise<{ env?: Record<string, string> }> {
+  if (!githubGitEnv) return {};
+  const remoteUrl = await sandbox.execFile('git', ['remote', 'get-url', remote], { timeoutSeconds: 30 });
+  if (remoteUrl.exitCode !== 0 || !isManagedGithubHttpsRemote(remoteUrl.stdout.trim())) {
+    return {};
+  }
+  return { env: await githubGitEnv() };
+}
+
+function isManagedGithubHttpsRemote(remoteUrl: string): boolean {
+  try {
+    const parsed = new URL(remoteUrl);
+    return parsed.protocol === 'https:' && parsed.hostname === 'github.com' && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
 }
 
 async function discoverWorkspaceRepos(

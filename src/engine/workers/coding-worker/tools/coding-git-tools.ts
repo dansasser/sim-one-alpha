@@ -24,6 +24,7 @@ export interface CodingGitToolsOptions extends CodingWorkspaceTargetInput {
   sessionId?: string;
   approvalService?: CodingApprovalService;
   reporter?: CodingProgressReporter;
+  githubGitEnv?: () => Promise<Record<string, string>>;
 }
 
 export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefinition[] {
@@ -149,6 +150,7 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
         const sandbox = await getSandbox();
         const push = await sandbox.execFile('git', ['push', '-u', remote, branch], {
           timeoutSeconds: 120,
+          ...(await githubCredentialOptions(sandbox, remote, options.githubGitEnv)),
         });
         return toToolJson({ status: push.exitCode === 0 ? 'pushed' : 'failed', push });
       },
@@ -326,6 +328,28 @@ function readStringArray(value: unknown): string[] {
 
 function toToolJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
+}
+
+async function githubCredentialOptions(
+  sandbox: CodingSandboxRuntime,
+  remote: string,
+  githubGitEnv: (() => Promise<Record<string, string>>) | undefined,
+): Promise<{ env?: Record<string, string> }> {
+  if (!githubGitEnv) return {};
+  const remoteUrl = await sandbox.execFile('git', ['remote', 'get-url', remote], { timeoutSeconds: 30 });
+  if (remoteUrl.exitCode !== 0 || !isManagedGithubHttpsRemote(remoteUrl.stdout.trim())) {
+    return {};
+  }
+  return { env: await githubGitEnv() };
+}
+
+function isManagedGithubHttpsRemote(remoteUrl: string): boolean {
+  try {
+    const parsed = new URL(remoteUrl);
+    return parsed.protocol === 'https:' && parsed.hostname === 'github.com' && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
 }
 
 function toGithubResult(action: CodingGithubAction): string {

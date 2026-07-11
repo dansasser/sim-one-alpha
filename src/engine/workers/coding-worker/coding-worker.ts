@@ -137,6 +137,7 @@ export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOp
         env: executionEnv,
         sessionId: 'coding-worker-git-tools',
         approvalService,
+        githubGitEnv: async () => definedEnv(await githubAuthService.createGitCredentialEnv()),
       }),
       ...createCodingRepoWorkflowTools({
         workspaceRoot,
@@ -148,6 +149,7 @@ export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOp
         env: executionEnv,
         sessionId: 'coding-worker-repo-workflow-tools',
         approvalService,
+        githubGitEnv: async () => definedEnv(await githubAuthService.createGitCredentialEnv()),
       }),
       ...createCodingGitHubTools({
         workspaceRoot,
@@ -292,6 +294,12 @@ function withoutGithubCredentials(
   delete filtered.GIT_CONFIG_KEY_1;
   delete filtered.GIT_CONFIG_VALUE_1;
   return filtered;
+}
+
+function definedEnv(env: NodeJS.ProcessEnv): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  );
 }
 
 export { createCodingWorkerLoopDelegate } from '../../../engine/workers/coding-worker/workflow/loop.js';
