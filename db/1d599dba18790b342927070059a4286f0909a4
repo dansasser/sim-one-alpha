@@ -1,0 +1,30 @@
+tui/ratatui/tests/ui_render.rs
+  s_a81fff26d52223::t_3dfed0e3e84a7f 177-205
+  s_a81fff26d52223::t_b603094584471a 2-3,176,206-303,540-549
+docs/tui/ratatui.md
+  s_a81fff26d52223::t_67f9d7589a570e 69-70
+tui/ratatui/src/app.rs
+  s_a81fff26d52223::t_f442c239ed92b1 497-506
+docs/architecture/tui-cli-session-flow.md
+  s_a81fff26d52223::t_67f9d7589a570e 150-151
+docs/architecture/gorombo-flue-map.md
+  s_a81fff26d52223::t_67f9d7589a570e 77
+tui/ratatui/src/ui.rs
+  s_a81fff26d52223::t_f442c239ed92b1 43,46,64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "db1d599dba18790b342927070059a4286f0909a4",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
