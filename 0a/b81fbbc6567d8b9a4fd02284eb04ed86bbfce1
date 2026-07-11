@@ -1,0 +1,40 @@
+src/workspace/TOOLS.md
+  s_65db8ffa7c9620::t_8589e3903c8ba5 18-26,36,140
+src/engine/workers/coding-worker/subagents/github/workspace/TOOLS.md
+  s_65db8ffa7c9620::t_8589e3903c8ba5 5
+src/agents/orchestrator.ts
+  s_65db8ffa7c9620::t_8589e3903c8ba5 221,223,227
+src/engine/workers/coding-worker/workspace/SECURITY.md
+  s_65db8ffa7c9620::t_8589e3903c8ba5 10-11
+src/workspace/SOUL.md
+  s_65db8ffa7c9620::t_8589e3903c8ba5 27
+src/workspace/IDENTITY.md
+  s_65db8ffa7c9620::t_8589e3903c8ba5 32-37
+src/tests/architecture-contract.test.ts
+  s_65db8ffa7c9620::t_3066c3e1524809 98,107-109,161,169
+  s_65db8ffa7c9620::t_c8665a11dcba53 168
+src/workspace/AGENTS.md
+  s_65db8ffa7c9620::t_8589e3903c8ba5 30
+src/engine/workers/coding-worker/subagents/github/workspace/SECURITY.md
+  s_65db8ffa7c9620::t_8589e3903c8ba5 5
+src/workspace/SECURITY.md
+  s_65db8ffa7c9620::t_8589e3903c8ba5 17-18
+src/engine/workers/coding-worker/workspace/TOOLS.md
+  s_65db8ffa7c9620::t_8589e3903c8ba5 21-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "0ab81fbbc6567d8b9a4fd02284eb04ed86bbfce1",
+  "prompts": {},
+  "sessions": {
+    "s_65db8ffa7c9620": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f51b3-89d7-7d02-973d-9679f07254a1",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
