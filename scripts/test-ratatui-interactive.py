@@ -35,7 +35,18 @@ class GatewayHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length)
         REQUESTS.append(json.loads(body))
-        response = b'{"result":{"text":"interactive smoke response"}}'
+        response_lines = [f"interactive smoke response {len(REQUESTS)}"]
+        response_lines.extend(
+            f"response detail {index:02d}" for index in range(1, 13)
+        )
+        response_lines.append(f"response-final-{len(REQUESTS)}")
+        response = json.dumps(
+            {
+                "result": {
+                    "text": "\n".join(response_lines)
+                }
+            }
+        ).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(response)))
@@ -69,6 +80,40 @@ def wait_for_request_count(expected, timeout):
     while len(REQUESTS) < expected and time.monotonic() < deadline:
         time.sleep(0.02)
     return len(REQUESTS)
+
+
+def drain_output(master_fd, duration=0.3):
+    read_output(master_fd, duration)
+
+
+def read_output(master_fd, duration=0.3):
+    output = bytearray()
+    deadline = time.monotonic() + duration
+    while time.monotonic() < deadline:
+        ready, _, _ = select.select([master_fd], [], [], 0.02)
+        if not ready:
+            continue
+        try:
+            output.extend(os.read(master_fd, 65536))
+        except OSError:
+            break
+    return bytes(output)
+
+
+def send_mouse(master_fd, code, column, row, release=False):
+    suffix = "m" if release else "M"
+    os.write(master_fd, f"\x1b[<{code};{column};{row}{suffix}".encode())
+
+
+def click_mouse(master_fd, column, row):
+    send_mouse(master_fd, 0, column, row)
+    send_mouse(master_fd, 0, column, row, release=True)
+
+
+def drag_mouse(master_fd, start_column, start_row, end_column, end_row):
+    send_mouse(master_fd, 0, start_column, start_row)
+    send_mouse(master_fd, 32, end_column, end_row)
+    send_mouse(master_fd, 0, end_column, end_row, release=True)
 
 
 def stop_child(pid, master_fd):
@@ -129,6 +174,17 @@ def main():
             )
         os.write(master_fd, b"\x15")
 
+        os.write(master_fd, b"/")
+        read_until(master_fd, b"Resume a durable session", 5)
+        send_mouse(master_fd, 65, 5, 13)
+        click_mouse(master_fd, 5, 15)
+        read_until(master_fd, b"resume", 5)
+        if REQUESTS:
+            raise AssertionError(
+                f"mouse command palette selection submitted prematurely: {REQUESTS!r}"
+            )
+        os.write(master_fd, b"\x15")
+
         os.write(master_fd, b"first line\\\r")
         os.write(master_fd, b"\x1b[13;1:2u")
         time.sleep(0.5)
@@ -150,9 +206,56 @@ def main():
             raise AssertionError(
                 f"multiline prompt payload mismatch: expected 'first line updated\\nsecond line', got {prompt!r}"
             )
+        read_until(master_fd, b"response-final-1", 5)
+
+        os.write(master_fd, b"keep remove tail")
+        drag_mouse(master_fd, 9, 22, 14, 22)
+        read_until(master_fd, b"\x1b]52;c;cmVtb3Zl\x1b\\", 5)
+        os.write(master_fd, b"X\r")
+        if wait_for_request_count(2, 5) != 2:
+            raise AssertionError(f"mouse-edited prompt was not submitted: {REQUESTS!r}")
+        if REQUESTS[1].get("text") != "keep X tail":
+            raise AssertionError(
+                f"mouse selection replacement payload mismatch: {REQUESTS[1]!r}"
+            )
+        read_until(master_fd, b"response-final-2", 5)
+
+        os.write(master_fd, b"mouse alpha bravo")
+        click_mouse(master_fd, 16, 22)
+        os.write(master_fd, b"X\r")
+        if wait_for_request_count(3, 5) != 3:
+            raise AssertionError(f"mouse-click-edited prompt was not submitted: {REQUESTS!r}")
+        if REQUESTS[2].get("text") != "mouse alpha Xbravo":
+            raise AssertionError(
+                f"mouse cursor placement payload mismatch: {REQUESTS[2]!r}"
+            )
+        read_until(master_fd, b"response-final-3", 5)
+
+        for line in (b"alpha", b"bravo", b"charlie", b"delta", b"echo", b"foxtrot"):
+            os.write(master_fd, line + b"\\\r")
+        os.write(master_fd, b"golf")
+        drain_output(master_fd)
+        send_mouse(master_fd, 64, 10, 20)
+        read_until(master_fd, b"charlie", 5)
+        os.write(master_fd, b"\x15")
+
+        drain_output(master_fd)
+        click_mouse(master_fd, 100, 2)
+        top_redraw = read_output(master_fd, 0.5)
+        if b"preflight" not in top_redraw and b"system" not in top_redraw:
+            raise AssertionError(
+                f"scrollbar top click did not reveal startup rows: {top_redraw!r}"
+            )
+        drain_output(master_fd)
+        click_mouse(master_fd, 100, 18)
+        tail_redraw = read_output(master_fd, 0.5)
+        if b"response-fina" not in tail_redraw or b"-3" not in tail_redraw:
+            raise AssertionError(
+                f"scrollbar bottom click did not reveal the latest response: {tail_redraw!r}"
+            )
 
         print(
-            "[ratatui-interactive] packaged sim-one displayed and selected the slash-command palette, preserved backslash-Enter newline through an Enter repeat, moved vertically to edit the multiline prompt, and submitted the exact payload."
+            "[ratatui-interactive] packaged sim-one handled keyboard and mouse palette selection, multiline editing, prompt drag-copy/replacement, click cursor placement, prompt-local wheel scrolling, and full-range scrollbar navigation with exact submitted payloads."
         )
     finally:
         stop_child(pid, master_fd)

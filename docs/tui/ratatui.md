@@ -47,7 +47,7 @@ All transcript text uses a two-column left margin inside the pane border. The ma
 
 The initial transcript should contain startup/preflight rows, the gateway-resolved active TUI session, and the agent greeting. It should not contain scaffold scroll-test rows or a default `primary` session; specific old sessions are shown only after an explicit `--session` launch or `/resume`.
 
-The bottom pane contains gateway/session/model status and the editable prompt line. The entire visible prompt-editor interior uses a darker gray background so the active composer remains distinct from transcript content. Prompt editing remains active while the transcript is scrolled.
+The bottom pane contains gateway/session/model status and the editable prompt line. The entire visible prompt-editor interior uses a darker gray background so the active composer remains distinct from transcript content. Prompt editing remains active while the transcript is scrolled. Mouse events are routed by pane: an open command palette receives them first, followed by the prompt, transcript scrollbar, and transcript text.
 
 ## Prompt Editing
 
@@ -65,13 +65,18 @@ Home / End
 Ctrl+A / Ctrl+E
 Ctrl+U
 Backspace / Delete
+Ctrl+X (cut selected prompt text)
 Esc
-Ctrl+C
+Ctrl+C (copy selected prompt text; otherwise exit)
 ```
+
+The prompt supports mouse cursor placement and forward or reverse drag selection across wrapped and explicit rows. Selected cells are highlighted. Typing replaces the selection, Backspace/Delete remove it, and `Ctrl+X` cuts it. Releasing a drag copies the selected prompt text to the host clipboard through OSC52. Unicode selection and edits stay on character boundaries.
 
 ## Scrolling
 
-Use `PgUp`, `PgDown`, or the mouse wheel to scroll the transcript while the prompt remains focused. `Up` and `Down` move through wrapped or explicit prompt rows whenever prompt text is present, preserving the intended terminal display column across shorter rows. With an empty prompt they retain transcript line scrolling. Scrolling away from the tail does not block typing. New activity does not snap the viewport back to the bottom until tail-following is restored.
+Use `PgUp` and `PgDown` to scroll the transcript while the prompt remains focused. The mouse wheel is pane-local: over the transcript it scrolls context, over a prompt taller than five rows it scrolls the prompt viewport, and over the slash palette it changes the selected command. `Up` and `Down` move through wrapped or explicit prompt rows whenever prompt text is present, preserving the intended terminal display column across shorter rows. With an empty prompt they retain transcript line scrolling. Scrolling away from the tail does not block typing. New activity does not snap the viewport back to the bottom until tail-following is restored.
+
+The transcript scrollbar accepts track clicks and left-button drags across its full range. Selecting transcript text also uses left-button drag. Selection remains visually highlighted, auto-scrolls when dragged against the top or bottom viewport edge, and copies on release through OSC52. Copy text comes from logical rendered transcript sources: borders, the two-column margin, scrollbar symbols, Markdown source markers, and visual word-wrap newlines are excluded.
 
 Transcript lines use the same word-boundary wrapping as the prompt. When the next word does not fit, the complete word moves to the next row; the renderer does not split it at the pane edge.
 
@@ -95,7 +100,7 @@ If a live stream disconnects, the status changes to reconnecting or failed. Prom
 
 ## Slash Commands
 
-Typing `/` as the first prompt character opens a command palette above the status line without resizing the prompt or transcript. Continue typing to filter by command name. `Up` and `Down` move the highlight and scroll the six-row palette while it is open; `Enter` or `Tab` inserts the highlighted command without executing it. Press `Enter` again after supplying any arguments. `Esc` dismisses the palette first and exits the TUI only when the palette is closed. A complete command typed directly still submits normally.
+Typing `/` as the first prompt character opens a command palette above the status line without resizing the prompt or transcript. Continue typing to filter by command name. `Up` and `Down`, or the mouse wheel over the palette, move the highlight and scroll the six-row list. `Enter`, `Tab`, or a left click inserts the highlighted command without executing it. Press `Enter` again after supplying any arguments. `Esc` or a click outside dismisses the palette first and exits the TUI only when the palette is closed. A complete command typed directly still submits normally.
 
 TUI-local commands:
 
@@ -134,7 +139,9 @@ If the gateway fails to start, run the product smoke:
 pnpm run test:tui:ratatui
 ```
 
-On POSIX systems, this smoke launches the packaged `sim-one` command in a real PTY and verifies slash-Enter multiline input against a local gateway stub. It also sends nested worker output, a root live assistant delta, and a multiline Markdown root `message_end` while holding the HTTP prompt response open. The smoke verifies worker payloads remain internal, Markdown source markers are replaced by terminal styles, and the packaged TUI renders the root live/final answer before HTTP settles. Cross-platform Rust integration tests exercise exact multiline consolidation, Markdown styles, input, app-state, ordering, terminal-size, and framebuffer behavior.
+On POSIX systems, this smoke launches the packaged `sim-one` command in a real PTY and verifies keyboard and mouse palette selection, slash-Enter multiline input, prompt click placement, drag-copy/replacement, prompt-local wheel scrolling, and full-range scrollbar navigation against a local gateway stub. It also sends nested worker output, a root live assistant delta, and a multiline Markdown root `message_end` while holding the HTTP prompt response open. The smoke verifies worker payloads remain internal, Markdown source markers are replaced by terminal styles, and the packaged TUI renders the root live/final answer before HTTP settles. Cross-platform Rust integration tests exercise exact multiline consolidation, Markdown styles, pane routing, Unicode selection, input, app-state, ordering, terminal-size, and framebuffer behavior.
+
+OSC52 clipboard delivery depends on terminal and multiplexer support. Selection and highlighting still work when the host refuses OSC52, but the host clipboard may not update until OSC52 passthrough is enabled.
 
 If the TUI exits after `/exit`, use the printed session id to resume:
 

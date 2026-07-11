@@ -546,10 +546,11 @@ The TypeScript `sim-one` wrapper owns product command routing and capability sub
 
 - **Transcript/context pane** — `SIM-ONE Alpha` header with an explicit session name when present, prompts, assistant responses, stream activity, tool/status rows, and local system notices
 - **Prompt editor** — wrapped multiline input up to five visible rows, vertical arrow navigation, `\` then Enter for a newline, cursor and word movement, Home/End, delete/backspace, Ctrl+U, and submit
-- **Command palette** — type `/` to filter and select session/TUI commands from a six-row keyboard-driven drop-up
+- **Command palette** — type `/` to filter and select session/TUI commands from a six-row keyboard- and mouse-driven drop-up
 - **Status bar** — gateway URL, active session id or explicit name, stream state, pending response state, elapsed thinking time, and spinner
 - **Session command output** — `/new`, `/clear`, `/resume`, `/rename`, `/compact`, `/session`, `/sessions`, `/help`, and `/exit`
-- **Scroll behavior** — PgUp/PgDown and mouse wheel scroll the transcript while arrows move through multiline prompt rows
+- **Mouse text editing** — click or drag in the prompt, drag-copy logical transcript text, and use OSC52 clipboard delivery without disabling mouse capture
+- **Scroll behavior** — PgUp/PgDown scroll the transcript; mouse wheel, scrollbar, and palette events route to the pane under the pointer while arrows move through multiline prompt rows
 
 ### First run — the wizard (planned)
 
@@ -597,6 +598,8 @@ Core TUI slash commands:
 /help                  print the TUI command list
 /exit                  close the TUI and print the active session id
 ```
+
+Mouse controls are pane-aware. Transcript drag selection highlights logical rendered text and copies it without borders, margins, Markdown markers, or visual-wrap newlines. Prompt clicks place the cursor; prompt drags support copy, replacement, cut, and deletion across wrapped Unicode text. The transcript scrollbar supports track clicks and dragging, and the command palette supports wheel navigation, click selection, and outside dismissal. Host clipboard delivery uses OSC52 and may require multiplexer passthrough.
 
 See:
 

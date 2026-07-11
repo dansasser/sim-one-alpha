@@ -272,7 +272,7 @@ try {
     'chat event spoofed connector /new command with secret',
     (body) => {
       assertJson(
-        body.result?.text?.includes('/new is handled by the web client session controls') &&
+        body.result?.text?.includes('/new telegram notes is handled by the web client session controls') &&
           body.result?.command?.name === 'new',
         `spoofed connector /new command did not include the expected web-safe command result.\n${JSON.stringify(body).slice(0, 1200)}`,
       );

@@ -4,6 +4,8 @@ This document is the repository-level map for the SIM-ONE Alpha terminal surface
 
 User-facing command reference lives in `docs/tui/ratatui.md` and `docs/tui/session-management.md`. Operator runbook details live in `docs/operations/product-tui.md`.
 
+The local implementation and milestone plan is `/opt/ai/plans/sim-one-ratatui-tui/plan.md`; that plan points back to these repository docs.
+
 ## Ownership
 
 ```text
@@ -15,7 +17,7 @@ sim-one-cli/
 
 tui/ratatui/
   Rust/Ratatui terminal client.
-  Owns terminal drawing, input mapping, transcript scroll state, prompt editing, the slash-command palette, local TUI commands, gateway launch/reuse, stream attach/restart, and packaged binary behavior.
+  Owns terminal drawing, pane-aware keyboard/mouse input mapping, transcript scroll and logical selection state, prompt editing/selection, the clickable slash-command palette, scrollbar interaction, OSC52 clipboard handoff, local TUI commands, gateway launch/reuse, stream attach/restart, and packaged binary behavior.
 
 src/api/routes/chat-events.ts
   App-owned connector-style chat ingress.
@@ -37,7 +39,24 @@ scripts/test-ratatui-visible-final.py
   POSIX PTY regression that delivers nested worker output, a root assistant text delta, and a multiline root message_end while holding the HTTP result open. Verifies the packaged TUI keeps worker payloads internal and renders the consolidated root answer immediately.
 ```
 
-The prompt editor opens a filtered command drop-up when its first token begins with `/`. The palette is capped at six visible rows and overlays the transcript above the status line, so it does not change transcript viewport height or prompt geometry. Up/Down navigate the palette while it is open, move vertically through wrapped/explicit prompt rows when prompt text is present, and retain transcript line scrolling when the prompt is empty. PgUp/PgDown and mouse-wheel events always scroll transcript context. Enter or Tab inserts the selected command; Esc dismisses the palette before retaining its normal exit behavior. An unescaped trailing `\` followed by Enter inserts a prompt newline, while doubled trailing backslashes remain literal.
+The prompt editor opens a filtered command drop-up when its first token begins with `/`. The palette is capped at six visible rows and overlays the transcript above the status line, so it does not change transcript viewport height or prompt geometry. Up/Down navigate the palette while it is open, move vertically through wrapped/explicit prompt rows when prompt text is present, and retain transcript line scrolling when the prompt is empty. PgUp/PgDown always scroll transcript context. Mouse wheel events route to the palette, prompt viewport, or transcript according to the pointer location. Enter or Tab inserts the selected command; a palette click does the same. Esc or an outside click dismisses the palette before retaining normal input behavior. An unescaped trailing `\` followed by Enter inserts a prompt newline, while doubled trailing backslashes remain literal.
+
+## Mouse And Clipboard Flow
+
+```text
+Crossterm MouseEvent
+  -> input.rs preserves kind, coordinates, button, and modifiers
+  -> App routes by z-order: palette -> prompt -> scrollbar -> transcript
+  -> ui.rs publishes the current frame's hit regions and wrapped-row mappings
+  -> App updates cursor, selection, prompt viewport, or transcript scroll state
+  -> ui.rs renders selection with reversed cell styling
+  -> mouse release queues logical selected text
+  -> main.rs sends queued text through terminal.rs OSC52 clipboard output
+```
+
+Transcript selection stores logical source positions rather than scraping terminal cells. Normal word-wrapped rows retain source character ranges; rendered assistant Markdown rows retain equivalent plain rendered source ranges. Copy therefore omits borders, margins, scrollbar glyphs, Markdown markers, and synthetic wrap boundaries while preserving explicit logical newlines. Prompt selection stores UTF-8 byte boundaries derived from wrapped character/display-column mappings, so selection replacement, Backspace/Delete, and `Ctrl+X` cannot split a multibyte character.
+
+Mouse capture remains enabled because wheel, drag, scrollbar, and palette behavior all depend on it. `terminal.rs` disables capture before normal Ratatui restoration and from the panic hook. OSC52 support is a host-terminal capability; clipboard failure does not change selection state or terminate the TUI.
 
 `chat_sessions.explicit_name` stores only names explicitly supplied through `/rename`, `/new <title>`, or `/clear <title>`. It remains separate from automatic prompt-derived conversation titles. Session-management responses return that explicit name during `/session` and `/resume`, allowing Ratatui to restore `SIM-ONE Alpha - <name>` in the transcript header for a loaded named session. Fresh and unnamed sessions use `SIM-ONE Alpha`. The existing status label remains unchanged, and state synchronization never parses human-readable command response text.
 

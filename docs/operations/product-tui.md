@@ -126,8 +126,13 @@ clean startup transcript without scaffold rows
 agent greeting through the built-in greeting-preflight skill path
 packaged interactive PTY input through the sim-one wrapper
 slash-command palette display and keyboard selection
+slash-command palette wheel navigation, mouse selection, and outside dismissal
 backslash-Enter newline preservation when the terminal reports an Enter repeat
 vertical arrow editing across packaged multiline prompt rows
+prompt mouse cursor placement and exact submitted payload
+prompt drag selection, OSC52 copy, replacement, and exact submitted payload
+prompt-local mouse-wheel scrolling after the editor reaches five visible rows
+transcript scrollbar track clicks from startup rows back to live tail
 exact multiline prompt payload submitted to the gateway
 renamed session name in final TUI status and stable session id on exit
 fresh, renamed, and resumed transcript header values without status-bar changes
@@ -139,6 +144,10 @@ temporary session-database isolation for product smoke data
 /rename
 /exit
 ```
+
+The Rust input/app/framebuffer suites run alongside product verification and cover cut/delete state, selection-aware `Ctrl+C`, reverse selection, UTF-8 boundaries, logical transcript copy, highlight rendering, scrollbar dragging, and pane hit-testing on every supported platform.
+
+The TUI enables Crossterm mouse capture after Ratatui terminal initialization and disables it during normal restoration and the panic hook. App-owned selection is intentional: transcript and prompt drags remain available while wheel, scrollbar, and command-palette mouse controls are active. Completed selections are sent to the host clipboard with OSC52; terminal multiplexers may require clipboard passthrough configuration.
 
 Manual session smoke inside the running TUI:
 
