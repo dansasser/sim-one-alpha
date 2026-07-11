@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use ratatui::backend::TestBackend;
 use ratatui::layout::Position;
+use ratatui::symbols::scrollbar;
 use ratatui::Terminal;
 use sim_one_ratatui_tui::agent::AgentReply;
 use sim_one_ratatui_tui::app::{App, AppEvent};
@@ -203,6 +204,47 @@ fn small_transcript_tail_reaches_bottom_after_many_wrapped_lines() {
         .map(|cell| cell.symbol())
         .collect::<String>();
     assert!(buffer.contains("tail-ok"), "{buffer}");
+}
+
+#[test]
+fn transcript_scrollbar_thumb_reaches_bottom_at_tail() {
+    let backend = TestBackend::new(40, 16);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    for index in 0..20 {
+        app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+            serde_json::json!({
+                "type":"log",
+                "eventIndex":200 + index,
+                "text":format!("row {index}")
+            }),
+        )]));
+    }
+    app.jump_to_tail();
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("tail scrollbar shell should render");
+
+    let buffer = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    let bottom_track_symbol = terminal
+        .backend()
+        .buffer()
+        .cell(Position::new(39, 9))
+        .expect("bottom transcript scrollbar track cell should exist")
+        .symbol();
+
+    assert_eq!(
+        bottom_track_symbol,
+        scrollbar::DOUBLE_VERTICAL.thumb,
+        "{buffer}"
+    );
 }
 
 fn app_with_pending_response() -> App {

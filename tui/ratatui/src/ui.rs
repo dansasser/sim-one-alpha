@@ -42,8 +42,10 @@ fn render_transcript(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Re
 
     frame.render_widget(paragraph, area);
 
-    let mut scrollbar_state =
-        ScrollbarState::new(app.transcript_rendered_row_count()).position(app.transcript_scroll());
+    let scroll_positions = app.max_scroll().saturating_add(1);
+    let mut scrollbar_state = ScrollbarState::new(scroll_positions)
+        .position(app.transcript_scroll())
+        .viewport_content_length(visible_height.max(1));
     frame.render_stateful_widget(
         Scrollbar::new(ScrollbarOrientation::VerticalRight),
         area,
