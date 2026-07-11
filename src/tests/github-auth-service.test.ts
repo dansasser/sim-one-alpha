@@ -47,6 +47,7 @@ test('GitHub auth start relays a device challenge privately and returns only opa
   const authRoot = mkdtempSync(join(tmpdir(), 'github-auth-root-'));
   const challenges: unknown[] = [];
   let cancelled = false;
+  const submittedInput: string[] = [];
   const runner: GithubAuthCommandRunner = async () => ({ exitCode: 1, stdout: '', stderr: 'not logged in' });
   const loginRunner: GithubAuthLoginRunner = {
     start: async (args, env, onOutput) => {
@@ -68,6 +69,9 @@ test('GitHub auth start relays a device challenge privately and returns only opa
         completion: new Promise(() => undefined),
         cancel: () => {
           cancelled = true;
+        },
+        submitInput: (value) => {
+          submittedInput.push(value);
         },
       };
     },
@@ -95,6 +99,7 @@ test('GitHub auth start relays a device challenge privately and returns only opa
       userCode: 'WXYZ-1234',
       expiresAt: result.expiresAt,
     }]);
+    assert.deepEqual(submittedInput, ['\n']);
 
     const cancelledResult = await service.cancel({ authSessionId: result.authSessionId! });
     assert.equal(cancelledResult.state, 'cancelled');

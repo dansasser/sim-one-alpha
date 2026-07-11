@@ -120,6 +120,13 @@ class DefaultGithubAuthService implements GithubAuthService {
 
     try {
       let loginProcess: GithubAuthLoginProcess | undefined;
+      let shouldSubmitEnter = false;
+      let submittedEnter = false;
+      const submitEnter = () => {
+        if (!shouldSubmitEnter || submittedEnter || !loginProcess?.submitInput) return;
+        loginProcess.submitInput('\n');
+        submittedEnter = true;
+      };
       loginProcess = await this.loginRunner.start(loginArgs, env, (chunk) => {
         output += chunk;
         const parsed = parseDeviceChallenge(output, session);
@@ -127,11 +134,13 @@ class DefaultGithubAuthService implements GithubAuthService {
           resolveChallenge(parsed);
           resolveChallenge = undefined;
           if (/press\s+enter/i.test(output)) {
-            loginProcess?.submitInput?.('\n');
+            shouldSubmitEnter = true;
+            submitEnter();
           }
         }
       });
       session.process = loginProcess;
+      submitEnter();
       const challenge = await withTimeout(challengePromise, 15_000, 'GitHub device challenge was not available.');
       await input.deliverChallenge(challenge);
       this.observeCompletion(session);
