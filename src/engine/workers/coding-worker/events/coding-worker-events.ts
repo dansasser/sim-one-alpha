@@ -69,7 +69,7 @@ const forbiddenPublicTraceKeys = new Set([
   'accessToken',
   'authorization',
   'token',
-]);
+].map(normalizePublicTraceKey));
 
 export function createCodingWorkerEvent(
   input: Omit<CodingWorkerEvent, 'timestamp'> & { timestamp?: string },
@@ -95,7 +95,7 @@ function findForbiddenKey(value: unknown): string | undefined {
   }
 
   for (const [key, child] of Object.entries(value)) {
-    if (forbiddenPublicTraceKeys.has(key)) {
+    if (forbiddenPublicTraceKeys.has(normalizePublicTraceKey(key))) {
       return key;
     }
 
@@ -106,4 +106,8 @@ function findForbiddenKey(value: unknown): string | undefined {
   }
 
   return undefined;
+}
+
+function normalizePublicTraceKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, '');
 }

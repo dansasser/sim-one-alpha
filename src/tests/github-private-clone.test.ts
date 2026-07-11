@@ -50,6 +50,9 @@ test('private GitHub HTTPS clones receive managed credentials while other remote
     });
     await clone.execute({ taskId: 'clone-github', remoteUrl: 'https://github.com/owner/private.git', slug: 'private' });
     assert.deepEqual(calls.at(-1)?.env, {
+      GIT_CONFIG_NOSYSTEM: '1',
+      GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null',
+      GIT_TERMINAL_PROMPT: '0',
       GH_CONFIG_DIR: '/managed/gh',
       GIT_CONFIG_COUNT: '2',
       GIT_CONFIG_KEY_0: 'credential.https://github.com.helper',
@@ -68,7 +71,14 @@ test('private GitHub HTTPS clones receive managed credentials while other remote
       principal: { id: 'operator-1', roles: ['operator'] },
     });
     await clone.execute({ taskId: 'clone-gitlab', remoteUrl: 'https://gitlab.com/owner/project.git', slug: 'gitlab-project' });
-    assert.equal(calls.at(-1)?.env, undefined);
+    assert.deepEqual(calls.at(-1)?.env, {
+      GIT_CONFIG_NOSYSTEM: '1',
+      GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null',
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'credential.helper',
+      GIT_CONFIG_VALUE_0: '',
+      GIT_TERMINAL_PROMPT: '0',
+    });
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
   }

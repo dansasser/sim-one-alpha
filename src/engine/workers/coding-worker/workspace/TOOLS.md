@@ -22,6 +22,8 @@ Wired worker-local capability groups:
 
 GitHub authentication is runtime state, not a `TOOLS.md` flag. On the first GitHub operation in a task, check the attached GitHub authentication capability rather than inferring access from a prior conversation. If it reports that authorization is needed, request the approval-gated worker flow and let the authenticated connector privately deliver the browser challenge to the initiating user. Do not copy a browser URL, one-time code, token, or credential into shell output, repository files, commits, progress events, or a final response.
 
+If approval completes after the initiating turn, call `github_auth_start` again with the new trusted current `eventId` and the prior `approvalRequestId`. The runtime verifies that the approved request belongs to the same connector, actor, conversation, host, and profile before delivering the challenge to the current response. Never reuse an approval from another conversation.
+
 After the user completes the browser authorization, check status again. Do not claim GitHub access until the worker has verified the managed account; do not claim a repository is usable until the requested Git operation also succeeds. Use HTTPS Git remotes only for product-managed GitHub access.
 
 The runtime workspace root is the coding worker's access root. Do not treat the agent source checkout or `process.cwd()` as the default user project. Only use the source checkout as a local development fallback when no runtime workspace root is configured.

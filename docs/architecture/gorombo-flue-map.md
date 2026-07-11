@@ -112,7 +112,7 @@ src/api/middleware/api-secret.ts
 
 src/api/routes/chat-events.ts
   App-owned /api/chat/events ingress alias.
-  Verifies API-secret middleware, exposes /api/chat/sessions for HTTP chat lists, normalizes the HTTP boundary, persists trusted event context, resolves the product session, and prompts the durable /agents/orchestrator/:sessionId route.
+  Verifies API-secret middleware, exposes /api/chat/sessions for HTTP chat lists, normalizes the HTTP boundary, persists trusted event context, binds the current event through request-local trusted context for model-callable authorization tools, resolves the product session, and prompts the durable /agents/orchestrator/:sessionId route.
   Does not call c.executionCtx, a workflow route for normal chat execution, or a non-Flue orchestrator.
 
 src/api/routes/knowledge.ts

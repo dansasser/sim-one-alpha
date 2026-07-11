@@ -6,7 +6,9 @@ import test from 'node:test';
 import { createInMemoryCodingApprovalService } from '../engine/workers/coding-worker/approvals/approval-service.js';
 import { createCodingGithubAuthTools } from '../engine/workers/coding-worker/github/github-auth-tools.js';
 import type { GithubAuthService } from '../engine/workers/coding-worker/github/github-auth-service.js';
+import type { GithubAuthAudience } from '../engine/workers/coding-worker/github/github-auth-types.js';
 import { InMemoryGithubAuthChallengeRelay } from '../api/ingress/github-auth-challenge-relay.js';
+import { runWithTrustedMessageEvent } from '../api/ingress/trusted-event-context.js';
 
 const event = {
   id: 'event-auth-1',
@@ -23,6 +25,7 @@ test('Coding Worker GitHub auth start is approval-gated and privately relays onl
   const workspaceRoot = mkdtempSync(join(tmpdir(), 'github-auth-tools-'));
   const approvalService = createInMemoryCodingApprovalService();
   const relay = new InMemoryGithubAuthChallengeRelay();
+  const challengeExpiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
   let started = 0;
   const authService: GithubAuthService = {
     status: async () => ({
@@ -39,7 +42,7 @@ test('Coding Worker GitHub auth start is approval-gated and privately relays onl
         audience,
         verificationUri: 'https://github.com/login/device',
         userCode: 'WXYZ-1234',
-        expiresAt: '2030-01-01T00:15:00.000Z',
+        expiresAt: challengeExpiresAt,
       });
       return {
         state: 'authorization_pending',
@@ -47,7 +50,7 @@ test('Coding Worker GitHub auth start is approval-gated and privately relays onl
         hostname: 'github.com',
         credentialSource: 'managed_profile',
         authSessionId: 'session-1',
-        expiresAt: '2030-01-01T00:15:00.000Z',
+        expiresAt: challengeExpiresAt,
         checkedAt: '2026-07-11T00:00:00.000Z',
       };
     },
@@ -105,6 +108,7 @@ test('Coding Worker GitHub auth start is approval-gated and privately relays onl
     assert.equal(startedOutput.state, 'authorization_pending');
     assert.equal(startedOutput.userCode, undefined);
     assert.equal(startedOutput.verificationUri, undefined);
+    assert.equal(startedOutput.expiresAt, undefined);
     assert.equal(started, 1);
     assert.equal(relay.consume({
       connector: event.connector,
@@ -121,17 +125,233 @@ test('Coding Worker GitHub auth start is approval-gated and privately relays onl
       sessionId: 'session-1',
       verificationUri: 'https://github.com/login/device',
       userCode: 'WXYZ-1234',
-      expiresAt: '2030-01-01T00:15:00.000Z',
+      expiresAt: challengeExpiresAt,
     });
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
   }
 });
 
+test('GitHub auth tools reject a persisted event that is not the current trusted event', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'github-auth-current-event-'));
+  const currentEvent = { ...event, id: 'event-current' };
+  const unrelatedEvent = {
+    ...event,
+    id: 'event-unrelated',
+    actor: { id: 'actor-2' },
+    conversation: { id: 'conversation-2' },
+  };
+  const authService = createFakeAuthService();
+
+  try {
+    const tools = createCodingGithubAuthTools({
+      workspaceRoot,
+      authService,
+      currentEventId: currentEvent.id,
+      resolveEvent: (eventId) => {
+        if (eventId === currentEvent.id) return currentEvent;
+        if (eventId === unrelatedEvent.id) return unrelatedEvent;
+        return undefined;
+      },
+    } as Parameters<typeof createCodingGithubAuthTools>[0] & { currentEventId: string });
+    const status = getTool(tools, 'github_auth_status');
+
+    await assert.rejects(
+      () => status.execute({ eventId: unrelatedEvent.id }),
+      /current trusted event/i,
+    );
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('GitHub auth status is bound to the trusted event context', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'github-auth-trusted-context-'));
+  let statusCalls = 0;
+  const authService = createFakeAuthService();
+  authService.status = async () => {
+    statusCalls += 1;
+    return {
+      state: 'unauthenticated',
+      profile: 'default',
+      hostname: 'github.com',
+      credentialSource: 'none',
+      checkedAt: new Date().toISOString(),
+    };
+  };
+
+  try {
+    const status = getTool(createCodingGithubAuthTools({ workspaceRoot, authService }), 'github_auth_status');
+    const result = await runWithTrustedMessageEvent(event, () => status.execute({ eventId: event.id }));
+    assert.equal(JSON.parse(result).state, 'unauthenticated');
+    assert.equal(statusCalls, 1);
+    await assert.rejects(
+      runWithTrustedMessageEvent(event, () => status.execute({ eventId: 'event-unrelated' })),
+      /current trusted event/i,
+    );
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('GitHub auth start returns authenticated status without approval or device login', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'github-auth-already-authenticated-'));
+  const approvalService = createInMemoryCodingApprovalService();
+  let starts = 0;
+  const authService = createFakeAuthService({
+    state: 'authenticated',
+    credentialSource: 'managed_profile',
+    accountLogin: 'octocat',
+    gitProtocol: 'https',
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  }, () => {
+    starts += 1;
+  });
+
+  try {
+    const tools = createCodingGithubAuthTools({
+      workspaceRoot,
+      approvalService,
+      authService,
+      resolveEvent: (eventId) => eventId === event.id ? event : undefined,
+    });
+    const start = getTool(tools, 'github_auth_start');
+    const result = JSON.parse(await start.execute({ eventId: event.id })) as {
+      state?: string;
+      blocked?: boolean;
+    };
+
+    assert.equal(result.state, 'authenticated');
+    assert.equal(result.blocked, undefined);
+    assert.equal((result as { expiresAt?: string }).expiresAt, undefined);
+    assert.equal(starts, 0);
+    assert.deepEqual(await approvalService.listRecords(event.id), []);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('a later trusted event can continue an approved GitHub login request', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'github-auth-approved-continuation-'));
+  const approvalService = createInMemoryCodingApprovalService();
+  const relay = new InMemoryGithubAuthChallengeRelay();
+  const firstEvent = { ...event, id: 'event-approval-request' };
+  const continuationEvent = { ...event, id: 'event-approval-continuation' };
+  const challengeExpiresAt = new Date(Date.now() + 60_000).toISOString();
+  let startAudience: GithubAuthAudience | undefined;
+  let startSessionId: string | undefined;
+  const authService = createFakeAuthService();
+  authService.start = async ({ authSessionId, audience, deliverChallenge }) => {
+    startAudience = audience;
+    startSessionId = authSessionId;
+    await deliverChallenge({
+      sessionId: authSessionId!,
+      audience,
+      verificationUri: 'https://github.com/login/device',
+      userCode: 'FLOW-0001',
+      expiresAt: challengeExpiresAt,
+    });
+    return {
+      state: 'authorization_pending',
+      profile: 'default',
+      hostname: 'github.com',
+      credentialSource: 'managed_profile',
+      authSessionId,
+      expiresAt: challengeExpiresAt,
+      checkedAt: new Date().toISOString(),
+    };
+  };
+
+  try {
+    const requestTool = getTool(createCodingGithubAuthTools({
+      workspaceRoot,
+      approvalService,
+      authService,
+      challengeRelay: relay,
+      currentEventId: firstEvent.id,
+      resolveEvent: (eventId) => eventId === firstEvent.id ? firstEvent : undefined,
+    }), 'github_auth_start');
+    const blocked = JSON.parse(await requestTool.execute({ eventId: firstEvent.id })) as {
+      request: { id: string };
+    };
+    await approvalService.recordDecision({
+      requestId: blocked.request.id,
+      approved: true,
+      decidedBy: 'operator-1',
+      principal: { id: 'operator-1', roles: ['operator'] },
+    });
+
+    const continueTool = getTool(createCodingGithubAuthTools({
+      workspaceRoot,
+      approvalService,
+      authService,
+      challengeRelay: relay,
+      currentEventId: continuationEvent.id,
+      resolveEvent: (eventId) => eventId === continuationEvent.id ? continuationEvent : undefined,
+    }), 'github_auth_start');
+    const continued = JSON.parse(await continueTool.execute({
+      eventId: continuationEvent.id,
+      approvalRequestId: blocked.request.id,
+    })) as { state?: string; blocked?: boolean };
+
+    assert.equal(continued.state, 'authorization_pending');
+    assert.equal(continued.blocked, undefined);
+    assert.equal(startAudience?.eventId, continuationEvent.id);
+    assert.deepEqual(relay.consume({
+      connector: continuationEvent.connector,
+      actorId: continuationEvent.actor.id,
+      conversationId: continuationEvent.conversation.id,
+      eventId: continuationEvent.id,
+    }), {
+      sessionId: startSessionId,
+      verificationUri: 'https://github.com/login/device',
+      userCode: 'FLOW-0001',
+      expiresAt: challengeExpiresAt,
+    });
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+function createFakeAuthService(
+  statusOverrides: Partial<Awaited<ReturnType<GithubAuthService['status']>>> = {},
+  onStart: () => void = () => {},
+): GithubAuthService {
+  return {
+    status: async () => ({
+      state: 'unauthenticated',
+      profile: 'default',
+      hostname: 'github.com',
+      credentialSource: 'none',
+      checkedAt: '2026-07-11T00:00:00.000Z',
+      ...statusOverrides,
+    }),
+    start: async () => {
+      onStart();
+      return {
+        state: 'authorization_pending',
+        profile: 'default',
+        hostname: 'github.com',
+        credentialSource: 'managed_profile',
+        checkedAt: '2026-07-11T00:00:00.000Z',
+      };
+    },
+    cancel: async () => ({
+      state: 'cancelled',
+      profile: 'default',
+      hostname: 'github.com',
+      credentialSource: 'managed_profile',
+      checkedAt: '2026-07-11T00:00:00.000Z',
+    }),
+    createGhEnv: async () => ({}),
+    createGitCredentialEnv: async () => ({}),
+  };
+}
+
 function getTool(tools: unknown[], name: string): {
-  execute(args: { eventId: string }): Promise<string>;
+  execute(args: { eventId: string; approvalRequestId?: string }): Promise<string>;
 } {
   const tool = (tools as Array<{ name: string; execute: unknown }>).find((candidate) => candidate.name === name);
   assert.ok(tool, `Missing ${name} tool.`);
-  return tool as unknown as { execute(args: { eventId: string }): Promise<string> };
+  return tool as unknown as { execute(args: { eventId: string; approvalRequestId?: string }): Promise<string> };
 }

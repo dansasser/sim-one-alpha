@@ -1,9 +1,9 @@
-import { createHash } from 'node:crypto';
 import { defineTool, type ToolDefinition } from '@flue/runtime';
 import * as v from 'valibot';
 import { goromboPersistenceRuntime } from '../../../../db.js';
 import type { NormalizedMessageEvent } from '../../../../core/types/index.js';
 import { getGithubAuthChallengeRelay, type GithubAuthChallengeRelay } from '../../../../api/ingress/github-auth-challenge-relay.js';
+import { getTrustedMessageEvent } from '../../../../api/ingress/trusted-event-context.js';
 import type { CodingApprovalService } from '../approvals/approval-service.js';
 import { createInMemoryCodingApprovalService } from '../approvals/approval-service.js';
 import { evaluateGitApproval } from '../tools/coding-git-tools.js';
@@ -12,6 +12,10 @@ import {
   type GithubAuthService,
 } from './github-auth-service.js';
 import { getGithubAuthService } from './github-auth-runtime.js';
+import {
+  createGithubAuthSessionId,
+  toModelVisibleGithubAuthResult,
+} from './github-auth-utils.js';
 
 export interface CodingGithubAuthToolsOptions {
   workspaceRoot: string;
@@ -20,18 +24,20 @@ export interface CodingGithubAuthToolsOptions {
   approvalService?: CodingApprovalService;
   reporter?: CodingProgressReporter;
   authService?: GithubAuthService;
+  authServiceLoader?: () => Promise<GithubAuthService>;
   challengeRelay?: GithubAuthChallengeRelay;
+  currentEventId?: string;
   resolveEvent?(eventId: string): NormalizedMessageEvent | undefined;
 }
 
 export function createCodingGithubAuthTools(options: CodingGithubAuthToolsOptions): ToolDefinition[] {
   const approvalService = options.approvalService ?? createInMemoryCodingApprovalService();
   const relay = options.challengeRelay ?? getGithubAuthChallengeRelay();
-  const getService = async () => options.authService ?? getGithubAuthService({
-    workspaceRoot: options.workspaceRoot,
-    authRoot: options.authRoot,
-    env: options.env,
-  });
+  const getService = async () => options.authService ?? options.authServiceLoader?.() ?? getGithubAuthService({
+      workspaceRoot: options.workspaceRoot,
+      authRoot: options.authRoot,
+      env: options.env,
+    });
   const resolveEvent = options.resolveEvent ?? resolvePersistedEvent;
 
   return [
@@ -40,37 +46,52 @@ export function createCodingGithubAuthTools(options: CodingGithubAuthToolsOption
       description: 'Check Coding Worker managed GitHub authentication for the trusted chat event. Read-only.',
       parameters: v.object({ eventId: v.string() }),
       execute: async ({ eventId }) => {
-        resolveTrustedEvent(resolveEvent, eventId);
-        return JSON.stringify(await (await getService()).status(), null, 2);
+        resolveTrustedEvent(resolveEvent, eventId, options.currentEventId, Boolean(options.resolveEvent));
+        return JSON.stringify(toModelVisibleGithubAuthResult(await (await getService()).status()), null, 2);
       },
     }),
     defineTool({
       name: 'github_auth_start',
       description: 'Request approval and start managed HTTPS GitHub browser authorization for the trusted chat event.',
-      parameters: v.object({ eventId: v.string() }),
-      execute: async ({ eventId }) => {
-        const event = resolveTrustedEvent(resolveEvent, eventId);
+      parameters: v.object({
+        eventId: v.string(),
+        approvalRequestId: v.optional(v.string()),
+      }),
+      execute: async ({ eventId, approvalRequestId }) => {
+        const event = resolveTrustedEvent(resolveEvent, eventId, options.currentEventId, Boolean(options.resolveEvent));
         const profile = 'default';
-        const authSessionId = stableSessionId(event.id, profile);
-        const approval = await evaluateGitApproval({ reporter: options.reporter }, {
-          approvalService,
-          taskId: event.id,
-          actionType: 'github.auth.login',
-          summary: 'Authorize the Coding Worker managed GitHub profile.',
-          reason: 'GitHub device authorization creates persistent managed provider credentials.',
-          risk: 'This grants the Coding Worker access to the GitHub account selected in the browser.',
-          target: 'github.com',
-          metadata: {
-            connector: event.connector,
-            actorId: event.actor.id,
-            conversationId: event.conversation.id,
-            eventId: event.id,
-            hostname: 'github.com',
-            profile,
-            scope: 'workflow',
-            authSessionId,
-          },
-        });
+        const service = await getService();
+        const currentStatus = await service.status({ profile });
+        if (currentStatus.state === 'authenticated') {
+          return JSON.stringify(toModelVisibleGithubAuthResult(currentStatus), null, 2);
+        }
+        let authSessionId = createGithubAuthSessionId(event.id, profile);
+        const approval = approvalRequestId
+          ? await resolveApprovedContinuation(approvalService, approvalRequestId, event, profile)
+          : await evaluateGitApproval({ reporter: options.reporter }, {
+              approvalService,
+              taskId: event.id,
+              actionType: 'github.auth.login',
+              summary: 'Authorize the Coding Worker managed GitHub profile.',
+              reason: 'GitHub device authorization creates persistent managed provider credentials.',
+              risk: 'This grants the Coding Worker access to the GitHub account selected in the browser.',
+              target: 'github.com',
+              expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+              metadata: {
+                connector: event.connector,
+                actorId: event.actor.id,
+                conversationId: event.conversation.id,
+                eventId: event.id,
+                hostname: 'github.com',
+                profile,
+                scope: 'workflow',
+                authSessionId,
+              },
+            });
+        const approvedSessionId = approval.request.metadata?.authSessionId;
+        if (typeof approvedSessionId === 'string' && approvedSessionId.length > 0) {
+          authSessionId = approvedSessionId;
+        }
         if (!approval.evaluation.allowed) {
           options.reporter?.emit({
             type: 'coding.github.auth.requested',
@@ -82,7 +103,7 @@ export function createCodingGithubAuthTools(options: CodingGithubAuthToolsOption
           });
           return JSON.stringify({ blocked: true, request: approval.request, evaluation: approval.evaluation }, null, 2);
         }
-        const result = await (await getService()).start({
+        const result = await service.start({
           profile,
           authSessionId,
           audience: {
@@ -103,25 +124,56 @@ export function createCodingGithubAuthTools(options: CodingGithubAuthToolsOption
           evidence: result.authSessionId ? [result.authSessionId] : [],
           ...(result.failureCode ? { decision: result.failureCode } : {}),
         });
-        return JSON.stringify(result, null, 2);
+        return JSON.stringify(toModelVisibleGithubAuthResult(result), null, 2);
       },
     }),
   ];
 }
 
+async function resolveApprovedContinuation(
+  approvalService: CodingApprovalService,
+  requestId: string,
+  event: NormalizedMessageEvent,
+  profile: string,
+) {
+  const record = await approvalService.getRecord(requestId);
+  if (!record || record.request.actionType !== 'github.auth.login') {
+    throw new Error('GitHub authentication continuation approval was not found.');
+  }
+  const metadata = record.request.metadata;
+  if (metadata?.connector !== event.connector ||
+      metadata?.actorId !== event.actor.id ||
+      metadata?.conversationId !== event.conversation.id ||
+      metadata?.hostname !== 'github.com' ||
+      metadata?.profile !== profile) {
+    throw new Error('GitHub authentication continuation does not match the current trusted audience.');
+  }
+  return {
+    request: record.request,
+    evaluation: await approvalService.evaluateRequest(record.request),
+  };
+}
+
 function resolveTrustedEvent(
   resolver: (eventId: string) => NormalizedMessageEvent | undefined,
   eventId: string,
+  currentEventId?: string,
+  customResolver = false,
 ): NormalizedMessageEvent {
+  const contextualEvent = getTrustedMessageEvent();
+  const trustedEventId = currentEventId ?? contextualEvent?.id;
+  if (trustedEventId !== undefined && eventId !== trustedEventId) {
+    throw new Error('GitHub authentication requires the current trusted eventId.');
+  }
+  if (contextualEvent) return contextualEvent;
+  if (!customResolver && currentEventId === undefined) {
+    throw new Error('GitHub authentication requires a current trusted event context.');
+  }
   const event = resolver(eventId);
   if (!event) {
     throw new Error('GitHub authentication requires a trusted eventId persisted by chat ingress.');
   }
   return event;
-}
-
-function stableSessionId(eventId: string, profile: string): string {
-  return createHash('sha256').update(`${eventId}\u0000${profile}`).digest('hex').slice(0, 32);
 }
 
 function resolvePersistedEvent(eventId: string): NormalizedMessageEvent | undefined {

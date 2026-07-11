@@ -24,6 +24,10 @@ import {
   createFlueLocalCodingSandbox,
   type CodingSandboxRuntime,
 } from '../../../../engine/workers/coding-worker/tools/sandbox-runtime.js';
+import {
+  githubCredentialOptions,
+  githubUrlCredentialOptions,
+} from './github-credential-utils.js';
 
 export interface CodingRepoWorkflowToolsOptions extends CodingWorkspaceTargetInput {
   env?: Record<string, string | undefined>;
@@ -186,9 +190,7 @@ export function createCodingRepoWorkflowTools(options: CodingRepoWorkflowToolsOp
           ['clone', ...(branch ? ['--branch', branch] : []), '--', remoteUrl, repoPath],
           {
             timeoutSeconds: 300,
-            ...(isManagedGithubHttpsRemote(remoteUrl) && options.githubGitEnv
-              ? { env: await options.githubGitEnv() }
-              : {}),
+            ...(await githubUrlCredentialOptions(remoteUrl, options.githubGitEnv)),
           },
         );
         let record: CodingRegisteredRepo | undefined;
@@ -476,28 +478,6 @@ function toInvalidOperandResult(name: string, value: string): ReturnType<typeof 
   return toToolJson({ blocked: true, reason: `invalid git operand for ${name}: ${value}` });
 }
 
-async function githubCredentialOptions(
-  sandbox: CodingSandboxRuntime,
-  remote: string,
-  githubGitEnv: (() => Promise<Record<string, string>>) | undefined,
-): Promise<{ env?: Record<string, string> }> {
-  if (!githubGitEnv) return {};
-  const remoteUrl = await sandbox.execFile('git', ['remote', 'get-url', remote], { timeoutSeconds: 30 });
-  if (remoteUrl.exitCode !== 0 || !isManagedGithubHttpsRemote(remoteUrl.stdout.trim())) {
-    return {};
-  }
-  return { env: await githubGitEnv() };
-}
-
-function isManagedGithubHttpsRemote(remoteUrl: string): boolean {
-  try {
-    const parsed = new URL(remoteUrl);
-    return parsed.protocol === 'https:' && parsed.hostname === 'github.com' && !parsed.username && !parsed.password;
-  } catch {
-    return false;
-  }
-}
-
 async function discoverWorkspaceRepos(
   sandbox: CodingSandboxRuntime,
   registered: CodingRegisteredRepo[],
@@ -569,6 +549,14 @@ function normalizeRepoWorkspaceRelativePath(value: string): string {
 function normalizeRepoUrl(value: string): string {
   if (!value.trim() || value.includes('\0') || value.startsWith('-')) {
     throw new Error(`Invalid git remoteUrl: ${value}`);
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.username || parsed.password) {
+      throw new Error('Git remote URLs with embedded credentials are not allowed.');
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('embedded credentials')) throw error;
   }
   return value;
 }

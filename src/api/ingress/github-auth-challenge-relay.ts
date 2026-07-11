@@ -22,19 +22,44 @@ export interface GithubAuthChallengeRelay {
  * integration: a device code is a temporary authorization capability.
  */
 export class InMemoryGithubAuthChallengeRelay implements GithubAuthChallengeRelay {
-  readonly #challenges = new Map<string, GithubAuthChallenge>();
+  readonly #challenges = new Map<string, StoredChallenge>();
 
   deliver(challenge: GithubAuthChallenge): void {
-    this.#challenges.set(challenge.audience.eventId, { ...challenge, audience: { ...challenge.audience } });
+    const eventId = challenge.audience.eventId;
+    const expiresAt = Date.parse(challenge.expiresAt);
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      return;
+    }
+
+    const previous = this.#challenges.get(eventId);
+    if (previous?.expiryTimer) clearTimeout(previous.expiryTimer);
+    for (const [storedEventId, stored] of this.#challenges) {
+      if (storedEventId !== eventId && sameConversationAudience(stored.challenge.audience, challenge.audience)) {
+        if (stored.expiryTimer) clearTimeout(stored.expiryTimer);
+        this.#challenges.delete(storedEventId);
+      }
+    }
+
+    const stored: StoredChallenge = {
+      challenge: { ...challenge, audience: { ...challenge.audience } },
+    };
+    this.#challenges.set(eventId, stored);
+    this.#scheduleExpiry(eventId, stored, expiresAt);
   }
 
   consume(audience: GithubAuthAudience): DeliveredGithubAuthChallenge | undefined {
-    const challenge = this.#challenges.get(audience.eventId);
-    if (!challenge || !sameAudience(challenge.audience, audience)) {
+    const match = this.#findChallenge(audience);
+    if (!match) {
       return undefined;
     }
-    this.#challenges.delete(audience.eventId);
-    if (Date.parse(challenge.expiresAt) <= Date.now()) {
+    const [eventId, stored] = match;
+    const challenge = stored.challenge;
+    if (stored.expiryTimer) clearTimeout(stored.expiryTimer);
+    if (this.#challenges.get(eventId) === stored) {
+      this.#challenges.delete(eventId);
+    }
+    const expiresAt = Date.parse(challenge.expiresAt);
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
       return undefined;
     }
     return {
@@ -44,6 +69,36 @@ export class InMemoryGithubAuthChallengeRelay implements GithubAuthChallengeRela
       expiresAt: challenge.expiresAt,
     };
   }
+
+  #findChallenge(audience: GithubAuthAudience): [string, StoredChallenge] | undefined {
+    const exact = this.#challenges.get(audience.eventId);
+    if (exact && sameAudience(exact.challenge.audience, audience)) {
+      return [audience.eventId, exact];
+    }
+
+    // A later authenticated chat turn has a new event id. It may continue the
+    // approved flow only inside the same connector/actor/conversation scope.
+    return [...this.#challenges.entries()].find(([, stored]) =>
+      sameConversationAudience(stored.challenge.audience, audience));
+  }
+
+  #scheduleExpiry(eventId: string, stored: StoredChallenge, expiresAt: number): void {
+    const delay = Math.min(expiresAt - Date.now(), 2_147_483_647);
+    stored.expiryTimer = setTimeout(() => {
+      if (this.#challenges.get(eventId) !== stored) return;
+      if (expiresAt > Date.now()) {
+        this.#scheduleExpiry(eventId, stored, expiresAt);
+        return;
+      }
+      this.#challenges.delete(eventId);
+    }, Math.max(0, delay));
+    stored.expiryTimer.unref?.();
+  }
+}
+
+interface StoredChallenge {
+  challenge: GithubAuthChallenge;
+  expiryTimer?: NodeJS.Timeout;
 }
 
 const defaultRelay = new InMemoryGithubAuthChallengeRelay();
@@ -62,8 +117,12 @@ export function githubAuthAudienceFromEvent(event: NormalizedMessageEvent): Gith
 }
 
 function sameAudience(left: GithubAuthAudience, right: GithubAuthAudience): boolean {
+  return sameConversationAudience(left, right) &&
+    left.eventId === right.eventId;
+}
+
+function sameConversationAudience(left: GithubAuthAudience, right: GithubAuthAudience): boolean {
   return left.connector === right.connector &&
     left.actorId === right.actorId &&
-    left.conversationId === right.conversationId &&
-    left.eventId === right.eventId;
+    left.conversationId === right.conversationId;
 }
