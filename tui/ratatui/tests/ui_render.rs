@@ -52,6 +52,80 @@ fn renders_prompt_cursor_at_edit_position() {
 }
 
 #[test]
+fn wraps_long_prompt_inside_prompt_box() {
+    let backend = TestBackend::new(24, 12);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    app.handle_event(AppEvent::Text("abcdefghijklmnopqrstuvwxyz".to_string()));
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("wrapped prompt shell should render");
+
+    let buffer = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    assert!(buffer.contains("abcdefghijklmnopqrst"), "{buffer}");
+    assert!(buffer.contains("uvwxyz"), "{buffer}");
+    assert_eq!(terminal.backend().cursor_position(), Position::new(9, 10));
+}
+
+#[test]
+fn prompt_uses_five_visible_rows_then_follows_cursor() {
+    let backend = TestBackend::new(14, 16);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    app.handle_event(AppEvent::Text(
+        "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddeeeeeeeeeeffffffff".to_string(),
+    ));
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("scrolling prompt shell should render");
+
+    let buffer = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    assert!(!buffer.contains("aaaaaaaaaa"), "{buffer}");
+    assert!(buffer.contains("bbbbbbbbbb"), "{buffer}");
+    assert!(buffer.contains("fffffff"), "{buffer}");
+    assert_eq!(terminal.backend().cursor_position(), Position::new(11, 14));
+}
+
+#[test]
+fn shift_enter_newline_renders_prompt_on_next_row() {
+    let backend = TestBackend::new(40, 12);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    app.handle_event(AppEvent::Text("first".to_string()));
+    app.handle_event(AppEvent::Text("\n".to_string()));
+    app.handle_event(AppEvent::Text("second".to_string()));
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("multiline prompt shell should render");
+
+    let buffer = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    assert!(buffer.contains("first"), "{buffer}");
+    assert!(buffer.contains("second"), "{buffer}");
+    assert_eq!(terminal.backend().cursor_position(), Position::new(9, 10));
+}
+
+#[test]
 fn renders_pending_spinner_status_without_covering_prompt() {
     let backend = TestBackend::new(160, 28);
     let mut terminal = Terminal::new(backend).expect("test backend should initialize");

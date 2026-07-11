@@ -60,6 +60,10 @@ fn maps_prompt_editing_and_submit_keys() {
         map_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
         Some(AppEvent::Submit)
     );
+    assert_eq!(
+        map_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT)),
+        Some(AppEvent::Text("\n".to_string()))
+    );
 }
 
 #[test]

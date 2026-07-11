@@ -12,6 +12,10 @@ pub fn map_terminal_event(event: Event) -> Option<AppEvent> {
 }
 
 pub fn map_key_event(key: KeyEvent) -> Option<AppEvent> {
+    if key.code == KeyCode::Enter && key.modifiers.contains(KeyModifiers::SHIFT) {
+        return Some(AppEvent::Text("\n".to_string()));
+    }
+
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         return match key.code {
             KeyCode::Char('c') => Some(AppEvent::Quit),
