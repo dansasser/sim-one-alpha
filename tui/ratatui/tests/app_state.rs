@@ -167,6 +167,68 @@ fn final_agent_response_moves_below_stream_activity_rows() {
 }
 
 #[test]
+fn streamed_final_response_reconciles_in_place_after_late_activity() {
+    let clock = TestClock::new();
+    let (mut app, release, calls) = app_with_blocked_sender(&clock);
+
+    app.handle_event(AppEvent::Text("keep one final row".to_string()));
+    app.handle_event(AppEvent::Submit);
+    wait_for_calls(&calls, 1);
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"message_end",
+            "eventIndex":20,
+            "message":{"role":"assistant","content":"streamed final answer"}
+        }),
+    )]));
+
+    assert!(app.is_agent_pending());
+    assert_eq!(
+        app.transcript_lines().last().map(String::as_str),
+        Some("assistant: streamed final answer")
+    );
+
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"operation",
+            "eventIndex":21,
+            "name":"operation",
+            "isError":false
+        }),
+    )]));
+    let lines = app.transcript_lines();
+    let operation_line = lines
+        .iter()
+        .position(|line| line == "operation: operation completed")
+        .expect("late operation should render");
+    let streamed_final_line = lines
+        .iter()
+        .position(|line| line == "assistant: streamed final answer")
+        .expect("streamed final should remain rendered");
+    assert!(operation_line < streamed_final_line, "{lines:?}");
+
+    release.send(()).expect("pending sender should release");
+    wait_for_agent(&mut app);
+
+    let lines = app.transcript_lines();
+    assert_eq!(
+        lines
+            .iter()
+            .filter(|line| line.starts_with("assistant: "))
+            .count(),
+        1,
+        "{lines:?}"
+    );
+    assert_eq!(
+        lines.last().map(String::as_str),
+        Some("assistant: done: keep one final row")
+    );
+    assert!(!lines
+        .iter()
+        .any(|line| line.contains("streamed final answer")));
+}
+
+#[test]
 fn pending_tick_advances_spinner_and_elapsed_time() {
     let clock = TestClock::new();
     let (mut app, release, calls) = app_with_blocked_sender(&clock);

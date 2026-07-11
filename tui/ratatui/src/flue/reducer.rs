@@ -449,7 +449,7 @@ fn fallback_row_id(kind: &str, turn_sequence: u64, sequence: u64, name: &str) ->
     }
 }
 
-fn extract_role(value: &serde_json::Value) -> Option<&str> {
+pub(crate) fn extract_role(value: &serde_json::Value) -> Option<&str> {
     value
         .pointer("/message/role")
         .and_then(|role| role.as_str())
@@ -471,7 +471,7 @@ fn extract_name(value: &serde_json::Value) -> Option<String> {
     )
 }
 
-fn extract_text(value: &serde_json::Value) -> Option<String> {
+pub(crate) fn extract_text(value: &serde_json::Value) -> Option<String> {
     extract_string(
         value,
         &[

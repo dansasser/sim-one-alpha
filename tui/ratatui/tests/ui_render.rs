@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -267,6 +267,81 @@ fn retry_completion_renders_final_response_at_live_tail() {
 }
 
 #[test]
+fn flue_final_message_is_visible_before_http_request_settles() {
+    let backend = TestBackend::new(133, 35);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let (release_tx, release_rx) = mpsc::channel();
+    let release_rx = Arc::new(Mutex::new(release_rx));
+    let sender_release_rx = Arc::clone(&release_rx);
+    let mut app = App::with_agent_sender(
+        "tui-visible-final-test",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(move |_, _, _| {
+            sender_release_rx
+                .lock()
+                .expect("release receiver should lock")
+                .recv_timeout(Duration::from_secs(2))
+                .expect("test should release blocked sender");
+            Ok(AgentReply {
+                text: "FINAL_VISIBLE_MARKER".to_string(),
+                session_id: None,
+                command_name: None,
+                session_created: None,
+            })
+        }),
+    );
+
+    for index in 0..24 {
+        app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+            serde_json::json!({
+                "type":"log",
+                "eventIndex":100 + index,
+                "text":format!("history row {index}")
+            }),
+        )]));
+    }
+    app.handle_event(AppEvent::Text("show the final response".to_string()));
+    app.handle_event(AppEvent::Submit);
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![
+        FlueEvent::from_value(serde_json::json!({
+            "type":"message_end",
+            "eventIndex":200,
+            "role":"assistant",
+            "text":"FINAL_VISIBLE_MARKER"
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"turn",
+            "eventIndex":201,
+            "isError":false
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"operation",
+            "eventIndex":202,
+            "name":"operation",
+            "isError":false
+        })),
+    ]));
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("Flue-complete frame should render");
+
+    let transcript_has_final = app
+        .transcript_lines()
+        .iter()
+        .any(|line| line.contains("FINAL_VISIBLE_MARKER"));
+    let frame = terminal_buffer_lines(&terminal);
+    let frame_has_final = frame.contains("FINAL_VISIBLE_MARKER");
+    release_tx.send(()).expect("pending sender should release");
+
+    assert!(
+        transcript_has_final && frame_has_final,
+        "Flue delivered the final message, but transcript_has_final={transcript_has_final}, frame_has_final={frame_has_final}\nframe:\n{frame}"
+    );
+}
+
+#[test]
 fn render_preserves_manual_scrollback_after_transcript_growth() {
     let backend = TestBackend::new(40, 12);
     let mut terminal = Terminal::new(backend).expect("test backend should initialize");
@@ -522,6 +597,118 @@ fn transcript_scrollbar_thumb_reaches_bottom_at_tail() {
     );
 }
 
+#[test]
+fn live_tail_renders_final_content_above_blank_margin_row() {
+    let backend = TestBackend::new(40, 12);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    for index in 0..8 {
+        app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+            serde_json::json!({
+                "type":"log",
+                "eventIndex":700 + index,
+                "text":format!("history row {index}")
+            }),
+        )]));
+    }
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"log",
+            "eventIndex":799,
+            "text":"TAIL_MARGIN_MARKER"
+        }),
+    )]));
+    app.jump_to_tail();
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("tail margin shell should render");
+
+    let buffer = terminal.backend().buffer();
+    let content_row = (1..39)
+        .filter_map(|x| buffer.cell(Position::new(x, 4)))
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    let margin_row = (1..39)
+        .filter_map(|x| buffer.cell(Position::new(x, 5)))
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    assert!(content_row.contains("TAIL_MARGIN_MARKER"), "{content_row}");
+    assert!(margin_row.trim().is_empty(), "{margin_row:?}");
+}
+
+#[test]
+fn streamed_final_remains_visible_across_terminal_and_prompt_sizes() {
+    for (width, height, draft) in [
+        (22, 9, "short draft"),
+        (
+            40,
+            12,
+            "a growing draft prompt that wraps across several rows below the transcript",
+        ),
+        (
+            80,
+            24,
+            "line one of a draft\nline two of a draft\nline three of a draft\nline four of a draft\nline five of a draft",
+        ),
+        (
+            133,
+            35,
+            "line one of a draft\nline two of a draft\nline three of a draft\nline four of a draft\nline five of a draft",
+        ),
+    ] {
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+        let mut app = App::with_agent_sender(
+            "tui-size-matrix",
+            "test gateway",
+            "http://127.0.0.1:3940",
+            Arc::new(|_, _, _| {
+                Ok(AgentReply {
+                    text: "TAIL_OK".to_string(),
+                    session_id: None,
+                    command_name: None,
+                    session_created: None,
+                })
+            }),
+        );
+        for index in 0..30 {
+            app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+                serde_json::json!({
+                    "type":"log",
+                    "eventIndex":900 + index,
+                    "text":format!("history row {index}")
+                }),
+            )]));
+        }
+        app.handle_event(AppEvent::Text("show the final response".to_string()));
+        app.handle_event(AppEvent::Submit);
+        app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+            serde_json::json!({
+                "type":"message_end",
+                "eventIndex":999,
+                "message":{"role":"assistant","content":"TAIL_OK"}
+            }),
+        )]));
+        app.handle_event(AppEvent::Text(draft.to_string()));
+
+        terminal
+            .draw(|frame| render(frame, &mut app))
+            .expect("size-matrix shell should render");
+        let frame = terminal_buffer_lines(&terminal);
+        assert!(
+            frame.contains("TAIL_OK"),
+            "final response missing at {width}x{height}:\n{frame}"
+        );
+        assert!(app.follow_tail(), "live tail disabled at {width}x{height}");
+        assert_eq!(
+            app.transcript_scroll(),
+            app.max_scroll(),
+            "tail offset wrong at {width}x{height}"
+        );
+    }
+}
+
 fn app_with_pending_response() -> App {
     App::with_agent_sender(
         "tui-existing-1",
@@ -546,4 +733,17 @@ fn wait_for_agent(app: &mut App) {
     }
     app.poll_agent();
     assert!(!app.is_agent_pending(), "agent response did not settle");
+}
+
+fn terminal_buffer_lines(terminal: &Terminal<TestBackend>) -> String {
+    let buffer = terminal.backend().buffer();
+    (0..buffer.area.height)
+        .map(|y| {
+            (0..buffer.area.width)
+                .filter_map(|x| buffer.cell(Position::new(x, y)))
+                .map(|cell| cell.symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }

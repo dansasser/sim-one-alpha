@@ -73,6 +73,7 @@ try {
   await assertProductCommandRouting(childEnv);
   await assertDefaultProductCommandStartsCleanStartup(childEnv);
   await assertInteractivePromptInput(childEnv);
+  await assertVisibleFinalBeforeHttpSettlement(childEnv);
 
   const startupSmoke = await runProductCommand(
     ['--port', String(port)],
@@ -232,6 +233,32 @@ async function assertInteractivePromptInput(env) {
   const exitCode = await waitForClose(command, 30_000);
   if (exitCode !== 0) {
     throw new Error(`Ratatui interactive product smoke failed with exit ${exitCode}\nstdout:\n${commandStdout}\nstderr:\n${commandStderr}`);
+  }
+  process.stdout.write(commandStdout);
+}
+
+async function assertVisibleFinalBeforeHttpSettlement(env) {
+  if (process.platform === 'win32') {
+    console.log('[ratatui-visible-final] PTY smoke skipped on Windows; Rust framebuffer coverage remains active.');
+    return;
+  }
+
+  const command = spawn('python3', ['scripts/test-ratatui-visible-final.py'], {
+    cwd: process.cwd(),
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let commandStdout = '';
+  let commandStderr = '';
+  command.stdout.on('data', (chunk) => {
+    commandStdout += String(chunk);
+  });
+  command.stderr.on('data', (chunk) => {
+    commandStderr += String(chunk);
+  });
+  const exitCode = await waitForClose(command, 30_000);
+  if (exitCode !== 0) {
+    throw new Error(`Ratatui visible-final product smoke failed with exit ${exitCode}\nstdout:\n${commandStdout}\nstderr:\n${commandStderr}`);
   }
   process.stdout.write(commandStdout);
 }

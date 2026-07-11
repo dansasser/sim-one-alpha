@@ -32,6 +32,9 @@ src/skills/greeting-preflight/SKILL.md
 
 scripts/test-ratatui-product.mjs
   Packaged product smoke for the exact built `sim-one` path.
+
+scripts/test-ratatui-visible-final.py
+  POSIX PTY regression that delivers Flue message_end while holding the HTTP result open and verifies the packaged TUI renders the answer immediately.
 ```
 
 The TUI is a connector surface, not an agent runtime. It must not own orchestration, protocol loading, tool selection, model execution, worker behavior, or memory/RAG decisions.
@@ -148,6 +151,20 @@ TUI prompt submit
 Prompt editing is local TUI state. Enter submits normally; when the character immediately before the cursor is `/`, Enter consumes that slash and inserts a newline instead. Enter repeat events are discarded at the crossterm mapping boundary so the newline press cannot become an immediate second submit. The editor grows to five visible rows and then scrolls locally. Prompt-height changes recalculate the transcript viewport while preserving live-tail or scrolled-back state; they do not alter the connector session or Flue stream offset.
 
 Live-tail is a render-time invariant, not a best-effort side effect of individual transcript mutations. After wrapping transcript lines for the current frame width, the renderer sets the scroll offset to the exact maximum whenever `follow_tail` is active. When the user has scrolled back, the renderer only clamps out-of-range offsets and does not snap to the tail.
+
+Final response display has two coordinated inputs:
+
+```text
+Flue live stream emits assistant message_end
+-> App replaces the pending spinner row with the final assistant text immediately
+-> later activity rows are inserted before the anchored final response
+-> POST /api/chat/events settles
+-> App reconciles response/session/command metadata into the same final row
+```
+
+The live Flue `message_end` event is the immediate display source. The synchronous HTTP result remains authoritative for request errors and session/command metadata, but the TUI must not hide an already-completed Flue answer while waiting for that second transport to close. Pending-row indices and the final-response anchor are reindexed together when activity rows are inserted, preventing late operation events from overwriting or moving the answer.
+
+`transcript_rendered_lines()` appends one virtual blank tail-margin row after wrapping. This sentinel gives the live-tail calculation a deterministic final row and leaves visual space below the newest response. It never enters `transcript_lines`, durable session history, copied context, or Flue persistence.
 
 The stable `local-tui` actor/conversation/thread scope is intentional. The gateway uses that connector scope to resolve the active durable TUI session, matching Telegram-style one-thread behavior. The active session id selects the durable conversation, while the stable scope lets `/new`, `/clear`, `/resume`, `/rename`, and `/compact` operate across session switches without creating unreachable conversation scopes.
 

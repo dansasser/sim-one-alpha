@@ -68,6 +68,10 @@ Use `PgUp` and `PgDown` to scroll the transcript. Scrolling away from the tail d
 
 While the title shows `Transcript - live tail`, every rendered frame anchors the viewport to the actual last wrapped transcript row. Final responses, retries, activity updates, and prompt-height changes therefore keep the newest line visible. Manual scrollback disables that anchoring until the user returns to the tail.
 
+The final assistant message is rendered as soon as Flue emits its authoritative `message_end` event. The still-running HTTP prompt request then reconciles command/session metadata or an error into that same transcript row instead of creating a duplicate response. Tool, turn, and operation rows that arrive afterward remain above the final response.
+
+Live tail includes one blank visual margin row after the final transcript content. This row is a rendering sentinel only: it is not persisted in the session, included in agent context, or added to transcript history. The newest response should always appear directly above it.
+
 ## Status Bar
 
 The status area shows the gateway connection, active session, stream state, pending response state, elapsed thinking time, and a spinner while the agent is working.
@@ -115,7 +119,7 @@ If the gateway fails to start, run the product smoke:
 pnpm run test:tui:ratatui
 ```
 
-On POSIX systems, this smoke launches the packaged `sim-one` command in a real PTY and verifies slash-Enter multiline input against a local gateway stub. Cross-platform Rust integration tests exercise the same crossterm event sequence, including Enter repeats, through input mapping, app state, and rendering.
+On POSIX systems, this smoke launches the packaged `sim-one` command in a real PTY and verifies slash-Enter multiline input against a local gateway stub. It also holds the HTTP prompt response open after sending a final Flue `message_end` event and verifies that the packaged TUI already rendered the answer. Cross-platform Rust integration tests exercise the same input, app-state, ordering, terminal-size, and framebuffer behavior.
 
 If the TUI exits after `/exit`, use the printed session id to resume:
 

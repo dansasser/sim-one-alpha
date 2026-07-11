@@ -5,12 +5,14 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::agent::{list_chat_sessions, send_agent_prompt_reply, AgentReply, SessionSummary};
-use crate::flue::reducer::{DisplayRow, EventTranscript};
+use crate::flue::events::FlueEvent;
+use crate::flue::reducer::{extract_role, extract_text, DisplayRow, EventTranscript};
 use crate::flue::stream::{spawn_agent_stream, AgentStreamHandle, AgentStreamUpdate};
 
 pub const SCROLL_PAGE_LINES: usize = 8;
 const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
 const UNRESOLVED_SESSION_LABEL: &str = "resolving";
+const TRANSCRIPT_TAIL_MARGIN_ROWS: usize = 1;
 
 pub type AgentSender =
     Arc<dyn Fn(String, String, String) -> Result<AgentReply, String> + Send + Sync + 'static>;
@@ -292,8 +294,15 @@ impl App {
                 if let Some(event) = events.last() {
                     self.last_stream_event = Some(event.event_type.clone());
                 }
+                let final_message = self
+                    .pending_response
+                    .as_ref()
+                    .and_then(|_| final_assistant_message(&events));
                 self.event_transcript.apply_events(&events);
                 self.sync_event_transcript_rows();
+                if let Some(final_message) = final_message {
+                    self.settle_pending_stream_response(&final_message);
+                }
             }
             AgentStreamUpdate::Control(control) => {
                 if control.up_to_date {
@@ -491,7 +500,13 @@ impl App {
     }
 
     pub fn transcript_rendered_lines(&self) -> Vec<String> {
-        wrap_transcript_lines(&self.transcript_lines, self.transcript_viewport_width)
+        let mut lines =
+            wrap_transcript_lines(&self.transcript_lines, self.transcript_viewport_width);
+        lines.extend(std::iter::repeat_n(
+            String::new(),
+            TRANSCRIPT_TAIL_MARGIN_ROWS,
+        ));
+        lines
     }
 
     pub(crate) fn sync_transcript_scroll_for_render(&mut self, rendered_row_count: usize) -> usize {
@@ -855,6 +870,25 @@ Use the workspace identity and user context already loaded for this agent. Greet
         self.final_response_range = Some((final_start, replacement_len));
     }
 
+    fn settle_pending_stream_response(&mut self, text: &str) {
+        let Some(line_index) = self
+            .pending_response
+            .as_ref()
+            .map(|pending| pending.transcript_line)
+        else {
+            return;
+        };
+
+        self.settle_pending_response_line(line_index, "assistant", text.trim());
+        if let (Some(pending), Some((final_start, _))) =
+            (&mut self.pending_response, self.final_response_range)
+        {
+            pending.transcript_line = final_start;
+        }
+        self.agent_status = "finalizing".to_string();
+        self.after_transcript_changed();
+    }
+
     fn after_transcript_changed(&mut self) {
         if self.follow_tail {
             self.jump_to_tail();
@@ -904,6 +938,7 @@ Use the workspace identity and user context already loaded for this agent. Greet
 
     fn reindex_event_rows_after_splice(&mut self, start: usize, removed: usize, inserted: usize) {
         self.reindex_final_response_after_splice(start, removed, inserted);
+        self.reindex_pending_response_after_splice(start, removed, inserted);
         if removed == inserted {
             return;
         }
@@ -926,6 +961,37 @@ Use the workspace identity and user context already loaded for this agent. Greet
                 } else if *index >= start {
                     *index = start;
                 }
+            }
+        }
+    }
+
+    fn reindex_pending_response_after_splice(
+        &mut self,
+        start: usize,
+        removed: usize,
+        inserted: usize,
+    ) {
+        let Some(pending) = &mut self.pending_response else {
+            return;
+        };
+        if removed == inserted {
+            return;
+        }
+
+        let removed_end = start.saturating_add(removed);
+        if inserted > removed {
+            let delta = inserted - removed;
+            if pending.transcript_line >= removed_end {
+                pending.transcript_line = pending.transcript_line.saturating_add(delta);
+            } else if pending.transcript_line >= start {
+                pending.transcript_line = start;
+            }
+        } else {
+            let delta = removed - inserted;
+            if pending.transcript_line >= removed_end {
+                pending.transcript_line = pending.transcript_line.saturating_sub(delta);
+            } else if pending.transcript_line >= start {
+                pending.transcript_line = start;
             }
         }
     }
@@ -1050,6 +1116,17 @@ fn speaker_lines(speaker: &str, text: &str) -> Vec<String> {
     }
 
     lines
+}
+
+fn final_assistant_message(events: &[FlueEvent]) -> Option<String> {
+    events.iter().rev().find_map(|event| {
+        if event.event_type != "message_end"
+            || extract_role(&event.value).unwrap_or("assistant") != "assistant"
+        {
+            return None;
+        }
+        extract_text(&event.value).filter(|text| !text.trim().is_empty())
+    })
 }
 
 fn pending_transcript_line(pending: &PendingResponse, now: Instant) -> String {
