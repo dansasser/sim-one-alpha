@@ -575,6 +575,10 @@ impl App {
     }
 
     fn submit_prompt(&mut self) {
+        if self.insert_newline_after_slash() {
+            return;
+        }
+
         let prompt = self.prompt.trim().to_string();
         if !prompt.is_empty() && self.pending_response.is_none() {
             self.final_response_range = None;
@@ -606,7 +610,6 @@ impl App {
         self.prompt.clear();
         self.prompt_cursor = 0;
         self.agent_status = "thinking".to_string();
-        self.jump_to_tail();
 
         let base_url = self.base_url.clone();
         let session_id = self.session_id.clone();
@@ -627,6 +630,7 @@ impl App {
         self.transcript_lines
             .push(pending_transcript_line(&pending, started_at));
         self.pending_response = Some(pending);
+        self.jump_to_tail();
     }
 
     fn submit_internal_prompt(&mut self, prompt: String) {
@@ -636,7 +640,6 @@ impl App {
 
         let transcript_line = self.transcript_lines.len();
         self.agent_status = "thinking".to_string();
-        self.jump_to_tail();
 
         let base_url = self.base_url.clone();
         let session_id = self.session_id.clone();
@@ -657,6 +660,21 @@ impl App {
         self.transcript_lines
             .push(pending_transcript_line(&pending, started_at));
         self.pending_response = Some(pending);
+        self.jump_to_tail();
+    }
+
+    fn insert_newline_after_slash(&mut self) -> bool {
+        let Some(previous) = previous_char_boundary(&self.prompt, self.prompt_cursor) else {
+            return false;
+        };
+        if &self.prompt[previous..self.prompt_cursor] != "/" {
+            return false;
+        }
+
+        self.prompt
+            .replace_range(previous..self.prompt_cursor, "\n");
+        self.prompt_cursor = previous + 1;
+        true
     }
 
     fn handle_local_slash_command(&mut self, prompt: &str) -> bool {

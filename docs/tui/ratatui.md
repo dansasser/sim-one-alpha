@@ -45,7 +45,9 @@ The bottom pane contains gateway/session/model status and the editable prompt li
 
 ## Prompt Editing
 
-Press `Enter` to submit the prompt. While a prompt is pending, a duplicate submit is shown as a visible status instead of queueing a second prompt.
+Press `Enter` to submit the prompt. To insert a newline, type `/` at the cursor and press `Enter`; the TUI removes the trailing slash and starts the next prompt line without submitting. Slash commands such as `/new` and `/compact` still submit normally because their final character is not `/`.
+
+The editor wraps long input, grows to five visible rows, and then scrolls its own contents while keeping the cursor visible. Transcript tail-following is recalculated as the editor grows, so the latest response remains directly above the prompt. While a prompt is pending, a duplicate submit is shown as a visible status instead of queueing a second prompt.
 
 Supported editing keys include:
 

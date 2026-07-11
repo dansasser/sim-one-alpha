@@ -54,6 +54,24 @@ fn enter_submits_prompt_to_agent_and_returns_to_tail() {
 }
 
 #[test]
+fn first_submit_keeps_new_pending_response_at_visible_tail() {
+    let clock = TestClock::new();
+    let (mut app, release, calls) = app_with_blocked_sender(&clock);
+    app.set_transcript_viewport_size(2, 80);
+    app.jump_to_tail();
+
+    app.handle_event(AppEvent::Text("first prompt".to_string()));
+    app.handle_event(AppEvent::Submit);
+    wait_for_calls(&calls, 1);
+
+    assert!(app.follow_tail());
+    assert_eq!(app.transcript_scroll(), app.max_scroll());
+
+    release.send(()).expect("pending sender should release");
+    wait_for_agent(&mut app);
+}
+
+#[test]
 fn pending_turn_starts_with_spinner_elapsed_and_status() {
     let clock = TestClock::new();
     let (mut app, release, calls) = app_with_blocked_sender(&clock);
@@ -607,6 +625,29 @@ fn prompt_cursor_allows_insertion_navigation_and_word_delete() {
     app.handle_event(AppEvent::MovePromptEnd);
     app.handle_event(AppEvent::Backspace);
     assert_eq!(app.prompt(), "worl");
+}
+
+#[test]
+fn trailing_slash_enter_inserts_newline_without_submitting() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let sender_calls = Arc::clone(&calls);
+    let mut app = App::with_agent_sender(
+        "tui-existing-1",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(move |_, _, _| {
+            sender_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(agent_reply("should not submit"))
+        }),
+    );
+
+    app.handle_event(AppEvent::Text("first line/".to_string()));
+    app.handle_event(AppEvent::Submit);
+
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert_eq!(app.prompt(), "first line\n");
+    assert_eq!(app.prompt_cursor(), app.prompt().len());
+    assert!(!app.is_agent_pending());
 }
 
 #[test]

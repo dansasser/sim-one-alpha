@@ -101,6 +101,77 @@ fn prompt_uses_five_visible_rows_then_follows_cursor() {
 }
 
 #[test]
+fn growing_prompt_keeps_transcript_tail_above_prompt_panel() {
+    let backend = TestBackend::new(40, 10);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    for index in 0..20 {
+        app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+            serde_json::json!({
+                "type":"log",
+                "eventIndex":300 + index,
+                "text":format!("history row {index}")
+            }),
+        )]));
+    }
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"log",
+            "eventIndex":999,
+            "text":"visible-tail-marker"
+        }),
+    )]));
+    app.jump_to_tail();
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("initial tail shell should render");
+    app.handle_event(AppEvent::Text(
+        "line one wraps across the prompt width and keeps going until the input occupies five visible rows without explicit newlines".to_string(),
+    ));
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("grown prompt shell should render");
+
+    let buffer = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    assert!(buffer.contains("visible-tail-marker"), "{buffer}");
+    assert_eq!(app.transcript_scroll(), app.max_scroll());
+    assert!(app.follow_tail());
+}
+
+#[test]
+fn first_pending_response_is_visible_without_waiting_for_another_prompt() {
+    let backend = TestBackend::new(40, 9);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = app_with_pending_response();
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("initial shell should render");
+    app.handle_event(AppEvent::Text("first prompt".to_string()));
+    app.handle_event(AppEvent::Submit);
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("first pending response should render");
+
+    let buffer = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    assert!(buffer.contains("final response"), "{buffer}");
+    assert_eq!(app.transcript_scroll(), app.max_scroll());
+}
+
+#[test]
 fn shift_enter_newline_renders_prompt_on_next_row() {
     let backend = TestBackend::new(40, 12);
     let mut terminal = Terminal::new(backend).expect("test backend should initialize");

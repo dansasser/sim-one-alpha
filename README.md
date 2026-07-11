@@ -545,7 +545,7 @@ The TypeScript `sim-one` wrapper owns product command routing and capability sub
 ### What the TUI shows
 
 - **Transcript/context pane** — prompts, assistant responses, stream activity, tool/status rows, and local system notices
-- **Prompt editor** — cursor movement, word movement, Home/End, delete/backspace, Ctrl+U, and submit
+- **Prompt editor** — wrapped multiline input up to five visible rows, `/` then Enter for a newline, cursor and word movement, Home/End, delete/backspace, Ctrl+U, and submit
 - **Status bar** — gateway URL, active session, stream state, pending response state, elapsed thinking time, and spinner
 - **Session command output** — `/new`, `/clear`, `/resume`, `/rename`, `/compact`, `/session`, `/sessions`, `/help`, and `/exit`
 - **Scroll behavior** — PgUp/PgDown scrolls the transcript while prompt typing remains active
