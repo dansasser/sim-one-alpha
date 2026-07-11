@@ -544,7 +544,7 @@ The TypeScript `sim-one` wrapper owns product command routing and capability sub
 
 ### What the TUI shows
 
-- **Transcript/context pane** — prompts, assistant responses, stream activity, tool/status rows, and local system notices
+- **Transcript/context pane** — `SIM-ONE Alpha` header with an explicit session name when present, prompts, assistant responses, stream activity, tool/status rows, and local system notices
 - **Prompt editor** — wrapped multiline input up to five visible rows, vertical arrow navigation, `\` then Enter for a newline, cursor and word movement, Home/End, delete/backspace, Ctrl+U, and submit
 - **Command palette** — type `/` to filter and select session/TUI commands from a six-row keyboard-driven drop-up
 - **Status bar** — gateway URL, active session id or explicit name, stream state, pending response state, elapsed thinking time, and spinner

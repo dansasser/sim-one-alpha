@@ -130,6 +130,8 @@ backslash-Enter newline preservation when the terminal reports an Enter repeat
 vertical arrow editing across packaged multiline prompt rows
 exact multiline prompt payload submitted to the gateway
 renamed session name in final TUI status and stable session id on exit
+fresh, renamed, and resumed transcript header values without status-bar changes
+temporary session-database isolation for product smoke data
 /new
 /session
 /compact

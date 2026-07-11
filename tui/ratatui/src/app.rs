@@ -493,7 +493,7 @@ impl App {
                         let session_id = reply.session_id.clone();
                         let explicit_session_title = matches!(
                             reply.command_name.as_deref(),
-                            Some("rename" | "new" | "clear")
+                            Some("rename" | "new" | "clear" | "resume" | "session")
                         )
                         .then(|| clean_session_title(reply.session_title.clone()))
                         .flatten();
@@ -613,6 +613,13 @@ impl App {
 
     pub fn session_title(&self) -> Option<&str> {
         self.session_title.as_deref()
+    }
+
+    pub fn transcript_header_title(&self) -> String {
+        self.session_title.as_deref().map_or_else(
+            || "SIM-ONE Alpha".to_string(),
+            |title| format!("SIM-ONE Alpha - {title}"),
+        )
     }
 
     fn session_label(&self) -> &str {

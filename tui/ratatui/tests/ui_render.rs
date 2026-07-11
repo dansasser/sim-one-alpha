@@ -30,8 +30,10 @@ fn renders_static_shell_with_transcript_status_and_prompt() {
         .iter()
         .map(|cell| cell.symbol())
         .collect::<String>();
-    assert!(buffer.contains("Transcript"));
-    assert!(buffer.contains("SIM-ONE Alpha"));
+    let frame = terminal_buffer_lines(&terminal);
+    assert!(frame.starts_with("┌SIM-ONE Alpha"), "{frame}");
+    assert!(!buffer.contains("Transcript - live tail"));
+    assert!(!buffer.contains("Transcript - scrolled back"));
     assert!(buffer.contains("session: resolving"));
     assert!(!buffer.contains("session: primary"));
     assert!(buffer.contains("> Type a message"));
@@ -225,7 +227,7 @@ fn multiline_prompt_arrows_move_the_visible_cursor_without_scrolling_transcript(
 }
 
 #[test]
-fn renamed_session_title_is_rendered_in_status_bar() {
+fn renamed_session_title_is_rendered_in_header_without_changing_status_bar() {
     let backend = TestBackend::new(120, 18);
     let mut terminal = Terminal::new(backend).expect("test backend should initialize");
     let mut app = App::with_agent_sender(
@@ -250,8 +252,49 @@ fn renamed_session_title_is_rendered_in_status_bar() {
         .draw(|frame| render(frame, &mut app))
         .expect("renamed session status should render");
     let frame = terminal_buffer_lines(&terminal);
+    assert!(
+        frame.starts_with("┌SIM-ONE Alpha - Release Work"),
+        "{frame}"
+    );
     assert!(frame.contains("session: Release Work"), "{frame}");
     assert!(!frame.contains("Release Work (tui-existing-1)"), "{frame}");
+}
+
+#[test]
+fn transcript_header_does_not_change_with_scroll_position() {
+    let backend = TestBackend::new(80, 16);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::with_session("tui-existing-1", "test gateway", "http://127.0.0.1:3940");
+    for index in 0..20 {
+        app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+            serde_json::json!({
+                "type":"log",
+                "eventIndex":900 + index,
+                "text":format!("header scroll row {index}")
+            }),
+        )]));
+    }
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("live header should render");
+    assert!(
+        terminal_buffer_lines(&terminal).starts_with("┌SIM-ONE Alpha"),
+        "{}",
+        terminal_buffer_lines(&terminal)
+    );
+
+    app.scroll_page_up();
+    assert!(app.status_text().contains("tail: scrolled"));
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("scrolled header should render");
+    let scrolled = terminal_buffer_lines(&terminal);
+    assert!(scrolled.starts_with("┌SIM-ONE Alpha"), "{scrolled}");
+    assert!(
+        !scrolled.contains("Transcript - scrolled back"),
+        "{scrolled}"
+    );
 }
 
 #[test]

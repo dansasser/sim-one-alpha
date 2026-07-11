@@ -216,7 +216,9 @@ fn extract_session_summary(value: &serde_json::Value) -> Option<SessionSummary> 
         .unwrap_or("unknown")
         .to_string();
     let title = value
-        .get("title")
+        .get("displayName")
+        .or_else(|| value.get("display_name"))
+        .or_else(|| value.get("title"))
         .and_then(|title| title.as_str())
         .map(str::to_string);
     let updated_at = value

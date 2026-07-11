@@ -1055,12 +1055,72 @@ fn rename_reply_updates_status_title_without_changing_session_id() {
 
     assert_eq!(app.session_id(), "tui-existing-1");
     assert_eq!(app.session_title(), Some("Release Work"));
+    assert_eq!(
+        app.transcript_header_title(),
+        "SIM-ONE Alpha - Release Work"
+    );
     assert!(
         app.status_text().contains("session: Release Work"),
         "{}",
         app.status_text()
     );
     assert!(!app.status_text().contains("Release Work ("));
+}
+
+#[test]
+fn fresh_and_unnamed_sessions_keep_the_product_only_header() {
+    let unresolved = App::new_for_test();
+    assert_eq!(unresolved.transcript_header_title(), "SIM-ONE Alpha");
+    assert!(
+        unresolved
+            .status_text()
+            .starts_with("SIM-ONE Alpha | session: resolving |"),
+        "{}",
+        unresolved.status_text()
+    );
+
+    let unnamed = App::with_session("tui-existing-1", "test gateway", "http://127.0.0.1:3940");
+    assert_eq!(unnamed.transcript_header_title(), "SIM-ONE Alpha");
+    assert!(
+        unnamed
+            .status_text()
+            .starts_with("SIM-ONE Alpha | session: tui-existing-1 |"),
+        "{}",
+        unnamed.status_text()
+    );
+}
+
+#[test]
+fn resume_reply_restores_explicit_name_in_header_and_existing_status_field() {
+    let mut app = App::with_agent_sender(
+        "tui-current-1",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| {
+            Ok(AgentReply {
+                text: "Resumed session tui-named-1.".to_string(),
+                session_id: Some("tui-named-1".to_string()),
+                session_title: Some("Release Work".to_string()),
+                command_name: Some("resume".to_string()),
+                session_created: Some(false),
+            })
+        }),
+    );
+    app.handle_event(AppEvent::Text("/resume tui-named-1".to_string()));
+    app.handle_event(AppEvent::Submit);
+    wait_for_agent(&mut app);
+
+    assert_eq!(app.session_id(), "tui-named-1");
+    assert_eq!(
+        app.transcript_header_title(),
+        "SIM-ONE Alpha - Release Work"
+    );
+    assert!(
+        app.status_text()
+            .starts_with("SIM-ONE Alpha | session: Release Work |"),
+        "{}",
+        app.status_text()
+    );
 }
 
 #[test]

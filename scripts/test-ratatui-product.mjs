@@ -51,6 +51,10 @@ let child;
 try {
   const config = JSON.parse(originalConfig);
   config.gateway = { ...(config.gateway ?? {}), port };
+  config.storage = {
+    ...(config.storage ?? {}),
+    sessionDatabasePath: join(codingWorkspaceRoot, 'sessions.sqlite'),
+  };
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
   const childEnv = {
@@ -101,6 +105,7 @@ try {
   if (stdout.includes('This is an automatic SIM-ONE Alpha local Ratatui TUI startup event')) {
     throw new Error(`Ratatui status exposed the internal startup prompt as a session title.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
   }
+  assertOutputIncludes(stdout, '\nSIM-ONE Alpha\nSIM-ONE Alpha | session:', 'fresh startup did not use the product-only header or preserve the status bar');
 
   const createSessionSmoke = await runProductCommand(
     ['--port', String(port)],
@@ -135,7 +140,23 @@ try {
     throw new Error(`Ratatui /clear reused the old session id ${sessionId}.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
   }
   assertOutputIncludes(stdout, `system: current session ${clearedSessionId}`, 'session command did not show the cleared active session');
+  assertOutputIncludes(stdout, '\nSIM-ONE Alpha - Smoke Cleared\nSIM-ONE Alpha | session: Smoke Cleared |', 'named clear did not update the header while preserving the status bar');
   assertOutputIncludes(stdout, `Exited SIM-ONE Alpha TUI. Session: ${clearedSessionId}`, 'exit command did not print the cleared active session id');
+
+  const resumeNamedSessionSmoke = await runProductCommand(
+    ['--port', String(port)],
+    {
+      ...childEnv,
+      SIM_ONE_TUI_TEST_PROMPTS: [
+        `/resume ${clearedSessionId}`,
+        '/exit',
+      ].join('\n'),
+    },
+    240_000,
+  );
+  stdout = resumeNamedSessionSmoke.stdout;
+  stderr = resumeNamedSessionSmoke.stderr;
+  assertOutputIncludes(stdout, '\nSIM-ONE Alpha - Smoke Cleared\nSIM-ONE Alpha | session: Smoke Cleared |', 'resume did not restore the explicit header name or preserve the status bar');
 
   const resumeSessionSmoke = await runProductCommand(
     ['--port', String(port)],
@@ -153,6 +174,7 @@ try {
   stderr = resumeSessionSmoke.stderr;
   assertOutputIncludes(stdout, `assistant: Resumed session ${clearedSessionId}.`, 'resume command did not resume the cleared session');
   assertOutputIncludes(stdout, `assistant: Renamed session ${clearedSessionId} to "Smoke Session Renamed".`, 'rename command did not rename the active session');
+  assertOutputIncludes(stdout, '\nSIM-ONE Alpha - Smoke Session Renamed\n', 'rename command did not update the product header with the explicit name');
   assertOutputIncludes(stdout, 'session: Smoke Session Renamed', 'rename command did not replace the status-bar session id with the explicit title');
   assertOutputIncludes(stdout, `Exited SIM-ONE Alpha TUI. Session: ${clearedSessionId}`, 'exit after resume did not print the active session id');
 

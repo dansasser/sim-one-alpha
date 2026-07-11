@@ -32,6 +32,8 @@ system: current session <session-id>
 
 The status bar starts with `session: <session-id>`. Renaming replaces that same field with `session: <title>` as soon as the gateway confirms the explicit name. `/session` still prints the durable id into the transcript.
 
+The transcript header is `SIM-ONE Alpha` for an unnamed session and `SIM-ONE Alpha - <name>` for an explicitly named session. Loading or resuming a named session restores that header without changing the status-bar format.
+
 ## Start A New Session
 
 Use:
