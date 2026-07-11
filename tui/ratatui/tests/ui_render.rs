@@ -583,7 +583,7 @@ fn live_assistant_stream_is_dimmed_until_final_message_replaces_it() {
                 .recv_timeout(Duration::from_secs(2))
                 .expect("test should release blocked sender");
             Ok(AgentReply {
-                text: "Live answer finalized.".to_string(),
+                text: "Live **answer** finalized.".to_string(),
                 session_id: None,
                 command_name: None,
                 session_created: None,
@@ -598,7 +598,7 @@ fn live_assistant_stream_is_dimmed_until_final_message_replaces_it() {
             "eventIndex":5,
             "timestamp":"2026-07-11T18:37:02Z",
             "session":"default",
-            "text":"Live answer "
+            "text":"Live **answer** "
         })),
         FlueEvent::from_value(serde_json::json!({
             "type":"text_delta",
@@ -627,6 +627,20 @@ fn live_assistant_stream_is_dimmed_until_final_message_replaces_it() {
             "live assistant cell at x={x} should be dimmed"
         );
     }
+    let live_bold = Position::new(
+        buffer_row_text(&terminal, live_row)
+            .find("answer")
+            .expect("live assistant row should contain bold text") as u16,
+        live_row,
+    );
+    assert!(terminal
+        .backend()
+        .buffer()
+        .cell(live_bold)
+        .expect("live Markdown bold cell should exist")
+        .style()
+        .add_modifier
+        .contains(Modifier::BOLD));
 
     app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
         serde_json::json!({
@@ -634,7 +648,7 @@ fn live_assistant_stream_is_dimmed_until_final_message_replaces_it() {
             "eventIndex":21,
             "timestamp":"2026-07-11T18:37:09Z",
             "session":"default",
-            "message":{"role":"assistant","content":[{"type":"text","text":"Live answer finalized."}]}
+            "message":{"role":"assistant","content":[{"type":"text","text":"Live **answer** finalized."}]}
         }),
     )]));
     terminal
@@ -651,6 +665,20 @@ fn live_assistant_stream_is_dimmed_until_final_message_replaces_it() {
             .add_modifier
             .contains(Modifier::DIM));
     }
+    let final_bold = Position::new(
+        buffer_row_text(&terminal, final_row)
+            .find("answer")
+            .expect("final assistant row should contain bold text") as u16,
+        final_row,
+    );
+    let final_style = terminal
+        .backend()
+        .buffer()
+        .cell(final_bold)
+        .expect("final Markdown bold cell should exist")
+        .style();
+    assert!(final_style.add_modifier.contains(Modifier::BOLD));
+    assert!(!final_style.add_modifier.contains(Modifier::DIM));
 
     wait_for_agent(&mut app);
 }
@@ -965,6 +993,135 @@ fn semantic_prefix_formatting_preserves_body_and_continuation_styles() {
 }
 
 #[test]
+fn assistant_markdown_renders_inline_styles_without_source_markers() {
+    let backend = TestBackend::new(120, 20);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::with_agent_sender(
+        "tui-markdown-inline",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| {
+            Ok(AgentReply {
+                text: "Plain **bold** *italic* `code` [docs](https://example.com)".to_string(),
+                session_id: None,
+                command_name: None,
+                session_created: None,
+            })
+        }),
+    );
+    app.handle_event(AppEvent::Text("format markdown".to_string()));
+    app.handle_event(AppEvent::Submit);
+    wait_for_agent(&mut app);
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("Markdown transcript should render");
+
+    let frame = terminal_buffer_lines(&terminal);
+    assert!(!frame.contains("**bold**"), "{frame}");
+    assert!(!frame.contains("*italic*"), "{frame}");
+    assert!(!frame.contains("`code`"), "{frame}");
+    assert!(!frame.contains("[docs]"), "{frame}");
+
+    let bold = find_buffer_text_position(&terminal, "bold");
+    assert!(terminal
+        .backend()
+        .buffer()
+        .cell(bold)
+        .expect("bold Markdown cell should exist")
+        .style()
+        .add_modifier
+        .contains(Modifier::BOLD));
+
+    let italic = find_buffer_text_position(&terminal, "italic");
+    assert!(terminal
+        .backend()
+        .buffer()
+        .cell(italic)
+        .expect("italic Markdown cell should exist")
+        .style()
+        .add_modifier
+        .contains(Modifier::ITALIC));
+
+    let code = find_buffer_text_position(&terminal, "code");
+    assert_eq!(
+        terminal
+            .backend()
+            .buffer()
+            .cell(code)
+            .expect("inline-code Markdown cell should exist")
+            .style()
+            .bg,
+        Some(Color::Rgb(38, 38, 40))
+    );
+
+    let link = find_buffer_text_position(&terminal, "https://example.com");
+    assert!(terminal
+        .backend()
+        .buffer()
+        .cell(link)
+        .expect("link Markdown cell should exist")
+        .style()
+        .add_modifier
+        .contains(Modifier::UNDERLINED));
+}
+
+#[test]
+fn assistant_markdown_renders_blocks_and_preserves_word_wrapping() {
+    let backend = TestBackend::new(28, 24);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::with_agent_sender(
+        "tui-markdown-blocks",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| {
+            Ok(AgentReply {
+                text: "# Summary\n\n- alpha bravo charlie delta echo\n- second item\n\n```rust\nlet value = 1;\n```"
+                    .to_string(),
+                session_id: None,
+                command_name: None,
+                session_created: None,
+            })
+        }),
+    );
+    app.handle_event(AppEvent::Text("render blocks".to_string()));
+    app.handle_event(AppEvent::Submit);
+    wait_for_agent(&mut app);
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("block Markdown transcript should render");
+
+    let frame = terminal_buffer_lines(&terminal);
+    assert!(frame.contains("# Summary"), "{frame}");
+    assert!(frame.contains("- alpha bravo charlie"), "{frame}");
+    assert!(frame.contains("delta echo"), "{frame}");
+    assert!(frame.contains("let value = 1;"), "{frame}");
+    assert!(!frame.contains("charlie delta"), "{frame}");
+
+    let heading = find_buffer_text_position(&terminal, "Summary");
+    assert!(terminal
+        .backend()
+        .buffer()
+        .cell(heading)
+        .expect("heading Markdown cell should exist")
+        .style()
+        .add_modifier
+        .contains(Modifier::BOLD));
+    let code = find_buffer_text_position(&terminal, "let value = 1;");
+    assert_eq!(
+        terminal
+            .backend()
+            .buffer()
+            .cell(code)
+            .expect("code-block Markdown cell should exist")
+            .style()
+            .bg,
+        Some(Color::Rgb(38, 38, 40))
+    );
+}
+
+#[test]
 fn error_prefix_is_bold_light_red() {
     let backend = TestBackend::new(80, 16);
     let mut terminal = Terminal::new(backend).expect("test backend should initialize");
@@ -1253,6 +1410,20 @@ fn buffer_row_text(terminal: &Terminal<TestBackend>, row: u16) -> String {
         .filter_map(|x| buffer.cell(Position::new(x, row)))
         .map(|cell| cell.symbol())
         .collect()
+}
+
+fn find_buffer_text_position(terminal: &Terminal<TestBackend>, needle: &str) -> Position {
+    let buffer = terminal.backend().buffer();
+    for y in 0..buffer.area.height {
+        let row = buffer_row_text(terminal, y);
+        if let Some(x) = row.find(needle) {
+            return Position::new(x as u16, y);
+        }
+    }
+    panic!(
+        "could not find {needle:?} in:\n{}",
+        terminal_buffer_lines(terminal)
+    );
 }
 
 fn find_buffer_row(terminal: &Terminal<TestBackend>, needle: &str) -> u16 {

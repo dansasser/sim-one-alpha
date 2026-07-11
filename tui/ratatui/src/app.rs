@@ -4,10 +4,14 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use ratatui::text::Span;
+
 use crate::agent::{list_chat_sessions, send_agent_prompt_reply, AgentReply, SessionSummary};
 use crate::flue::events::FlueEvent;
 use crate::flue::reducer::{extract_role, extract_text, DisplayRow, EventTranscript};
 use crate::flue::stream::{spawn_agent_stream, AgentStreamHandle, AgentStreamUpdate};
+use crate::markdown::render_markdown;
+use crate::text_wrap::display_width;
 use crate::text_wrap::wrap_words;
 
 pub const SCROLL_PAGE_LINES: usize = 8;
@@ -84,6 +88,7 @@ pub struct RenderedTranscriptRow {
     pub text: String,
     pub kind: TranscriptRowKind,
     pub is_streaming: bool,
+    pub styled_spans: Option<Vec<Span<'static>>>,
 }
 
 pub struct App {
@@ -582,6 +587,7 @@ impl App {
                 text: String::new(),
                 kind: TranscriptRowKind::Other,
                 is_streaming: false,
+                styled_spans: None,
             },
             TRANSCRIPT_TAIL_MARGIN_ROWS,
         ));
@@ -1205,15 +1211,51 @@ fn wrap_transcript_rows(
 ) -> Vec<RenderedTranscriptRow> {
     let mut wrapped = Vec::new();
     let mut previous_kind = TranscriptRowKind::Other;
+    let mut line_index = 0;
 
-    for (line_index, line) in lines.iter().enumerate() {
+    while line_index < lines.len() {
+        let line = &lines[line_index];
         let kind = transcript_row_kind(line, previous_kind);
-        let is_streaming = streaming_range.is_some_and(|(start, len)| {
-            line_index >= start && line_index < start.saturating_add(len)
-        });
         if kind != TranscriptRowKind::Other {
             previous_kind = kind;
         }
+
+        if kind == TranscriptRowKind::Assistant && line.starts_with("assistant:") {
+            let block_end = assistant_block_end(lines, line_index);
+            let markdown = assistant_markdown_block(lines, line_index, block_end);
+            let is_streaming = range_intersects(streaming_range, line_index, block_end);
+            let prefix = TranscriptRowKind::Assistant
+                .prefix()
+                .expect("assistant rows have a prefix");
+            let first_width = width.saturating_sub(display_width(prefix) + 1).max(1);
+            for (markdown_index, markdown_row) in render_markdown(&markdown, first_width, width)
+                .into_iter()
+                .enumerate()
+            {
+                if markdown_index == 0 {
+                    let mut spans = Vec::with_capacity(markdown_row.spans.len() + 1);
+                    spans.push(Span::raw(" "));
+                    spans.extend(markdown_row.spans);
+                    wrapped.push(RenderedTranscriptRow {
+                        text: format!("{prefix} {}", markdown_row.text),
+                        kind,
+                        is_streaming,
+                        styled_spans: Some(spans),
+                    });
+                } else {
+                    wrapped.push(RenderedTranscriptRow {
+                        text: markdown_row.text,
+                        kind,
+                        is_streaming,
+                        styled_spans: Some(markdown_row.spans),
+                    });
+                }
+            }
+            line_index = block_end;
+            continue;
+        }
+
+        let is_streaming = range_intersects(streaming_range, line_index, line_index + 1);
         wrapped.extend(
             wrap_words(line, width)
                 .into_iter()
@@ -1221,11 +1263,44 @@ fn wrap_transcript_rows(
                     text: row.text,
                     kind,
                     is_streaming,
+                    styled_spans: None,
                 }),
         );
+        line_index += 1;
     }
 
     wrapped
+}
+
+fn assistant_block_end(lines: &[String], start: usize) -> usize {
+    let mut end = start + 1;
+    while end < lines.len() && lines[end].starts_with("  ") {
+        end += 1;
+    }
+    end
+}
+
+fn assistant_markdown_block(lines: &[String], start: usize, end: usize) -> String {
+    let first = lines[start]
+        .strip_prefix("assistant:")
+        .expect("assistant block starts with assistant prefix")
+        .strip_prefix(' ')
+        .unwrap_or_default();
+    std::iter::once(first)
+        .chain(
+            lines[start + 1..end]
+                .iter()
+                .map(|line| line.strip_prefix("  ").unwrap_or(line)),
+        )
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn range_intersects(streaming_range: Option<(usize, usize)>, start: usize, end: usize) -> bool {
+    streaming_range.is_some_and(|(range_start, len)| {
+        let range_end = range_start.saturating_add(len);
+        start < range_end && range_start < end
+    })
 }
 
 fn transcript_row_kind(line: &str, previous: TranscriptRowKind) -> TranscriptRowKind {

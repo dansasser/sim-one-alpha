@@ -5,6 +5,46 @@ use crate::app::TranscriptRowKind;
 pub const USER_PROMPT_BACKGROUND: Color = Color::Rgb(52, 52, 56);
 pub const PROMPT_EDITOR_BACKGROUND: Color = Color::Rgb(38, 38, 40);
 
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct TranscriptMarkdownStyleSheet;
+
+impl tui_markdown::StyleSheet for TranscriptMarkdownStyleSheet {
+    fn heading(&self, level: u8) -> Style {
+        let color = if level <= 3 {
+            Color::LightCyan
+        } else {
+            Color::Cyan
+        };
+        Style::default().fg(color).add_modifier(Modifier::BOLD)
+    }
+
+    fn code(&self) -> Style {
+        Style::default()
+            .fg(Color::White)
+            .bg(PROMPT_EDITOR_BACKGROUND)
+    }
+
+    fn link(&self) -> Style {
+        Style::default()
+            .fg(Color::LightBlue)
+            .add_modifier(Modifier::UNDERLINED)
+    }
+
+    fn blockquote(&self) -> Style {
+        Style::default()
+            .fg(Color::DarkGray)
+            .add_modifier(Modifier::ITALIC)
+    }
+
+    fn heading_meta(&self) -> Style {
+        Style::default().add_modifier(Modifier::DIM)
+    }
+
+    fn metadata_block(&self) -> Style {
+        Style::default().fg(Color::DarkGray)
+    }
+}
+
 pub(crate) fn user_prompt_style() -> Style {
     Style::default().bg(USER_PROMPT_BACKGROUND)
 }

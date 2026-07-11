@@ -54,6 +54,36 @@ fn enter_submits_prompt_to_agent_and_returns_to_tail() {
 }
 
 #[test]
+fn assistant_markdown_is_preserved_canonically_but_rendered_without_inline_markers() {
+    let mut app = App::with_agent_sender(
+        "tui-markdown-render",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| {
+            Ok(agent_reply(
+                "Use **bold text**, *italic text*, `inline code`, and [the docs](https://example.com).",
+            ))
+        }),
+    );
+
+    app.handle_event(AppEvent::Text("show markdown".to_string()));
+    app.handle_event(AppEvent::Submit);
+    wait_for_agent(&mut app);
+
+    let canonical = app.transcript_lines().join("\n");
+    assert!(canonical.contains("**bold text**"), "{canonical}");
+    assert!(canonical.contains("`inline code`"), "{canonical}");
+
+    let rendered = app.transcript_rendered_lines().join("\n");
+    assert!(rendered.contains("bold text"), "{rendered}");
+    assert!(rendered.contains("italic text"), "{rendered}");
+    assert!(rendered.contains("inline code"), "{rendered}");
+    assert!(!rendered.contains("**"), "{rendered}");
+    assert!(!rendered.contains('`'), "{rendered}");
+    assert!(!rendered.contains("[the docs]"), "{rendered}");
+}
+
+#[test]
 fn first_submit_keeps_new_pending_response_at_visible_tail() {
     let clock = TestClock::new();
     let (mut app, release, calls) = app_with_blocked_sender(&clock);

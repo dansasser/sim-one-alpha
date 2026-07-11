@@ -27,7 +27,9 @@ LIVE_MARKER = b"LIVE_ASSISTANT_STREAM_MARKER"
 CHILD_MARKER = b"CHILD_RAW_OUTPUT_MARKER"
 FINAL_MARKER = b"FINAL_VISIBLE_MARKER"
 FINAL_CONTINUATION_MARKER = b"FINAL_CONTINUATION_MARKER"
-FINAL_TEXT = f"{FINAL_MARKER.decode()}\n\n{FINAL_CONTINUATION_MARKER.decode()}"
+FINAL_TEXT = (
+    f"**{FINAL_MARKER.decode()}**\n\n`{FINAL_CONTINUATION_MARKER.decode()}`"
+)
 LIVE_CONNECTED = threading.Event()
 PROMPT_RECEIVED = threading.Event()
 LIVE_DELTA_SENT = threading.Event()
@@ -236,6 +238,11 @@ def main():
             raise AssertionError("mock gateway did not deliver the final Flue event frame")
         output = read_until(master_fd, FINAL_CONTINUATION_MARKER, 5)
         visible_before_http = FINAL_MARKER in output and FINAL_CONTINUATION_MARKER in output
+        if b"**FINAL_VISIBLE_MARKER**" in output or b"`FINAL_CONTINUATION_MARKER`" in output:
+            raise AssertionError(
+                "packaged TUI exposed Markdown source markers instead of styled content; "
+                f"output tail={bytes(output[-3000:])!r}"
+            )
         RELEASE_HTTP.set()
         output_after_http = read_for(master_fd, 1.0)
         if not visible_before_http:
@@ -245,7 +252,7 @@ def main():
                 f"after-HTTP output tail={bytes(output_after_http[-1000:])!r}"
             )
         print(
-            "[ratatui-visible-final] packaged sim-one kept nested worker output internal, rendered a live root assistant block, and consolidated Flue's multiline final before HTTP settled."
+            "[ratatui-visible-final] packaged sim-one kept nested worker output internal, rendered Markdown styles, rendered a live root assistant block, and consolidated Flue's multiline final before HTTP settled."
         )
     finally:
         RELEASE_HTTP.set()

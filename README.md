@@ -25,7 +25,7 @@ The goal is simple:
 - Coding worker with plan / implement / test-debug / review / GitHub subagents and approval-gated repo mutations
 - Business-focused AI Employee architecture
 - Runpod Public Endpoints image generation tool (`generate_image`) attached directly to the main orchestrator
-- Production Ratatui TUI with clean startup preflight, durable sessions, and orchestrator-owned greeting behavior
+- Production Ratatui TUI with clean startup preflight, durable sessions, styled Markdown responses, and orchestrator-owned greeting behavior
 
 ## Why Flue
 
@@ -538,7 +538,7 @@ pnpm run test:tui:ratatui # packaged sim-one/Ratatui product smoke
 
 ## Interactive TUI
 
-SIM-ONE Alpha includes a Ratatui terminal UI for chatting with the agent, viewing live progress rows, managing durable sessions, and keeping prompt input usable while the transcript scrolls. The TUI is a connector client. It sends prompts and backend-owned slash commands to `/api/chat/events` as connector `tui`; the Flue gateway owns orchestration, model calls, tools, workers, protocols, memory, and compaction.
+SIM-ONE Alpha includes a Ratatui terminal UI for chatting with the agent, viewing live progress rows, rendering assistant Markdown with terminal-native styles, managing durable sessions, and keeping prompt input usable while the transcript scrolls. The TUI is a connector client. It sends prompts and backend-owned slash commands to `/api/chat/events` as connector `tui`; the Flue gateway owns orchestration, model calls, tools, workers, protocols, memory, and compaction.
 
 The TypeScript `sim-one` wrapper owns product command routing and capability subcommands. No-argument `sim-one` launches the Rust/Ratatui binary.
 

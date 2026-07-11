@@ -95,25 +95,49 @@ fn rendered_transcript_line(row: RenderedTranscriptRow, visible_width: usize) ->
         Style::default()
     };
     let Some(prefix) = row.kind.prefix() else {
-        return Line::from(vec![Span::raw(margin), Span::styled(row.text, body_style)]);
+        let mut spans = vec![Span::raw(margin)];
+        spans.extend(styled_body_spans(row.styled_spans, row.text, body_style));
+        return Line::from(spans);
     };
     let Some(body) = row.text.strip_prefix(prefix) else {
-        return Line::from(vec![Span::raw(margin), Span::styled(row.text, body_style)]);
+        let mut spans = vec![Span::raw(margin)];
+        spans.extend(styled_body_spans(row.styled_spans, row.text, body_style));
+        return Line::from(spans);
     };
+    let body = body.to_string();
     let prefix_style = if row.kind == TranscriptRowKind::Assistant && row.is_streaming {
         Some(live_assistant_prefix_style())
     } else {
         transcript_prefix_style(row.kind)
     };
     let Some(prefix_style) = prefix_style else {
-        return Line::from(vec![Span::raw(margin), Span::styled(row.text, body_style)]);
+        let mut spans = vec![Span::raw(margin)];
+        spans.extend(styled_body_spans(row.styled_spans, row.text, body_style));
+        return Line::from(spans);
     };
 
-    Line::from(vec![
+    let mut spans = vec![
         Span::raw(margin),
         Span::styled(prefix.to_string(), prefix_style),
-        Span::styled(body.to_string(), body_style),
-    ])
+    ];
+    spans.extend(styled_body_spans(row.styled_spans, body, body_style));
+    Line::from(spans)
+}
+
+fn styled_body_spans(
+    styled_spans: Option<Vec<Span<'static>>>,
+    fallback: String,
+    base_style: Style,
+) -> Vec<Span<'static>> {
+    styled_spans.map_or_else(
+        || vec![Span::styled(fallback, base_style)],
+        |spans| {
+            spans
+                .into_iter()
+                .map(|span| Span::styled(span.content.into_owned(), span.style.patch(base_style)))
+                .collect()
+        },
+    )
 }
 
 fn transcript_left_margin_width(visible_width: usize) -> usize {
