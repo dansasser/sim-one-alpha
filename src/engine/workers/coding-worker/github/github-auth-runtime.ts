@@ -15,7 +15,13 @@ export function getGithubAuthService(options: CreateGithubAuthServiceOptions): P
   const key = `${resolve(options.workspaceRoot)}\u0000${resolve(options.authRoot ?? '')}`;
   let service = services.get(key);
   if (!service) {
-    service = createGithubAuthService(options);
+    const created = createGithubAuthService(options);
+    service = created.catch((error) => {
+      if (services.get(key) === service) {
+        services.delete(key);
+      }
+      throw error;
+    });
     services.set(key, service);
   }
   return service;

@@ -1,8 +1,8 @@
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, realpath } from 'node:fs/promises';
+import { chmod, mkdir, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import type {
   GithubAuthProfileRef,
@@ -20,6 +20,7 @@ export interface GithubAuthCommandResult {
   exitCode: number;
   stdout: string;
   stderr: string;
+  failureKind?: 'not_found' | 'timeout' | 'execution';
 }
 
 export type GithubAuthCommandRunner = (
@@ -47,6 +48,7 @@ export interface CreateGithubAuthServiceOptions {
   env?: Record<string, string | undefined>;
   runner?: GithubAuthCommandRunner;
   loginRunner?: GithubAuthLoginRunner;
+  sessionTtlMs?: number;
 }
 
 export interface GithubAuthService {
@@ -64,8 +66,16 @@ export async function createGithubAuthService(
   const workspaceRoot = resolve(options.workspaceRoot);
   await assertAuthRootOutsideWorkspace(authRoot, workspaceRoot);
   await mkdir(authRoot, { recursive: true, mode: 0o700 });
+  await assertAuthRootOutsideWorkspace(authRoot, workspaceRoot);
+  await chmod(authRoot, 0o700);
   const runner = options.runner ?? runGh;
-  return new DefaultGithubAuthService(authRoot, options.env ?? {}, runner, options.loginRunner ?? ghLoginRunner);
+  return new DefaultGithubAuthService(
+    authRoot,
+    options.env ?? {},
+    runner,
+    options.loginRunner ?? ghLoginRunner,
+    options.sessionTtlMs ?? 15 * 60_000,
+  );
 }
 
 class DefaultGithubAuthService implements GithubAuthService {
@@ -74,6 +84,7 @@ class DefaultGithubAuthService implements GithubAuthService {
     private readonly configuredEnv: Record<string, string | undefined>,
     private readonly runner: GithubAuthCommandRunner,
     private readonly loginRunner: GithubAuthLoginRunner,
+    private readonly sessionTtlMs: number,
   ) {}
 
   readonly #sessions = new Map<string, AuthSession>();
@@ -94,8 +105,14 @@ class DefaultGithubAuthService implements GithubAuthService {
       };
     }
 
+    for (const session of this.#sessions.values()) {
+      this.expireSessionIfNeeded(session);
+    }
     const existing = [...this.#sessions.values()].find((session) => session.profile === profile && isActiveState(session.state));
     if (existing) {
+      if (!sameAudience(existing.audience, input.audience)) {
+        throw new Error('GitHub auth profile already has an active session for another audience.');
+      }
       return toResult(existing, checkedAt);
     }
 
@@ -103,12 +120,13 @@ class DefaultGithubAuthService implements GithubAuthService {
       id: input.authSessionId ?? randomUUID(),
       profile,
       state: 'authorization_pending',
-      expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+      expiresAt: new Date(Date.now() + this.sessionTtlMs).toISOString(),
       checkedAt,
       credentialSource: 'managed_profile',
       audience: input.audience,
     };
     this.#sessions.set(session.id, session);
+    this.scheduleExpiry(session);
     const env = await this.createGhEnv(profile);
     let output = '';
     let resolveChallenge: ((challenge: GithubAuthChallenge) => void) | undefined;
@@ -128,6 +146,7 @@ class DefaultGithubAuthService implements GithubAuthService {
         submittedEnter = true;
       };
       loginProcess = await this.loginRunner.start(loginArgs, env, (chunk) => {
+        if (!resolveChallenge) return;
         output += chunk;
         const parsed = parseDeviceChallenge(output, session);
         if (parsed && resolveChallenge) {
@@ -137,6 +156,7 @@ class DefaultGithubAuthService implements GithubAuthService {
             shouldSubmitEnter = true;
             submitEnter();
           }
+          output = '';
         }
       });
       session.process = loginProcess;
@@ -147,48 +167,60 @@ class DefaultGithubAuthService implements GithubAuthService {
       return toResult(session, new Date().toISOString());
     } catch (error) {
       rejectChallenge?.(toError(error));
-      session.state = 'failed';
-      session.failureCode = 'github_device_login_failed';
-      session.process?.cancel();
-      return toResult(session, new Date().toISOString());
+      const result = this.finishSession(session, 'failed', 'github_device_login_failed', true);
+      return result;
     }
   }
 
   async cancel(input: GithubAuthCancelInput): Promise<GithubAuthResult> {
+    assertAudience(input.audience);
     const session = this.#sessions.get(input.authSessionId);
     if (!session) {
       throw new Error('GitHub auth session was not found.');
     }
-    if (isActiveState(session.state)) {
-      session.process?.cancel();
-      session.state = 'cancelled';
+    if (!sameAudience(session.audience, input.audience)) {
+      throw new Error('GitHub auth session audience does not match the initiating audience.');
     }
-    return toResult(session, new Date().toISOString());
+    return this.finishSession(session, 'cancelled', undefined, true);
   }
 
   async status(input: GithubAuthProfileRef = {}): Promise<GithubAuthResult> {
     const profile = normalizeProfile(input.profile);
     const activeSession = [...this.#sessions.values()].find((session) => session.profile === profile && isActiveState(session.state));
     if (activeSession) {
-      if (Date.parse(activeSession.expiresAt) <= Date.now()) {
-        activeSession.process?.cancel();
-        activeSession.state = 'expired';
+      if (this.expireSessionIfNeeded(activeSession)) {
+        return toResult(activeSession, new Date().toISOString());
       }
       return toResult(activeSession, new Date().toISOString());
     }
+    return this.verifyProfile(profile);
+  }
+
+  private async verifyProfile(profile: string): Promise<GithubAuthResult> {
     const credentialSource = resolveCredentialSource(this.configuredEnv);
     const env = await this.createGhEnv(profile);
     const command = await this.runner(['auth', 'status', '--active', '--hostname', 'github.com'], env);
     const checkedAt = new Date().toISOString();
 
     if (command.exitCode !== 0) {
+      if (credentialSource === 'none' && isExplicitLoggedOutResult(command)) {
+        return {
+          state: 'unauthenticated',
+          profile,
+          hostname: 'github.com',
+          credentialSource,
+          checkedAt,
+        };
+      }
       return {
-        state: credentialSource === 'none' ? 'unauthenticated' : 'invalid',
+        state: credentialSource === 'none' ? 'unknown' : 'invalid',
         profile,
         hostname: 'github.com',
         credentialSource,
         checkedAt,
-        ...(credentialSource === 'none' ? {} : { failureCode: 'github_auth_status_failed' }),
+        failureCode: command.failureKind
+          ? `github_auth_${command.failureKind}`
+          : 'github_auth_status_failed',
       };
     }
 
@@ -248,11 +280,14 @@ class DefaultGithubAuthService implements GithubAuthService {
     const env = await this.createGhEnv(profileInput);
     return {
       ...env,
-      GIT_CONFIG_COUNT: '2',
-      GIT_CONFIG_KEY_0: 'credential.https://github.com.helper',
+      GIT_CONFIG_NOSYSTEM: '1',
+      GIT_CONFIG_COUNT: '3',
+      GIT_CONFIG_KEY_0: 'credential.helper',
       GIT_CONFIG_VALUE_0: '',
       GIT_CONFIG_KEY_1: 'credential.https://github.com.helper',
-      GIT_CONFIG_VALUE_1: '!gh auth git-credential',
+      GIT_CONFIG_VALUE_1: '',
+      GIT_CONFIG_KEY_2: 'credential.https://github.com.helper',
+      GIT_CONFIG_VALUE_2: '!gh auth git-credential',
     };
   }
 
@@ -260,7 +295,11 @@ class DefaultGithubAuthService implements GithubAuthService {
     const profileDirectory = resolve(this.authRoot, 'profiles', profile);
     const ghConfigDir = resolve(profileDirectory, 'gh');
     assertPathInside(ghConfigDir, this.authRoot, 'GitHub profile directory');
-    await mkdir(ghConfigDir, { recursive: true, mode: 0o700 });
+    const directories = [resolve(this.authRoot, 'profiles'), profileDirectory, ghConfigDir];
+    for (const directory of directories) {
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      await chmod(directory, 0o700);
+    }
     return ghConfigDir;
   }
 
@@ -270,20 +309,55 @@ class DefaultGithubAuthService implements GithubAuthService {
     void process.completion.then(async (result) => {
       if (session.state !== 'authorization_pending') return;
       if (result.exitCode !== 0) {
-        session.state = 'failed';
-        session.failureCode = 'github_device_login_failed';
+        this.finishSession(session, 'failed', 'github_device_login_failed');
         return;
       }
       session.state = 'verifying';
-      const verified = await this.status({ profile: session.profile });
-      session.state = verified.state;
-      session.failureCode = verified.failureCode;
+      const verified = await this.verifyProfile(session.profile);
+      this.finishSession(session, verified.state, verified.failureCode);
     }).catch(() => {
-      if (session.state === 'authorization_pending') {
-        session.state = 'failed';
-        session.failureCode = 'github_device_login_failed';
+      if (isActiveState(session.state)) {
+        this.finishSession(session, 'failed', 'github_device_login_failed');
       }
     });
+  }
+
+  private scheduleExpiry(session: AuthSession): void {
+    const expiresAt = Date.parse(session.expiresAt);
+    const delay = Math.min(Math.max(0, expiresAt - Date.now()), 2_147_483_647);
+    session.expiryTimer = setTimeout(() => {
+      if (this.#sessions.get(session.id) !== session) return;
+      if (Date.parse(session.expiresAt) > Date.now()) {
+        this.scheduleExpiry(session);
+        return;
+      }
+      this.finishSession(session, 'expired', undefined, true);
+    }, delay);
+    session.expiryTimer.unref?.();
+  }
+
+  private expireSessionIfNeeded(session: AuthSession): boolean {
+    if (!isActiveState(session.state) || Date.parse(session.expiresAt) > Date.now()) return false;
+    this.finishSession(session, 'expired', undefined, true);
+    return true;
+  }
+
+  private finishSession(
+    session: AuthSession,
+    state: GithubAuthResult['state'],
+    failureCode?: string,
+    cancelProcess = false,
+  ): GithubAuthResult {
+    session.state = state;
+    session.failureCode = failureCode;
+    if (session.expiryTimer) clearTimeout(session.expiryTimer);
+    session.expiryTimer = undefined;
+    if (cancelProcess) session.process?.cancel();
+    session.process = undefined;
+    if (this.#sessions.get(session.id) === session) {
+      this.#sessions.delete(session.id);
+    }
+    return toResult(session, new Date().toISOString());
   }
 }
 
@@ -296,6 +370,7 @@ interface AuthSession {
   checkedAt: string;
   audience: GithubAuthStartInput['audience'];
   process?: GithubAuthLoginProcess;
+  expiryTimer?: NodeJS.Timeout;
   failureCode?: string;
 }
 
@@ -330,11 +405,26 @@ function isActiveState(state: GithubAuthResult['state']): boolean {
 }
 
 function assertAudience(audience: GithubAuthStartInput['audience']): void {
-  for (const [key, value] of Object.entries(audience)) {
+  for (const key of ['connector', 'actorId', 'conversationId', 'eventId'] as const) {
+    const value = audience?.[key];
     if (typeof value !== 'string' || !value.trim()) {
       throw new Error(`GitHub auth audience requires ${key}.`);
     }
   }
+}
+
+function sameAudience(left: GithubAuthStartInput['audience'], right: GithubAuthStartInput['audience']): boolean {
+  return left.connector === right.connector &&
+    left.actorId === right.actorId &&
+    left.conversationId === right.conversationId &&
+    left.eventId === right.eventId;
+}
+
+function isExplicitLoggedOutResult(command: GithubAuthCommandResult): boolean {
+  if (command.failureKind) return false;
+  return /not logged (?:in|into)|not authenticated|no (?:github )?accounts?/i.test(
+    `${command.stdout}\n${command.stderr}`,
+  );
 }
 
 function parseDeviceChallenge(output: string, session: AuthSession): GithubAuthChallenge | undefined {
@@ -396,10 +486,27 @@ function baseCommandEnv(): NodeJS.ProcessEnv {
 }
 
 async function assertAuthRootOutsideWorkspace(authRoot: string, workspaceRoot: string): Promise<void> {
-  const resolvedAuthRoot = await realpath(authRoot).catch(() => authRoot);
-  const resolvedWorkspace = await realpath(workspaceRoot).catch(() => workspaceRoot);
+  const resolvedAuthRoot = await resolveThroughExistingParent(authRoot);
+  const resolvedWorkspace = await resolveThroughExistingParent(workspaceRoot);
   if (pathsEqual(resolvedAuthRoot, resolvedWorkspace) || isPathInside(resolvedAuthRoot, resolvedWorkspace)) {
     throw new Error('GitHub auth root must be outside the coding-worker workspace root.');
+  }
+}
+
+async function resolveThroughExistingParent(path: string): Promise<string> {
+  let current = resolve(path);
+  const missingSegments: string[] = [];
+  while (true) {
+    try {
+      return resolve(await realpath(current), ...missingSegments);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') throw error;
+      const parent = dirname(current);
+      if (parent === current) throw error;
+      missingSegments.unshift(basename(current));
+      current = parent;
+    }
   }
 }
 
@@ -425,11 +532,24 @@ async function runGh(args: string[], env: NodeJS.ProcessEnv): Promise<GithubAuth
     const result = await execFileAsync('gh', args, { env, windowsHide: true, timeout: 30_000 });
     return { exitCode: 0, stdout: result.stdout, stderr: result.stderr };
   } catch (error) {
-    const failure = error as { code?: number; stdout?: string; stderr?: string };
+    const failure = error as {
+      code?: number | string;
+      stdout?: string;
+      stderr?: string;
+      killed?: boolean;
+    };
+    const failureKind = failure.code === 'ENOENT'
+      ? 'not_found'
+      : failure.killed || failure.code === 'ETIMEDOUT'
+        ? 'timeout'
+        : typeof failure.code === 'number'
+          ? undefined
+          : 'execution';
     return {
       exitCode: typeof failure.code === 'number' ? failure.code : 1,
       stdout: typeof failure.stdout === 'string' ? failure.stdout : '',
       stderr: typeof failure.stderr === 'string' ? failure.stderr : '',
+      ...(failureKind ? { failureKind } : {}),
     };
   }
 }

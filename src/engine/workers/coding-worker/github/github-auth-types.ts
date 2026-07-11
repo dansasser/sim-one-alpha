@@ -12,6 +12,8 @@ export type GithubAuthState =
 
 export type GithubCredentialSource = 'gh_token' | 'github_token' | 'managed_profile' | 'none';
 
+export const githubRawTokenEnvironmentKeys = ['GH_TOKEN', 'GITHUB_TOKEN'] as const;
+
 export interface GithubAuthProfileRef {
   profile?: string;
 }
@@ -53,4 +55,5 @@ export interface GithubAuthStartInput extends GithubAuthProfileRef {
 
 export interface GithubAuthCancelInput {
   authSessionId: string;
+  audience: GithubAuthAudience;
 }
