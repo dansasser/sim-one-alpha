@@ -1,0 +1,70 @@
+tui/ratatui/src/input.rs
+  s_a81fff26d52223::t_ffaad530817bb1 1,11-15,51-52
+tui/ratatui/tests/terminal_interaction.rs
+  s_a81fff26d52223::t_c4c616e2e824f1 25
+docs/tui/ratatui.md
+  s_a81fff26d52223::t_c033cf6becf969 62,74,88
+tui/ratatui/src/ui.rs
+  s_a81fff26d52223::t_ec40dd56d57de6 157,171
+docs/tui/session-management.md
+  s_a81fff26d52223::t_c033cf6becf969 33-34
+docs/architecture/tui-cli-session-flow.md
+  s_a81fff26d52223::t_c033cf6becf969 40-42
+scripts/test-ratatui-product.mjs
+  s_a81fff26d52223::t_601186a13fb8b4 153
+tui/ratatui/tests/input_mapping.rs
+  s_a81fff26d52223::t_601186a13fb8b4 1-3,91,95,142-159
+tui/ratatui/src/app.rs
+  s_a81fff26d52223::t_c4c616e2e824f1 1667
+  s_a81fff26d52223::t_ec40dd56d57de6 552,1737-1776
+  s_a81fff26d52223::t_f709f0fc9a0fc5 14-15,103-104,164-165,300-301,344-353,358,365-366,546-551,775,785,794,801,808,814,819,826,862,878,888,964,980,994,997,999-1000,1004,1011,1013-1030,1032-1046
+  s_a81fff26d52223::t_f6a989d4875d8f 174,310,494,502,504-506,607-610,619-625,649,1121
+  s_a81fff26d52223::t_f3a782e3a59fab 1777-1783
+  s_a81fff26d52223::t_8c00b0f3c3ce16 553
+tui/ratatui/src/agent.rs
+  s_a81fff26d52223::t_4056b84c21f276 15,150-154,170
+tui/ratatui/src/main.rs
+  s_a81fff26d52223::t_c033cf6becf969 177
+tui/ratatui/src/terminal.rs
+  s_a81fff26d52223::t_ffaad530817bb1 3-4,10,17-19,23
+README.md
+  s_a81fff26d52223::t_c033cf6becf969 548,550,552
+scripts/test-ratatui-interactive.py
+  s_a81fff26d52223::t_cbc98be1515622 140-144,149,151,155
+src/tests/http-endpoints.test.ts
+  s_a81fff26d52223::t_601186a13fb8b4 328,334
+docs/operations/product-tui.md
+  s_a81fff26d52223::t_cbc98be1515622 130
+  s_a81fff26d52223::t_c033cf6becf969 132
+src/api/routes/chat-events.ts
+  s_a81fff26d52223::t_cbc98be1515622 270,289
+  s_a81fff26d52223::t_4056b84c21f276 176,232,249,267
+tui/ratatui/tests/ui_render.rs
+  s_a81fff26d52223::t_601186a13fb8b4 204-258
+  s_a81fff26d52223::t_c4c616e2e824f1 567,640,716,1077,1137,1213,1458,1510
+  s_a81fff26d52223::t_070ce6d8d6200b 102
+docs/architecture/gorombo-flue-map.md
+  s_a81fff26d52223::t_c033cf6becf969 77
+tui/ratatui/tests/agent_client.rs
+  s_a81fff26d52223::t_601186a13fb8b4 126,145
+tui/ratatui/tests/app_state.rs
+  s_a81fff26d52223::t_c4c616e2e824f1 542,585,1316,1348
+  s_a81fff26d52223::t_070ce6d8d6200b 1077-1078
+  s_a81fff26d52223::t_601186a13fb8b4 955-1054
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "2e79736e42e94bae6c224261d70f4101e38c5a68",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
