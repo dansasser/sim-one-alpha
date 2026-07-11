@@ -147,6 +147,8 @@ TUI prompt submit
 
 Prompt editing is local TUI state. Enter submits normally; when the character immediately before the cursor is `/`, Enter consumes that slash and inserts a newline instead. Enter repeat events are discarded at the crossterm mapping boundary so the newline press cannot become an immediate second submit. The editor grows to five visible rows and then scrolls locally. Prompt-height changes recalculate the transcript viewport while preserving live-tail or scrolled-back state; they do not alter the connector session or Flue stream offset.
 
+Live-tail is a render-time invariant, not a best-effort side effect of individual transcript mutations. After wrapping transcript lines for the current frame width, the renderer sets the scroll offset to the exact maximum whenever `follow_tail` is active. When the user has scrolled back, the renderer only clamps out-of-range offsets and does not snap to the tail.
+
 The stable `local-tui` actor/conversation/thread scope is intentional. The gateway uses that connector scope to resolve the active durable TUI session, matching Telegram-style one-thread behavior. The active session id selects the durable conversation, while the stable scope lets `/new`, `/clear`, `/resume`, `/rename`, and `/compact` operate across session switches without creating unreachable conversation scopes.
 
 ## Slash Commands

@@ -66,6 +66,8 @@ Ctrl+C
 
 Use `PgUp` and `PgDown` to scroll the transcript. Scrolling away from the tail does not block typing. New activity does not snap the viewport back to the bottom until tail-following is restored.
 
+While the title shows `Transcript - live tail`, every rendered frame anchors the viewport to the actual last wrapped transcript row. Final responses, retries, activity updates, and prompt-height changes therefore keep the newest line visible. Manual scrollback disables that anchoring until the user returns to the tail.
+
 ## Status Bar
 
 The status area shows the gateway connection, active session, stream state, pending response state, elapsed thinking time, and a spinner while the agent is working.

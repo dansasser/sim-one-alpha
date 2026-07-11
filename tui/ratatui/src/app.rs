@@ -494,6 +494,16 @@ impl App {
         wrap_transcript_lines(&self.transcript_lines, self.transcript_viewport_width)
     }
 
+    pub(crate) fn sync_transcript_scroll_for_render(&mut self, rendered_row_count: usize) -> usize {
+        let max_scroll = rendered_row_count.saturating_sub(self.transcript_viewport_height.max(1));
+        if self.follow_tail {
+            self.transcript_scroll = max_scroll;
+        } else {
+            self.transcript_scroll = self.transcript_scroll.min(max_scroll);
+        }
+        max_scroll
+    }
+
     pub fn scroll_page_up(&mut self) {
         self.scroll_lines_up(SCROLL_PAGE_LINES);
     }

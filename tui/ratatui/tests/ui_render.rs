@@ -1,4 +1,6 @@
 use std::sync::Arc;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use ratatui::backend::TestBackend;
 use ratatui::layout::Position;
@@ -169,6 +171,134 @@ fn first_pending_response_is_visible_without_waiting_for_another_prompt() {
         .collect::<String>();
     assert!(buffer.contains("final response"), "{buffer}");
     assert_eq!(app.transcript_scroll(), app.max_scroll());
+}
+
+#[test]
+fn live_tail_reanchors_when_transcript_wrap_count_changes_between_frames() {
+    let backend = TestBackend::new(40, 9);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = app_with_pending_response();
+    app.handle_event(AppEvent::Text("first prompt".to_string()));
+    app.handle_event(AppEvent::Submit);
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("initial pending response should render");
+    assert_eq!(app.transcript_scroll(), app.max_scroll());
+
+    app.handle_event(AppEvent::Submit);
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("grown pending response should render at live tail");
+
+    let buffer = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    assert_eq!(app.transcript_scroll(), app.max_scroll());
+    assert!(buffer.contains("finishes"), "{buffer}");
+}
+
+#[test]
+fn retry_completion_renders_final_response_at_live_tail() {
+    let backend = TestBackend::new(40, 9);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::with_agent_sender(
+        "tui-retry-test",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| {
+            Ok(AgentReply {
+                text: "retry completed and the final response is visible at TAIL_OK".to_string(),
+                session_id: None,
+                command_name: None,
+                session_created: None,
+            })
+        }),
+    );
+    app.handle_event(AppEvent::Text("retry this prompt".to_string()));
+    app.handle_event(AppEvent::Submit);
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("pending retry prompt should render");
+
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![
+        FlueEvent::from_value(serde_json::json!({
+            "type":"turn",
+            "eventIndex":10,
+            "isError":true,
+            "error":"Request timed out."
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"log",
+            "eventIndex":11,
+            "message":"[flue:model-retry] Retrying transient model error"
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"turn_start",
+            "eventIndex":12
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"tool",
+            "eventIndex":13,
+            "toolCallId":"protocol-retry",
+            "toolName":"load_protocols",
+            "isError":false
+        })),
+    ]));
+    wait_for_agent(&mut app);
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("retry final response should render at live tail");
+
+    let buffer = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    assert!(buffer.contains("TAIL_OK"), "{buffer}");
+    assert_eq!(app.transcript_scroll(), app.max_scroll());
+    assert!(app.follow_tail());
+}
+
+#[test]
+fn render_preserves_manual_scrollback_after_transcript_growth() {
+    let backend = TestBackend::new(40, 12);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    for index in 0..20 {
+        app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+            serde_json::json!({
+                "type":"log",
+                "eventIndex":500 + index,
+                "text":format!("history row {index}")
+            }),
+        )]));
+    }
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("history should render at tail");
+    app.scroll_page_up();
+    let scrollback_position = app.transcript_scroll();
+
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"log",
+            "eventIndex":999,
+            "text":"new tail content that must not snap manual scrollback"
+        }),
+    )]));
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("manual scrollback should render without snapping");
+
+    assert_eq!(app.transcript_scroll(), scrollback_position);
+    assert!(!app.follow_tail());
 }
 
 #[test]
@@ -406,4 +536,14 @@ fn app_with_pending_response() -> App {
             })
         }),
     )
+}
+
+fn wait_for_agent(app: &mut App) {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while app.is_agent_pending() && Instant::now() < deadline {
+        app.poll_agent();
+        thread::sleep(Duration::from_millis(5));
+    }
+    app.poll_agent();
+    assert!(!app.is_agent_pending(), "agent response did not settle");
 }

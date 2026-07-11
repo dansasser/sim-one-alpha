@@ -40,9 +40,10 @@ pub fn render(frame: &mut Frame<'_>, app: &mut App) {
     render_bottom(frame, app, bottom_area);
 }
 
-fn render_transcript(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Rect) {
+fn render_transcript(frame: &mut Frame<'_>, app: &mut App, area: ratatui::layout::Rect) {
     let rendered_lines = app.transcript_rendered_lines();
     let visible_height = area.height.saturating_sub(2) as usize;
+    let max_scroll = app.sync_transcript_scroll_for_render(rendered_lines.len());
     let start = app.transcript_scroll().min(rendered_lines.len());
     let text = rendered_lines
         .into_iter()
@@ -60,7 +61,7 @@ fn render_transcript(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Re
 
     frame.render_widget(paragraph, area);
 
-    let scroll_positions = app.max_scroll().saturating_add(1);
+    let scroll_positions = max_scroll.saturating_add(1);
     let mut scrollbar_state = ScrollbarState::new(scroll_positions)
         .position(app.transcript_scroll())
         .viewport_content_length(visible_height.max(1));
