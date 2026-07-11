@@ -1,0 +1,53 @@
+tui/ratatui/src/theme.rs
+  s_a81fff26d52223::t_8cf8e12fb49c8c 1-18
+tui/ratatui/src/ui.rs
+  s_a81fff26d52223::t_6e2be8c1490561 13,104-110,219,221-223,229,231-240,242-252,254-255,257-265
+  s_a81fff26d52223::t_8cf8e12fb49c8c 3,9,41,43-46,50,54-57
+  s_a81fff26d52223::t_8026fcf5cab0c2 64-65,102,177,183-184,198,224-228,230,241
+  s_a81fff26d52223::t_3e99e4eae5945b 1,10-12,51-53,115-117
+docs/architecture/gorombo-flue-map.md
+  s_a81fff26d52223::t_2ada819af494c9 77,150-154
+tui/ratatui/src/text_wrap.rs
+  s_a81fff26d52223::t_8026fcf5cab0c2 26-46,66,73-74
+  s_a81fff26d52223::t_356c36c21ee44a 140-171
+  s_a81fff26d52223::t_aa4bff501f4572 1-2
+tui/ratatui/Cargo.toml
+  s_a81fff26d52223::t_8026fcf5cab0c2 14
+docs/architecture/tui-cli-session-flow.md
+  s_a81fff26d52223::t_2ada819af494c9 151-153,279-282
+  s_a81fff26d52223::t_7e2d84f6f076f1 283-284
+tui/ratatui/src/lib.rs
+  s_a81fff26d52223::t_8cf8e12fb49c8c 9
+tui/ratatui/src/app.rs
+  s_a81fff26d52223::t_8cf8e12fb49c8c 48-69,522,526-538,541,1108,1110,1113-1124,1130-1159
+docs/tui/ratatui.md
+  s_a81fff26d52223::t_2ada819af494c9 42-43,46,52
+tui/ratatui/tests/ui_render.rs
+  s_a81fff26d52223::t_89a87dc36b18b5 7,98,638-660,929-934
+  s_a81fff26d52223::t_8341a5c8ac28d1 94-97,99-122,919-928,935
+  s_a81fff26d52223::t_d536ca14ec2d5c 186-203
+  s_a81fff26d52223::t_45be6ca2ec59d9 207-209
+  s_a81fff26d52223::t_620a4921e6a102 173-185,204-206,210-224,936
+  s_a81fff26d52223::t_6b96d13da30d2e 43-77
+  s_a81fff26d52223::t_efaa72db2dcfe7 42
+  s_a81fff26d52223::t_ed757a24edc804 93
+  s_a81fff26d52223::t_62546b3fc19baf 172
+Cargo.lock
+  s_a81fff26d52223::t_8f920c93161bd6 711
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "291708d6358e4e62b8963aa3c081d68dad85b870",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
