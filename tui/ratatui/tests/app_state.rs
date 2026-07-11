@@ -534,6 +534,24 @@ fn max_scroll_uses_rendered_viewport_height() {
 }
 
 #[test]
+fn max_scroll_counts_wrapped_rows_for_narrow_transcript_width() {
+    let mut app = App::new_for_test();
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"thinking_delta",
+            "eventIndex":10,
+            "text":"abcdefghij12345"
+        }),
+    )]));
+
+    app.set_transcript_viewport_size(3, 5);
+    app.jump_to_tail();
+
+    assert!(app.max_scroll() > app.transcript_lines().len().saturating_sub(3));
+    assert_eq!(app.transcript_scroll(), app.max_scroll());
+}
+
+#[test]
 fn prompt_cursor_allows_insertion_navigation_and_word_delete() {
     let mut app = App::new_for_test();
 

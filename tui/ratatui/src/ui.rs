@@ -14,7 +14,10 @@ pub fn render(frame: &mut Frame<'_>, app: &mut App) {
         .constraints([Constraint::Min(5), Constraint::Length(5)])
         .areas(frame.area());
 
-    app.set_transcript_viewport_height(transcript_area.height.saturating_sub(2) as usize);
+    app.set_transcript_viewport_size(
+        transcript_area.height.saturating_sub(2) as usize,
+        transcript_area.width.saturating_sub(2) as usize,
+    );
     render_transcript(frame, app, transcript_area);
     render_bottom(frame, app, bottom_area);
 }
@@ -35,7 +38,7 @@ fn render_transcript(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Re
     frame.render_widget(paragraph, area);
 
     let mut scrollbar_state =
-        ScrollbarState::new(app.transcript_lines().len()).position(app.transcript_scroll());
+        ScrollbarState::new(app.transcript_rendered_row_count()).position(app.transcript_scroll());
     frame.render_stateful_widget(
         Scrollbar::new(ScrollbarOrientation::VerticalRight),
         area,

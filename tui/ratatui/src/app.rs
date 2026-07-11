@@ -65,6 +65,7 @@ pub struct App {
     event_row_lines: BTreeMap<String, usize>,
     final_response_range: Option<(usize, usize)>,
     transcript_viewport_height: usize,
+    transcript_viewport_width: usize,
     startup_phase: StartupPhase,
     startup_attach_stream: bool,
 }
@@ -194,6 +195,7 @@ impl App {
             event_row_lines: BTreeMap::new(),
             final_response_range: None,
             transcript_viewport_height: SCROLL_PAGE_LINES,
+            transcript_viewport_width: 80,
             startup_phase: StartupPhase::Idle,
             startup_attach_stream: false,
         };
@@ -460,23 +462,32 @@ impl App {
     }
 
     pub fn max_scroll(&self) -> usize {
-        self.transcript_lines
-            .len()
+        self.transcript_rendered_row_count()
             .saturating_sub(self.transcript_viewport_height.max(1))
     }
 
     pub fn set_transcript_viewport_height(&mut self, height: usize) {
+        self.set_transcript_viewport_size(height, self.transcript_viewport_width);
+    }
+
+    pub fn set_transcript_viewport_size(&mut self, height: usize, width: usize) {
         let height = height.max(1);
-        if self.transcript_viewport_height == height {
+        let width = width.max(1);
+        if self.transcript_viewport_height == height && self.transcript_viewport_width == width {
             return;
         }
 
         self.transcript_viewport_height = height;
+        self.transcript_viewport_width = width;
         if self.follow_tail {
             self.jump_to_tail();
         } else {
             self.transcript_scroll = self.transcript_scroll.min(self.max_scroll());
         }
+    }
+
+    pub fn transcript_rendered_row_count(&self) -> usize {
+        transcript_rendered_row_count(&self.transcript_lines, self.transcript_viewport_width)
     }
 
     pub fn scroll_page_up(&mut self) {
@@ -962,6 +973,21 @@ fn initial_transcript() -> Vec<String> {
         "system: SIM-ONE Alpha Ratatui TUI".to_string(),
         "preflight: waiting for gateway startup result".to_string(),
     ]
+}
+
+fn transcript_rendered_row_count(lines: &[String], width: usize) -> usize {
+    let width = width.max(1);
+    lines
+        .iter()
+        .map(|line| {
+            let chars = line.chars().count();
+            if chars == 0 {
+                1
+            } else {
+                chars.div_ceil(width)
+            }
+        })
+        .sum()
 }
 
 fn speaker_lines(speaker: &str, text: &str) -> Vec<String> {
