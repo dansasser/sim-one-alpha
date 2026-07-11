@@ -1,0 +1,111 @@
+src/engine/workers/coding-worker/coding-worker.ts
+  s_65db8ffa7c9620::t_7f918e31df9065 189,191
+  s_65db8ffa7c9620::t_ae184689643182 18,53-54,96-102
+  s_65db8ffa7c9620::t_4a7dca4ece4739 20,103-118,120-121,162,174,311-313,315-319,323-336
+  s_65db8ffa7c9620::t_44f677297c7805 337-338
+src/engine/workers/coding-worker/workspace/TOOLS.md
+  s_65db8ffa7c9620::t_3963a399cecbdd 25-26
+src/tests/github-credential-boundaries.test.ts
+  s_65db8ffa7c9620::t_5d76382094c3b9 12,265-313
+  s_65db8ffa7c9620::t_ffb5799de6e32c 1-11,13-27,39-102,104-118,120-124,126,135-149,152-158,163-177,180-193,200-264,314-382,400-410
+  s_65db8ffa7c9620::t_e38cd276c35a50 28-38,103,119,125,127-134,150-151,159-162,178-179,194-199,383-399
+src/api/ingress/github-auth-challenge-relay.ts
+  s_65db8ffa7c9620::t_f3da635547fd3a 35
+  s_65db8ffa7c9620::t_bc9a8234c359b7 36-40
+  s_65db8ffa7c9620::t_583a25e3548a6b 47,57,83-96,101
+  s_65db8ffa7c9620::t_4f84204d91caf8 25,28,34,41-46,51-52,55-56,58-62,72-82,97-100,120-124,127
+  s_65db8ffa7c9620::t_0253623c5341c1 29-33
+src/engine/workers/coding-worker/events/coding-worker-events.ts
+  s_65db8ffa7c9620::t_4f84204d91caf8 72,98,110-112
+  s_a81fff26d52223::t_157979a215efc0 113
+src/api/ingress/trusted-event-context.ts
+  s_65db8ffa7c9620::t_48c055267470a1 1-12
+src/tests/architecture-contract.test.ts
+  s_65db8ffa7c9620::t_2cdc3565157042 99,111,197-199
+  s_65db8ffa7c9620::t_fc3ea3d7d1e2ca 200-202
+src/tests/github-auth-challenge-relay.test.ts
+  s_65db8ffa7c9620::t_c39decf7e32975 95-121,147
+  s_65db8ffa7c9620::t_f6db0b5b6a91c3 122-146
+  s_65db8ffa7c9620::t_5abd855355ac70 76-94
+  s_65db8ffa7c9620::t_2cdc3565157042 34-75
+  s_65db8ffa7c9620::t_95104ceb941e0f 16,22,30
+src/engine/workers/coding-worker/tools/coding-repo-workflow-tools.ts
+  s_65db8ffa7c9620::t_96a75142ad8183 553-559
+  s_65db8ffa7c9620::t_5ef7d71368e88d 29,193
+  s_65db8ffa7c9620::t_5fe574ad6d1088 27-28,30
+  s_65db8ffa7c9620::t_83bf2dcf294d90 560
+docs/architecture/gorombo-flue-map.md
+  s_65db8ffa7c9620::t_4eaeaf98439ef7 115
+src/workflows/github-auth.ts
+  s_65db8ffa7c9620::t_19b52506f0cac6 65-68,81
+  s_65db8ffa7c9620::t_4f84204d91caf8 3,21-25,31-36,40-45,55-56,58-61,69
+  s_65db8ffa7c9620::t_2e419c4ec85caa 9-12,57,96,106
+src/engine/workers/coding-worker/tools/coding-git-tools.ts
+  s_65db8ffa7c9620::t_01707ca999b8fe 20,154,220-223
+  s_65db8ffa7c9620::t_a3fa62c2903dc6 257,268,287
+src/engine/workers/coding-worker/github/github-auth-utils.ts
+  s_65db8ffa7c9620::t_2e419c4ec85caa 2,6-10
+  s_65db8ffa7c9620::t_4f84204d91caf8 1,3-5,11
+src/tests/github-auth-workflow.test.ts
+  s_65db8ffa7c9620::t_2cdc3565157042 1-16,21-32
+  s_65db8ffa7c9620::t_3c4f90236aea02 17-20
+src/engine/workers/coding-worker/github/github-auth-tools.ts
+  s_65db8ffa7c9620::t_2e419c4ec85caa 15-18,50,66,127
+  s_65db8ffa7c9620::t_a3fa62c2903dc6 56-60,68-94,133-154
+  s_65db8ffa7c9620::t_48c055267470a1 6,49,61,161,163-165,167-170
+  s_65db8ffa7c9620::t_7f918e31df9065 27,36-40
+  s_65db8ffa7c9620::t_4f84204d91caf8 29,63-65,67,106,160,166,171
+  s_65db8ffa7c9620::t_0af7117d85d609 155-156
+src/api/routes/chat-events.ts
+  s_65db8ffa7c9620::t_227e6f7ee1bfc4 142
+  s_65db8ffa7c9620::t_48c055267470a1 32,134
+src/tests/github-auth-events.test.ts
+  s_65db8ffa7c9620::t_2cdc3565157042 44-62
+  s_65db8ffa7c9620::t_95104ceb941e0f 24-42
+  s_65db8ffa7c9620::t_c9defa7d81107a 43
+src/tests/github-private-clone.test.ts
+  s_65db8ffa7c9620::t_92d05fdf97361f 53-55,74-81
+src/agents/orchestrator.ts
+  s_65db8ffa7c9620::t_3963a399cecbdd 231-232
+  s_65db8ffa7c9620::t_4f84204d91caf8 229-230
+src/tests/github-auth-tools.test.ts
+  s_65db8ffa7c9620::t_95104ceb941e0f 28,45,53,128
+  s_65db8ffa7c9620::t_9647e15a3f41cc 9,241-242,246,306
+  s_65db8ffa7c9620::t_2cdc3565157042 135-160,190-205,207-225,227-233,316-350
+  s_65db8ffa7c9620::t_bbd56eeadfb8f8 111,206,226
+  s_65db8ffa7c9620::t_bbb5821f525c83 11,161-189
+  s_65db8ffa7c9620::t_7f5a96d83655b7 234-240,243-245,247-305,307-315,352,356
+src/tests/github-auth-live.test.ts
+  s_65db8ffa7c9620::t_f7aeadea814cc0 19,21-40,46-53,77
+src/engine/workers/coding-worker/tools/github-credential-utils.ts
+  s_65db8ffa7c9620::t_5ef7d71368e88d 20-21,23-39,50-58,62-72
+  s_65db8ffa7c9620::t_7bfb22c71603a1 1-19,22,40-49,59-61,73
+docs/architecture/github-auth-system.md
+  s_65db8ffa7c9620::t_e4ec30ef83c49e 31-35,44,52
+  s_65db8ffa7c9620::t_3963a399cecbdd 50
+  s_65db8ffa7c9620::t_fa65b3bc925511 51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "65e3584710293cf35bb835e8b9278cab10a14fdb",
+  "prompts": {},
+  "sessions": {
+    "s_65db8ffa7c9620": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f51b3-89d7-7d02-973d-9679f07254a1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    },
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
