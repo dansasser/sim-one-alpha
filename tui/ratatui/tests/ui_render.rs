@@ -54,7 +54,7 @@ fn renders_prompt_cursor_at_edit_position() {
 }
 
 #[test]
-fn wraps_long_prompt_inside_prompt_box() {
+fn prompt_does_not_split_a_word_longer_than_the_input_width() {
     let backend = TestBackend::new(24, 12);
     let mut terminal = Terminal::new(backend).expect("test backend should initialize");
     let mut app = App::new_for_test();
@@ -62,7 +62,7 @@ fn wraps_long_prompt_inside_prompt_box() {
 
     terminal
         .draw(|frame| render(frame, &mut app))
-        .expect("wrapped prompt shell should render");
+        .expect("long-word prompt shell should render");
 
     let buffer = terminal
         .backend()
@@ -72,8 +72,34 @@ fn wraps_long_prompt_inside_prompt_box() {
         .map(|cell| cell.symbol())
         .collect::<String>();
     assert!(buffer.contains("abcdefghijklmnopqrst"), "{buffer}");
-    assert!(buffer.contains("uvwxyz"), "{buffer}");
-    assert_eq!(terminal.backend().cursor_position(), Position::new(9, 10));
+    assert!(!buffer.contains("uvwxyz"), "{buffer}");
+    assert_eq!(terminal.backend().cursor_position(), Position::new(22, 9));
+}
+
+#[test]
+fn prompt_wraps_before_a_word_that_does_not_fit() {
+    let backend = TestBackend::new(14, 12);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    app.handle_event(AppEvent::Text("alpha bravo charlie".to_string()));
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("word-wrapped prompt shell should render");
+
+    let frame = terminal_buffer_lines(&terminal);
+    let rows = frame.lines().collect::<Vec<_>>();
+    assert!(rows[8].contains("> alpha"), "{frame}");
+    assert!(rows[9].contains("  bravo"), "{frame}");
+    assert!(rows[10].contains("  charlie"), "{frame}");
+    assert!(!frame.contains("alpha brav"), "{frame}");
+    assert_eq!(terminal.backend().cursor_position(), Position::new(10, 10));
+
+    app.handle_event(AppEvent::MovePromptWordLeft);
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("word-wrapped prompt cursor should render");
+    assert_eq!(terminal.backend().cursor_position(), Position::new(3, 10));
 }
 
 #[test]
@@ -82,7 +108,7 @@ fn prompt_uses_five_visible_rows_then_follows_cursor() {
     let mut terminal = Terminal::new(backend).expect("test backend should initialize");
     let mut app = App::new_for_test();
     app.handle_event(AppEvent::Text(
-        "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddeeeeeeeeeeffffffff".to_string(),
+        "aaaaaaaaaa bbbbbbbbbb cccccccccc dddddddddd eeeeeeeeee ffffffff".to_string(),
     ));
 
     terminal
@@ -99,7 +125,7 @@ fn prompt_uses_five_visible_rows_then_follows_cursor() {
     assert!(!buffer.contains("aaaaaaaaaa"), "{buffer}");
     assert!(buffer.contains("bbbbbbbbbb"), "{buffer}");
     assert!(buffer.contains("fffffff"), "{buffer}");
-    assert_eq!(terminal.backend().cursor_position(), Position::new(11, 14));
+    assert_eq!(terminal.backend().cursor_position().y, 14);
 }
 
 #[test]

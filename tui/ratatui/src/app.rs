@@ -8,6 +8,7 @@ use crate::agent::{list_chat_sessions, send_agent_prompt_reply, AgentReply, Sess
 use crate::flue::events::FlueEvent;
 use crate::flue::reducer::{extract_role, extract_text, DisplayRow, EventTranscript};
 use crate::flue::stream::{spawn_agent_stream, AgentStreamHandle, AgentStreamUpdate};
+use crate::text_wrap::wrap_words;
 
 pub const SCROLL_PAGE_LINES: usize = 8;
 const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
@@ -1074,29 +1075,10 @@ fn initial_transcript() -> Vec<String> {
 }
 
 fn wrap_transcript_lines(lines: &[String], width: usize) -> Vec<String> {
-    let width = width.max(1);
     let mut wrapped = Vec::new();
 
     for line in lines {
-        if line.is_empty() {
-            wrapped.push(String::new());
-            continue;
-        }
-
-        let mut row = String::new();
-        let mut row_len = 0;
-        for ch in line.chars() {
-            row.push(ch);
-            row_len += 1;
-            if row_len == width {
-                wrapped.push(std::mem::take(&mut row));
-                row_len = 0;
-            }
-        }
-
-        if !row.is_empty() {
-            wrapped.push(row);
-        }
+        wrapped.extend(wrap_words(line, width).into_iter().map(|row| row.text));
     }
 
     wrapped

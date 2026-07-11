@@ -47,7 +47,7 @@ The bottom pane contains gateway/session/model status and the editable prompt li
 
 Press `Enter` to submit the prompt. To insert a newline, type `/` at the cursor and press `Enter`; the TUI removes the trailing slash and starts the next prompt line without submitting. Enter key-repeat events are ignored so one physical Enter produces one submit or newline action. Slash commands such as `/new` and `/compact` still submit normally because their final character is not `/`.
 
-The editor wraps long input, grows to five visible rows, and then scrolls its own contents while keeping the cursor visible. Transcript tail-following is recalculated as the editor grows, so the latest response remains directly above the prompt. While a prompt is pending, a duplicate submit is shown as a visible status instead of queueing a second prompt.
+The editor wraps long input before the word that no longer fits, grows to five visible rows, and then scrolls its own contents while keeping the cursor visible. Words are never split across rows. Transcript tail-following is recalculated as the editor grows, so the latest response remains directly above the prompt. While a prompt is pending, a duplicate submit is shown as a visible status instead of queueing a second prompt.
 
 Supported editing keys include:
 
@@ -65,6 +65,8 @@ Ctrl+C
 ## Scrolling
 
 Use `PgUp` and `PgDown` to scroll the transcript. Scrolling away from the tail does not block typing. New activity does not snap the viewport back to the bottom until tail-following is restored.
+
+Transcript lines use the same word-boundary wrapping as the prompt. When the next word does not fit, the complete word moves to the next row; the renderer does not split it at the pane edge.
 
 While the title shows `Transcript - live tail`, every rendered frame anchors the viewport to the actual last wrapped transcript row. Final responses, retries, activity updates, and prompt-height changes therefore keep the newest line visible. Manual scrollback disables that anchoring until the user returns to the tail.
 

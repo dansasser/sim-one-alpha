@@ -620,19 +620,65 @@ fn max_scroll_counts_wrapped_rows_for_narrow_transcript_width() {
         serde_json::json!({
             "type":"thinking_delta",
             "eventIndex":10,
-            "text":"abcdefghij12345"
+            "text":"alpha bravo charlie delta"
         }),
     )]));
 
-    app.set_transcript_viewport_size(3, 5);
+    app.set_transcript_viewport_size(3, 12);
     app.jump_to_tail();
 
     assert!(app
         .transcript_rendered_lines()
         .iter()
-        .all(|line| line.chars().count() <= 5));
+        .all(|line| line.chars().count() <= 12));
     assert!(app.max_scroll() > app.transcript_lines().len().saturating_sub(3));
     assert_eq!(app.transcript_scroll(), app.max_scroll());
+}
+
+#[test]
+fn transcript_does_not_split_a_word_longer_than_the_viewport() {
+    let mut app = App::new_for_test();
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"log",
+            "eventIndex":12,
+            "text":"abcdefghij12345"
+        }),
+    )]));
+
+    app.set_transcript_viewport_size(4, 5);
+    let rendered = app.transcript_rendered_lines();
+
+    assert!(
+        rendered.iter().any(|line| line == "abcdefghij12345"),
+        "{rendered:?}"
+    );
+    assert!(!rendered.iter().any(|line| line == "abcde"), "{rendered:?}");
+}
+
+#[test]
+fn transcript_wraps_before_a_word_that_does_not_fit() {
+    let mut app = App::new_for_test();
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"log",
+            "eventIndex":11,
+            "text":"alpha bravo"
+        }),
+    )]));
+
+    app.set_transcript_viewport_size(4, 12);
+    let rendered = app.transcript_rendered_lines();
+
+    assert!(
+        rendered.iter().any(|line| line == "log: alpha"),
+        "{rendered:?}"
+    );
+    assert!(rendered.iter().any(|line| line == "bravo"), "{rendered:?}");
+    assert!(
+        !rendered.iter().any(|line| line == "log: alpha b"),
+        "{rendered:?}"
+    );
 }
 
 #[test]

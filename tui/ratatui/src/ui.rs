@@ -7,17 +7,11 @@ use ratatui::widgets::{
 use ratatui::Frame;
 
 use crate::app::App;
+use crate::text_wrap::{wrap_words, WrappedLine};
 
 const PROMPT_GUTTER_WIDTH: usize = 2;
 const PROMPT_MIN_VISIBLE_ROWS: usize = 2;
 const PROMPT_MAX_VISIBLE_ROWS: usize = 5;
-
-#[derive(Debug, Clone)]
-struct PromptRow {
-    text: String,
-    start_char: usize,
-    end_char: usize,
-}
 
 #[derive(Debug, Clone, Copy)]
 struct PromptCursorPosition {
@@ -154,53 +148,12 @@ fn prompt_text_width(area_width: usize) -> usize {
         .max(1)
 }
 
-fn wrap_prompt_rows(prompt: &str, width: usize) -> Vec<PromptRow> {
-    let width = width.max(1);
-    let mut rows = Vec::new();
-    let mut row = String::new();
-    let mut row_len = 0;
-    let mut start_char = 0;
-    let mut total_chars = 0;
-
-    for (index, ch) in prompt.chars().enumerate() {
-        total_chars = index + 1;
-        if ch == '\n' {
-            rows.push(PromptRow {
-                text: std::mem::take(&mut row),
-                start_char,
-                end_char: index,
-            });
-            row_len = 0;
-            start_char = index + 1;
-            continue;
-        }
-
-        row.push(ch);
-        row_len += 1;
-        if row_len == width {
-            rows.push(PromptRow {
-                text: std::mem::take(&mut row),
-                start_char,
-                end_char: index + 1,
-            });
-            row_len = 0;
-            start_char = index + 1;
-        }
-    }
-
-    if rows.is_empty() || !row.is_empty() || start_char == total_chars {
-        rows.push(PromptRow {
-            text: row,
-            start_char,
-            end_char: total_chars,
-        });
-    }
-
-    rows
+fn wrap_prompt_rows(prompt: &str, width: usize) -> Vec<WrappedLine> {
+    wrap_words(prompt, width)
 }
 
 fn prompt_cursor_position(
-    rows: &[PromptRow],
+    rows: &[WrappedLine],
     cursor_chars: usize,
     width: usize,
 ) -> PromptCursorPosition {
@@ -240,7 +193,7 @@ fn prompt_view_start(cursor_row: usize, row_count: usize, visible_rows: usize) -
 
 fn visible_prompt_lines(
     prompt: &str,
-    rows: &[PromptRow],
+    rows: &[WrappedLine],
     start: usize,
     visible_rows: usize,
 ) -> Vec<Line<'static>> {
