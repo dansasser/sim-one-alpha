@@ -1,0 +1,54 @@
+tui/ratatui/tests/input_mapping.rs
+  s_a81fff26d52223::t_e8b532994af505 67-70,97
+tui/ratatui/tests/terminal_interaction.rs
+  s_a81fff26d52223::t_1aee536de3df41 13,31
+tui/ratatui/tests/ui_render.rs
+  s_a81fff26d52223::t_e8b532994af505 42-112
+docs/architecture/gorombo-flue-map.md
+  s_a81fff26d52223::t_0e6ff85d626c16 77,146
+tui/ratatui/src/app.rs
+  s_a81fff26d52223::t_7cc9be3366a8d4 28-91,107-108,162-163,295-296,342,344-349,524-533,535-537,541-552,734,743,751,778,813,828,837,892,896-905,912,916-950,955-959,977-982
+  s_a81fff26d52223::t_67ae63405e46c1 795-800,951-954
+  s_a81fff26d52223::t_b15bff3766e5ad 534,538-540
+scripts/test-ratatui-interactive.py
+  s_a81fff26d52223::t_e8b532994af505 122-132,137,151
+docs/tui/session-management.md
+  s_a81fff26d52223::t_59e092a9755379 15-18
+README.md
+  s_a81fff26d52223::t_0e6ff85d626c16 548-549
+tui/ratatui/src/theme.rs
+  s_a81fff26d52223::t_67ae63405e46c1 7-8,58-74
+  s_a81fff26d52223::t_b2c9b628c04e17 75
+tui/ratatui/tests/app_state.rs
+  s_a81fff26d52223::t_e8b532994af505 954,967-1021,1030-1052,1054,1056
+  s_a81fff26d52223::t_b94768b2ff4517 1053,1055,1057-1059
+docs/tui/ratatui.md
+  s_a81fff26d52223::t_0e6ff85d626c16 54,95
+  s_a81fff26d52223::t_9d7cea6d122b4a 96
+tui/ratatui/src/ui.rs
+  s_a81fff26d52223::t_67ae63405e46c1 1,5,14-17,24-25,172-246
+  s_a81fff26d52223::t_06335ebbfe0842 247-249
+docs/operations/product-tui.md
+  s_a81fff26d52223::t_0e6ff85d626c16 128-129
+docs/architecture/tui-cli-session-flow.md
+  s_a81fff26d52223::t_0e6ff85d626c16 18,40
+  s_a81fff26d52223::t_df02aff5aadcf0 41
+tui/ratatui/src/input.rs
+  s_a81fff26d52223::t_7cc9be3366a8d4 39,48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "74e36442d6a9f8148829a7404907c2e2fa2adfd2",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
