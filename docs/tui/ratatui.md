@@ -75,7 +75,7 @@ Use `PgUp`, `PgDown`, or the mouse wheel to scroll the transcript while the prom
 
 Transcript lines use the same word-boundary wrapping as the prompt. When the next word does not fit, the complete word moves to the next row; the renderer does not split it at the pane edge.
 
-While the title shows `Transcript - live tail`, every rendered frame anchors the viewport to the actual last wrapped transcript row. Final responses, retries, activity updates, and prompt-height changes therefore keep the newest line visible. Manual scrollback disables that anchoring until the user returns to the tail.
+While live-tail following is active, every rendered frame anchors the viewport to the actual last wrapped transcript row. Final responses, retries, activity updates, and prompt-height changes therefore keep the newest line visible. Manual scrollback disables that anchoring until the user returns to the tail. The border remains the session title; the status row adds `view: scrolled back` only while manual scrollback is active.
 
 Only root-orchestrator assistant output becomes a chat response. Nested worker/subagent `text_delta` and `message_end` payloads remain internal to the parent agent; task and tool activity can still be represented by their structured activity rows. Root-agent `text_delta` events replace the pending spinner with one dimmed `assistant:` block and update that block in place.
 
@@ -85,7 +85,9 @@ Live tail includes one blank visual margin row after the final transcript conten
 
 ## Status Bar
 
-The status area shows the gateway connection, active session label, stream state, pending response state, elapsed thinking time, and a spinner while the agent is working. The label starts as the durable session id. A confirmed `/rename`, `/new <title>`, or `/clear <title>` replaces that same field with the explicit name. Automatic prompt-derived titles are never displayed there; `/session` and `/exit` retain access to the durable id.
+The transcript border shows `SIM-ONE Alpha - <session-id>` for an unnamed resolved session and `SIM-ONE Alpha - <name>` for an explicitly named session. Before startup resolves a session it shows only `SIM-ONE Alpha`. Explicit names survive `/resume` and startup restoration because they are stored separately from automatic prompt-derived conversation titles. `/session` and `/exit` retain access to the durable id.
+
+The status area shows the gateway connection, stream state, pending response state, elapsed thinking time, and a spinner while the agent is working. Live-tail following is implicit. When the user scrolls away from the tail, the status begins with `view: scrolled back` until tail-following is restored.
 
 During startup, status and transcript rows show gateway readiness, active TUI session resolution, stream attach, and the greeting turn. After preflight completes, normal prompt entry is available.
 

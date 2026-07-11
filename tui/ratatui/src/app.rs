@@ -493,7 +493,7 @@ impl App {
                         let session_id = reply.session_id.clone();
                         let explicit_session_title = matches!(
                             reply.command_name.as_deref(),
-                            Some("rename" | "new" | "clear")
+                            Some("rename" | "new" | "clear" | "resume" | "session")
                         )
                         .then(|| clean_session_title(reply.session_title.clone()))
                         .flatten();
@@ -623,11 +623,16 @@ impl App {
         }
     }
 
-    fn status_session_label(&self) -> String {
-        self.session_title
+    pub fn transcript_title(&self) -> String {
+        let session_label = self
+            .session_title
             .as_deref()
-            .unwrap_or_else(|| self.session_label())
-            .to_string()
+            .or_else(|| (!self.session_id.trim().is_empty()).then_some(self.session_id.as_str()));
+
+        session_label.map_or_else(
+            || "SIM-ONE Alpha".to_string(),
+            |label| format!("SIM-ONE Alpha - {label}"),
+        )
     }
 
     pub fn gateway_status(&self) -> &str {
@@ -651,12 +656,12 @@ impl App {
     }
 
     pub fn status_text(&self) -> String {
-        let mut parts = vec![
-            "SIM-ONE Alpha".to_string(),
-            format!("session: {}", self.status_session_label()),
-            format!("gateway: {}", self.gateway_status),
-            format!("stream: {}", self.stream_status()),
-        ];
+        let mut parts = Vec::new();
+        if !self.follow_tail {
+            parts.push("view: scrolled back".to_string());
+        }
+        parts.push(format!("gateway: {}", self.gateway_status));
+        parts.push(format!("stream: {}", self.stream_status()));
 
         if let Some(pending) = &self.pending_response {
             parts.push(format!("agent: thinking {}", pending.spinner_frame_text()));
@@ -675,10 +680,6 @@ impl App {
             parts.push(format!("last: {event_type}"));
         }
         parts.push(format!("messages: {}", self.transcript_lines.len()));
-        parts.push(format!(
-            "tail: {}",
-            if self.follow_tail { "live" } else { "scrolled" }
-        ));
         parts.join(" | ")
     }
 

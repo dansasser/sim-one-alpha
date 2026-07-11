@@ -58,11 +58,7 @@ fn render_transcript(frame: &mut Frame<'_>, app: &mut App, area: ratatui::layout
         .take(visible_height)
         .map(|row| rendered_transcript_line(row, visible_width))
         .collect::<Vec<_>>();
-    let title = if app.follow_tail() {
-        "Transcript - live tail"
-    } else {
-        "Transcript - scrolled back"
-    };
+    let title = app.transcript_title();
 
     let paragraph = Paragraph::new(Text::from(lines))
         .block(Block::default().borders(Borders::ALL).title(title));

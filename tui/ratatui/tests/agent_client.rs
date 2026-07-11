@@ -3,7 +3,7 @@ use std::net::TcpListener;
 use std::sync::mpsc;
 use std::thread;
 
-use sim_one_ratatui_tui::agent::{send_agent_prompt, send_agent_prompt_reply};
+use sim_one_ratatui_tui::agent::{list_chat_sessions, send_agent_prompt, send_agent_prompt_reply};
 
 #[test]
 fn posts_prompt_to_tui_chat_event_endpoint_and_extracts_text() {
@@ -148,6 +148,35 @@ fn extracts_command_session_metadata_from_chat_event_response() {
 }
 
 #[test]
+fn session_list_prefers_explicit_display_name_over_prompt_title() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("test server should bind");
+    let port = listener
+        .local_addr()
+        .expect("test server should have address")
+        .port();
+
+    thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("client should connect");
+        let _ = read_http_request(&mut stream);
+
+        let body = r#"{"sessions":[{"sessionId":"tui-123","origin":"tui","title":"latest prompt","displayName":"Release Work","updatedAt":"2026-07-11T00:00:00.000Z"}]}"#;
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .expect("response should be writable");
+    });
+
+    let sessions = list_chat_sessions(&format!("http://127.0.0.1:{port}"), 10)
+        .expect("session list should decode");
+
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].title.as_deref(), Some("Release Work"));
+}
+
+#[test]
 fn decodes_chunked_agent_response_before_utf8_conversion() {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("test server should bind");
     let port = listener
@@ -224,7 +253,7 @@ fn read_http_request(stream: &mut impl Read) -> String {
                     .expect("content length should parse")
             })
         })
-        .expect("request should include content-length");
+        .unwrap_or(0);
 
     while bytes.len() < header_end + content_length {
         let read = stream.read(&mut buffer).expect("body should be readable");

@@ -16,6 +16,7 @@ export interface ResolveChatSessionInput {
   requestedSessionId?: string;
   forceNew?: boolean;
   title?: string;
+  displayName?: string;
 }
 
 export interface ChatSessionResolution {
@@ -53,6 +54,7 @@ export function resolveChatSession(input: ResolveChatSessionInput): ChatSessionR
       conversationId: input.event.conversation.id,
       threadId: input.event.conversation.threadId,
       title,
+      displayName: input.displayName,
     });
 
     if (isActiveSessionManagedSurface(surface)) {
@@ -76,6 +78,7 @@ export function resolveChatSession(input: ResolveChatSessionInput): ChatSessionR
     conversationId: input.event.conversation.id,
     threadId: input.event.conversation.threadId,
     title,
+    displayName: input.displayName,
   });
 
   if (isActiveSessionManagedSurface(surface)) {

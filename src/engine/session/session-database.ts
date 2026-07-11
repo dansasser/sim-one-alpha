@@ -20,6 +20,7 @@ export interface ChatSessionRecord {
   conversationId?: string;
   threadId?: string;
   title?: string;
+  displayName?: string;
   archivedAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -32,6 +33,7 @@ export interface EnsureChatSessionInput {
   conversationId?: string;
   threadId?: string;
   title?: string;
+  displayName?: string;
 }
 
 export interface CreateChatSessionInput extends Omit<EnsureChatSessionInput, 'sessionId'> {
@@ -279,13 +281,14 @@ export class GoromboSessionDatabase {
     this.database
       .prepare(
         `INSERT INTO chat_sessions
-         (session_id, origin, actor_id, conversation_id, thread_id, title, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         (session_id, origin, actor_id, conversation_id, thread_id, title, display_name, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(session_id) DO UPDATE SET
            actor_id = COALESCE(excluded.actor_id, chat_sessions.actor_id),
            conversation_id = COALESCE(excluded.conversation_id, chat_sessions.conversation_id),
            thread_id = COALESCE(excluded.thread_id, chat_sessions.thread_id),
            title = COALESCE(excluded.title, chat_sessions.title),
+           display_name = COALESCE(excluded.display_name, chat_sessions.display_name),
            updated_at = excluded.updated_at`,
       )
       .run(
@@ -295,6 +298,7 @@ export class GoromboSessionDatabase {
         input.conversationId ?? null,
         input.threadId ?? null,
         input.title ?? null,
+        input.displayName ?? null,
         now,
         now,
       );
@@ -309,7 +313,7 @@ export class GoromboSessionDatabase {
   getChatSession(sessionId: string): ChatSessionRecord | null {
     const row = this.database
       .prepare(
-        `SELECT session_id, origin, actor_id, conversation_id, thread_id, title, archived_at, created_at, updated_at
+        `SELECT session_id, origin, actor_id, conversation_id, thread_id, title, display_name, archived_at, created_at, updated_at
          FROM chat_sessions
          WHERE session_id = ?`,
       )
@@ -326,7 +330,7 @@ export class GoromboSessionDatabase {
   listChatSessions(limit = 50): ChatSessionRecord[] {
     const rows = this.database
       .prepare(
-        `SELECT session_id, origin, actor_id, conversation_id, thread_id, title, archived_at, created_at, updated_at
+        `SELECT session_id, origin, actor_id, conversation_id, thread_id, title, display_name, archived_at, created_at, updated_at
          FROM chat_sessions
          WHERE archived_at IS NULL
          ORDER BY updated_at DESC
@@ -337,14 +341,16 @@ export class GoromboSessionDatabase {
     return rows.map(toChatSessionRecord);
   }
 
-  touchChatSession(sessionId: string, title?: string): void {
+  touchChatSession(sessionId: string, title?: string, displayName?: string): void {
     this.database
       .prepare(
         `UPDATE chat_sessions
-         SET updated_at = ?, title = COALESCE(?, title)
+         SET updated_at = ?,
+             title = COALESCE(?, title),
+             display_name = COALESCE(?, display_name)
          WHERE session_id = ?`,
       )
-      .run(new Date().toISOString(), title ?? null, sessionId);
+      .run(new Date().toISOString(), title ?? null, displayName ?? null, sessionId);
   }
 
   recordNormalizedMessageEvent(input: RecordNormalizedMessageEventInput): void {
@@ -821,6 +827,7 @@ export class GoromboSessionDatabase {
         conversation_id TEXT,
         thread_id TEXT,
         title TEXT,
+        display_name TEXT,
         archived_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -949,11 +956,29 @@ export class GoromboSessionDatabase {
       );
     `);
 
+    this.ensureChatSessionDisplayNameColumn();
     this.ensureSessionMemoryScopeColumns();
     this.database.exec(`
       CREATE INDEX IF NOT EXISTS idx_session_memory_scope
         ON session_memory_chunks(actor_id, conversation_id, session_name);
     `);
+  }
+
+  private ensureChatSessionDisplayNameColumn(): void {
+    const existingColumns = new Set(
+      (this.database.prepare(`PRAGMA table_info(chat_sessions)`).all() as unknown as Array<{ name: string }>)
+        .map((column) => column.name),
+    );
+
+    if (!existingColumns.has('display_name')) {
+      try {
+        this.database.exec('ALTER TABLE chat_sessions ADD COLUMN display_name TEXT');
+      } catch (error) {
+        if (!String(error).includes('duplicate column name')) {
+          throw error;
+        }
+      }
+    }
   }
 
   private ensureSessionMemoryScopeColumns(): void {
@@ -1464,6 +1489,7 @@ function toChatSessionRecord(row: ChatSessionRow): ChatSessionRecord {
     ...(typeof row.conversation_id === 'string' ? { conversationId: row.conversation_id } : {}),
     ...(typeof row.thread_id === 'string' ? { threadId: row.thread_id } : {}),
     ...(typeof row.title === 'string' ? { title: row.title } : {}),
+    ...(typeof row.display_name === 'string' ? { displayName: row.display_name } : {}),
     ...(typeof row.archived_at === 'string' ? { archivedAt: row.archived_at } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -1549,6 +1575,7 @@ interface ChatSessionRow {
   conversation_id: string | null;
   thread_id: string | null;
   title: string | null;
+  display_name: string | null;
   archived_at: string | null;
   created_at: string;
   updated_at: string;
@@ -1653,7 +1680,6 @@ function parseJsonStringArray(value: string | null | undefined): string[] {
   }
   return [];
 }
-
 
 
 

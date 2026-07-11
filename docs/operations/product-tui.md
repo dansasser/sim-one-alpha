@@ -129,7 +129,9 @@ slash-command palette display and keyboard selection
 backslash-Enter newline preservation when the terminal reports an Enter repeat
 vertical arrow editing across packaged multiline prompt rows
 exact multiline prompt payload submitted to the gateway
-renamed session name in final TUI status and stable session id on exit
+active session identity in the transcript border
+renamed session name restored after resume and stable session id on exit
+manual scrollback status without a redundant live-tail label
 /new
 /session
 /compact
