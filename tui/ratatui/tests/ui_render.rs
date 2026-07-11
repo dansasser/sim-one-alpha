@@ -140,6 +140,71 @@ fn renders_thinking_and_tool_activity_rows() {
     );
 }
 
+#[test]
+fn narrow_transcript_tail_reaches_wrapped_bottom_row() {
+    let backend = TestBackend::new(24, 10);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"thinking_delta",
+            "eventIndex":10,
+            "text":"alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa bottom-marker"
+        }),
+    )]));
+    app.jump_to_tail();
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("narrow tail shell should render");
+
+    let buffer = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    assert!(buffer.contains("marker"), "{buffer}");
+}
+
+#[test]
+fn small_transcript_tail_reaches_bottom_after_many_wrapped_lines() {
+    let backend = TestBackend::new(22, 9);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    for index in 0..30 {
+        app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+            serde_json::json!({
+                "type":"log",
+                "eventIndex":100 + index,
+                "text":format!("row {index} alpha bravo charlie delta echo foxtrot")
+            }),
+        )]));
+    }
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"log",
+            "eventIndex":999,
+            "text":"tail-ok"
+        }),
+    )]));
+    app.jump_to_tail();
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("small tail shell should render");
+
+    let buffer = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    assert!(buffer.contains("tail-ok"), "{buffer}");
+}
+
 fn app_with_pending_response() -> App {
     App::with_agent_sender(
         "tui-existing-1",

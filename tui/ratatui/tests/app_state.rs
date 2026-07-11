@@ -547,8 +547,41 @@ fn max_scroll_counts_wrapped_rows_for_narrow_transcript_width() {
     app.set_transcript_viewport_size(3, 5);
     app.jump_to_tail();
 
+    assert!(app
+        .transcript_rendered_lines()
+        .iter()
+        .all(|line| line.chars().count() <= 5));
     assert!(app.max_scroll() > app.transcript_lines().len().saturating_sub(3));
     assert_eq!(app.transcript_scroll(), app.max_scroll());
+}
+
+#[test]
+fn max_scroll_uses_exact_prewrapped_transcript_rows() {
+    let mut app = App::new_for_test();
+    for index in 0..30 {
+        app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+            serde_json::json!({
+                "type":"log",
+                "eventIndex":100 + index,
+                "text":format!("row {index} alpha bravo charlie delta echo foxtrot")
+            }),
+        )]));
+    }
+
+    let height = 4;
+    let width = 20;
+    app.set_transcript_viewport_size(height, width);
+    let rendered_lines = app.transcript_rendered_lines();
+
+    assert!(rendered_lines.len() > app.transcript_lines().len());
+    assert!(rendered_lines
+        .iter()
+        .all(|line| line.chars().count() <= width));
+    assert_eq!(app.transcript_rendered_row_count(), rendered_lines.len());
+    assert_eq!(
+        app.max_scroll(),
+        rendered_lines.len().saturating_sub(height)
+    );
 }
 
 #[test]

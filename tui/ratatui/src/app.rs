@@ -487,7 +487,11 @@ impl App {
     }
 
     pub fn transcript_rendered_row_count(&self) -> usize {
-        transcript_rendered_row_count(&self.transcript_lines, self.transcript_viewport_width)
+        self.transcript_rendered_lines().len()
+    }
+
+    pub fn transcript_rendered_lines(&self) -> Vec<String> {
+        wrap_transcript_lines(&self.transcript_lines, self.transcript_viewport_width)
     }
 
     pub fn scroll_page_up(&mut self) {
@@ -975,19 +979,33 @@ fn initial_transcript() -> Vec<String> {
     ]
 }
 
-fn transcript_rendered_row_count(lines: &[String], width: usize) -> usize {
+fn wrap_transcript_lines(lines: &[String], width: usize) -> Vec<String> {
     let width = width.max(1);
-    lines
-        .iter()
-        .map(|line| {
-            let chars = line.chars().count();
-            if chars == 0 {
-                1
-            } else {
-                chars.div_ceil(width)
+    let mut wrapped = Vec::new();
+
+    for line in lines {
+        if line.is_empty() {
+            wrapped.push(String::new());
+            continue;
+        }
+
+        let mut row = String::new();
+        let mut row_len = 0;
+        for ch in line.chars() {
+            row.push(ch);
+            row_len += 1;
+            if row_len == width {
+                wrapped.push(std::mem::take(&mut row));
+                row_len = 0;
             }
-        })
-        .sum()
+        }
+
+        if !row.is_empty() {
+            wrapped.push(row);
+        }
+    }
+
+    wrapped
 }
 
 fn speaker_lines(speaker: &str, text: &str) -> Vec<String> {

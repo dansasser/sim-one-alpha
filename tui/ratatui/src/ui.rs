@@ -2,7 +2,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Position};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{
-    Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap,
+    Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
 };
 use ratatui::Frame;
 
@@ -23,17 +23,22 @@ pub fn render(frame: &mut Frame<'_>, app: &mut App) {
 }
 
 fn render_transcript(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Rect) {
-    let text = app.transcript_lines().join("\n");
+    let rendered_lines = app.transcript_rendered_lines();
+    let visible_height = area.height.saturating_sub(2) as usize;
+    let start = app.transcript_scroll().min(rendered_lines.len());
+    let text = rendered_lines
+        .into_iter()
+        .skip(start)
+        .take(visible_height)
+        .collect::<Vec<_>>()
+        .join("\n");
     let title = if app.follow_tail() {
         "Transcript - live tail"
     } else {
         "Transcript - scrolled back"
     };
 
-    let paragraph = Paragraph::new(text)
-        .block(Block::default().borders(Borders::ALL).title(title))
-        .wrap(Wrap { trim: false })
-        .scroll((app.transcript_scroll().min(u16::MAX as usize) as u16, 0));
+    let paragraph = Paragraph::new(text).block(Block::default().borders(Borders::ALL).title(title));
 
     frame.render_widget(paragraph, area);
 
