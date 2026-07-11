@@ -1,0 +1,28 @@
+src/tests/github-auth-service.test.ts
+  s_65db8ffa7c9620::t_b44c0a687b1bbf 9,44-80,84-101
+  s_65db8ffa7c9620::t_f4df4e7de97744 81-83
+  s_65db8ffa7c9620::t_3117377e8d588b 102-137
+src/engine/workers/coding-worker/github/github-auth-types.ts
+  s_65db8ffa7c9620::t_742a1c8389cb12 32-55
+src/engine/workers/coding-worker/github/github-auth-service.ts
+  s_65db8ffa7c9620::t_7251cf3c6f4a2d 186-210,216-217
+  s_65db8ffa7c9620::t_742a1c8389cb12 1-2,11-13,30-43,49,54-55,68,76,79-108,110-121,124-129,131-133,135-159,162-169,257-287,289-338,340-343
+  s_65db8ffa7c9620::t_3f6b27d870d24c 109,122-123,130,134,288,339,344-361
+  s_65db8ffa7c9620::t_dfa0d415d7c10e 427-455
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "36e3fe0c594aa2b139424a4587e780d30d726be2",
+  "prompts": {},
+  "sessions": {
+    "s_65db8ffa7c9620": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f51b3-89d7-7d02-973d-9679f07254a1",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
