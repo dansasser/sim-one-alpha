@@ -1,0 +1,64 @@
+docs/operations/product-tui.md
+  s_a81fff26d52223::t_7bb771141854dd 132-134
+tui/ratatui/tests/agent_client.rs
+  s_a81fff26d52223::t_33e04f82cc76b1 6,256
+  s_a81fff26d52223::t_3263a83b67e6dc 150-176
+  s_a81fff26d52223::t_10adbee28e69fe 177-178
+src/engine/session/session-routing.ts
+  s_a81fff26d52223::t_2c4f47ed155513 19,57,81
+docs/tui/session-management.md
+  s_a81fff26d52223::t_7bb771141854dd 33,84
+tui/ratatui/src/agent.rs
+  s_a81fff26d52223::t_b1515a3260ccf0 219-221
+docs/architecture/tui-cli-session-flow.md
+  s_a81fff26d52223::t_7bb771141854dd 42,155,161
+  s_a81fff26d52223::t_974d885c296c05 162
+tui/ratatui/src/ui.rs
+  s_a81fff26d52223::t_2c4f47ed155513 61
+README.md
+  s_a81fff26d52223::t_7bb771141854dd 547,550
+tui/ratatui/src/main.rs
+  s_a81fff26d52223::t_2c4f47ed155513 148,178
+  s_a81fff26d52223::t_acab506a3a8758 33,40,235
+src/api/routes/chat-events.ts
+  s_a81fff26d52223::t_2c4f47ed155513 114-116,174,275
+scripts/test-ratatui-product.mjs
+  s_a81fff26d52223::t_3263a83b67e6dc 147-161
+  s_a81fff26d52223::t_33e04f82cc76b1 54-57
+  s_a81fff26d52223::t_f52ae5ee0ff6b0 108-110,178
+tui/ratatui/tests/app_state.rs
+  s_a81fff26d52223::t_b1515a3260ccf0 1064-1088,1106,1108,1112,1114
+  s_a81fff26d52223::t_f52ae5ee0ff6b0 581-582,1038,1059-1063,1089-1105
+  s_a81fff26d52223::t_59f0c6e7eb779e 1107,1109-1111
+src/engine/session/session-database.ts
+  s_a81fff26d52223::t_2c4f47ed155513 23,36,284-285,291,301,316,333,344,348-350,353,830,959,967-983,1492,1578
+src/tests/http-endpoints.test.ts
+  s_a81fff26d52223::t_f52ae5ee0ff6b0 304,311,341-363
+docs/tui/ratatui.md
+  s_a81fff26d52223::t_7bb771141854dd 78,88-90
+tui/ratatui/tests/ui_render.rs
+  s_a81fff26d52223::t_b1515a3260ccf0 33,54,69
+  s_a81fff26d52223::t_f52ae5ee0ff6b0 34-37,230,253,255-256,260-285,288,291
+  s_a81fff26d52223::t_e723e31cccec2f 286-287,289-290,292-295
+tui/ratatui/src/app.rs
+  s_a81fff26d52223::t_2c4f47ed155513 496,626-628,630-635,659-662
+  s_a81fff26d52223::t_c26fb026bcdad8 663-664
+docs/architecture/gorombo-flue-map.md
+  s_a81fff26d52223::t_7bb771141854dd 77,146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "dff34d2defbb9bb0d2f3a70b64cfa7771b2a58c7",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
