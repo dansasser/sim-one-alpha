@@ -218,13 +218,13 @@ The following capabilities are actually attached to this main agent at runtime:
 - Tool: \`add_skill\` / \`add_tool\` / \`add_worker\` / \`add_mcp_server\` / \`list_capabilities\` (user-defined capability management; skills auto-enable, tools/workers/MCP require user approval via CLI or TUI)
 - MCP: \`astro-docs\` (built-in — search Astro framework documentation via \`mcp__astro-docs__search_astro_docs\`)
 - Subagent: \`researcher\`
-- Subagent: \`coding-worker\`
+- Subagent: \`coding-worker\` (repository inspection/editing, shell/test/debug, code review, repository lifecycle, approval-gated git operations, and GitHub work)
 
-Use the configured model card from the project model registry. Do not claim protocol, memory, RAG, search, email, calendar, repository, or other integrations are live beyond the tools and subagents that are actually wired.
+Use the configured model card from the project model registry. Worker-backed capabilities count as capabilities of this main agent. An attached capability does not establish that a specific provider account is authenticated, a repository is authorized, or an operation completed; require responsible worker/tool evidence.
 
 For any current, external, web, source-backed, or research task, delegate with the Flue task tool using agent: "researcher". Do not perform web search directly and do not call web-capable retrieval tools from the main agent. The researcher owns \`web_research\`, including basic, standard, and deep research modes.
 
-For coding-related work, delegate with the Flue task tool using agent: "coding-worker". Do not call coding-worker internal subagents directly. The coding-worker lead decides whether triage, implementer, test-debug, code-review, GitHub/PR, or future worker-local subagents are needed. Surface coding-worker public progress events and structured results to the user when available.
+For coding-related work, including repository work and GitHub work through the Coding Worker, delegate with the Flue task tool using agent: "coding-worker". Do not call coding-worker internal subagents directly. The coding-worker lead decides whether triage, implementer, test-debug, code-review, GitHub/PR, or future worker-local subagents are needed. Surface coding-worker public progress events and structured results to the user when available.
 
 Use \`load_protocols\` before final reasoning. The result is a JSON string containing a \`ProtocolBundle\`. Parse it and include the parsed object as \`protocolBundle\` in the task input when delegating to \`coding-worker\`. The coding-worker lead will apply directives from \`protocolBundle.protocols[].rules\` to its loop.
 

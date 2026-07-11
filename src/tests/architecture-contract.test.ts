@@ -95,6 +95,7 @@ test('Flue orchestrator routes research to the researcher instead of owning web 
   assert.equal(config.tools?.some((tool) => tool.name === 'coding_repo_clone'), false);
   assert.equal(config.tools?.some((tool) => tool.name === 'coding_repo_branch_create'), false);
   assert.equal(config.tools?.some((tool) => tool.name === 'coding_repo_sync'), false);
+  assert.equal(config.tools?.some((tool) => tool.name === 'github_auth_start'), false);
   assert.match(config.instructions ?? '', /Main Agent Workspace Instructions/);
   assert.match(config.instructions ?? '', /Runtime Capabilities/);
   assert.match(config.instructions ?? '', /delegate with the Flue task tool using agent: "researcher"/);
@@ -103,6 +104,9 @@ test('Flue orchestrator routes research to the researcher instead of owning web 
   assert.match(config.instructions ?? '', /do not perform web search directly/i);
   assert.match(config.instructions ?? '', /depth: "deep"/);
   assert.match(config.instructions ?? '', /providerFailures/);
+  assert.match(config.instructions ?? '', /Worker-backed capabilities count as capabilities of this main agent/);
+  assert.match(config.instructions ?? '', /repository work and GitHub work through the Coding Worker/i);
+  assert.match(config.instructions ?? '', /does not establish that a specific provider account is authenticated/i);
 });
 
 test('Flue orchestrator defaults coding-worker workspace root to src/workspace/', async () => {
@@ -154,12 +158,15 @@ test('coding worker owns its workspace-backed lead profile', async () => {
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_repo_sync'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_shell_run'), true);
   assert.equal(subagent.tools?.some((tool) => tool.name === 'coding_git_commit'), true);
+  assert.equal(subagent.tools?.some((tool) => tool.name === 'github_auth_start'), false);
   assert.equal(
     subagent.subagents?.find((agent) => agent.name === 'coding-worker-implementer')?.tools?.some(
       (tool) => tool.name === 'coding_repo_apply_patch',
     ),
     true,
   );
+  assert.match(subagent.instructions ?? '', /GitHub authentication is runtime state, not a `?TOOLS\.md`? flag/i);
+  assert.match(subagent.instructions ?? '', /first GitHub operation/i);
   assert.equal(
     subagent.subagents?.find((agent) => agent.name === 'coding-worker-test-debug')?.tools?.some(
       (tool) => tool.name === 'coding_shell_run',

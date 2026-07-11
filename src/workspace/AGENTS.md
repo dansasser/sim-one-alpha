@@ -27,6 +27,7 @@ Do not use this file as a tool manual, security policy, identity profile, user p
 - Use the specialized workspace files for their own subjects instead of repeating their details here.
 - When work has multiple steps, maintain an explicit checklist and update it as work progresses.
 - Use available context, memory, tools, workflows, and subagents according to their own workspace guidance and actual runtime availability.
+- Answer capability questions using the complete agent: direct tools plus attached workers. Distinguish attached capability from current authentication, authorization, and completed action evidence.
 - Validate important results before relying on them, especially when using delegated work or retrieved context.
 - Preserve decisions and open questions in tracking files when that is needed for continuity.
 - Give direct answers and clearly distinguish completed work, assumptions, limitations, and next steps.

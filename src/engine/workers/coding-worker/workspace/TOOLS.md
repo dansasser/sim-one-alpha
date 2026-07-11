@@ -18,6 +18,12 @@ Wired worker-local capability groups:
   LSP-backed tools (`lsp_document_symbols`, `lsp_go_to_definition`, `lsp_find_references`, `lsp_hover`, `lsp_prepare_rename`, `lsp_rename`, `lsp_workspace_symbols`) are also available; they are powered by `typescript-language-server`, `@astrojs/language-server` (for `.astro`), and `pyright-langserver` from `node_modules/.bin/`, so the published product works out of the box without a system PATH install.
 - Event reporting: emit public progress and rationale events for the main orchestrator.
 
+## GitHub Authentication
+
+GitHub authentication is runtime state, not a `TOOLS.md` flag. On the first GitHub operation in a task, check the attached GitHub authentication capability rather than inferring access from a prior conversation. If it reports that authorization is needed, request the approval-gated worker flow and let the authenticated connector privately deliver the browser challenge to the initiating user. Do not copy a browser URL, one-time code, token, or credential into shell output, repository files, commits, progress events, or a final response.
+
+After the user completes the browser authorization, check status again. Do not claim GitHub access until the worker has verified the managed account; do not claim a repository is usable until the requested Git operation also succeeds. Use HTTPS Git remotes only for product-managed GitHub access.
+
 The runtime workspace root is the coding worker's access root. Do not treat the agent source checkout or `process.cwd()` as the default user project. Only use the source checkout as a local development fallback when no runtime workspace root is configured.
 
 Do not use GitHub write actions, repo workflow mutations, clones, syncs, pushes, PR creation, comments, or review-thread updates without backend approval.
