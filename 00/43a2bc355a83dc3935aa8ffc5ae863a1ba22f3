@@ -1,0 +1,55 @@
+src/tests/github-auth-workflow.test.ts
+  s_65db8ffa7c9620::t_1532b80dc2ac56 3-4,6-7,13-22,24-33,35-42,44-48,50-53,56-57,59-78,81-88,91-107,109-114,164-173,176-179,186-216
+  s_65db8ffa7c9620::t_07c597583bd5ff 5,8-11,34,43,49,58,80,108,117-162,174-175,180-185
+  s_65db8ffa7c9620::t_708c99d86a0e29 79
+src/engine/workers/coding-worker/coding-worker.ts
+  s_65db8ffa7c9620::t_66893c16ff6f6a 107-111
+src/tests/github-auth-service.test.ts
+  s_65db8ffa7c9620::t_1532b80dc2ac56 2-11,157-228,624-669
+  s_65db8ffa7c9620::t_09ff0e7645d279 670
+docs/architecture/github-auth-system.md
+  s_65db8ffa7c9620::t_66893c16ff6f6a 36
+src/engine/workers/coding-worker/github/github-auth-utils.ts
+  s_65db8ffa7c9620::t_66893c16ff6f6a 2,12-24
+src/engine/workers/coding-worker/tools/github-credential-utils.ts
+  s_65db8ffa7c9620::t_66893c16ff6f6a 26-27,40-41,73,77-88
+  s_65db8ffa7c9620::t_31a2a4e7d6b66b 89
+src/engine/workers/coding-worker/github/github-auth-service.ts
+  s_65db8ffa7c9620::t_66893c16ff6f6a 15,114,132-138,140-141,151-162,165,167-170,174-177,179-182,186-188,200,210,362-365
+  s_65db8ffa7c9620::t_07c597583bd5ff 139
+docs/architecture/gorombo-flue-map.md
+  s_65db8ffa7c9620::t_66893c16ff6f6a 225-227
+src/tests/github-auth-challenge-relay.test.ts
+  s_65db8ffa7c9620::t_1532b80dc2ac56 96-120,147
+src/tests/architecture-contract.test.ts
+  s_65db8ffa7c9620::t_c192b55f8c5cb6 73-76
+src/tests/github-private-clone.test.ts
+  s_65db8ffa7c9620::t_e53a68f5712178 81
+  s_65db8ffa7c9620::t_34a75b4577baa4 60
+src/workflows/github-auth.ts
+  s_65db8ffa7c9620::t_66893c16ff6f6a 1,5,10,27-29,31-35,41-48,58,82,85,117,121-138
+  s_65db8ffa7c9620::t_94bc9e77da0ddd 139
+src/tests/github-credential-boundaries.test.ts
+  s_65db8ffa7c9620::t_1532b80dc2ac56 2-3,19,23-24,27-29,38,44-83
+  s_65db8ffa7c9620::t_eaacc8f4d1ff47 84
+src/api/ingress/github-auth-challenge-relay.ts
+  s_65db8ffa7c9620::t_66893c16ff6f6a 6-9,41,79,86
+src/tests/github-auth-tools.test.ts
+  s_65db8ffa7c9620::t_1532b80dc2ac56 275,300
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "0043a2bc355a83dc3935aa8ffc5ae863a1ba22f3",
+  "prompts": {},
+  "sessions": {
+    "s_65db8ffa7c9620": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f51b3-89d7-7d02-973d-9679f07254a1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
