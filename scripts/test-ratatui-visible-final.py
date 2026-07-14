@@ -36,12 +36,14 @@ LIVE_DELTA_SENT = threading.Event()
 ALLOW_FINAL = threading.Event()
 SSE_SENT = threading.Event()
 RELEASE_HTTP = threading.Event()
+REQUEST_PATHS = []
 
 
 class GatewayHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def do_GET(self):
+        REQUEST_PATHS.append(("GET", self.path))
         parsed = urlparse(self.path)
         if not parsed.path.startswith("/agents/orchestrator/"):
             self.send_response(404)
@@ -131,8 +133,25 @@ class GatewayHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
+        REQUEST_PATHS.append(("POST", self.path))
         length = int(self.headers.get("Content-Length", "0"))
         self.rfile.read(length)
+        if self.path == "/api/chat/sessions/tui-visible-final-smoke/resume":
+            response = json.dumps(
+                {
+                    "session": {
+                        "id": "tui-visible-final-smoke",
+                        "surface": "tui",
+                        "created": False,
+                    }
+                }
+            ).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+            return
         PROMPT_RECEIVED.set()
         if not RELEASE_HTTP.wait(10):
             return
@@ -221,9 +240,13 @@ def main():
 
     try:
         fcntl.ioctl(master_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 35, 133, 0, 0))
-        read_until(master_fd, b"Prompt", 10)
+        startup_output = read_until(master_fd, b"Prompt", 10)
         if not LIVE_CONNECTED.wait(5):
-            raise AssertionError("packaged TUI did not attach its Flue live stream")
+            startup_output.extend(read_for(master_fd, 1.0))
+            raise AssertionError(
+                "packaged TUI did not attach its Flue live stream; "
+                f"requests={REQUEST_PATHS!r}; output tail={bytes(startup_output[-3000:])!r}"
+            )
         os.write(master_fd, b"show the final response\r")
         if not LIVE_DELTA_SENT.wait(5):
             raise AssertionError("mock gateway did not deliver the live assistant delta")

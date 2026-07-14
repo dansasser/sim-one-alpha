@@ -23,17 +23,36 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SIM_ONE = ROOT / ".gorombo" / "sim-one-cli" / "sim-one"
 REQUESTS = []
+REQUEST_PATHS = []
 
 
 class GatewayHandler(BaseHTTPRequestHandler):
     def do_GET(self):
+        REQUEST_PATHS.append(("GET", self.path))
         self.send_response(404)
         self.send_header("Content-Length", "0")
         self.end_headers()
 
     def do_POST(self):
+        REQUEST_PATHS.append(("POST", self.path))
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length)
+        if self.path == "/api/chat/sessions/tui-interactive-smoke/resume":
+            response = json.dumps(
+                {
+                    "session": {
+                        "id": "tui-interactive-smoke",
+                        "surface": "tui",
+                        "created": False,
+                    }
+                }
+            ).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+            return
         REQUESTS.append(json.loads(body))
         response_lines = [f"interactive smoke response {len(REQUESTS)}"]
         response_lines.extend(
@@ -80,6 +99,15 @@ def wait_for_request_count(expected, timeout):
     while len(REQUESTS) < expected and time.monotonic() < deadline:
         time.sleep(0.02)
     return len(REQUESTS)
+
+
+def wait_for_path(method, prefix, timeout):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if any(seen_method == method and path.startswith(prefix) for seen_method, path in REQUEST_PATHS):
+            return True
+        time.sleep(0.02)
+    return False
 
 
 def drain_output(master_fd, duration=0.3):
@@ -163,6 +191,10 @@ def main():
     try:
         fcntl.ioctl(master_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 100, 0, 0))
         read_until(master_fd, b"Prompt", 10)
+        if not wait_for_path("GET", "/agents/orchestrator/tui-interactive-smoke", 5):
+            raise AssertionError(
+                f"packaged TUI did not validate resume and request its stream: {REQUEST_PATHS!r}"
+            )
 
         os.write(master_fd, b"/res")
         read_until(master_fd, b"Resume a durable session", 5)

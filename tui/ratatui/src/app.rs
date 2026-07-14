@@ -1596,8 +1596,10 @@ impl App {
         }
 
         let prompt = self.prompt.trim().to_string();
-        if self.pending_session_lifecycle.is_some() {
-            self.agent_status = "busy".to_string();
+        if self.pending_session_lifecycle.is_some() || self.startup_phase == StartupPhase::Failed {
+            if self.startup_phase != StartupPhase::Failed {
+                self.agent_status = "busy".to_string();
+            }
             return;
         }
         if !prompt.is_empty() && self.pending_response.is_none() {

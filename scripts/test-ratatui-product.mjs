@@ -10,6 +10,7 @@ import {
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 const serverDir = '.gorombo/sim-one-alpha';
 const serverPath = join(serverDir, 'server.mjs');
@@ -53,7 +54,9 @@ try {
   config.gateway = { ...(config.gateway ?? {}), port };
   config.storage = {
     ...(config.storage ?? {}),
+    flueDatabasePath: join(codingWorkspaceRoot, 'flue.sqlite'),
     sessionDatabasePath: join(codingWorkspaceRoot, 'sessions.sqlite'),
+    vectorStorePath: join(codingWorkspaceRoot, 'vectors'),
   };
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
@@ -79,44 +82,35 @@ try {
   await assertInteractivePromptInput(childEnv);
   await assertVisibleFinalBeforeHttpSettlement(childEnv);
 
-  const startupSmoke = await runProductCommand(
-    ['--port', String(port)],
-    {
-      ...childEnv,
-      SIM_ONE_TUI_TEST_STARTUP: '1',
-    },
-    240_000,
+  const firstStartup = await runFreshStartup(childEnv, 'default launch 1');
+  const firstSessionId = firstStartup.sessionId;
+  const secondStartup = await runFreshStartup(childEnv, 'default launch 2');
+  const secondSessionId = secondStartup.sessionId;
+  if (firstSessionId === secondSessionId) {
+    throw new Error(`default TUI launch reused session ${firstSessionId}`);
+  }
+  assertFreshStartupDatabase(
+    join(codingWorkspaceRoot, 'sessions.sqlite'),
+    [firstSessionId, secondSessionId],
   );
-  stdout = startupSmoke.stdout;
-  stderr = startupSmoke.stderr;
-  assertOutputIncludes(stdout, 'preflight: gateway ready', 'startup smoke did not show gateway preflight');
-  assertOutputIncludes(stdout, 'preflight: all systems go', 'startup smoke did not show all-systems-go preflight');
-  assertOutputIncludes(stdout, 'assistant:', 'startup smoke did not render an agent greeting');
-  const lastStartupTranscriptLine = lastTranscriptLine(stdout);
-  if (!lastStartupTranscriptLine?.startsWith('assistant:')) {
-    throw new Error(`Ratatui startup smoke did not leave the greeting as the last transcript line. Last transcript line: ${lastStartupTranscriptLine ?? '(none)'}\nstdout:\n${stdout}\nstderr:\n${stderr}`);
-  }
-  if (/session:\s*primary/i.test(stdout)) {
-    throw new Error(`Ratatui startup smoke rendered the old primary session default.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
-  }
-  if (/context 0[1-9]|scroll test row|placeholder/i.test(stdout)) {
-    throw new Error(`Ratatui startup smoke rendered scaffold or placeholder transcript content.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
-  }
-  if (stdout.includes('This is an automatic SIM-ONE Alpha local Ratatui TUI startup event')) {
-    throw new Error(`Ratatui status exposed the internal startup prompt as a session title.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
-  }
-  assertOutputIncludes(stdout, '\nSIM-ONE Alpha\nSIM-ONE Alpha | session:', 'fresh startup did not use the product-only header or preserve the status bar');
+  console.log(`[ratatui-product] default launch 1 created a fresh session ${firstSessionId}.`);
+  console.log(`[ratatui-product] default launch 2 created a different fresh session ${secondSessionId}.`);
+  console.log('[ratatui-product] startup emitted no lifecycle slash commands.');
 
   const createSessionSmoke = await runProductCommand(
     ['--port', String(port)],
     {
       ...childEnv,
       SIM_ONE_TUI_TEST_PROMPTS: [
+        '/session',
         '/new Smoke Session',
         '/session',
         '/compact',
         '/clear Smoke Cleared',
         '/session',
+        '/sessions',
+        `/resume ${firstSessionId}`,
+        '/rename Smoke Session Renamed',
         '/exit',
       ].join('\n'),
     },
@@ -140,46 +134,43 @@ try {
     throw new Error(`Ratatui /clear reused the old session id ${sessionId}.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
   }
   assertOutputIncludes(stdout, `system: current session ${clearedSessionId}`, 'session command did not show the cleared active session');
-  assertOutputIncludes(stdout, '\nSIM-ONE Alpha - Smoke Cleared\nSIM-ONE Alpha | session: Smoke Cleared |', 'named clear did not update the header while preserving the status bar');
-  assertOutputIncludes(stdout, `Exited SIM-ONE Alpha TUI. Session: ${clearedSessionId}`, 'exit command did not print the cleared active session id');
-
-  const resumeNamedSessionSmoke = await runProductCommand(
-    ['--port', String(port)],
-    {
-      ...childEnv,
-      SIM_ONE_TUI_TEST_PROMPTS: [
-        `/resume ${clearedSessionId}`,
-        '/exit',
-      ].join('\n'),
-    },
-    240_000,
-  );
-  stdout = resumeNamedSessionSmoke.stdout;
-  stderr = resumeNamedSessionSmoke.stderr;
-  assertOutputIncludes(stdout, '\nSIM-ONE Alpha - Smoke Cleared\nSIM-ONE Alpha | session: Smoke Cleared |', 'resume did not restore the explicit header name or preserve the status bar');
-
-  const resumeSessionSmoke = await runProductCommand(
-    ['--port', String(port)],
-    {
-      ...childEnv,
-      SIM_ONE_TUI_TEST_PROMPTS: [
-        `/resume ${clearedSessionId}`,
-        '/rename Smoke Session Renamed',
-        '/exit',
-      ].join('\n'),
-    },
-    240_000,
-  );
-  stdout = resumeSessionSmoke.stdout;
-  stderr = resumeSessionSmoke.stderr;
-  assertOutputIncludes(stdout, `assistant: Resumed session ${clearedSessionId}.`, 'resume command did not resume the cleared session');
-  assertOutputIncludes(stdout, `assistant: Renamed session ${clearedSessionId} to "Smoke Session Renamed".`, 'rename command did not rename the active session');
+  assertOutputIncludes(stdout, 'system: recent sessions', 'sessions command did not list scoped TUI sessions');
+  assertOutputIncludes(stdout, `assistant: Resumed session ${firstSessionId}.`, 'resume command did not resume the first fresh session');
+  assertOutputIncludes(stdout, `assistant: Renamed session ${firstSessionId} to "Smoke Session Renamed".`, 'rename command did not rename the resumed session');
   assertOutputIncludes(stdout, '\nSIM-ONE Alpha - Smoke Session Renamed\n', 'rename command did not update the product header with the explicit name');
   assertOutputIncludes(stdout, 'session: Smoke Session Renamed', 'rename command did not replace the status-bar session id with the explicit title');
-  assertOutputIncludes(stdout, `Exited SIM-ONE Alpha TUI. Session: ${clearedSessionId}`, 'exit after resume did not print the active session id');
+  assertOutputIncludes(stdout, `Exited SIM-ONE Alpha TUI. Session: ${firstSessionId}`, 'exit command did not print the resumed session id');
 
-  console.log('[ratatui-product] sim-one ran startup preflight, created a clean TUI session, and received an agent greeting.');
-  console.log('[ratatui-product] sim-one session commands created, inspected, compacted, cleared, resumed, renamed, and exited a TUI session.');
+  const eventsBeforeExplicitResume = countNormalizedEventsForSession(
+    join(codingWorkspaceRoot, 'sessions.sqlite'),
+    firstSessionId,
+  );
+  const explicitResumeSmoke = await runProductCommand(
+    ['--port', String(port), '--session', firstSessionId],
+    {
+      ...childEnv,
+      SIM_ONE_TUI_TEST_PROMPTS: '/exit',
+    },
+    240_000,
+  );
+  stdout = explicitResumeSmoke.stdout;
+  stderr = explicitResumeSmoke.stderr;
+  assertOutputIncludes(stdout, `preflight: resumed TUI session ${firstSessionId}`, 'explicit --session did not validate and resume the requested session');
+  assertOutputIncludes(stdout, '\nSIM-ONE Alpha - Smoke Session Renamed\nSIM-ONE Alpha | session: Smoke Session Renamed |', 'explicit --session did not restore the named header and status');
+  assertOutputIncludes(stdout, `Exited SIM-ONE Alpha TUI. Session: ${firstSessionId}`, 'explicit --session exit did not print the requested session id');
+  if (stdout.includes('preflight: created fresh TUI session')) {
+    throw new Error(`explicit --session created a fresh session.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
+  }
+  const eventsAfterExplicitResume = countNormalizedEventsForSession(
+    join(codingWorkspaceRoot, 'sessions.sqlite'),
+    firstSessionId,
+  );
+  if (eventsAfterExplicitResume !== eventsBeforeExplicitResume) {
+    throw new Error(`explicit --session appended a startup greeting to ${firstSessionId}`);
+  }
+
+  console.log(`[ratatui-product] explicit --session resumed the requested session ${firstSessionId} without a greeting.`);
+  console.log('[ratatui-product] session commands and existing interactive controls passed.');
 } finally {
   if (child && child.exitCode === null && child.signalCode === null) {
     child.kill('SIGKILL');
@@ -207,6 +198,84 @@ function productLikePath() {
   return [nodeBin, currentPath].filter(Boolean).join(delimiter);
 }
 
+async function runFreshStartup(env, label) {
+  const result = await runProductCommand(
+    ['--port', String(port)],
+    {
+      ...env,
+      SIM_ONE_TUI_TEST_STARTUP: '1',
+    },
+    240_000,
+  );
+  stdout = result.stdout;
+  stderr = result.stderr;
+  assertOutputIncludes(stdout, 'preflight: gateway ready', `${label} did not show gateway preflight`);
+  assertOutputIncludes(stdout, 'preflight: all systems go', `${label} did not show all-systems-go preflight`);
+  assertOutputIncludes(stdout, 'assistant:', `${label} did not render an agent greeting`);
+  const sessionMatch = /preflight: created fresh TUI session (tui-[^\s]+)/.exec(stdout);
+  if (!sessionMatch?.[1]) {
+    throw new Error(`${label} did not report a fresh TUI session id.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
+  }
+  const lastStartupTranscriptLine = lastTranscriptLine(stdout);
+  if (!lastStartupTranscriptLine?.startsWith('assistant:')) {
+    throw new Error(`${label} did not leave the greeting as the last transcript line. Last transcript line: ${lastStartupTranscriptLine ?? '(none)'}\nstdout:\n${stdout}\nstderr:\n${stderr}`);
+  }
+  if (/session:\s*primary/i.test(stdout)) {
+    throw new Error(`${label} rendered the old primary session default.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
+  }
+  if (/context 0[1-9]|scroll test row|placeholder/i.test(stdout)) {
+    throw new Error(`${label} rendered scaffold or placeholder transcript content.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
+  }
+  if (stdout.includes('This is an automatic SIM-ONE Alpha local Ratatui TUI startup event')) {
+    throw new Error(`${label} exposed the internal startup prompt as a session title.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
+  }
+  assertOutputIncludes(stdout, '\nSIM-ONE Alpha\nSIM-ONE Alpha | session:', `${label} did not use the product-only header or preserve the status bar`);
+  return { ...result, sessionId: sessionMatch[1] };
+}
+
+function assertFreshStartupDatabase(databasePath, sessionIds) {
+  const database = new DatabaseSync(databasePath, { readOnly: true });
+  try {
+    const placeholders = sessionIds.map(() => '?').join(', ');
+    const rows = database
+      .prepare(
+        `SELECT session_id AS sessionId, text
+         FROM normalized_message_events
+         WHERE session_id IN (${placeholders})
+         ORDER BY received_at, event_id`,
+      )
+      .all(...sessionIds);
+    for (const sessionId of sessionIds) {
+      const sessionRows = rows.filter((row) => row.sessionId === sessionId);
+      if (sessionRows.length !== 1) {
+        throw new Error(`fresh startup session ${sessionId} recorded ${sessionRows.length} normalized events instead of one greeting`);
+      }
+      const greeting = String(sessionRows[0].text);
+      if (!greeting.includes('automatic SIM-ONE Alpha local Ratatui TUI startup event') || !greeting.includes('greeting-preflight')) {
+        throw new Error(`fresh startup session ${sessionId} did not record the greeting as its first normal event`);
+      }
+    }
+    const lifecycleSlash = rows.find((row) => /^\/(?:session|new|clear)(?:\s|$)/.test(String(row.text).trim()));
+    if (lifecycleSlash) {
+      throw new Error(`startup recorded lifecycle slash command ${lifecycleSlash.text} in ${lifecycleSlash.sessionId}`);
+    }
+  } finally {
+    database.close();
+  }
+}
+
+function countNormalizedEventsForSession(databasePath, sessionId) {
+  const database = new DatabaseSync(databasePath, { readOnly: true });
+  try {
+    const row = database
+      .prepare('SELECT COUNT(*) AS count FROM normalized_message_events WHERE session_id = ?')
+      .get(sessionId);
+    return Number(row.count);
+  } finally {
+    database.close();
+  }
+}
+
 async function assertDefaultProductCommandStartsCleanStartup(env) {
   const fakeTuiPath = join(codingWorkspaceRoot, process.platform === 'win32' ? 'fake-tui.cmd' : 'fake-tui');
   if (process.platform === 'win32') {
@@ -223,7 +292,7 @@ async function assertDefaultProductCommandStartsCleanStartup(env) {
   );
   const defaultArgs = parseForwardedArgs(defaultLaunch.stdout);
   if (defaultArgs.includes('--session')) {
-    throw new Error(`default sim-one launch forwarded --session instead of letting the gateway resolve the active TUI connector session.\nstdout:\n${defaultLaunch.stdout}\nstderr:\n${defaultLaunch.stderr}`);
+    throw new Error(`default sim-one launch forwarded --session instead of letting Ratatui create a fresh session.\nstdout:\n${defaultLaunch.stdout}\nstderr:\n${defaultLaunch.stderr}`);
   }
 
   const explicitLaunch = await runProductCommand(

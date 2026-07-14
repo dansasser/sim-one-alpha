@@ -676,6 +676,13 @@ fn startup_preflight_reports_lifecycle_and_greeting_failures() {
     assert!(transcript.contains("error: session service unavailable"));
     assert!(transcript.contains("preflight: startup preflight failed"));
     assert!(!lifecycle_failure.startup_succeeded());
+    lifecycle_failure.handle_event(AppEvent::Text("must stay blocked".to_string()));
+    lifecycle_failure.handle_event(AppEvent::Submit);
+    assert_eq!(lifecycle_failure.prompt(), "must stay blocked");
+    assert!(!lifecycle_failure
+        .transcript_lines()
+        .iter()
+        .any(|line| line.contains("you: must stay blocked")));
 
     let mut greeting_failure = App::with_agent_sender_and_lifecycle(
         "",

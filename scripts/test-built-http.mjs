@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 if (!existsSync('.gorombo/sim-one-alpha/server.mjs')) {
   throw new Error('.gorombo/sim-one-alpha/server.mjs does not exist. Run pnpm run build before the built HTTP test.');
@@ -14,6 +15,9 @@ const envFileValues = parseEnvFile('.env');
 const requestSecret = process.env.GOROMBO_HTTP_TEST_API_SECRET || envFileValues.API_SECRET || 'built-http-test-secret';
 const nodeArgs = existsSync('.env') ? ['--env-file=.env', '.gorombo/sim-one-alpha/server.mjs'] : ['.gorombo/sim-one-alpha/server.mjs'];
 const codingWorkspaceRoot = mkdtempSync(join(tmpdir(), 'built-http-coding-workspace-'));
+const configPath = '.gorombo/sim-one-alpha/gorombo.config.json';
+const originalConfig = readFileSync(configPath, 'utf8');
+const sessionDatabasePath = join(codingWorkspaceRoot, 'sessions.sqlite');
 const modelEnv = {
   OLLAMA_API_KEY: process.env.OLLAMA_API_KEY || envFileValues.OLLAMA_API_KEY || 'built-http-test-key',
   CODEX_BRAIN_LOCAL_API_KEY:
@@ -22,30 +26,41 @@ const modelEnv = {
     process.env.CODEX_BRAIN_LOCAL_API_URL || envFileValues.CODEX_BRAIN_LOCAL_API_URL || 'https://dt1.example.test/v1',
 };
 
-const child = spawn(process.execPath, nodeArgs, {
-  cwd: process.cwd(),
-  env: {
-    ...process.env,
-    ...modelEnv,
-    PORT: String(port),
-    API_SECRET: requestSecret,
-    GOROMBO_WORKSPACE_ROOT: codingWorkspaceRoot,
-    TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || envFileValues.TELEGRAM_BOT_TOKEN || 'built-http-test-bot-token',
-    TELEGRAM_WEBHOOK_SECRET_TOKEN: process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN || envFileValues.TELEGRAM_WEBHOOK_SECRET_TOKEN || 'built-http-test-webhook-secret',
-  },
-  stdio: ['ignore', 'pipe', 'pipe'],
-});
-
 let stderr = '';
 let stdout = '';
-child.stderr.on('data', (chunk) => {
-  stderr += String(chunk);
-});
-child.stdout.on('data', (chunk) => {
-  stdout += String(chunk);
-});
+let child;
 
 try {
+  const config = JSON.parse(originalConfig);
+  config.storage = {
+    ...(config.storage ?? {}),
+    flueDatabasePath: join(codingWorkspaceRoot, 'flue.sqlite'),
+    sessionDatabasePath,
+    vectorStorePath: join(codingWorkspaceRoot, 'vectors'),
+  };
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+
+  child = spawn(process.execPath, nodeArgs, {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      ...modelEnv,
+      PORT: String(port),
+      API_SECRET: requestSecret,
+      GOROMBO_WORKSPACE_ROOT: codingWorkspaceRoot,
+      GOROMBO_TEST_MODE: '1',
+      TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || envFileValues.TELEGRAM_BOT_TOKEN || 'built-http-test-bot-token',
+      TELEGRAM_WEBHOOK_SECRET_TOKEN: process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN || envFileValues.TELEGRAM_WEBHOOK_SECRET_TOKEN || 'built-http-test-webhook-secret',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  child.stderr.on('data', (chunk) => {
+    stderr += String(chunk);
+  });
+  child.stdout.on('data', (chunk) => {
+    stdout += String(chunk);
+  });
+
   await waitForHealth();
 
   const externalHeaders = { 'x-forwarded-for': '10.0.0.1' };
@@ -82,16 +97,128 @@ try {
 
   await expectStatus(`${baseUrl}/api/chat/sessions`, { method: 'GET', headers: externalHeaders }, 401, 'chat sessions without secret');
 
+  const lifecycleIdentity = {
+    connector: 'tui',
+    actorId: 'built-http-lifecycle-user',
+    conversationId: `built-http-lifecycle-${Date.now().toString(36)}`,
+    threadId: 'local-tui',
+  };
+  const firstLifecycle = await expectJsonStatus(
+    `${baseUrl}/api/chat/sessions`,
+    {
+      method: 'POST',
+      headers: {
+        ...externalHeaders,
+        'content-type': 'application/json',
+        'x-api-secret': requestSecret,
+      },
+      body: JSON.stringify(lifecycleIdentity),
+    },
+    201,
+    'first fresh TUI lifecycle session',
+    (body) => {
+      assertJson(body.session?.created === true, `first lifecycle call did not create a session.\n${JSON.stringify(body)}`);
+    },
+  );
+  const secondLifecycle = await expectJsonStatus(
+    `${baseUrl}/api/chat/sessions`,
+    {
+      method: 'POST',
+      headers: {
+        ...externalHeaders,
+        'content-type': 'application/json',
+        'x-api-secret': requestSecret,
+      },
+      body: JSON.stringify(lifecycleIdentity),
+    },
+    201,
+    'second fresh TUI lifecycle session',
+    (body) => {
+      assertJson(body.session?.created === true, `second lifecycle call did not create a session.\n${JSON.stringify(body)}`);
+    },
+  );
+  const firstLifecycleId = firstLifecycle.session?.id;
+  const secondLifecycleId = secondLifecycle.session?.id;
+  assertJson(typeof firstLifecycleId === 'string', 'first lifecycle response did not include a session id');
+  assertJson(typeof secondLifecycleId === 'string', 'second lifecycle response did not include a session id');
+  assertJson(firstLifecycleId !== secondLifecycleId, `fresh lifecycle calls reused session ${firstLifecycleId}`);
+  assertJson(
+    countNormalizedEventsForActors(sessionDatabasePath, [lifecycleIdentity.actorId]) === 0,
+    'session lifecycle calls created normalized chat-message events',
+  );
+
   await expectJsonStatus(
-    `${baseUrl}/api/chat/sessions?limit=3`,
+    `${baseUrl}/api/chat/sessions/${encodeURIComponent(firstLifecycleId)}/resume`,
+    {
+      method: 'POST',
+      headers: {
+        ...externalHeaders,
+        'content-type': 'application/json',
+        'x-api-secret': requestSecret,
+      },
+      body: JSON.stringify(lifecycleIdentity),
+    },
+    200,
+    'owned TUI lifecycle resume',
+    (body) => {
+      assertJson(
+        body.session?.id === firstLifecycleId && body.session?.created === false,
+        `owned resume did not return exact session metadata.\n${JSON.stringify(body)}`,
+      );
+    },
+  );
+
+  await expectStatus(
+    `${baseUrl}/api/chat/sessions/${encodeURIComponent(firstLifecycleId)}/resume`,
+    {
+      method: 'POST',
+      headers: {
+        ...externalHeaders,
+        'content-type': 'application/json',
+        'x-api-secret': requestSecret,
+      },
+      body: JSON.stringify({ ...lifecycleIdentity, actorId: 'built-http-lifecycle-other-user' }),
+    },
+    403,
+    'cross-actor TUI lifecycle resume',
+  );
+
+  const lifecycleQuery = new URLSearchParams({
+    ...lifecycleIdentity,
+    limit: '10',
+  });
+  await expectJsonStatus(
+    `${baseUrl}/api/chat/sessions?${lifecycleQuery}`,
     {
       method: 'GET',
       headers: { ...externalHeaders, 'x-api-secret': requestSecret },
     },
     200,
-    'chat sessions with secret',
+    'scope-filtered TUI lifecycle list',
     (body) => {
-      assertJson(Array.isArray(body.sessions), 'chat sessions response did not include a sessions array');
+      const ids = new Set(body.sessions?.map((session) => session.sessionId));
+      assertJson(
+        ids.has(firstLifecycleId) && ids.has(secondLifecycleId) && ids.size === 2,
+        `scoped lifecycle list did not contain exactly both owned sessions.\n${JSON.stringify(body)}`,
+      );
+    },
+  );
+
+  const otherLifecycleQuery = new URLSearchParams({
+    ...lifecycleIdentity,
+    actorId: 'built-http-lifecycle-other-user',
+    limit: '10',
+  });
+  await expectJsonStatus(
+    `${baseUrl}/api/chat/sessions?${otherLifecycleQuery}`,
+    {
+      method: 'GET',
+      headers: { ...externalHeaders, 'x-api-secret': requestSecret },
+    },
+    200,
+    'other-actor TUI lifecycle list',
+    (body) => {
+      assertJson(Array.isArray(body.sessions) && body.sessions.length === 0, 'other actor could list owned TUI sessions');
     },
   );
 
@@ -343,9 +470,12 @@ try {
     },
   );
 
-  console.log('Built HTTP integration test passed.');
+  console.log('Built HTTP integration test passed, including isolated fresh-session lifecycle checks.');
 } finally {
-  await stopChild(child);
+  if (child) {
+    await stopChild(child);
+  }
+  writeFileSync(configPath, originalConfig);
   rmSync(codingWorkspaceRoot, { recursive: true, force: true });
 }
 
@@ -448,6 +578,19 @@ async function expectJsonStatus(url, init, expectedStatus, label, validate) {
 function assertJson(condition, message) {
   if (!condition) {
     throw new Error(message);
+  }
+}
+
+function countNormalizedEventsForActors(databasePath, actorIds) {
+  const database = new DatabaseSync(databasePath, { readOnly: true });
+  try {
+    const placeholders = actorIds.map(() => '?').join(', ');
+    const row = database
+      .prepare(`SELECT COUNT(*) AS count FROM normalized_message_events WHERE actor_id IN (${placeholders})`)
+      .get(...actorIds);
+    return Number(row.count);
+  } finally {
+    database.close();
   }
 }
 
