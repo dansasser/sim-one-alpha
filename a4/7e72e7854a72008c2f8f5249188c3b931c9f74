@@ -1,0 +1,55 @@
+src/agents/orchestrator.ts
+  s_65db8ffa7c9620::t_3c0086e63cb893 69,75
+src/tests/architecture-contract.test.ts
+  s_65db8ffa7c9620::t_781c2aebaace25 116
+docs/architecture/github-auth-system.md
+  s_65db8ffa7c9620::t_9bce38d28a6458 40-45
+src/engine/workers/coding-worker/coding-worker.ts
+  s_65db8ffa7c9620::t_3c0086e63cb893 55-56,198,230,241
+docs/architecture/gorombo-flue-map.md
+  s_65db8ffa7c9620::t_9bce38d28a6458 230-232
+src/tests/chat-prompt.test.ts
+  s_65db8ffa7c9620::t_2a237bed01ac73 54,61,63-64
+src/channels/telegram.ts
+  s_65db8ffa7c9620::t_cac03d6db65ab8 245-246,258-259,261,264-265,268
+src/tests/github-auth-tools.test.ts
+  s_65db8ffa7c9620::t_600564328c5606 169-200
+  s_65db8ffa7c9620::t_2a237bed01ac73 239,253,255-256,259,261,439,444
+  s_65db8ffa7c9620::t_10af26a7e66da2 264-272,274
+src/tests/trusted-event-admission.test.ts
+  s_65db8ffa7c9620::t_2a237bed01ac73 27,32-34,61,65,69-71,110
+  s_65db8ffa7c9620::t_781c2aebaace25 5,72-109
+  s_65db8ffa7c9620::t_10af26a7e66da2 19,35-60
+src/engine/workers/coding-worker/workspace/TOOLS.md
+  s_65db8ffa7c9620::t_9bce38d28a6458 27
+src/workspace/TOOLS.md
+  s_65db8ffa7c9620::t_9bce38d28a6458 37
+src/engine/workers/coding-worker/github/github-auth-tools.ts
+  s_65db8ffa7c9620::t_42cdb199dc283f 31,33,45,51-52,55,58,70,73,76,175,178,199-200,223-227
+  s_65db8ffa7c9620::t_2a0f5d42ece73a 182-187,193-197
+  s_65db8ffa7c9620::t_d3fa867aa6e359 198
+src/api/routes/chat-prompt.ts
+  s_65db8ffa7c9620::t_609b367b2b4b24 9
+src/engine/session/session-database.ts
+  s_65db8ffa7c9620::t_42cdb199dc283f 447-449
+  s_65db8ffa7c9620::t_781c2aebaace25 963
+  s_65db8ffa7c9620::t_3d82ab8c01e800 87,99,436,452-453,456,468-471,473,475-476,478,490,495,1060,1063-1065,1071-1082
+  s_65db8ffa7c9620::t_2fd1fc9236ae5e 446
+  s_65db8ffa7c9620::t_23e0464beb529a 1083-1084
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "a47e72e7854a72008c2f8f5249188c3b931c9f74",
+  "prompts": {},
+  "sessions": {
+    "s_65db8ffa7c9620": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f51b3-89d7-7d02-973d-9679f07254a1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
