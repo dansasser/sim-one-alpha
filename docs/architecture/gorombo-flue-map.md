@@ -222,8 +222,9 @@ src/workflows/research.ts
   Initializes the researcher.
 
 src/workflows/github-auth.ts
-  Finite admitted operator/UI workflow for Coding Worker managed GitHub auth.
-  Shares the worker auth runtime, returns no device code, and never waits for browser completion.
+  Finite internal workflow for Coding Worker managed GitHub auth.
+  Requires matching request-local trusted event context, shares the worker auth runtime, returns no device code, and never waits for browser completion.
+  Exports no public route until durable event-scoped workflow admission exists.
 
 src/workflows/retrieval.ts
   Shared retrieval machinery.

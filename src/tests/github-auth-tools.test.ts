@@ -272,7 +272,7 @@ test('a later trusted event can continue an approved GitHub login request', asyn
       resolveEvent: (eventId) => eventId === firstEvent.id ? firstEvent : undefined,
     }), 'github_auth_start');
     const blocked = JSON.parse(await requestTool.execute({ eventId: firstEvent.id })) as {
-      request: { id: string };
+      request: { id: string; metadata?: Record<string, unknown> };
     };
     await approvalService.recordDecision({
       requestId: blocked.request.id,
@@ -297,6 +297,7 @@ test('a later trusted event can continue an approved GitHub login request', asyn
     assert.equal(continued.state, 'authorization_pending');
     assert.equal(continued.blocked, undefined);
     assert.equal(startAudience?.eventId, continuationEvent.id);
+    assert.equal(startSessionId, blocked.request.metadata?.authSessionId);
     assert.deepEqual(relay.consume({
       connector: continuationEvent.connector,
       actorId: continuationEvent.actor.id,

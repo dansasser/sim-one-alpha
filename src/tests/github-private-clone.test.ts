@@ -57,6 +57,7 @@ test('private GitHub HTTPS clones receive managed credentials while other remote
       GIT_CONFIG_COUNT: '2',
       GIT_CONFIG_KEY_0: 'credential.https://github.com.helper',
       GIT_CONFIG_VALUE_0: '',
+      GIT_ASKPASS: '',
       GIT_CONFIG_KEY_1: 'credential.https://github.com.helper',
       GIT_CONFIG_VALUE_1: '!gh auth git-credential',
     });
@@ -77,6 +78,7 @@ test('private GitHub HTTPS clones receive managed credentials while other remote
       GIT_CONFIG_COUNT: '1',
       GIT_CONFIG_KEY_0: 'credential.helper',
       GIT_CONFIG_VALUE_0: '',
+      GIT_ASKPASS: '',
       GIT_TERMINAL_PROMPT: '0',
     });
   } finally {

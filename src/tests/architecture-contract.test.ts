@@ -70,6 +70,10 @@ test('low-level web retrieval workflows are internal machinery, not public route
   assert.doesNotMatch(readText('src/workflows/web-research.ts'), /export const route/);
 });
 
+test('GitHub auth workflow stays internal until it has durable event-scoped admission', () => {
+  assert.doesNotMatch(readText('src/workflows/github-auth.ts'), /export const route/);
+});
+
 test('Flue orchestrator routes research to the researcher instead of owning web tools', async () => {
   const config = await orchestratorAgent.initialize({
     id: 'architecture-contract',

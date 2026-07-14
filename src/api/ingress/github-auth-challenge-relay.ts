@@ -3,6 +3,10 @@ import type {
   GithubAuthChallenge,
 } from '../../engine/workers/coding-worker/github/github-auth-types.js';
 import type { NormalizedMessageEvent } from '../../core/types/index.js';
+import {
+  sameGithubAuthAudience,
+  sameGithubAuthConversationAudience,
+} from '../../engine/workers/coding-worker/github/github-auth-utils.js';
 
 export interface DeliveredGithubAuthChallenge {
   sessionId: string;
@@ -34,7 +38,7 @@ export class InMemoryGithubAuthChallengeRelay implements GithubAuthChallengeRela
     const previous = this.#challenges.get(eventId);
     if (previous?.expiryTimer) clearTimeout(previous.expiryTimer);
     for (const [storedEventId, stored] of this.#challenges) {
-      if (storedEventId !== eventId && sameConversationAudience(stored.challenge.audience, challenge.audience)) {
+      if (storedEventId !== eventId && sameGithubAuthConversationAudience(stored.challenge.audience, challenge.audience)) {
         if (stored.expiryTimer) clearTimeout(stored.expiryTimer);
         this.#challenges.delete(storedEventId);
       }
@@ -72,14 +76,14 @@ export class InMemoryGithubAuthChallengeRelay implements GithubAuthChallengeRela
 
   #findChallenge(audience: GithubAuthAudience): [string, StoredChallenge] | undefined {
     const exact = this.#challenges.get(audience.eventId);
-    if (exact && sameAudience(exact.challenge.audience, audience)) {
+    if (exact && sameGithubAuthAudience(exact.challenge.audience, audience)) {
       return [audience.eventId, exact];
     }
 
     // A later authenticated chat turn has a new event id. It may continue the
     // approved flow only inside the same connector/actor/conversation scope.
     return [...this.#challenges.entries()].find(([, stored]) =>
-      sameConversationAudience(stored.challenge.audience, audience));
+      sameGithubAuthConversationAudience(stored.challenge.audience, audience));
   }
 
   #scheduleExpiry(eventId: string, stored: StoredChallenge, expiresAt: number): void {
@@ -114,15 +118,4 @@ export function githubAuthAudienceFromEvent(event: NormalizedMessageEvent): Gith
     conversationId: event.conversation.id,
     eventId: event.id,
   };
-}
-
-function sameAudience(left: GithubAuthAudience, right: GithubAuthAudience): boolean {
-  return sameConversationAudience(left, right) &&
-    left.eventId === right.eventId;
-}
-
-function sameConversationAudience(left: GithubAuthAudience, right: GithubAuthAudience): boolean {
-  return left.connector === right.connector &&
-    left.actorId === right.actorId &&
-    left.conversationId === right.conversationId;
 }

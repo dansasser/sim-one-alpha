@@ -104,7 +104,11 @@ export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOp
     const service = await getAuthService();
     const status = await service.status();
     if (status.state !== 'authenticated') {
-      throw new Error(`Managed GitHub authentication is not usable: ${status.failureCode ?? status.state}`);
+      const error = new Error(`Managed GitHub authentication is not usable: ${status.failureCode ?? status.state}`);
+      if (status.state === 'unauthenticated' || status.state === 'authorization_pending' || status.state === 'verifying') {
+        error.name = 'GithubAuthenticationUnavailableError';
+      }
+      throw error;
     }
     return service;
   };

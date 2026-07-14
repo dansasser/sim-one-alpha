@@ -12,6 +12,7 @@ import type {
   GithubAuthChallenge,
   GithubAuthStartInput,
 } from './github-auth-types.js';
+import { sameGithubAuthAudience } from './github-auth-utils.js';
 
 const execFileAsync = promisify(execFile);
 const profilePattern = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -110,7 +111,7 @@ class DefaultGithubAuthService implements GithubAuthService {
     }
     const existing = [...this.#sessions.values()].find((session) => session.profile === profile && isActiveState(session.state));
     if (existing) {
-      if (!sameAudience(existing.audience, input.audience)) {
+      if (!sameGithubAuthAudience(existing.audience, input.audience)) {
         throw new Error('GitHub auth profile already has an active session for another audience.');
       }
       return toResult(existing, checkedAt);
@@ -127,16 +128,17 @@ class DefaultGithubAuthService implements GithubAuthService {
     };
     this.#sessions.set(session.id, session);
     this.scheduleExpiry(session);
-    const env = await this.createGhEnv(profile);
-    let output = '';
-    let resolveChallenge: ((challenge: GithubAuthChallenge) => void) | undefined;
-    let rejectChallenge: ((error: Error) => void) | undefined;
-    const challengePromise = new Promise<GithubAuthChallenge>((resolveChallengePromise, rejectChallengePromise) => {
-      resolveChallenge = resolveChallengePromise;
-      rejectChallenge = rejectChallengePromise;
-    });
-
     try {
+      const env = await this.createGhEnv(profile);
+      if (!this.isCurrentActiveSession(session)) {
+        return toResult(session, new Date().toISOString());
+      }
+      let output = '';
+      let promptOutput = '';
+      let resolveChallenge: ((challenge: GithubAuthChallenge) => void) | undefined;
+      const challengePromise = new Promise<GithubAuthChallenge>((resolveChallengePromise) => {
+        resolveChallenge = resolveChallengePromise;
+      });
       let loginProcess: GithubAuthLoginProcess | undefined;
       let shouldSubmitEnter = false;
       let submittedEnter = false;
@@ -146,27 +148,44 @@ class DefaultGithubAuthService implements GithubAuthService {
         submittedEnter = true;
       };
       loginProcess = await this.loginRunner.start(loginArgs, env, (chunk) => {
-        if (!resolveChallenge) return;
-        output += chunk;
-        const parsed = parseDeviceChallenge(output, session);
-        if (parsed && resolveChallenge) {
-          resolveChallenge(parsed);
-          resolveChallenge = undefined;
-          if (/press\s+enter/i.test(output)) {
-            shouldSubmitEnter = true;
-            submitEnter();
-          }
-          output = '';
+        if (!this.isCurrentActiveSession(session)) return;
+        promptOutput = `${promptOutput}${chunk}`.slice(-256);
+        if (/press\s+enter/i.test(promptOutput)) {
+          shouldSubmitEnter = true;
         }
+        if (resolveChallenge) {
+          output += chunk;
+          const parsed = parseDeviceChallenge(output, session);
+          if (parsed) {
+            resolveChallenge(parsed);
+            resolveChallenge = undefined;
+            output = '';
+          }
+        }
+        submitEnter();
       });
+      if (!this.isCurrentActiveSession(session)) {
+        loginProcess.cancel();
+        return toResult(session, new Date().toISOString());
+      }
       session.process = loginProcess;
       submitEnter();
       const challenge = await withTimeout(challengePromise, 15_000, 'GitHub device challenge was not available.');
+      if (!this.isCurrentActiveSession(session)) {
+        loginProcess.cancel();
+        return toResult(session, new Date().toISOString());
+      }
       await input.deliverChallenge(challenge);
+      if (!this.isCurrentActiveSession(session)) {
+        loginProcess.cancel();
+        return toResult(session, new Date().toISOString());
+      }
       this.observeCompletion(session);
       return toResult(session, new Date().toISOString());
     } catch (error) {
-      rejectChallenge?.(toError(error));
+      if (!this.isCurrentActiveSession(session)) {
+        return toResult(session, new Date().toISOString());
+      }
       const result = this.finishSession(session, 'failed', 'github_device_login_failed', true);
       return result;
     }
@@ -178,7 +197,7 @@ class DefaultGithubAuthService implements GithubAuthService {
     if (!session) {
       throw new Error('GitHub auth session was not found.');
     }
-    if (!sameAudience(session.audience, input.audience)) {
+    if (!sameGithubAuthAudience(session.audience, input.audience)) {
       throw new Error('GitHub auth session audience does not match the initiating audience.');
     }
     return this.finishSession(session, 'cancelled', undefined, true);
@@ -188,9 +207,7 @@ class DefaultGithubAuthService implements GithubAuthService {
     const profile = normalizeProfile(input.profile);
     const activeSession = [...this.#sessions.values()].find((session) => session.profile === profile && isActiveState(session.state));
     if (activeSession) {
-      if (this.expireSessionIfNeeded(activeSession)) {
-        return toResult(activeSession, new Date().toISOString());
-      }
+      this.expireSessionIfNeeded(activeSession);
       return toResult(activeSession, new Date().toISOString());
     }
     return this.verifyProfile(profile);
@@ -342,6 +359,10 @@ class DefaultGithubAuthService implements GithubAuthService {
     return true;
   }
 
+  private isCurrentActiveSession(session: AuthSession): boolean {
+    return this.#sessions.get(session.id) === session && isActiveState(session.state);
+  }
+
   private finishSession(
     session: AuthSession,
     state: GithubAuthResult['state'],
@@ -411,13 +432,6 @@ function assertAudience(audience: GithubAuthStartInput['audience']): void {
       throw new Error(`GitHub auth audience requires ${key}.`);
     }
   }
-}
-
-function sameAudience(left: GithubAuthStartInput['audience'], right: GithubAuthStartInput['audience']): boolean {
-  return left.connector === right.connector &&
-    left.actorId === right.actorId &&
-    left.conversationId === right.conversationId &&
-    left.eventId === right.eventId;
 }
 
 function isExplicitLoggedOutResult(command: GithubAuthCommandResult): boolean {

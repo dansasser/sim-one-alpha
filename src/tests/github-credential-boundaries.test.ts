@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -15,14 +16,17 @@ import { createCodingWorkerSubagent } from '../engine/workers/coding-worker/codi
 import { createCodingGitTools } from '../engine/workers/coding-worker/tools/coding-git-tools.js';
 import { createCodingRepoWorkflowTools } from '../engine/workers/coding-worker/tools/coding-repo-workflow-tools.js';
 import type { CodingSandboxRuntime } from '../engine/workers/coding-worker/tools/sandbox-runtime.js';
+import { githubUrlCredentialOptions } from '../engine/workers/coding-worker/tools/github-credential-utils.js';
 
 const managedGithubEnv = {
   GH_CONFIG_DIR: '/managed/github/default/gh',
-  GIT_CONFIG_COUNT: '2',
-  GIT_CONFIG_KEY_0: 'credential.https://github.com.helper',
+  GIT_CONFIG_COUNT: '3',
+  GIT_CONFIG_KEY_0: 'credential.helper',
   GIT_CONFIG_VALUE_0: '',
   GIT_CONFIG_KEY_1: 'credential.https://github.com.helper',
-  GIT_CONFIG_VALUE_1: '!gh auth git-credential',
+  GIT_CONFIG_VALUE_1: '',
+  GIT_CONFIG_KEY_2: 'credential.https://github.com.helper',
+  GIT_CONFIG_VALUE_2: '!gh auth git-credential',
 };
 
 const unmanagedGitEnv = {
@@ -31,10 +35,52 @@ const unmanagedGitEnv = {
   GIT_CONFIG_COUNT: '1',
   GIT_CONFIG_KEY_0: 'credential.helper',
   GIT_CONFIG_VALUE_0: '',
+  GIT_ASKPASS: '',
   GIT_TERMINAL_PROMPT: '0',
 };
 
 const expectedManagedGitEnv = { ...unmanagedGitEnv, ...managedGithubEnv };
+
+test('credential-free GitHub HTTPS operations continue when managed authentication is unavailable', async () => {
+  const unavailable = new Error('Managed GitHub authentication is not usable: unauthenticated');
+  unavailable.name = 'GithubAuthenticationUnavailableError';
+
+  const result = await githubUrlCredentialOptions(
+    'https://github.com/owner/public.git',
+    async () => { throw unavailable; },
+  );
+
+  assert.deepEqual(result.env, unmanagedGitEnv);
+});
+
+test('credential-free Git environment overrides repository-local core.askPass', async (t) => {
+  if (process.platform === 'win32') {
+    t.skip('POSIX askpass regression uses an executable shell script.');
+    return;
+  }
+  const root = mkdtempSync(join(tmpdir(), 'github-no-credential-'));
+  const repo = join(root, 'repo');
+  const askpass = join(root, 'askpass.sh');
+  const marker = join(root, 'askpass-invoked');
+  writeFileSync(askpass, `#!/bin/sh\nprintf invoked > "${marker}"\nprintf secret\n`);
+  chmodSync(askpass, 0o700);
+
+  try {
+    assert.equal(spawnSync('git', ['init', repo]).status, 0);
+    assert.equal(spawnSync('git', ['-C', repo, 'config', 'core.askPass', askpass]).status, 0);
+    const { env } = await githubUrlCredentialOptions('https://example.com/repo.git', undefined);
+
+    spawnSync('git', ['-C', repo, 'credential', 'fill'], {
+      env: { ...process.env, ...env },
+      input: 'protocol=https\nhost=example.com\n\n',
+      encoding: 'utf8',
+    });
+
+    assert.equal(existsSync(marker), false, 'repository-local core.askPass was executed');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('approved PR creation receives the managed GitHub CLI environment', async () => {
   const workspaceRoot = mkdtempSync(join(tmpdir(), 'github-pr-env-'));

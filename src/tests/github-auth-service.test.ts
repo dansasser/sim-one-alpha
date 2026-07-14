@@ -1,5 +1,14 @@
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -139,6 +148,78 @@ test('GitHub auth start relays a device challenge privately and returns only opa
     } as Parameters<typeof service.cancel>[0]);
     assert.equal(cancelledResult.state, 'cancelled');
     assert.equal(cancelled, true);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmSync(authRoot, { recursive: true, force: true });
+  }
+});
+
+test('GitHub auth start evicts a failed session when managed profile setup fails', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'github-auth-workspace-'));
+  const authRoot = mkdtempSync(join(tmpdir(), 'github-auth-root-'));
+  const profilesRoot = join(authRoot, 'profiles');
+  let loginStarts = 0;
+  const loginRunner: GithubAuthLoginRunner = {
+    start: async (_args, _env, onOutput) => {
+      loginStarts += 1;
+      onOutput('Copy your one-time code: WXYZ-1234\nOpen https://github.com/login/device.');
+      return {
+        completion: new Promise(() => undefined),
+        cancel: () => undefined,
+      };
+    },
+  };
+
+  try {
+    const service = await createGithubAuthService({ workspaceRoot, authRoot, loginRunner });
+    writeFileSync(profilesRoot, 'blocks managed profile directory creation');
+
+    const failed = await service.start({
+      audience: initiatingAudience,
+      deliverChallenge: () => undefined,
+    });
+    assert.equal(failed.state, 'failed');
+    assert.equal(loginStarts, 0);
+
+    rmSync(profilesRoot, { force: true });
+    const retried = await service.start({
+      audience: initiatingAudience,
+      deliverChallenge: () => undefined,
+    });
+    assert.equal(retried.state, 'authorization_pending');
+    assert.equal(loginStarts, 1);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmSync(authRoot, { recursive: true, force: true });
+  }
+});
+
+test('GitHub auth submits Enter when the prompt arrives after the device challenge', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'github-auth-workspace-'));
+  const authRoot = mkdtempSync(join(tmpdir(), 'github-auth-root-'));
+  const submittedInput: string[] = [];
+  const loginRunner: GithubAuthLoginRunner = {
+    start: async (_args, _env, onOutput) => {
+      onOutput('Copy your one-time code: WXYZ-1234\nOpen https://github.com/login/device.');
+      onOutput('\nPress En');
+      onOutput('ter to open your browser.');
+      return {
+        completion: new Promise(() => undefined),
+        cancel: () => undefined,
+        submitInput: (value) => submittedInput.push(value),
+      };
+    },
+  };
+
+  try {
+    const service = await createGithubAuthService({ workspaceRoot, authRoot, loginRunner });
+    const result = await service.start({
+      audience: initiatingAudience,
+      deliverChallenge: () => undefined,
+    });
+
+    assert.equal(result.state, 'authorization_pending');
+    assert.deepEqual(submittedInput, ['\n']);
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
     rmSync(authRoot, { recursive: true, force: true });
@@ -534,6 +615,53 @@ test('GitHub auth expiry cancels and evicts an abandoned authorization process',
       } as Parameters<typeof service.cancel>[0]),
       /not found/i,
     );
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmSync(authRoot, { recursive: true, force: true });
+  }
+});
+
+test('GitHub auth cancels a login process that starts after the authorization expires', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'github-auth-workspace-'));
+  const authRoot = mkdtempSync(join(tmpdir(), 'github-auth-root-'));
+  const loginProcess = deferred<Awaited<ReturnType<GithubAuthLoginRunner['start']>>>();
+  let emitOutput: ((value: string) => void) | undefined;
+  let cancelled = false;
+  let deliveries = 0;
+  const loginRunner: GithubAuthLoginRunner = {
+    start: async (_args, _env, onOutput) => {
+      emitOutput = onOutput;
+      return loginProcess.promise;
+    },
+  };
+
+  try {
+    const service = await createGithubAuthService({
+      workspaceRoot,
+      authRoot,
+      loginRunner,
+      sessionTtlMs: 10,
+    });
+    const start = service.start({
+      audience: initiatingAudience,
+      deliverChallenge: () => {
+        deliveries += 1;
+      },
+    });
+
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
+    emitOutput?.('Copy your one-time code: WXYZ-1234\nOpen https://github.com/login/device.');
+    loginProcess.resolve({
+      completion: new Promise(() => undefined),
+      cancel: () => {
+        cancelled = true;
+      },
+    });
+
+    const result = await start;
+    assert.equal(result.state, 'expired');
+    assert.equal(cancelled, true);
+    assert.equal(deliveries, 0);
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
     rmSync(authRoot, { recursive: true, force: true });

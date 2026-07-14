@@ -33,7 +33,7 @@ context while the orchestrator and Coding Worker execute. Authentication tools
 validate any model-supplied `eventId` against that trusted event and fail closed
 when no trusted event context is available.
 
-`src/workflows/github-auth.ts` is a finite, admitted Flue workflow for UI/operator callers. It shares the same deep auth runtime as the worker tools. A workflow invocation starts or checks one transition and returns; it never waits for browser completion or imports another workflow's `run()` function.
+`src/workflows/github-auth.ts` is a finite internal Flue workflow that shares the same deep auth runtime as the worker tools. It requires a request-local trusted event whose ID matches its payload, starts or checks one transition, and returns without waiting for browser completion. It deliberately exports no public route: an independent HTTP/SDK workflow invocation needs a durable, short-lived event-scoped admission grant before it can safely cross Flue's asynchronous workflow boundary.
 
 ## Credential Boundary
 

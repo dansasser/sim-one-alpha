@@ -93,7 +93,31 @@ test('GitHub auth challenge relay delivers an approved challenge on a later even
   });
 });
 
-test('an older expiry timer cannot delete a newer challenge for the same event', async () => {
+test('GitHub auth challenge relay rejects a later event from another actor without consuming the challenge', () => {
+  const relay = new InMemoryGithubAuthChallengeRelay();
+  const expiresAt = new Date(Date.now() + 60_000).toISOString();
+  relay.deliver({
+    sessionId: 'session-continuation',
+    audience,
+    verificationUri: 'https://github.com/login/device',
+    userCode: 'NEXT-0001',
+    expiresAt,
+  });
+
+  assert.equal(
+    relay.consume({ ...audience, eventId: 'event-2', actorId: 'other-actor' }),
+    undefined,
+  );
+  assert.deepEqual(relay.consume({ ...audience, eventId: 'event-2' }), {
+    sessionId: 'session-continuation',
+    verificationUri: 'https://github.com/login/device',
+    userCode: 'NEXT-0001',
+    expiresAt,
+  });
+});
+
+test('an older expiry callback cannot delete a newer challenge for the same event', async (t) => {
+  t.mock.method(globalThis, 'clearTimeout', () => undefined);
   const relay = new InMemoryGithubAuthChallengeRelay();
   relay.deliver({
     sessionId: 'session-old-timer',
@@ -120,7 +144,7 @@ test('an older expiry timer cannot delete a newer challenge for the same event',
   });
 });
 
-test('a late expired challenge cannot remove a newer challenge for the same event', () => {
+test('an invalid expired delivery cannot remove a newer challenge for the same event', () => {
   const relay = new InMemoryGithubAuthChallengeRelay();
   const replacementExpiry = new Date(Date.now() + 60_000).toISOString();
   relay.deliver({

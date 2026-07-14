@@ -23,7 +23,8 @@ export async function githubCredentialOptions(
   if (remoteUrls.exitCode !== 0 || urls.length === 0 || !urls.every(isManagedGithubHttpsRemote) || !githubGitEnv) {
     return { env: createNoCredentialGitEnv() };
   }
-  return { env: { ...createNoCredentialGitEnv(), ...await githubGitEnv() } };
+  const managedEnv = await loadManagedGithubEnv(githubGitEnv);
+  return { env: managedEnv ? { ...createNoCredentialGitEnv(), ...managedEnv } : createNoCredentialGitEnv() };
 }
 
 export async function githubUrlCredentialOptions(
@@ -36,7 +37,8 @@ export async function githubUrlCredentialOptions(
   if (!githubGitEnv || !isManagedGithubHttpsRemote(remoteUrl)) {
     return { env: createNoCredentialGitEnv() };
   }
-  return { env: { ...createNoCredentialGitEnv(), ...await githubGitEnv() } };
+  const managedEnv = await loadManagedGithubEnv(githubGitEnv);
+  return { env: managedEnv ? { ...createNoCredentialGitEnv(), ...managedEnv } : createNoCredentialGitEnv() };
 }
 
 export function isManagedGithubHttpsRemote(remoteUrl: string): boolean {
@@ -68,6 +70,20 @@ function createNoCredentialGitEnv(): Record<string, string> {
     GIT_CONFIG_COUNT: '1',
     GIT_CONFIG_KEY_0: 'credential.helper',
     GIT_CONFIG_VALUE_0: '',
+    GIT_ASKPASS: '',
     GIT_TERMINAL_PROMPT: '0',
   };
+}
+
+async function loadManagedGithubEnv(
+  githubGitEnv: () => Promise<Record<string, string>>,
+): Promise<Record<string, string> | undefined> {
+  try {
+    return await githubGitEnv();
+  } catch (error) {
+    if (error instanceof Error && error.name === 'GithubAuthenticationUnavailableError') {
+      return undefined;
+    }
+    throw error;
+  }
 }
