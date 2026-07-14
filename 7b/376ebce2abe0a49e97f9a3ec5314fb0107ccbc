@@ -1,0 +1,44 @@
+src/tests/github-auth-telegram.test.ts
+  s_65db8ffa7c9620::t_43ed85deb51926 48,53-55,59-69,71-74,100
+  s_65db8ffa7c9620::t_c3c02b98388cc1 56-58,75-83
+  s_65db8ffa7c9620::t_06d348150f308b 6,15-19,21-24,27,40,46,70,84-99,101-109,122
+docs/architecture/gorombo-flue-map.md
+  s_65db8ffa7c9620::t_3ec2ef7196d90b 230-231
+src/api/routes/chat-prompt.ts
+  s_65db8ffa7c9620::t_a888734f1e508b 5,33-34
+  s_65db8ffa7c9620::t_2e69e14fb8832f 35
+src/workspace/TOOLS.md
+  s_65db8ffa7c9620::t_3ec2ef7196d90b 38
+src/api/ingress/github-auth-challenge-relay.ts
+  s_65db8ffa7c9620::t_a888734f1e508b 20,27-32,77,86-89,92-110,112-119,123-129,159
+  s_65db8ffa7c9620::t_c3c02b98388cc1 34-36
+src/tests/chat-prompt.test.ts
+  s_65db8ffa7c9620::t_06d348150f308b 67-68,74-78
+  s_65db8ffa7c9620::t_5a5f567bc389b3 69-73
+src/engine/workers/coding-worker/workspace/TOOLS.md
+  s_65db8ffa7c9620::t_3ec2ef7196d90b 29-30
+src/channels/telegram.ts
+  s_65db8ffa7c9620::t_a888734f1e508b 252-262,272-275,301-315
+docs/architecture/github-auth-system.md
+  s_65db8ffa7c9620::t_a888734f1e508b 30-34
+src/tests/github-auth-workflow.test.ts
+  s_65db8ffa7c9620::t_5a5f567bc389b3 184
+src/tests/github-auth-challenge-relay.test.ts
+  s_65db8ffa7c9620::t_c3c02b98388cc1 203-266
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "7b376ebce2abe0a49e97f9a3ec5314fb0107ccbc",
+  "prompts": {},
+  "sessions": {
+    "s_65db8ffa7c9620": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f51b3-89d7-7d02-973d-9679f07254a1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
