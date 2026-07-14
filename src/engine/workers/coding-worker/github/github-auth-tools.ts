@@ -2,6 +2,7 @@ import { defineTool, type ToolDefinition } from '@flue/runtime';
 import * as v from 'valibot';
 import { goromboPersistenceRuntime } from '../../../../db.js';
 import type { NormalizedMessageEvent } from '../../../../core/types/index.js';
+import type { TrustedEventAdmission } from '../../../session/session-database.js';
 import { getGithubAuthChallengeRelay, type GithubAuthChallengeRelay } from '../../../../api/ingress/github-auth-challenge-relay.js';
 import { getTrustedMessageEvent } from '../../../../api/ingress/trusted-event-context.js';
 import type { CodingApprovalService } from '../approvals/approval-service.js';
@@ -28,6 +29,7 @@ export interface CodingGithubAuthToolsOptions {
   challengeRelay?: GithubAuthChallengeRelay;
   currentEventId?: string;
   resolveEvent?(eventId: string): NormalizedMessageEvent | undefined;
+  resolveAdmission?(admissionId: string): TrustedEventAdmission | undefined;
 }
 
 export function createCodingGithubAuthTools(options: CodingGithubAuthToolsOptions): ToolDefinition[] {
@@ -39,14 +41,24 @@ export function createCodingGithubAuthTools(options: CodingGithubAuthToolsOption
       env: options.env,
     });
   const resolveEvent = options.resolveEvent ?? resolvePersistedEvent;
+  const resolveAdmission = options.resolveAdmission ?? resolvePersistedAdmission;
 
   return [
     defineTool({
       name: 'github_auth_status',
       description: 'Check Coding Worker managed GitHub authentication for the trusted chat event. Read-only.',
-      parameters: v.object({ eventId: v.string() }),
-      execute: async ({ eventId }) => {
-        resolveTrustedEvent(resolveEvent, eventId, options.currentEventId, Boolean(options.resolveEvent));
+      parameters: v.object({
+        eventId: v.string(),
+        admissionId: v.optional(v.string()),
+      }),
+      execute: async ({ eventId, admissionId }) => {
+        resolveTrustedEvent({
+          resolver: resolveEvent,
+          admissionResolver: resolveAdmission,
+          eventId,
+          admissionId,
+          currentEventId: options.currentEventId,
+        });
         return JSON.stringify(toModelVisibleGithubAuthResult(await (await getService()).status()), null, 2);
       },
     }),
@@ -55,10 +67,17 @@ export function createCodingGithubAuthTools(options: CodingGithubAuthToolsOption
       description: 'Request approval and start managed HTTPS GitHub browser authorization for the trusted chat event.',
       parameters: v.object({
         eventId: v.string(),
+        admissionId: v.optional(v.string()),
         approvalRequestId: v.optional(v.string()),
       }),
-      execute: async ({ eventId, approvalRequestId }) => {
-        const event = resolveTrustedEvent(resolveEvent, eventId, options.currentEventId, Boolean(options.resolveEvent));
+      execute: async ({ eventId, admissionId, approvalRequestId }) => {
+        const event = resolveTrustedEvent({
+          resolver: resolveEvent,
+          admissionResolver: resolveAdmission,
+          eventId,
+          admissionId,
+          currentEventId: options.currentEventId,
+        });
         const profile = 'default';
         const service = await getService();
         const currentStatus = await service.status({ profile });
@@ -154,28 +173,50 @@ async function resolveApprovedContinuation(
   };
 }
 
-function resolveTrustedEvent(
-  resolver: (eventId: string) => NormalizedMessageEvent | undefined,
-  eventId: string,
-  currentEventId?: string,
-  customResolver = false,
-): NormalizedMessageEvent {
+function resolveTrustedEvent(input: {
+  resolver: (eventId: string) => NormalizedMessageEvent | undefined;
+  admissionResolver: (admissionId: string) => TrustedEventAdmission | undefined;
+  eventId: string;
+  admissionId?: string;
+  currentEventId?: string;
+}): NormalizedMessageEvent {
   const contextualEvent = getTrustedMessageEvent();
-  const trustedEventId = currentEventId ?? contextualEvent?.id;
-  if (trustedEventId !== undefined && eventId !== trustedEventId) {
+  const trustedEventId = input.currentEventId ?? contextualEvent?.id;
+  if (trustedEventId !== undefined && input.eventId !== trustedEventId) {
     throw new Error('GitHub authentication requires the current trusted eventId.');
   }
   if (contextualEvent) return contextualEvent;
-  if (!customResolver && currentEventId === undefined) {
-    throw new Error('GitHub authentication requires a current trusted event context.');
+  if (input.currentEventId !== undefined) {
+    const currentEvent = input.resolver(input.eventId);
+    if (!currentEvent) {
+      throw new Error('GitHub authentication requires a trusted eventId persisted by chat ingress.');
+    }
+    return currentEvent;
   }
-  const event = resolver(eventId);
-  if (!event) {
-    throw new Error('GitHub authentication requires a trusted eventId persisted by chat ingress.');
+  if (input.admissionId) {
+    const admission = input.admissionResolver(input.admissionId);
+    const event = input.resolver(input.eventId);
+    const expiresAt = admission ? Date.parse(admission.expiresAt) : Number.NaN;
+    if (!admission ||
+        admission.purpose !== 'github.auth' ||
+        admission.eventId !== input.eventId ||
+        !Number.isFinite(expiresAt) ||
+        expiresAt <= Date.now() ||
+        !event ||
+        admission.connector !== event.connector ||
+        admission.actorId !== event.actor.id ||
+        admission.conversationId !== event.conversation.id) {
+      throw new Error('GitHub authentication requires a matching unexpired trusted event admission.');
+    }
+    return event;
   }
-  return event;
+  throw new Error('GitHub authentication requires a current trusted event context or event admission.');
 }
 
 function resolvePersistedEvent(eventId: string): NormalizedMessageEvent | undefined {
   return goromboPersistenceRuntime.sessionDatabase.getNormalizedMessageEvent(eventId) ?? undefined;
+}
+
+function resolvePersistedAdmission(admissionId: string): TrustedEventAdmission | undefined {
+  return goromboPersistenceRuntime.sessionDatabase.getTrustedEventAdmission(admissionId);
 }

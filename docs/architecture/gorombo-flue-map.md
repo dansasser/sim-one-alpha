@@ -226,6 +226,10 @@ src/workflows/github-auth.ts
   Requires matching request-local trusted event context, shares the worker auth runtime, returns no device code, and never waits for browser completion.
   Exports no public route until durable event-scoped workflow admission exists.
 
+src/api/ingress/github-auth-challenge-relay.ts
+  One-time audience-bound challenge storage with connector delivery listeners.
+  Telegram consumes through its trusted channel listener; synchronous chat consumes in its response path.
+
 src/workflows/retrieval.ts
   Shared retrieval machinery.
   Web-search provider access is restricted to the researcher/research workflow caller boundary.

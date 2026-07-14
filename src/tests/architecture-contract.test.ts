@@ -7,6 +7,7 @@ import orchestratorAgent from '../agents/orchestrator.js';
 import { createCodingWorkerSubagent } from '../engine/workers/coding-worker/coding-worker.js';
 import { createResearcherSubagent } from '../engine/workers/researcher/researcher.js';
 import { resolveCodingWorkerWorkspaceRoot as resolveCodingWorkerWorkspaceRootFromOrchestrator } from '../agents/orchestrator.js';
+import { runWithTrustedMessageEvent } from '../api/ingress/trusted-event-context.js';
 
 test('root and architecture docs preserve the Flue component contract', () => {
   const agents = readText('AGENTS.md');
@@ -132,6 +133,42 @@ test('Flue orchestrator defaults coding-worker workspace root to src/workspace/'
 
   const repoTool = codingWorker.tools?.find((tool) => tool.name === 'coding_repo_apply_patch');
   assert.ok(repoTool);
+});
+
+test('Flue orchestrator forwards the configured managed GitHub auth root to the Coding Worker', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'orchestrator-github-workspace-'));
+  const authRoot = mkdtempSync(join(tmpdir(), 'orchestrator-github-auth-'));
+  const event = {
+    id: 'event-orchestrator-auth-root',
+    connector: 'web-api',
+    kind: 'chat.message',
+    text: 'check GitHub auth',
+    receivedAt: new Date().toISOString(),
+    actor: { id: 'actor-1' },
+    conversation: { id: 'conversation-1' },
+  } as const;
+
+  try {
+    const config = await orchestratorAgent.initialize({
+      id: 'architecture-contract-github-auth-root',
+      env: {
+        ...createModelEnv(),
+        GOROMBO_WORKSPACE_ROOT: workspaceRoot,
+        GOROMBO_GITHUB_AUTH_ROOT: authRoot,
+      },
+      payload: undefined,
+    });
+    const codingWorker = config.subagents?.find((agent) => agent.name === 'coding-worker');
+    const status = codingWorker?.tools?.find((tool) => tool.name === 'github_auth_status');
+    assert.ok(status);
+
+    await runWithTrustedMessageEvent(event, () => status.execute({ eventId: event.id }));
+
+    assert.equal(existsSync(join(authRoot, 'profiles', 'default', 'gh')), true);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmSync(authRoot, { recursive: true, force: true });
+  }
 });
 
 test('coding worker owns its workspace-backed lead profile', async () => {

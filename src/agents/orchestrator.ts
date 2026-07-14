@@ -166,6 +166,7 @@ function createCodingWorkerToolEnv(env: Record<string, unknown>): Record<string,
   return {
     GH_TOKEN: readOptionalEnv(env, 'GH_TOKEN'),
     GITHUB_TOKEN: readOptionalEnv(env, 'GITHUB_TOKEN'),
+    GOROMBO_GITHUB_AUTH_ROOT: readOptionalEnv(env, 'GOROMBO_GITHUB_AUTH_ROOT'),
   };
 }
 

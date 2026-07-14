@@ -18,7 +18,10 @@ export interface DeliveredGithubAuthChallenge {
 export interface GithubAuthChallengeRelay {
   deliver(challenge: GithubAuthChallenge): void;
   consume(audience: GithubAuthAudience): DeliveredGithubAuthChallenge | undefined;
+  subscribe(listener: GithubAuthChallengeListener): () => void;
 }
+
+export type GithubAuthChallengeListener = (audience: GithubAuthAudience) => void;
 
 /**
  * Holds a device challenge only long enough to return it through the initiating
@@ -27,6 +30,12 @@ export interface GithubAuthChallengeRelay {
  */
 export class InMemoryGithubAuthChallengeRelay implements GithubAuthChallengeRelay {
   readonly #challenges = new Map<string, StoredChallenge>();
+  readonly #listeners = new Set<GithubAuthChallengeListener>();
+
+  subscribe(listener: GithubAuthChallengeListener): () => void {
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
+  }
 
   deliver(challenge: GithubAuthChallenge): void {
     const eventId = challenge.audience.eventId;
@@ -49,6 +58,13 @@ export class InMemoryGithubAuthChallengeRelay implements GithubAuthChallengeRela
     };
     this.#challenges.set(eventId, stored);
     this.#scheduleExpiry(eventId, stored, expiresAt);
+    for (const listener of this.#listeners) {
+      try {
+        listener({ ...challenge.audience });
+      } catch {
+        // Connector delivery failures must not mutate the authorization session.
+      }
+    }
   }
 
   consume(audience: GithubAuthAudience): DeliveredGithubAuthChallenge | undefined {

@@ -71,6 +71,7 @@ test('Coding Worker GitHub auth start is approval-gated and privately relays onl
       approvalService,
       authService,
       challengeRelay: relay,
+      currentEventId: event.id,
       resolveEvent: (eventId) => eventId === event.id ? event : undefined,
     });
     const start = getTool(tools, 'github_auth_start');
@@ -189,6 +190,49 @@ test('GitHub auth status is bound to the trusted event context', async () => {
       runWithTrustedMessageEvent(event, () => status.execute({ eventId: 'event-unrelated' })),
       /current trusted event/i,
     );
+    await assert.rejects(
+      status.execute({ eventId: event.id }),
+      /trusted event context or event admission/i,
+    );
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('GitHub auth tools accept only a matching unexpired event admission outside request-local context', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'github-auth-admission-'));
+  const authService = createFakeAuthService();
+  const admission = {
+    id: 'admission-current',
+    eventId: event.id,
+    purpose: 'github.auth',
+    connector: event.connector,
+    actorId: event.actor.id,
+    conversationId: event.conversation.id,
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    createdAt: new Date().toISOString(),
+  } as const;
+
+  try {
+    const status = getTool(createCodingGithubAuthTools({
+      workspaceRoot,
+      authService,
+      resolveEvent: (eventId) => eventId === event.id ? event : undefined,
+      resolveAdmission: (admissionId) => admissionId === admission.id ? admission : undefined,
+    }), 'github_auth_status');
+
+    assert.equal(JSON.parse(await status.execute({
+      eventId: event.id,
+      admissionId: admission.id,
+    })).state, 'unauthenticated');
+    await assert.rejects(
+      status.execute({ eventId: event.id, admissionId: 'admission-unrelated' }),
+      /event admission/i,
+    );
+    await assert.rejects(
+      status.execute({ eventId: 'event-unrelated', admissionId: admission.id }),
+      /event admission/i,
+    );
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
   }
@@ -213,6 +257,7 @@ test('GitHub auth start returns authenticated status without approval or device 
       workspaceRoot,
       approvalService,
       authService,
+      currentEventId: event.id,
       resolveEvent: (eventId) => eventId === event.id ? event : undefined,
     });
     const start = getTool(tools, 'github_auth_start');
@@ -350,9 +395,11 @@ function createFakeAuthService(
 }
 
 function getTool(tools: unknown[], name: string): {
-  execute(args: { eventId: string; approvalRequestId?: string }): Promise<string>;
+  execute(args: { eventId: string; admissionId?: string; approvalRequestId?: string }): Promise<string>;
 } {
   const tool = (tools as Array<{ name: string; execute: unknown }>).find((candidate) => candidate.name === name);
   assert.ok(tool, `Missing ${name} tool.`);
-  return tool as unknown as { execute(args: { eventId: string; approvalRequestId?: string }): Promise<string> };
+  return tool as unknown as {
+    execute(args: { eventId: string; admissionId?: string; approvalRequestId?: string }): Promise<string>;
+  };
 }

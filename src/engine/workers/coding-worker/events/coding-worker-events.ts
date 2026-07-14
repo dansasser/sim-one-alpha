@@ -69,6 +69,7 @@ const forbiddenPublicTraceKeys = new Set([
   'accessToken',
   'authorization',
   'token',
+  'githubAuthAdmissionId',
 ].map(normalizePublicTraceKey));
 
 export function createCodingWorkerEvent(

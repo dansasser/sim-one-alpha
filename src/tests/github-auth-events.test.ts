@@ -50,6 +50,7 @@ test('GitHub auth progress events reject normalized secret-key variants at any d
     { access_token: 'secret' },
     { 'access-token': 'secret' },
     { Authorization: 'Bearer secret' },
+    { github_auth_admission_id: 'admission-secret' },
     { nested: [{ DEVICE_CODE: 'secret' }] },
   ];
 

@@ -182,6 +182,7 @@ function createDependencies(
     getChallengeRelay: () => ({
       deliver: () => undefined,
       consume: () => undefined,
+      subscribe: () => () => undefined,
     }),
     ...overrides,
   };

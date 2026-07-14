@@ -23,15 +23,20 @@ Main persona
         -> private challenge relay
           -> initiating connector + actor + conversation only
 
-Chat ingress consumes the one-time browser URL/code once and returns it outside
-the model/tool transcript. Generic Coding Worker progress events contain only
-opaque session state.
+Synchronous chat ingress consumes the one-time browser URL/code once and returns
+it outside the model/tool transcript. Asynchronous connectors subscribe to the
+same audience-bound relay and deliver it through connector-owned APIs. Generic
+Coding Worker progress events contain only opaque session state.
 ```
 
-Chat ingress binds the normalized current event through request-local trusted
-context while the orchestrator and Coding Worker execute. Authentication tools
-validate any model-supplied `eventId` against that trusted event and fail closed
-when no trusted event context is available.
+Synchronous chat ingress binds the normalized current event through request-local
+trusted context while the orchestrator and Coding Worker execute. Telegram's
+Flue `dispatch()` is asynchronous, so its verified ingress persists a short-lived
+admission grant containing the exact event, connector, actor, conversation, and
+purpose. Authentication tools validate the model-supplied `eventId` against the
+request-local event or that durable admission and fail closed on mismatch or
+expiry. The opaque admission id is routing authority only; it is never returned
+to the user or emitted in public progress.
 
 `src/workflows/github-auth.ts` is a finite internal Flue workflow that shares the same deep auth runtime as the worker tools. It requires a request-local trusted event whose ID matches its payload, starts or checks one transition, and returns without waiting for browser completion. It deliberately exports no public route: an independent HTTP/SDK workflow invocation needs a durable, short-lived event-scoped admission grant before it can safely cross Flue's asynchronous workflow boundary.
 
@@ -49,7 +54,7 @@ Starting device authorization requires `github.auth.login` approval. The approva
 
 If approval finishes after the initiating response, the next trusted event may present the prior opaque approval-request id. The Coding Worker verifies its connector, actor, conversation, hostname, and profile metadata, reuses the original auth-session id, and binds challenge delivery to the new current event. Login approvals expire after fifteen minutes.
 
-The browser URL, one-time code, and expiry are temporary authorization capabilities. They are not returned by worker tools or workflows, not written to progress events, and not persisted in task records or telemetry. The in-memory relay releases a challenge only once to the matching connector, actor, and conversation. A later authenticated event in that same conversation may consume a challenge created before approval completed; a different actor or conversation cannot. Malformed and expired challenges fail closed, and replacement-safe timers remove abandoned challenges.
+The browser URL, one-time code, and expiry are temporary authorization capabilities. They are not returned by worker tools or workflows, not written to progress events, and not persisted in task records or telemetry. The in-memory relay releases a challenge only once to the matching connector, actor, and conversation, and notifies trusted connector listeners only after storing it. A later authenticated event in that same conversation may consume a challenge created before approval completed; a different actor or conversation cannot. Malformed and expired challenges fail closed, and replacement-safe timers remove abandoned challenges.
 
 ## Deferred Protocol Migration
 

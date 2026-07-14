@@ -24,6 +24,8 @@ GitHub authentication is runtime state, not a `TOOLS.md` flag. On the first GitH
 
 If approval completes after the initiating turn, call `github_auth_start` again with the new trusted current `eventId` and the prior `approvalRequestId`. The runtime verifies that the approved request belongs to the same connector, actor, conversation, host, and profile before delivering the challenge to the current response. Never reuse an approval from another conversation.
 
+For asynchronous connectors such as Telegram, the delegated task also includes an opaque `admissionId` issued by trusted ingress. Pass it unchanged to `github_auth_status` and `github_auth_start`. It is short-lived and bound to the exact event audience; never log it, emit it in progress, reuse it for another event, or include it in a user response.
+
 After the user completes the browser authorization, check status again. Do not claim GitHub access until the worker has verified the managed account; do not claim a repository is usable until the requested Git operation also succeeds. Use HTTPS Git remotes only for product-managed GitHub access.
 
 The runtime workspace root is the coding worker's access root. Do not treat the agent source checkout or `process.cwd()` as the default user project. Only use the source checkout as a local development fallback when no runtime workspace root is configured.

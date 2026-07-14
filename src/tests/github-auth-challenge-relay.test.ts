@@ -169,3 +169,34 @@ test('an invalid expired delivery cannot remove a newer challenge for the same e
     expiresAt: replacementExpiry,
   });
 });
+
+test('GitHub auth challenge relay notifies connector listeners after storing the challenge', async () => {
+  const relay = new InMemoryGithubAuthChallengeRelay();
+  const expiresAt = new Date(Date.now() + 60_000).toISOString();
+  const delivered = new Promise<unknown>((resolve) => {
+    relay.subscribe((deliveredAudience) => {
+      resolve({
+        audience: deliveredAudience,
+        challenge: relay.consume(deliveredAudience),
+      });
+    });
+  });
+
+  relay.deliver({
+    sessionId: 'session-listener',
+    audience,
+    verificationUri: 'https://github.com/login/device',
+    userCode: 'SEND-0001',
+    expiresAt,
+  });
+
+  assert.deepEqual(await delivered, {
+    audience,
+    challenge: {
+      sessionId: 'session-listener',
+      verificationUri: 'https://github.com/login/device',
+      userCode: 'SEND-0001',
+      expiresAt,
+    },
+  });
+});

@@ -82,6 +82,23 @@ export interface RecordNormalizedMessageEventInput {
   acceptedAt?: string;
 }
 
+export interface TrustedEventAdmission {
+  id: string;
+  eventId: string;
+  purpose: 'github.auth';
+  connector: string;
+  actorId: string;
+  conversationId: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface CreateTrustedEventAdmissionInput {
+  event: NormalizedMessageEvent;
+  purpose: TrustedEventAdmission['purpose'];
+  expiresAt: string;
+}
+
 
 export interface CreateImageArtifactInput {
   artifactId: string;
@@ -408,6 +425,69 @@ export class GoromboSessionDatabase {
       .get(eventId) as NormalizedMessageEventRow | undefined;
 
     return row ? toNormalizedMessageEvent(row) : null;
+  }
+
+  createTrustedEventAdmission(input: CreateTrustedEventAdmissionInput): TrustedEventAdmission {
+    const createdAt = new Date().toISOString();
+    const admission: TrustedEventAdmission = {
+      id: randomUUID(),
+      eventId: input.event.id,
+      purpose: input.purpose,
+      connector: input.event.connector,
+      actorId: input.event.actor.id,
+      conversationId: input.event.conversation.id,
+      expiresAt: input.expiresAt,
+      createdAt,
+    };
+    this.database.prepare(`DELETE FROM trusted_event_admissions WHERE expires_at <= ?`).run(createdAt);
+    this.database.prepare(
+      `INSERT INTO trusted_event_admissions
+       (admission_id, event_id, purpose, connector, actor_id, conversation_id, expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      admission.id,
+      admission.eventId,
+      admission.purpose,
+      admission.connector,
+      admission.actorId,
+      admission.conversationId,
+      admission.expiresAt,
+      admission.createdAt,
+    );
+    return admission;
+  }
+
+  getTrustedEventAdmission(admissionId: string): TrustedEventAdmission | undefined {
+    const row = this.database.prepare(
+      `SELECT admission_id, event_id, purpose, connector, actor_id, conversation_id, expires_at, created_at
+       FROM trusted_event_admissions
+       WHERE admission_id = ?`,
+    ).get(admissionId) as {
+      admission_id: string;
+      event_id: string;
+      purpose: string;
+      connector: string;
+      actor_id: string;
+      conversation_id: string;
+      expires_at: string;
+      created_at: string;
+    } | undefined;
+    if (!row) return undefined;
+    const expiresAt = Date.parse(row.expires_at);
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now() || row.purpose !== 'github.auth') {
+      this.database.prepare(`DELETE FROM trusted_event_admissions WHERE admission_id = ?`).run(admissionId);
+      return undefined;
+    }
+    return {
+      id: row.admission_id,
+      eventId: row.event_id,
+      purpose: 'github.auth',
+      connector: row.connector,
+      actorId: row.actor_id,
+      conversationId: row.conversation_id,
+      expiresAt: row.expires_at,
+      createdAt: row.created_at,
+    };
   }
 
 
@@ -864,6 +944,20 @@ export class GoromboSessionDatabase {
 
       CREATE INDEX IF NOT EXISTS idx_normalized_message_events_session
         ON normalized_message_events(session_id, received_at);
+
+      CREATE TABLE IF NOT EXISTS trusted_event_admissions (
+        admission_id TEXT PRIMARY KEY,
+        event_id TEXT NOT NULL,
+        purpose TEXT NOT NULL,
+        connector TEXT NOT NULL,
+        actor_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_trusted_event_admissions_expiry
+        ON trusted_event_admissions(expires_at);
 
       CREATE TABLE IF NOT EXISTS session_memory_chunks (
         chunk_key TEXT PRIMARY KEY,
@@ -1653,7 +1747,6 @@ function parseJsonStringArray(value: string | null | undefined): string[] {
   }
   return [];
 }
-
 
 
 
