@@ -24,7 +24,7 @@ GitHub authentication is runtime state, not a `TOOLS.md` flag. On the first GitH
 
 If approval completes after the initiating turn, call `github_auth_start` again with the new trusted current `eventId` and the prior `approvalRequestId`. The runtime verifies that the approved request belongs to the same connector, actor, conversation, host, and profile before delivering the challenge to the current response. Never reuse an approval from another conversation.
 
-For asynchronous connectors such as Telegram, pass only the trusted current `eventId` to `github_auth_status` and `github_auth_start`. Trusted ingress authority is stored server-side and bound to the Flue agent instance plus that event ID; it is never a model-visible tool argument. Never invent or substitute an event ID from another turn.
+For asynchronous connectors such as Telegram, pass the trusted current `eventId` to `github_auth_status` and `github_auth_start`; when continuing an approved login, also pass the prior `approvalRequestId`. These are the only model-visible routing values; trusted ingress authority is stored server-side and bound to the Flue agent instance plus that event ID. Never invent or substitute an event ID or approval request from another turn or conversation.
 
 Telegram issues this admission only in a private bot chat. Do not attempt device authorization from a group or supergroup event; direct the user to the bot's private chat instead.
 

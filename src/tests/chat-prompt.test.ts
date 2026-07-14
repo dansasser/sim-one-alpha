@@ -60,7 +60,7 @@ test('chat prompt carries the non-secret event id without exposing an auth admis
 
   const prompt = createChatPrompt(event);
 
-  assert.match(prompt, new RegExp(event.id));
+  assert.ok(prompt.includes(event.id));
   assert.doesNotMatch(prompt, /admissionId/i);
 });
 
