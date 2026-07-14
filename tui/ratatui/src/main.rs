@@ -5,7 +5,6 @@ use std::time::{Duration, Instant};
 
 use crossterm::event;
 use ratatui::DefaultTerminal;
-use sim_one_ratatui_tui::agent::send_agent_prompt;
 use sim_one_ratatui_tui::app::{App, AppEvent};
 use sim_one_ratatui_tui::gateway::{ensure_server_running, GatewayOptions};
 use sim_one_ratatui_tui::input::map_terminal_event;
@@ -32,15 +31,14 @@ fn main() -> io::Result<()> {
     let mut gateway = ensure_server_running(&cli.gateway).map_err(io::Error::other)?;
     let base_url = gateway.base_url.clone();
     let started = gateway.started;
-    let result = run_client(
+    run_client(
         base_url,
         started,
         cli.session_id,
         cli.session_explicit,
         cli.smoke_startup,
         || gateway.cleanup(),
-    );
-    result
+    )
 }
 
 fn run_client(
@@ -68,6 +66,7 @@ fn run_client(
             format!("{} started:{}", base_url, started),
             base_url,
             session_id,
+            session_explicit,
         );
         cleanup();
         return result;
@@ -78,6 +77,7 @@ fn run_client(
             format!("{} started:{}", base_url, started),
             base_url,
             session_id,
+            session_explicit,
             &prompts,
         );
         cleanup();
@@ -85,11 +85,15 @@ fn run_client(
     }
 
     if let Ok(prompt) = std::env::var("SIM_ONE_TUI_TEST_PROMPT") {
-        let response =
-            send_agent_prompt(&base_url, &session_id, &prompt).map_err(io::Error::other)?;
-        println!("assistant response: {response}");
+        let result = run_scripted_prompts(
+            format!("{} started:{}", base_url, started),
+            base_url,
+            session_id,
+            session_explicit,
+            &prompt,
+        );
         cleanup();
-        return Ok(());
+        return result;
     }
 
     install_panic_restore_hook();
@@ -99,7 +103,7 @@ fn run_client(
         format!("{} started:{}", base_url, started),
         base_url,
         session_id,
-        !session_explicit,
+        session_explicit,
     );
     restore_terminal();
     if let Ok(Some(session_id)) = &result {
@@ -114,14 +118,10 @@ fn run(
     gateway_status: String,
     base_url: String,
     session_id: String,
-    clean_startup: bool,
+    session_explicit: bool,
 ) -> io::Result<Option<String>> {
-    let mut app = App::with_session(session_id, gateway_status, base_url);
-    if clean_startup {
-        app.start_startup_preflight(true);
-    } else {
-        app.start_stream();
-    }
+    let mut app = App::with_session("", gateway_status, base_url);
+    start_app_lifecycle(&mut app, session_id, session_explicit, true);
 
     while !app.should_quit() {
         app.tick();
@@ -143,9 +143,10 @@ fn run_scripted_startup(
     gateway_status: String,
     base_url: String,
     session_id: String,
+    session_explicit: bool,
 ) -> io::Result<()> {
-    let mut app = App::with_session(session_id, gateway_status, base_url);
-    app.start_startup_preflight(true);
+    let mut app = App::with_session("", gateway_status, base_url);
+    start_app_lifecycle(&mut app, session_id, session_explicit, true);
     wait_for_scripted_startup(&mut app)?;
 
     for line in app.transcript_lines() {
@@ -161,9 +162,12 @@ fn run_scripted_prompts(
     gateway_status: String,
     base_url: String,
     session_id: String,
+    session_explicit: bool,
     prompts: &str,
 ) -> io::Result<()> {
-    let mut app = App::with_session(session_id, gateway_status, base_url);
+    let mut app = App::with_session("", gateway_status, base_url);
+    start_app_lifecycle(&mut app, session_id, session_explicit, true);
+    wait_for_scripted_startup(&mut app)?;
 
     for prompt in prompts
         .lines()
@@ -188,6 +192,19 @@ fn run_scripted_prompts(
     }
 
     Ok(())
+}
+
+fn start_app_lifecycle(
+    app: &mut App,
+    session_id: String,
+    session_explicit: bool,
+    attach_stream: bool,
+) {
+    if session_explicit {
+        app.start_explicit_resume(session_id, attach_stream);
+    } else {
+        app.start_startup_preflight(attach_stream);
+    }
 }
 
 fn wait_for_scripted_prompt(app: &mut App) -> io::Result<()> {
@@ -227,6 +244,12 @@ fn wait_for_scripted_startup(app: &mut App) -> io::Result<()> {
         ));
     }
 
+    if !app.startup_succeeded() {
+        return Err(io::Error::other(
+            "Scripted TUI startup preflight failed. See the transcript error above.",
+        ));
+    }
+
     Ok(())
 }
 
@@ -238,25 +261,13 @@ fn read_app_event() -> io::Result<Option<AppEvent>> {
     Ok(map_terminal_event(event::read()?))
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct CliOptions {
     gateway: GatewayOptions,
     base_url: Option<String>,
     session_id: String,
     session_explicit: bool,
     smoke_startup: bool,
-}
-
-impl Default for CliOptions {
-    fn default() -> Self {
-        Self {
-            gateway: GatewayOptions::default(),
-            base_url: None,
-            session_id: String::new(),
-            session_explicit: false,
-            smoke_startup: false,
-        }
-    }
 }
 
 impl CliOptions {
@@ -316,4 +327,26 @@ fn print_help() {
     println!(
         "SIM-ONE Alpha Ratatui TUI\n\nOptions:\n  --port <number>       Gateway port\n  --base-url <url>      Existing gateway base URL; skips server launch\n  --session <id>        Explicit existing agent session id to attach\n  --server-path <path>  Built SIM-ONE Alpha server.mjs path\n  --env-path <path>     Env file path\n  --smoke-startup       Start/connect gateway then exit\n  -h, --help            Show this help"
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CliOptions;
+
+    #[test]
+    fn default_cli_launch_has_no_session_and_uses_fresh_lifecycle() {
+        let options = CliOptions::parse(Vec::<String>::new()).expect("default CLI should parse");
+
+        assert!(options.session_id.is_empty());
+        assert!(!options.session_explicit);
+    }
+
+    #[test]
+    fn explicit_session_cli_launch_preserves_requested_id() {
+        let options = CliOptions::parse(["--session".to_string(), "tui-existing-1".to_string()])
+            .expect("explicit session CLI should parse");
+
+        assert_eq!(options.session_id, "tui-existing-1");
+        assert!(options.session_explicit);
+    }
 }

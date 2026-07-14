@@ -8,7 +8,7 @@ use ratatui::layout::Position;
 use ratatui::style::{Color, Modifier};
 use ratatui::symbols::scrollbar;
 use ratatui::Terminal;
-use sim_one_ratatui_tui::agent::AgentReply;
+use sim_one_ratatui_tui::agent::{AgentReply, SessionLifecycleReply};
 use sim_one_ratatui_tui::app::{App, AppEvent};
 use sim_one_ratatui_tui::flue::events::FlueEvent;
 use sim_one_ratatui_tui::flue::stream::AgentStreamUpdate;
@@ -470,6 +470,79 @@ fn renamed_session_title_is_rendered_in_header_without_changing_status_bar() {
     );
     assert!(frame.contains("session: Release Work"), "{frame}");
     assert!(!frame.contains("Release Work (tui-existing-1)"), "{frame}");
+}
+
+#[test]
+fn lifecycle_startup_rows_and_resumed_title_are_rendered() {
+    let backend = TestBackend::new(120, 24);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut fresh = App::with_agent_sender_and_lifecycle(
+        "",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| {
+            Ok(AgentReply {
+                text: "Hello Daniel. All systems are go.".to_string(),
+                session_id: Some("tui-fresh-1".to_string()),
+                session_title: None,
+                command_name: None,
+                session_created: Some(false),
+            })
+        }),
+        Arc::new(|_| {
+            Ok(SessionLifecycleReply {
+                id: "tui-fresh-1".to_string(),
+                title: None,
+                created: true,
+            })
+        }),
+        Arc::new(|_, _| panic!("fresh startup must not resume")),
+    );
+    fresh.start_startup_preflight(false);
+    wait_for_startup(&mut fresh);
+
+    terminal
+        .draw(|frame| render(frame, &mut fresh))
+        .expect("fresh lifecycle should render");
+    let frame = terminal_buffer_lines(&terminal);
+    assert!(
+        frame.contains("preflight: created fresh TUI session tui-fresh-1"),
+        "{frame}"
+    );
+    assert!(frame.contains("preflight: all systems go"), "{frame}");
+    assert!(frame.contains("assistant: Hello Daniel"), "{frame}");
+
+    let mut resumed = App::with_agent_sender_and_lifecycle(
+        "",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| panic!("explicit resume must not greet")),
+        Arc::new(|_| panic!("explicit resume must not create")),
+        Arc::new(|_, session_id| {
+            assert_eq!(session_id, "tui-existing-1");
+            Ok(SessionLifecycleReply {
+                id: session_id,
+                title: Some("Release Work".to_string()),
+                created: false,
+            })
+        }),
+    );
+    resumed.start_explicit_resume("tui-existing-1".to_string(), false);
+    wait_for_startup(&mut resumed);
+
+    terminal
+        .draw(|frame| render(frame, &mut resumed))
+        .expect("resumed lifecycle should render");
+    let frame = terminal_buffer_lines(&terminal);
+    assert!(
+        frame.starts_with("┌SIM-ONE Alpha - Release Work"),
+        "{frame}"
+    );
+    assert!(frame.contains("session: Release Work"), "{frame}");
+    assert!(
+        frame.contains("preflight: resumed TUI session tui-existing-1"),
+        "{frame}"
+    );
 }
 
 #[test]
@@ -1957,6 +2030,18 @@ fn wait_for_agent(app: &mut App) {
     }
     app.poll_agent();
     assert!(!app.is_agent_pending(), "agent response did not settle");
+}
+
+fn wait_for_startup(app: &mut App) {
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while (!app.startup_complete() || app.is_agent_pending()) && Instant::now() < deadline {
+        app.tick();
+        app.poll_agent();
+        thread::sleep(Duration::from_millis(1));
+    }
+    app.poll_agent();
+    assert!(app.startup_succeeded(), "startup lifecycle should succeed");
+    assert!(!app.is_agent_pending(), "startup lifecycle should settle");
 }
 
 fn terminal_buffer_lines(terminal: &Terminal<TestBackend>) -> String {

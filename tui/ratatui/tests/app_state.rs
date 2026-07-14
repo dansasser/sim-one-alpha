@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
-use sim_one_ratatui_tui::agent::{AgentReply, SessionSummary};
+use sim_one_ratatui_tui::agent::{AgentReply, SessionLifecycleReply, SessionSummary};
 use sim_one_ratatui_tui::app::{App, AppEvent, Clock, MouseRegions, SCROLL_PAGE_LINES};
 use sim_one_ratatui_tui::flue::events::{FlueEvent, StreamControl};
 use sim_one_ratatui_tui::flue::stream::AgentStreamUpdate;
@@ -563,91 +563,191 @@ fn initial_transcript_is_clean_preflight_shell() {
 }
 
 #[test]
-fn startup_preflight_resolves_active_session_without_primary_and_sends_greeting_prompt() {
-    let prompts = Arc::new(Mutex::new(Vec::<String>::new()));
+fn startup_preflight_creates_fresh_session_before_sending_one_greeting_prompt() {
+    let prompts = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
     let sent_prompts = Arc::clone(&prompts);
-    let mut app = App::with_agent_sender(
+    let creator_calls = Arc::new(AtomicUsize::new(0));
+    let recorded_creator_calls = Arc::clone(&creator_calls);
+    let mut app = App::with_agent_sender_and_lifecycle(
         "",
         "http://127.0.0.1:3940 started:false",
         "http://127.0.0.1:3940",
-        Arc::new(move |_, _, prompt| {
+        Arc::new(move |_, session_id, prompt| {
             sent_prompts
                 .lock()
                 .expect("prompt recorder should lock")
-                .push(prompt.clone());
-            if prompt == "/session" {
-                Ok(AgentReply {
-                    text: "Current session tui-startup-1.".to_string(),
-                    session_id: Some("tui-startup-1".to_string()),
-                    session_title: None,
-                    command_name: Some("session".to_string()),
-                    session_created: Some(true),
-                })
-            } else {
-                Ok(AgentReply {
-                    text: "Hello Daniel, I'm Ollie. All systems are go.".to_string(),
-                    session_id: Some("tui-startup-1".to_string()),
-                    session_title: Some(
-                        "This is an automatic SIM-ONE Alpha local Ratatui TUI startup event"
-                            .to_string(),
-                    ),
-                    command_name: None,
-                    session_created: Some(false),
-                })
-            }
+                .push((session_id.clone(), prompt));
+            Ok(AgentReply {
+                text: "Hello Daniel, I'm Ollie. All systems are go.".to_string(),
+                session_id: Some("tui-startup-1".to_string()),
+                session_title: None,
+                command_name: None,
+                session_created: Some(false),
+            })
         }),
+        Arc::new(move |_| {
+            recorded_creator_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(SessionLifecycleReply {
+                id: "tui-startup-1".to_string(),
+                title: None,
+                created: true,
+            })
+        }),
+        Arc::new(|_, _| panic!("default startup must not call the session resumer")),
     );
 
     app.start_startup_preflight(false);
-    wait_for_agent(&mut app);
+    wait_for_startup(&mut app);
 
+    assert_eq!(creator_calls.load(Ordering::SeqCst), 1);
     assert_eq!(app.session_id(), "tui-startup-1");
     let prompts = prompts.lock().expect("prompt recorder should lock");
-    assert_eq!(prompts.len(), 2);
-    assert_eq!(prompts[0], "/session");
-    assert!(prompts[1].contains("greeting-preflight"));
-    assert!(prompts[1].contains("Daniel T Sasser II"));
-    assert!(prompts[1].contains("all systems go"));
-    assert!(prompts[1].contains("status = \"all systems go\""));
-    assert!(prompts[1].contains("sessionId = \"tui-startup-1\""));
+    assert_eq!(prompts.len(), 1);
+    assert_eq!(prompts[0].0, "tui-startup-1");
+    assert!(prompts[0].1.contains("greeting-preflight"));
+    assert!(prompts[0].1.contains("Daniel T Sasser II"));
+    assert!(prompts[0].1.contains("all systems go"));
+    assert!(prompts[0].1.contains("status = \"all systems go\""));
+    assert!(prompts[0].1.contains("sessionId = \"tui-startup-1\""));
+    assert!(!prompts[0].1.trim_start().starts_with('/'));
 
     let transcript = app.transcript_lines().join("\n");
     assert!(transcript.contains("preflight: gateway ready"));
-    assert!(transcript.contains("preflight: active TUI session tui-startup-1"));
+    assert!(transcript.contains("preflight: created fresh TUI session tui-startup-1"));
+    assert!(transcript.contains("preflight: event stream attach deferred"));
     assert!(transcript.contains("preflight: all systems go"));
     assert!(transcript.contains("assistant: Hello Daniel, I'm Ollie."));
+    assert!(!transcript.contains("resolving active TUI session"));
+    assert!(!transcript.contains("assistant: /session"));
     assert!(!transcript.contains("primary"));
     assert_eq!(app.agent_status(), "ready");
+    assert!(app.startup_succeeded());
     assert!(app.status_text().contains("session: tui-startup-1"));
     assert!(!app.status_text().contains("automatic SIM-ONE"));
 }
 
 #[test]
-fn startup_preflight_fails_when_session_resolution_returns_no_session_id() {
-    let mut app = App::with_agent_sender(
+fn startup_preflight_fails_when_lifecycle_creation_returns_no_session_id() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let sender_calls = Arc::clone(&calls);
+    let mut app = App::with_agent_sender_and_lifecycle(
         "",
         "http://127.0.0.1:3940 started:false",
         "http://127.0.0.1:3940",
-        Arc::new(|_, _, prompt| {
-            assert_eq!(prompt, "/session");
-            Ok(AgentReply {
-                text: "Unknown command \"/session\".".to_string(),
-                session_id: None,
-                session_title: None,
-                command_name: Some("session".to_string()),
-                session_created: None,
+        Arc::new(move |_, _, _| {
+            sender_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(agent_reply("must not send greeting"))
+        }),
+        Arc::new(|_| {
+            Ok(SessionLifecycleReply {
+                id: " ".to_string(),
+                title: None,
+                created: true,
+            })
+        }),
+        Arc::new(|_, _| panic!("default startup must not call the session resumer")),
+    );
+
+    app.start_startup_preflight(false);
+    wait_for_startup(&mut app);
+
+    assert_eq!(app.session_id(), "");
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    let transcript = app.transcript_lines().join("\n");
+    assert!(transcript.contains("error: Gateway returned an empty TUI session id."));
+    assert!(transcript.contains("preflight: startup preflight failed"));
+    assert!(!transcript.contains("preflight: all systems go"));
+    assert!(!app.startup_succeeded());
+}
+
+#[test]
+fn startup_preflight_reports_lifecycle_and_greeting_failures() {
+    let mut lifecycle_failure = App::with_agent_sender_and_lifecycle(
+        "",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| panic!("failed lifecycle must not send greeting")),
+        Arc::new(|_| Err("session service unavailable".to_string())),
+        Arc::new(|_, _| panic!("default startup must not call the session resumer")),
+    );
+    lifecycle_failure.start_startup_preflight(false);
+    wait_for_startup(&mut lifecycle_failure);
+    let transcript = lifecycle_failure.transcript_lines().join("\n");
+    assert!(transcript.contains("error: session service unavailable"));
+    assert!(transcript.contains("preflight: startup preflight failed"));
+    assert!(!lifecycle_failure.startup_succeeded());
+
+    let mut greeting_failure = App::with_agent_sender_and_lifecycle(
+        "",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| Err("greeting failed".to_string())),
+        Arc::new(|_| {
+            Ok(SessionLifecycleReply {
+                id: "tui-greeting-failure".to_string(),
+                title: None,
+                created: true,
+            })
+        }),
+        Arc::new(|_, _| panic!("default startup must not call the session resumer")),
+    );
+    greeting_failure.start_startup_preflight(false);
+    wait_for_startup(&mut greeting_failure);
+    let transcript = greeting_failure.transcript_lines().join("\n");
+    assert!(transcript.contains("error: greeting failed"));
+    assert!(transcript.contains("preflight: startup preflight failed"));
+    assert!(!greeting_failure.startup_succeeded());
+}
+
+#[test]
+fn explicit_startup_resume_validates_and_restores_title_without_greeting() {
+    let sender_calls = Arc::new(AtomicUsize::new(0));
+    let recorded_sender_calls = Arc::clone(&sender_calls);
+    let resume_calls = Arc::new(Mutex::new(Vec::<String>::new()));
+    let recorded_resume_calls = Arc::clone(&resume_calls);
+    let mut app = App::with_agent_sender_and_lifecycle(
+        "",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(move |_, _, _| {
+            recorded_sender_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(agent_reply("must not greet"))
+        }),
+        Arc::new(|_| panic!("explicit resume must not create a session")),
+        Arc::new(move |_, session_id| {
+            recorded_resume_calls
+                .lock()
+                .expect("resume recorder should lock")
+                .push(session_id);
+            Ok(SessionLifecycleReply {
+                id: "tui-existing-1".to_string(),
+                title: Some("Release Work".to_string()),
+                created: false,
             })
         }),
     );
 
-    app.start_startup_preflight(false);
-    wait_for_agent(&mut app);
+    app.start_explicit_resume("tui-existing-1".to_string(), false);
+    wait_for_startup(&mut app);
 
-    assert_eq!(app.session_id(), "");
+    assert_eq!(
+        resume_calls
+            .lock()
+            .expect("resume recorder should lock")
+            .as_slice(),
+        ["tui-existing-1"]
+    );
+    assert_eq!(sender_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(app.session_id(), "tui-existing-1");
+    assert_eq!(app.session_title(), Some("Release Work"));
+    assert_eq!(
+        app.transcript_header_title(),
+        "SIM-ONE Alpha - Release Work"
+    );
+    assert!(app.startup_succeeded());
     let transcript = app.transcript_lines().join("\n");
-    assert!(transcript.contains("assistant: Unknown command \"/session\"."));
-    assert!(transcript.contains("preflight: startup preflight failed"));
-    assert!(!transcript.contains("preflight: all systems go"));
+    assert!(transcript.contains("preflight: resumed TUI session tui-existing-1"));
+    assert!(!transcript.contains("greeting-preflight"));
 }
 
 #[test]
@@ -1450,6 +1550,20 @@ fn wait_for_agent(app: &mut App) {
     }
     app.poll_agent();
     assert!(!app.is_agent_pending(), "agent response did not settle");
+}
+
+fn wait_for_startup(app: &mut App) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while (!app.startup_complete() || app.is_agent_pending()) && Instant::now() < deadline {
+        app.poll_agent();
+        thread::sleep(Duration::from_millis(10));
+    }
+    app.poll_agent();
+    assert!(app.startup_complete(), "startup did not settle");
+    assert!(
+        !app.is_agent_pending(),
+        "startup agent response did not settle"
+    );
 }
 
 fn agent_reply(text: impl Into<String>) -> AgentReply {

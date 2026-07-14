@@ -8,7 +8,10 @@ use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
 use ratatui::text::Span;
 
-use crate::agent::{list_chat_sessions, send_agent_prompt_reply, AgentReply, SessionSummary};
+use crate::agent::{
+    create_chat_session, list_chat_sessions, resume_chat_session, send_agent_prompt_reply,
+    AgentReply, SessionLifecycleReply, SessionSummary,
+};
 use crate::flue::events::FlueEvent;
 use crate::flue::reducer::{extract_role, extract_text, DisplayRow, EventTranscript};
 use crate::flue::stream::{spawn_agent_stream, AgentStreamHandle, AgentStreamUpdate};
@@ -25,6 +28,10 @@ pub type AgentSender =
     Arc<dyn Fn(String, String, String) -> Result<AgentReply, String> + Send + Sync + 'static>;
 pub type SessionLister =
     Arc<dyn Fn(String, usize) -> Result<Vec<SessionSummary>, String> + Send + Sync + 'static>;
+pub type SessionCreator =
+    Arc<dyn Fn(String) -> Result<SessionLifecycleReply, String> + Send + Sync + 'static>;
+pub type SessionResumer =
+    Arc<dyn Fn(String, String) -> Result<SessionLifecycleReply, String> + Send + Sync + 'static>;
 pub type Clock = Arc<dyn Fn() -> Instant + Send + Sync + 'static>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -269,8 +276,11 @@ pub struct App {
     agent_status: String,
     agent_sender: AgentSender,
     session_lister: SessionLister,
+    session_creator: SessionCreator,
+    session_resumer: SessionResumer,
     clock: Clock,
     pending_response: Option<PendingResponse>,
+    pending_session_lifecycle: Option<PendingSessionLifecycle>,
     stream_handle: Option<AgentStreamHandle>,
     stream_status: StreamStatus,
     last_stream_event: Option<String>,
@@ -303,6 +313,17 @@ struct AgentResponse {
     result: Result<AgentReply, String>,
 }
 
+#[derive(Debug)]
+struct PendingSessionLifecycle {
+    receiver: Receiver<SessionLifecycleResponse>,
+    requested_session_id: Option<String>,
+}
+
+#[derive(Debug)]
+struct SessionLifecycleResponse {
+    result: Result<SessionLifecycleReply, String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum StreamStatus {
     NotAttached,
@@ -317,6 +338,7 @@ enum StreamStatus {
 enum StartupPhase {
     Idle,
     CreatingSession,
+    ResumingSession,
     Greeting,
     Complete,
     Failed,
@@ -366,6 +388,26 @@ impl App {
         )
     }
 
+    pub fn with_agent_sender_and_lifecycle(
+        session_id: impl Into<String>,
+        gateway_status: impl Into<String>,
+        base_url: impl Into<String>,
+        agent_sender: AgentSender,
+        session_creator: SessionCreator,
+        session_resumer: SessionResumer,
+    ) -> Self {
+        Self::with_dependencies(
+            session_id,
+            gateway_status,
+            base_url,
+            agent_sender,
+            Arc::new(|base_url, limit| list_chat_sessions(&base_url, limit)),
+            Arc::new(Instant::now),
+            session_creator,
+            session_resumer,
+        )
+    }
+
     pub fn with_agent_sender_and_session_lister(
         session_id: impl Into<String>,
         gateway_status: impl Into<String>,
@@ -391,6 +433,29 @@ impl App {
         session_lister: SessionLister,
         clock: Clock,
     ) -> Self {
+        Self::with_dependencies(
+            session_id,
+            gateway_status,
+            base_url,
+            agent_sender,
+            session_lister,
+            clock,
+            Arc::new(|base_url| create_chat_session(&base_url)),
+            Arc::new(|base_url, session_id| resume_chat_session(&base_url, &session_id)),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn with_dependencies(
+        session_id: impl Into<String>,
+        gateway_status: impl Into<String>,
+        base_url: impl Into<String>,
+        agent_sender: AgentSender,
+        session_lister: SessionLister,
+        clock: Clock,
+        session_creator: SessionCreator,
+        session_resumer: SessionResumer,
+    ) -> Self {
         let mut app = Self {
             prompt: String::new(),
             prompt_cursor: 0,
@@ -414,8 +479,11 @@ impl App {
             agent_status: "ready".to_string(),
             agent_sender,
             session_lister,
+            session_creator,
+            session_resumer,
             clock,
             pending_response: None,
+            pending_session_lifecycle: None,
             stream_handle: None,
             stream_status: StreamStatus::NotAttached,
             last_stream_event: None,
@@ -505,7 +573,10 @@ impl App {
     }
 
     pub fn start_startup_preflight(&mut self, attach_stream: bool) {
-        if self.pending_response.is_some() || self.startup_phase != StartupPhase::Idle {
+        if self.pending_response.is_some()
+            || self.pending_session_lifecycle.is_some()
+            || self.startup_phase != StartupPhase::Idle
+        {
             return;
         }
 
@@ -518,8 +589,55 @@ impl App {
             "preflight",
             &format!("gateway ready ({})", self.gateway_status),
         );
-        self.push_speaker_text("preflight", "resolving active TUI session");
-        self.submit_internal_prompt("/session".to_string());
+        self.push_speaker_text("preflight", "creating fresh TUI session");
+
+        let base_url = self.base_url.clone();
+        let creator = Arc::clone(&self.session_creator);
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || {
+            let result = creator(base_url);
+            let _ = tx.send(SessionLifecycleResponse { result });
+        });
+        self.pending_session_lifecycle = Some(PendingSessionLifecycle {
+            receiver: rx,
+            requested_session_id: None,
+        });
+        self.jump_to_tail();
+    }
+
+    pub fn start_explicit_resume(&mut self, session_id: String, attach_stream: bool) {
+        if self.pending_response.is_some()
+            || self.pending_session_lifecycle.is_some()
+            || self.startup_phase != StartupPhase::Idle
+        {
+            return;
+        }
+
+        let session_id = session_id.trim().to_string();
+        self.startup_phase = StartupPhase::ResumingSession;
+        self.startup_attach_stream = attach_stream;
+        self.agent_status = "preflight".to_string();
+        self.final_response_range = None;
+        self.response_is_streaming = false;
+        self.push_speaker_text(
+            "preflight",
+            &format!("gateway ready ({})", self.gateway_status),
+        );
+        self.push_speaker_text("preflight", &format!("validating TUI session {session_id}"));
+
+        let base_url = self.base_url.clone();
+        let requested_session_id = session_id.clone();
+        let resumer = Arc::clone(&self.session_resumer);
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || {
+            let result = resumer(base_url, session_id);
+            let _ = tx.send(SessionLifecycleResponse { result });
+        });
+        self.pending_session_lifecycle = Some(PendingSessionLifecycle {
+            receiver: rx,
+            requested_session_id: Some(requested_session_id),
+        });
+        self.jump_to_tail();
     }
 
     pub fn startup_complete(&self) -> bool {
@@ -527,6 +645,10 @@ impl App {
             self.startup_phase,
             StartupPhase::Complete | StartupPhase::Failed
         )
+    }
+
+    pub fn startup_succeeded(&self) -> bool {
+        self.startup_phase == StartupPhase::Complete
     }
 
     pub fn poll_stream(&mut self) {
@@ -592,7 +714,47 @@ impl App {
         }
     }
 
+    fn poll_session_lifecycle(&mut self) {
+        let Some(pending) = &self.pending_session_lifecycle else {
+            return;
+        };
+        let requested_session_id = pending.requested_session_id.clone();
+        let received = pending.receiver.try_recv();
+
+        match received {
+            Ok(response) => {
+                self.pending_session_lifecycle = None;
+                match response.result {
+                    Ok(reply) => {
+                        if let Err(error) =
+                            self.complete_session_lifecycle(reply, requested_session_id.as_deref())
+                        {
+                            self.agent_status = "error".to_string();
+                            self.push_speaker_text("error", &error);
+                            self.fail_startup();
+                        }
+                    }
+                    Err(error) => {
+                        self.agent_status = "error".to_string();
+                        self.push_speaker_text("error", error.trim());
+                        self.fail_startup();
+                    }
+                }
+                self.after_transcript_changed();
+            }
+            Err(TryRecvError::Empty) => {}
+            Err(TryRecvError::Disconnected) => {
+                self.pending_session_lifecycle = None;
+                self.agent_status = "error".to_string();
+                self.push_speaker_text("error", "Session lifecycle response channel disconnected.");
+                self.fail_startup();
+                self.after_transcript_changed();
+            }
+        }
+    }
+
     pub fn poll_agent(&mut self) {
+        self.poll_session_lifecycle();
         let Some(pending) = &self.pending_response else {
             return;
         };
@@ -847,7 +1009,7 @@ impl App {
     }
 
     pub fn is_agent_pending(&self) -> bool {
-        self.pending_response.is_some()
+        self.pending_response.is_some() || self.pending_session_lifecycle.is_some()
     }
 
     pub fn max_scroll(&self) -> usize {
@@ -1434,6 +1596,10 @@ impl App {
         }
 
         let prompt = self.prompt.trim().to_string();
+        if self.pending_session_lifecycle.is_some() {
+            self.agent_status = "busy".to_string();
+            return;
+        }
         if !prompt.is_empty() && self.pending_response.is_none() {
             self.final_response_range = None;
             self.response_is_streaming = false;
@@ -1708,6 +1874,10 @@ impl App {
     }
 
     fn switch_session(&mut self, session_id: String) {
+        self.switch_session_with_announcement(session_id, true);
+    }
+
+    fn switch_session_with_announcement(&mut self, session_id: String, announce: bool) {
         if self.session_id == session_id {
             return;
         }
@@ -1732,44 +1902,84 @@ impl App {
         } else {
             self.stream_status = StreamStatus::NotAttached;
         }
-        self.push_speaker_text("system", &format!("active session {}", self.session_id));
+        if announce {
+            self.push_speaker_text("system", &format!("active session {}", self.session_id));
+        }
     }
 
-    fn continue_startup_after_agent_reply(&mut self, reply: &AgentReply) {
+    fn complete_session_lifecycle(
+        &mut self,
+        reply: SessionLifecycleReply,
+        requested_session_id: Option<&str>,
+    ) -> Result<(), String> {
+        let session_id = reply.id.trim();
+        if session_id.is_empty() {
+            return Err("Gateway returned an empty TUI session id.".to_string());
+        }
+
         match self.startup_phase {
             StartupPhase::CreatingSession => {
-                if reply.command_name.as_deref() != Some("session")
-                    || self.session_id.trim().is_empty()
-                {
-                    self.fail_startup();
-                    return;
+                if !reply.created {
+                    return Err("Gateway did not create a fresh TUI session.".to_string());
                 }
-
+                self.switch_session_with_announcement(session_id.to_string(), false);
+                self.session_title = clean_session_title(reply.title);
                 self.push_speaker_text(
                     "preflight",
-                    &format!("active TUI session {}", self.session_id),
+                    &format!("created fresh TUI session {session_id}"),
                 );
-                if self.startup_attach_stream {
-                    self.start_stream();
-                    self.push_speaker_text("preflight", "event stream attached");
-                } else {
-                    self.push_speaker_text("preflight", "event stream attach deferred");
-                }
+                self.attach_startup_stream();
                 self.push_speaker_text("preflight", "all systems go");
                 self.startup_phase = StartupPhase::Greeting;
                 self.submit_internal_prompt(self.startup_greeting_prompt());
             }
-            StartupPhase::Greeting => {
+            StartupPhase::ResumingSession => {
+                let requested_session_id = requested_session_id
+                    .map(str::trim)
+                    .filter(|requested| !requested.is_empty())
+                    .ok_or_else(|| "A session id is required for explicit resume.".to_string())?;
+                if reply.created {
+                    return Err("Gateway created a session during explicit resume.".to_string());
+                }
+                if session_id != requested_session_id {
+                    return Err(format!(
+                        "Gateway resumed session {session_id} instead of {requested_session_id}."
+                    ));
+                }
+
+                self.switch_session_with_announcement(session_id.to_string(), false);
+                self.session_title = clean_session_title(reply.title);
+                self.push_speaker_text("preflight", &format!("resumed TUI session {session_id}"));
+                self.attach_startup_stream();
+                self.push_speaker_text("preflight", "all systems go");
                 self.startup_phase = StartupPhase::Complete;
+                self.agent_status = "ready".to_string();
             }
-            _ => {}
+            _ => return Err("Session lifecycle completed outside startup.".to_string()),
+        }
+
+        Ok(())
+    }
+
+    fn attach_startup_stream(&mut self) {
+        if self.startup_attach_stream {
+            self.start_stream();
+            self.push_speaker_text("preflight", "event stream attached");
+        } else {
+            self.push_speaker_text("preflight", "event stream attach deferred");
+        }
+    }
+
+    fn continue_startup_after_agent_reply(&mut self, _reply: &AgentReply) {
+        if self.startup_phase == StartupPhase::Greeting {
+            self.startup_phase = StartupPhase::Complete;
         }
     }
 
     fn fail_startup(&mut self) {
         if matches!(
             self.startup_phase,
-            StartupPhase::CreatingSession | StartupPhase::Greeting
+            StartupPhase::CreatingSession | StartupPhase::ResumingSession | StartupPhase::Greeting
         ) {
             self.startup_phase = StartupPhase::Failed;
             self.push_speaker_text("preflight", "startup preflight failed");

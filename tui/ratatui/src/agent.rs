@@ -1,11 +1,14 @@
 use std::io::Read;
 use std::time::Duration;
 
-use crate::http::{connect_tcp, parse_http_response, write_http_request, HttpEndpoint};
+use crate::http::{
+    connect_tcp, parse_http_response, percent_encode, write_http_request, HttpEndpoint,
+};
 
 const AGENT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const AGENT_READ_TIMEOUT: Duration = Duration::from_secs(240);
 const AGENT_WRITE_TIMEOUT: Duration = Duration::from_secs(10);
+const SESSION_LIFECYCLE_READ_TIMEOUT: Duration = Duration::from_secs(10);
 const LOCAL_TUI_SCOPE_ID: &str = "local-tui";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,6 +26,31 @@ pub struct SessionSummary {
     pub origin: String,
     pub title: Option<String>,
     pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionLifecycleReply {
+    pub id: String,
+    pub title: Option<String>,
+    pub created: bool,
+}
+
+pub fn create_chat_session(base_url: &str) -> Result<SessionLifecycleReply, String> {
+    send_session_lifecycle_request(base_url, "/api/chat/sessions")
+}
+
+pub fn resume_chat_session(
+    base_url: &str,
+    session_id: &str,
+) -> Result<SessionLifecycleReply, String> {
+    let session_id = session_id.trim();
+    if session_id.is_empty() {
+        return Err("Session id is required for resume.".to_string());
+    }
+    send_session_lifecycle_request(
+        base_url,
+        &format!("/api/chat/sessions/{}/resume", percent_encode(session_id)),
+    )
 }
 
 pub fn send_agent_prompt(base_url: &str, session_id: &str, prompt: &str) -> Result<String, String> {
@@ -82,7 +110,10 @@ Connection: close\r\n\
 pub fn list_chat_sessions(base_url: &str, limit: usize) -> Result<Vec<SessionSummary>, String> {
     let endpoint = HttpEndpoint::parse(base_url)?;
     let limit = limit.clamp(1, 50);
-    let path = format!("/api/chat/sessions?limit={limit}");
+    let path = format!(
+        "/api/chat/sessions?connector=tui&actorId={scope}&conversationId={scope}&threadId={scope}&limit={limit}",
+        scope = LOCAL_TUI_SCOPE_ID,
+    );
 
     let mut stream = connect_tcp(
         &endpoint,
@@ -109,6 +140,101 @@ Connection: close\r\n\
         .map_err(|error| format!("Could not read gateway session list response: {error}"))?;
 
     parse_session_list_response(&response)
+}
+
+fn send_session_lifecycle_request(
+    base_url: &str,
+    path: &str,
+) -> Result<SessionLifecycleReply, String> {
+    let endpoint = HttpEndpoint::parse(base_url)?;
+    let body = local_tui_identity_body();
+    let mut stream = connect_tcp(
+        &endpoint,
+        AGENT_CONNECT_TIMEOUT,
+        SESSION_LIFECYCLE_READ_TIMEOUT,
+        AGENT_WRITE_TIMEOUT,
+    )?;
+    let request = format!(
+        "POST {path} HTTP/1.1\r\n\
+Host: {host}:{port}\r\n\
+Content-Type: application/json\r\n\
+Content-Length: {length}\r\n\
+Connection: close\r\n\
+\r\n\
+{body}",
+        host = endpoint.host,
+        port = endpoint.port,
+        length = body.len(),
+    );
+    write_http_request(&mut stream, &request, "session lifecycle")?;
+
+    let mut response = Vec::new();
+    stream
+        .read_to_end(&mut response)
+        .map_err(|error| format!("Could not read gateway session lifecycle response: {error}"))?;
+    parse_session_lifecycle_response(&response)
+}
+
+fn local_tui_identity_body() -> String {
+    serde_json::json!({
+        "connector": "tui",
+        "actorId": LOCAL_TUI_SCOPE_ID,
+        "conversationId": LOCAL_TUI_SCOPE_ID,
+        "threadId": LOCAL_TUI_SCOPE_ID,
+    })
+    .to_string()
+}
+
+fn parse_session_lifecycle_response(response: &[u8]) -> Result<SessionLifecycleReply, String> {
+    let response = parse_http_response(response, "Gateway")?;
+    let body = String::from_utf8(response.body)
+        .map_err(|error| format!("Gateway returned a non-UTF-8 session lifecycle body: {error}"))?;
+    if !(200..300).contains(&response.status) {
+        return Err(format!(
+            "Gateway returned HTTP {} for session lifecycle: {}",
+            response.status,
+            body.trim().chars().take(500).collect::<String>()
+        ));
+    }
+
+    let json: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|error| format!("Gateway returned invalid JSON for session lifecycle: {error}"))?;
+    let session = json.get("session").and_then(serde_json::Value::as_object);
+    let id = session
+        .and_then(|session| session.get("id"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|id| !id.is_empty());
+    let surface = session
+        .and_then(|session| session.get("surface"))
+        .and_then(serde_json::Value::as_str);
+    let created = session
+        .and_then(|session| session.get("created"))
+        .and_then(serde_json::Value::as_bool);
+    let (Some(id), Some(created)) = (id, created) else {
+        return Err(format!(
+            "Gateway session lifecycle response did not contain session metadata: {}",
+            body.trim().chars().take(500).collect::<String>()
+        ));
+    };
+    if surface != Some("tui") {
+        return Err(format!(
+            "Gateway session lifecycle response did not contain TUI session metadata: {}",
+            body.trim().chars().take(500).collect::<String>()
+        ));
+    }
+
+    let title = session
+        .and_then(|session| session.get("title"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|title| !title.is_empty())
+        .map(str::to_string);
+    Ok(SessionLifecycleReply {
+        id: id.to_string(),
+        title,
+        created,
+    })
 }
 
 fn parse_agent_response(response: &[u8]) -> Result<AgentReply, String> {
