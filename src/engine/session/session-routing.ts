@@ -28,6 +28,7 @@ export interface ChatSessionResolution {
 
 export function resolveChatSession(input: ResolveChatSessionInput): ChatSessionResolution {
   const surface = surfaceForEvent(input.event);
+  const persistentConnector = connectorUsesPersistentSession(input.event.connector);
   const activeLookup = {
     surface,
     connector: input.event.connector,
@@ -36,7 +37,7 @@ export function resolveChatSession(input: ResolveChatSessionInput): ChatSessionR
     threadId: input.event.conversation.threadId,
   };
   const explicitSessionId = cleanSessionId(input.requestedSessionId);
-  const existingActiveSessionId = isActiveSessionManagedSurface(surface) && !input.forceNew
+  const existingActiveSessionId = persistentConnector && !input.forceNew
     ? goromboPersistenceRuntime.sessionDatabase.getActiveSession(activeLookup)
     : null;
   const sessionId = explicitSessionId ?? existingActiveSessionId ?? undefined;
@@ -57,7 +58,7 @@ export function resolveChatSession(input: ResolveChatSessionInput): ChatSessionR
       displayName: input.displayName,
     });
 
-    if (isActiveSessionManagedSurface(surface)) {
+    if (persistentConnector) {
       goromboPersistenceRuntime.sessionDatabase.setActiveSession({
         ...activeLookup,
         sessionId,
@@ -81,7 +82,7 @@ export function resolveChatSession(input: ResolveChatSessionInput): ChatSessionR
     displayName: input.displayName,
   });
 
-  if (isActiveSessionManagedSurface(surface)) {
+  if (persistentConnector) {
     goromboPersistenceRuntime.sessionDatabase.setActiveSession({
       ...activeLookup,
       sessionId: session.sessionId,
@@ -104,6 +105,10 @@ export function isGuiSessionManagedConnector(connector: ConnectorKind): boolean 
   return connector === 'web-api';
 }
 
+export function connectorUsesPersistentSession(connector: ConnectorKind): boolean {
+  return connector === 'telegram';
+}
+
 function surfaceForEvent(event: NormalizedMessageEvent): ChatSurface {
   if (isGuiSessionManagedConnector(event.connector)) {
     return 'web';
@@ -112,10 +117,6 @@ function surfaceForEvent(event: NormalizedMessageEvent): ChatSurface {
     return 'tui';
   }
   return 'connector';
-}
-
-function isActiveSessionManagedSurface(surface: ChatSurface): boolean {
-  return surface === 'connector' || surface === 'tui';
 }
 
 function cleanSessionId(value: string | undefined): string | undefined {
