@@ -17,16 +17,23 @@ export interface DeliveredGithubAuthChallenge {
 
 export interface GithubAuthChallengeRelay {
   deliver(challenge: GithubAuthChallenge): void;
+  acquire(audience: GithubAuthAudience): GithubAuthChallengeLease | undefined;
   consume(audience: GithubAuthAudience): DeliveredGithubAuthChallenge | undefined;
   subscribe(listener: GithubAuthChallengeListener): () => void;
 }
 
 export type GithubAuthChallengeListener = (audience: GithubAuthAudience) => void;
 
+export interface GithubAuthChallengeLease {
+  challenge: DeliveredGithubAuthChallenge;
+  ack(): boolean;
+  release(): boolean;
+}
+
 /**
- * Holds a device challenge only long enough to return it through the initiating
- * connector response. This deliberately has no persistence or progress-event
- * integration: a device code is a temporary authorization capability.
+ * Holds a device challenge only long enough to deliver it through its trusted
+ * connector. This deliberately has no persistence or progress-event integration:
+ * a device code is a temporary authorization capability.
  */
 export class InMemoryGithubAuthChallengeRelay implements GithubAuthChallengeRelay {
   readonly #challenges = new Map<string, StoredChallenge>();
@@ -67,27 +74,57 @@ export class InMemoryGithubAuthChallengeRelay implements GithubAuthChallengeRela
     }
   }
 
-  consume(audience: GithubAuthAudience): DeliveredGithubAuthChallenge | undefined {
+  acquire(audience: GithubAuthAudience): GithubAuthChallengeLease | undefined {
     const match = this.#findChallenge(audience);
     if (!match) {
       return undefined;
     }
     const [eventId, stored] = match;
     const challenge = stored.challenge;
-    if (stored.expiryTimer) clearTimeout(stored.expiryTimer);
-    if (this.#challenges.get(eventId) === stored) {
-      this.#challenges.delete(eventId);
-    }
     const expiresAt = Date.parse(challenge.expiresAt);
     if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      if (stored.expiryTimer) clearTimeout(stored.expiryTimer);
+      if (this.#challenges.get(eventId) === stored) {
+        this.#challenges.delete(eventId);
+      }
       return undefined;
     }
-    return {
-      sessionId: challenge.sessionId,
-      verificationUri: challenge.verificationUri,
-      userCode: challenge.userCode,
-      expiresAt: challenge.expiresAt,
+    if (stored.reservation) return undefined;
+
+    const reservation = Symbol('github-auth-challenge-reservation');
+    stored.reservation = reservation;
+    let settled = false;
+    const settle = (consume: boolean): boolean => {
+      if (settled) return false;
+      settled = true;
+      if (this.#challenges.get(eventId) !== stored || stored.reservation !== reservation) {
+        return false;
+      }
+      if (consume) {
+        if (stored.expiryTimer) clearTimeout(stored.expiryTimer);
+        this.#challenges.delete(eventId);
+      } else {
+        stored.reservation = undefined;
+      }
+      return true;
     };
+    return {
+      challenge: {
+        sessionId: challenge.sessionId,
+        verificationUri: challenge.verificationUri,
+        userCode: challenge.userCode,
+        expiresAt: challenge.expiresAt,
+      },
+      ack: () => settle(true),
+      release: () => settle(false),
+    };
+  }
+
+  consume(audience: GithubAuthAudience): DeliveredGithubAuthChallenge | undefined {
+    const lease = this.acquire(audience);
+    if (!lease) return undefined;
+    lease.ack();
+    return lease.challenge;
   }
 
   #findChallenge(audience: GithubAuthAudience): [string, StoredChallenge] | undefined {
@@ -119,6 +156,7 @@ export class InMemoryGithubAuthChallengeRelay implements GithubAuthChallengeRela
 interface StoredChallenge {
   challenge: GithubAuthChallenge;
   expiryTimer?: NodeJS.Timeout;
+  reservation?: symbol;
 }
 
 const defaultRelay = new InMemoryGithubAuthChallengeRelay();

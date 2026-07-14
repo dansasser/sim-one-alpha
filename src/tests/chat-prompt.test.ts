@@ -64,3 +64,15 @@ test('chat prompt carries an event-scoped GitHub auth admission only when connec
   assert.match(prompt, /pass it unchanged to the coding-worker/i);
   assert.doesNotMatch(createChatPrompt(event), /githubAuthAdmissionId/);
 });
+
+test('chat prompt directs Telegram group authorization to a private bot chat', () => {
+  const event = normalizeWebApiMessage({
+    text: 'Authenticate GitHub from a group.',
+    actorId: 'telegram-user',
+    conversationId: 'telegram-group',
+  });
+  const prompt = createChatPrompt(event, { githubAuthRequiresPrivateChat: true });
+
+  assert.match(prompt, /GitHub authorization.*private chat/i);
+  assert.match(prompt, /do not attempt.*GitHub auth/i);
+});

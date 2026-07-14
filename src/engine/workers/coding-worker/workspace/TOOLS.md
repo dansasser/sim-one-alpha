@@ -26,6 +26,8 @@ If approval completes after the initiating turn, call `github_auth_start` again 
 
 For asynchronous connectors such as Telegram, the delegated task also includes an opaque `admissionId` issued by trusted ingress. Pass it unchanged to `github_auth_status` and `github_auth_start`. It is short-lived and bound to the exact event audience; never log it, emit it in progress, reuse it for another event, or include it in a user response.
 
+Telegram issues this admission only in a private bot chat. Do not attempt device authorization from a group or supergroup event; direct the user to the bot's private chat instead.
+
 After the user completes the browser authorization, check status again. Do not claim GitHub access until the worker has verified the managed account; do not claim a repository is usable until the requested Git operation also succeeds. Use HTTPS Git remotes only for product-managed GitHub access.
 
 The runtime workspace root is the coding worker's access root. Do not treat the agent source checkout or `process.cwd()` as the default user project. Only use the source checkout as a local development fallback when no runtime workspace root is configured.

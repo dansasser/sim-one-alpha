@@ -27,6 +27,11 @@ Synchronous chat ingress consumes the one-time browser URL/code once and returns
 it outside the model/tool transcript. Asynchronous connectors subscribe to the
 same audience-bound relay and deliver it through connector-owned APIs. Generic
 Coding Worker progress events contain only opaque session state.
+
+Telegram issues GitHub-auth admissions only for private bot chats. It never
+posts a device URL or code into a group or supergroup. Connector delivery leases
+the one-time challenge and acknowledges it only after Telegram accepts the
+private message; a failed send releases the same lease for an explicit retry.
 ```
 
 Synchronous chat ingress binds the normalized current event through request-local

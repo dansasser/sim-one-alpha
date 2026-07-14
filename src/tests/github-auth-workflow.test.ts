@@ -181,6 +181,7 @@ function createDependencies(
     evaluateApproval: async () => { throw new Error('approval evaluation was not expected'); },
     getChallengeRelay: () => ({
       deliver: () => undefined,
+      acquire: () => undefined,
       consume: () => undefined,
       subscribe: () => () => undefined,
     }),

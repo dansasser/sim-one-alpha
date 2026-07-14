@@ -227,8 +227,8 @@ src/workflows/github-auth.ts
   Exports no public route until durable event-scoped workflow admission exists.
 
 src/api/ingress/github-auth-challenge-relay.ts
-  One-time audience-bound challenge storage with connector delivery listeners.
-  Telegram consumes through its trusted channel listener; synchronous chat consumes in its response path.
+  One-time audience-bound challenge storage with connector delivery listeners and race-safe delivery leases.
+  Telegram consumes only for private chats through its trusted channel listener; synchronous chat consumes in its response path.
 
 src/workflows/retrieval.ts
   Shared retrieval machinery.

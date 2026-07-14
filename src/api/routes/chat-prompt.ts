@@ -2,6 +2,7 @@ import type { NormalizedMessageEvent } from '../../core/types/index.js';
 
 export interface ChatPromptOptions {
   githubAuthAdmissionId?: string;
+  githubAuthRequiresPrivateChat?: boolean;
 }
 
 export function createChatPrompt(event: NormalizedMessageEvent, options: ChatPromptOptions = {}): string {
@@ -28,6 +29,9 @@ Before you answer:
 7. If this event came from Telegram, the channel will send your final text response back to the chat automatically.
 ${options.githubAuthAdmissionId
   ? `8. This event has a GitHub auth admissionId: "${options.githubAuthAdmissionId}". It is scoped only to eventId "${event.id}". If you delegate GitHub authentication, pass it unchanged to the coding-worker and never expose it in a user response or progress event.`
+  : ''}
+${options.githubAuthRequiresPrivateChat
+  ? '8. GitHub authorization cannot be started from this Telegram group. If GitHub authorization is needed, tell the user to message the bot in a private chat; do not attempt GitHub auth from this event.'
   : ''}
 
 Safe event:

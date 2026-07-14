@@ -249,11 +249,17 @@ async function handleIncomingMessage(incoming: Message, update: Update) {
     sessionId: sessionResolution.sessionId,
     deliveryKind: 'direct-agent',
   });
-  const githubAuthAdmission = goromboPersistenceRuntime.sessionDatabase.createTrustedEventAdmission({
-    event: normalized,
-    purpose: 'github.auth',
-    expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
-  });
+  const isPrivateChat = incoming.chat.type === 'private';
+  if (isPrivateChat) {
+    await deliverTelegramGithubAuthChallenge(githubAuthAudienceFromEvent(normalized)).catch(() => false);
+  }
+  const githubAuthAdmission = isPrivateChat
+    ? goromboPersistenceRuntime.sessionDatabase.createTrustedEventAdmission({
+      event: normalized,
+      purpose: 'github.auth',
+      expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+    })
+    : undefined;
 
   const activeChannel = getOrCreateTelegramChannel();
 
@@ -263,7 +269,10 @@ async function handleIncomingMessage(incoming: Message, update: Update) {
       type: 'telegram.message',
       updateId: update.update_id,
       message: incoming,
-      prompt: createChatPrompt(normalized, { githubAuthAdmissionId: githubAuthAdmission.id }),
+      prompt: createChatPrompt(normalized, {
+        githubAuthAdmissionId: githubAuthAdmission?.id,
+        githubAuthRequiresPrivateChat: !isPrivateChat,
+      }),
     },
   });
 
@@ -289,15 +298,21 @@ export async function deliverTelegramGithubAuthChallenge(
   if (!event || !sameGithubAuthAudience(githubAuthAudienceFromEvent(event), audience)) {
     return false;
   }
-  const challenge = dependencies.relay.consume(audience);
-  if (!challenge) return false;
-  const threadId = Number(event.conversation.threadId);
-  await dependencies.sendMessage(
-    event.conversation.id,
-    `Open ${challenge.verificationUri} and enter code ${challenge.userCode} to authorize GitHub.`,
-    { messageThreadId: Number.isFinite(threadId) ? threadId : undefined },
-  );
-  return true;
+  if (event.actor.id !== event.conversation.id) return false;
+
+  const lease = dependencies.relay.acquire(audience);
+  if (!lease) return false;
+  try {
+    await dependencies.sendMessage(
+      event.actor.id,
+      `Open ${lease.challenge.verificationUri} and enter code ${lease.challenge.userCode} to authorize GitHub.`,
+      {},
+    );
+    return lease.ack();
+  } catch (error) {
+    lease.release();
+    throw error;
+  }
 }
 
 function registerTelegramGithubAuthChallengeDelivery(): void {

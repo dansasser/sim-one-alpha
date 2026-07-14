@@ -200,3 +200,67 @@ test('GitHub auth challenge relay notifies connector listeners after storing the
     },
   });
 });
+
+test('GitHub auth challenge leases prevent duplicate delivery and can be released', () => {
+  const relay = new InMemoryGithubAuthChallengeRelay();
+  relay.deliver({
+    sessionId: 'session-lease',
+    audience,
+    verificationUri: 'https://github.com/login/device',
+    userCode: 'LEAS-0001',
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  });
+
+  const lease = relay.acquire(audience);
+  assert.ok(lease);
+  assert.equal(relay.acquire(audience), undefined);
+  assert.equal(lease.release(), true);
+  assert.deepEqual(relay.consume(audience), lease.challenge);
+});
+
+test('a stale challenge lease cannot acknowledge a newer replacement', () => {
+  const relay = new InMemoryGithubAuthChallengeRelay();
+  relay.deliver({
+    sessionId: 'session-stale-lease',
+    audience,
+    verificationUri: 'https://github.com/login/device',
+    userCode: 'LEAS-OLD1',
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  });
+  const staleLease = relay.acquire(audience);
+  assert.ok(staleLease);
+
+  const replacementExpiry = new Date(Date.now() + 60_000).toISOString();
+  relay.deliver({
+    sessionId: 'session-fresh-lease',
+    audience,
+    verificationUri: 'https://github.com/login/device',
+    userCode: 'LEAS-NEW2',
+    expiresAt: replacementExpiry,
+  });
+
+  assert.equal(staleLease.ack(), false);
+  assert.deepEqual(relay.consume(audience), {
+    sessionId: 'session-fresh-lease',
+    verificationUri: 'https://github.com/login/device',
+    userCode: 'LEAS-NEW2',
+    expiresAt: replacementExpiry,
+  });
+});
+
+test('an expired challenge lease cannot be released back into the relay', async () => {
+  const relay = new InMemoryGithubAuthChallengeRelay();
+  relay.deliver({
+    sessionId: 'session-expiring-lease',
+    audience,
+    verificationUri: 'https://github.com/login/device',
+    userCode: 'LEAS-END1',
+    expiresAt: new Date(Date.now() + 10).toISOString(),
+  });
+  const lease = relay.acquire(audience);
+  assert.ok(lease);
+
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(lease.release(), false);
+  assert.equal(relay.consume(audience), undefined);
+});
