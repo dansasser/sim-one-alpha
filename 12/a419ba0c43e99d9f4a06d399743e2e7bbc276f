@@ -1,0 +1,47 @@
+src/api/routes/chat-events.ts
+  s_a81fff26d52223::t_c0cd4e24dc8f56 24,113-114
+  s_65db8ffa7c9620::t_d03a2ee5a19c70 115
+src/engine/session/session-database.ts
+  s_a81fff26d52223::t_d0933ffd0f5ebc 344-375,1001
+src/tests/http-endpoints.test.ts
+  s_a81fff26d52223::t_47875a41cca77c 173-183,207-209,248,250-255
+  s_a81fff26d52223::t_8a104d2e1885f0 210-233,235-247
+  s_a81fff26d52223::t_2971e4947221ef 93
+  s_a81fff26d52223::t_c6a295daf06374 5-6,11,15,95,97-98,367,369-373,375,377,379-380,385,389,391-392,398,402,404-410,412,414,416-472,476-480,482,485-491,767-775,787-810
+  s_a81fff26d52223::t_ee0383940f1d25 483-484
+  s_a81fff26d52223::t_d56a6b7e609f66 811
+src/engine/session/session-routing.ts
+  s_a81fff26d52223::t_d0933ffd0f5ebc 14-27,43-48,51-54,58,60,73-140,153-154,157,168-191,194-197,203-211,215
+src/tests/session-routing.test.ts
+  s_a81fff26d52223::t_9888064cf97c4d 2-4,13,15-16,18-20,85-170,172-228,259-265
+  s_a81fff26d52223::t_da5906b091f416 9-12,171
+  s_65db8ffa7c9620::t_91bb30b7d89720 266-268
+src/app.ts
+  s_a81fff26d52223::t_c0cd4e24dc8f56 7,26
+src/api/routes/chat-sessions.ts
+  s_a81fff26d52223::t_c0cd4e24dc8f56 1-120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "12a419ba0c43e99d9f4a06d399743e2e7bbc276f",
+  "prompts": {},
+  "sessions": {
+    "s_65db8ffa7c9620": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f51b3-89d7-7d02-973d-9679f07254a1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    },
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
