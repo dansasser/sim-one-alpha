@@ -283,6 +283,7 @@ test('model-facing worker commands strip all Git config overrides and raw GitHub
       env: {
         GH_TOKEN: 'raw-gh-token',
         GITHUB_TOKEN: 'raw-github-token',
+        GOROMBO_GITHUB_AUTH_ROOT: authRoot,
         GH_CONFIG_DIR: '/attacker/gh',
         GIT_CONFIG_COUNT: '3',
         GIT_CONFIG_KEY_2: 'credential.helper',
@@ -296,6 +297,7 @@ test('model-facing worker commands strip all Git config overrides and raw GitHub
     for (const forbiddenName of [
       'GH_TOKEN',
       'GITHUB_TOKEN',
+      'GOROMBO_GITHUB_AUTH_ROOT',
       'GH_CONFIG_DIR',
       'GIT_CONFIG_COUNT',
       'GIT_CONFIG_KEY_2',

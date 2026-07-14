@@ -315,6 +315,7 @@ function withoutGithubCredentials(
   for (const key of githubRawTokenEnvironmentKeys) {
     delete filtered[key];
   }
+  delete filtered.GOROMBO_GITHUB_AUTH_ROOT;
   delete filtered.GH_CONFIG_DIR;
   for (const key of Object.keys(filtered)) {
     if (key.startsWith('GIT_CONFIG_')) {
