@@ -1,0 +1,25 @@
+src/engine/workers/coding-worker/workspace/TOOLS.md
+  s_65db8ffa7c9620::t_83931678048328 27
+src/tests/architecture-contract.test.ts
+  s_65db8ffa7c9620::t_83931678048328 116-117
+src/tests/chat-prompt.test.ts
+  s_65db8ffa7c9620::t_83931678048328 63
+src/workspace/TOOLS.md
+  s_65db8ffa7c9620::t_83931678048328 37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "d6f273f2c07cd19c4b51eff5f0d838d50ef2df92",
+  "prompts": {},
+  "sessions": {
+    "s_65db8ffa7c9620": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f51b3-89d7-7d02-973d-9679f07254a1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
