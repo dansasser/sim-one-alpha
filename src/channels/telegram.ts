@@ -242,6 +242,8 @@ async function handleIncomingMessage(incoming: Message, update: Update) {
     update_id: update.update_id,
     message: incoming as unknown as Parameters<typeof normalizeTelegramUpdate>[0]['message'],
   });
+  const activeChannel = getOrCreateTelegramChannel();
+  const agentInstanceId = activeChannel.conversationKey(conversationFromMessage(incoming));
 
   const sessionResolution = resolveChatSession({ event: normalized });
   goromboPersistenceRuntime.sessionDatabase.recordNormalizedMessageEvent({
@@ -253,24 +255,22 @@ async function handleIncomingMessage(incoming: Message, update: Update) {
   if (isPrivateChat) {
     await deliverTelegramGithubAuthChallenge(githubAuthAudienceFromEvent(normalized)).catch(() => false);
   }
-  const githubAuthAdmission = isPrivateChat
-    ? goromboPersistenceRuntime.sessionDatabase.createTrustedEventAdmission({
+  if (isPrivateChat) {
+    goromboPersistenceRuntime.sessionDatabase.createTrustedEventAdmission({
       event: normalized,
+      agentInstanceId,
       purpose: 'github.auth',
       expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
-    })
-    : undefined;
-
-  const activeChannel = getOrCreateTelegramChannel();
+    });
+  }
 
   const harness = await dispatch(orchestratorAgent, {
-    id: activeChannel.conversationKey(conversationFromMessage(incoming)),
+    id: agentInstanceId,
     input: {
       type: 'telegram.message',
       updateId: update.update_id,
       message: incoming,
       prompt: createChatPrompt(normalized, {
-        githubAuthAdmissionId: githubAuthAdmission?.id,
         githubAuthRequiresPrivateChat: !isPrivateChat,
       }),
     },

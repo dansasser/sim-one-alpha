@@ -84,6 +84,7 @@ export interface RecordNormalizedMessageEventInput {
 
 export interface TrustedEventAdmission {
   id: string;
+  agentInstanceId: string;
   eventId: string;
   purpose: 'github.auth';
   connector: string;
@@ -95,6 +96,7 @@ export interface TrustedEventAdmission {
 
 export interface CreateTrustedEventAdmissionInput {
   event: NormalizedMessageEvent;
+  agentInstanceId: string;
   purpose: TrustedEventAdmission['purpose'];
   expiresAt: string;
 }
@@ -431,6 +433,7 @@ export class GoromboSessionDatabase {
     const createdAt = new Date().toISOString();
     const admission: TrustedEventAdmission = {
       id: randomUUID(),
+      agentInstanceId: input.agentInstanceId,
       eventId: input.event.id,
       purpose: input.purpose,
       connector: input.event.connector,
@@ -441,11 +444,16 @@ export class GoromboSessionDatabase {
     };
     this.database.prepare(`DELETE FROM trusted_event_admissions WHERE expires_at <= ?`).run(createdAt);
     this.database.prepare(
+      `DELETE FROM trusted_event_admissions
+       WHERE agent_instance_id = ? AND event_id = ? AND purpose = ?`,
+    ).run(admission.agentInstanceId, admission.eventId, admission.purpose);
+    this.database.prepare(
       `INSERT INTO trusted_event_admissions
-       (admission_id, event_id, purpose, connector, actor_id, conversation_id, expires_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (admission_id, agent_instance_id, event_id, purpose, connector, actor_id, conversation_id, expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       admission.id,
+      admission.agentInstanceId,
       admission.eventId,
       admission.purpose,
       admission.connector,
@@ -457,13 +465,17 @@ export class GoromboSessionDatabase {
     return admission;
   }
 
-  getTrustedEventAdmission(admissionId: string): TrustedEventAdmission | undefined {
+  getTrustedEventAdmissionForAgent(
+    agentInstanceId: string,
+    eventId: string,
+  ): TrustedEventAdmission | undefined {
     const row = this.database.prepare(
-      `SELECT admission_id, event_id, purpose, connector, actor_id, conversation_id, expires_at, created_at
+      `SELECT admission_id, agent_instance_id, event_id, purpose, connector, actor_id, conversation_id, expires_at, created_at
        FROM trusted_event_admissions
-       WHERE admission_id = ?`,
-    ).get(admissionId) as {
+       WHERE agent_instance_id = ? AND event_id = ? AND purpose = 'github.auth'`,
+    ).get(agentInstanceId, eventId) as {
       admission_id: string;
+      agent_instance_id: string;
       event_id: string;
       purpose: string;
       connector: string;
@@ -475,11 +487,12 @@ export class GoromboSessionDatabase {
     if (!row) return undefined;
     const expiresAt = Date.parse(row.expires_at);
     if (!Number.isFinite(expiresAt) || expiresAt <= Date.now() || row.purpose !== 'github.auth') {
-      this.database.prepare(`DELETE FROM trusted_event_admissions WHERE admission_id = ?`).run(admissionId);
+      this.database.prepare(`DELETE FROM trusted_event_admissions WHERE admission_id = ?`).run(row.admission_id);
       return undefined;
     }
     return {
       id: row.admission_id,
+      agentInstanceId: row.agent_instance_id,
       eventId: row.event_id,
       purpose: 'github.auth',
       connector: row.connector,
@@ -947,6 +960,7 @@ export class GoromboSessionDatabase {
 
       CREATE TABLE IF NOT EXISTS trusted_event_admissions (
         admission_id TEXT PRIMARY KEY,
+        agent_instance_id TEXT NOT NULL,
         event_id TEXT NOT NULL,
         purpose TEXT NOT NULL,
         connector TEXT NOT NULL,
@@ -1043,11 +1057,29 @@ export class GoromboSessionDatabase {
       );
     `);
 
+    this.ensureTrustedEventAdmissionAgentInstanceColumn();
     this.ensureSessionMemoryScopeColumns();
     this.database.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_trusted_event_admissions_agent_event
+        ON trusted_event_admissions(agent_instance_id, event_id, purpose);
+
       CREATE INDEX IF NOT EXISTS idx_session_memory_scope
         ON session_memory_chunks(actor_id, conversation_id, session_name);
     `);
+  }
+
+  private ensureTrustedEventAdmissionAgentInstanceColumn(): void {
+    const existingColumns = new Set(
+      (this.database.prepare(`PRAGMA table_info(trusted_event_admissions)`).all() as unknown as Array<{ name: string }>)
+        .map((column) => column.name),
+    );
+    if (!existingColumns.has('agent_instance_id')) {
+      try {
+        this.database.exec(`ALTER TABLE trusted_event_admissions ADD COLUMN agent_instance_id TEXT`);
+      } catch (error) {
+        if (!String(error).includes('duplicate column name')) throw error;
+      }
+    }
   }
 
   private ensureSessionMemoryScopeColumns(): void {
@@ -1747,9 +1779,6 @@ function parseJsonStringArray(value: string | null | undefined): string[] {
   }
   return [];
 }
-
-
-
 
 
 

@@ -34,7 +34,7 @@ The main agent retains user-facing outcome ownership: explain the result, progre
 - Use `list_image_artifacts` when the user references a prior image or asks for image history.
 - Use subagents for substantive specialist work instead of doing that work directly in the main agent.
 - For repository work and GitHub work, delegate to `coding-worker`. It owns project/repository discovery and creation, inspection and edits, shell/test/debug loops, code intelligence and review, clone/branch/worktree/fetch/sync operations, approval-gated commit/push, and GitHub issue/PR/check/comment/review work.
-- When trusted connector context includes a GitHub auth `admissionId`, pass that opaque value and the current `eventId` unchanged in the Coding Worker delegation. Never reuse it for another event or expose it in the response.
+- For GitHub authentication delegation, pass only the trusted current `eventId` to the Coding Worker. Trusted ingress authority is bound server-side to the Flue agent instance and is never supplied to the model; never invent or substitute an event ID from another turn.
 - Telegram GitHub authorization is private-chat only. If a group event has no auth admission, tell the user to message the bot privately; never attempt to route a device code through the group.
 - Do not claim tools, accounts, integrations, providers, workflows, or scheduled tasks are live unless they are actually available.
 

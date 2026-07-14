@@ -52,6 +52,8 @@ export interface CodingWorkerSubagentOptions extends CodingWorkspaceTargetInput 
   githubAuthRoot?: string;
   /** Injectable managed auth service for tests or an application-owned runtime. */
   githubAuthService?: GithubAuthService;
+  /** Trusted parent Flue agent instance used to resolve backend event admissions. */
+  trustedAgentInstanceId?: string;
 }
 
 export const codingWorkerInstructions = [
@@ -193,6 +195,7 @@ export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOp
         env: resolvedOptions.env,
         approvalService,
         authServiceLoader: getAuthService,
+        trustedAgentInstanceId: resolvedOptions.trustedAgentInstanceId,
       }),
       ...createCodingPlanningTools(),
       ...createCodingTaskMemoryTools({
@@ -224,7 +227,7 @@ export async function createCodingWorkerSubagent(options: CodingWorkerSubagentOp
   });
 }
 
-export default createAgent(async ({ env }) => {
+export default createAgent(async ({ id, env }) => {
   const models = configureRuntimeModels(env);
   const selectedModelCard = models.selectedModelCard;
   const workspaceRoot = resolveCodingWorkerWorkspaceRoot(env);
@@ -235,6 +238,7 @@ export default createAgent(async ({ env }) => {
       workspaceRoot,
       approvalRoot: readOptionalEnv(env, 'GOROMBO_APPROVAL_ROOT'),
       env: createCodingWorkerToolEnv(env),
+      trustedAgentInstanceId: id,
     }),
     model: selectedModelCard.specifier,
     cwd: workspaceRoot,

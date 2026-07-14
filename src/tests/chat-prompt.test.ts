@@ -51,18 +51,17 @@ test('chat prompt excludes sensitive event context and raw payloads', () => {
   assert.doesNotMatch(prompt, /secret-raw-token/);
 });
 
-test('chat prompt carries an event-scoped GitHub auth admission only when connector ingress supplies one', () => {
+test('chat prompt carries the non-secret event id without exposing an auth admission capability', () => {
   const event = normalizeWebApiMessage({
     text: 'Authenticate GitHub.',
     actorId: 'local-user',
     conversationId: 'local-thread',
   });
 
-  const prompt = createChatPrompt(event, { githubAuthAdmissionId: 'admission-123' });
+  const prompt = createChatPrompt(event);
 
-  assert.match(prompt, /admission-123/);
-  assert.match(prompt, /pass it unchanged to the coding-worker/i);
-  assert.doesNotMatch(createChatPrompt(event), /githubAuthAdmissionId/);
+  assert.match(prompt, new RegExp(event.id));
+  assert.doesNotMatch(prompt, /admissionId/i);
 });
 
 test('chat prompt directs Telegram group authorization to a private bot chat', () => {

@@ -166,6 +166,38 @@ test('GitHub auth tools reject a persisted event that is not the current trusted
   }
 });
 
+test('GitHub auth tools return the explicitly trusted current event instead of a different ambient event', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'github-auth-explicit-current-event-'));
+  const approvalService = createInMemoryCodingApprovalService();
+  const currentEvent = { ...event, id: 'event-explicit-current' };
+  const ambientEvent = {
+    ...event,
+    id: 'event-ambient-other',
+    actor: { id: 'actor-other' },
+    conversation: { id: 'conversation-other' },
+  };
+
+  try {
+    const start = getTool(createCodingGithubAuthTools({
+      workspaceRoot,
+      approvalService,
+      authService: createFakeAuthService(),
+      currentEventId: currentEvent.id,
+      resolveEvent: (eventId) => eventId === currentEvent.id ? currentEvent : undefined,
+    }), 'github_auth_start');
+
+    const blocked = JSON.parse(await runWithTrustedMessageEvent(
+      ambientEvent,
+      () => start.execute({ eventId: currentEvent.id }),
+    )) as { request?: { metadata?: Record<string, unknown> } };
+
+    assert.equal(blocked.request?.metadata?.actorId, currentEvent.actor.id);
+    assert.equal(blocked.request?.metadata?.conversationId, currentEvent.conversation.id);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
 test('GitHub auth status is bound to the trusted event context', async () => {
   const workspaceRoot = mkdtempSync(join(tmpdir(), 'github-auth-trusted-context-'));
   let statusCalls = 0;
@@ -204,6 +236,7 @@ test('GitHub auth tools accept only a matching unexpired event admission outside
   const authService = createFakeAuthService();
   const admission = {
     id: 'admission-current',
+    agentInstanceId: 'telegram-agent-session',
     eventId: event.id,
     purpose: 'github.auth',
     connector: event.connector,
@@ -217,20 +250,28 @@ test('GitHub auth tools accept only a matching unexpired event admission outside
     const status = getTool(createCodingGithubAuthTools({
       workspaceRoot,
       authService,
+      trustedAgentInstanceId: admission.agentInstanceId,
       resolveEvent: (eventId) => eventId === event.id ? event : undefined,
-      resolveAdmission: (admissionId) => admissionId === admission.id ? admission : undefined,
+      resolveAdmissionForAgent: (agentInstanceId, eventId) =>
+        agentInstanceId === admission.agentInstanceId && eventId === event.id ? admission : undefined,
     }), 'github_auth_status');
 
-    assert.equal(JSON.parse(await status.execute({
-      eventId: event.id,
-      admissionId: admission.id,
-    })).state, 'unauthenticated');
+    assert.equal(JSON.parse(await status.execute({ eventId: event.id })).state, 'unauthenticated');
     await assert.rejects(
-      status.execute({ eventId: event.id, admissionId: 'admission-unrelated' }),
+      status.execute({ eventId: 'event-unrelated' }),
       /event admission/i,
     );
+
+    const crossSessionStatus = getTool(createCodingGithubAuthTools({
+      workspaceRoot,
+      authService,
+      trustedAgentInstanceId: 'different-agent-session',
+      resolveEvent: (eventId) => eventId === event.id ? event : undefined,
+      resolveAdmissionForAgent: (agentInstanceId, eventId) =>
+        agentInstanceId === admission.agentInstanceId && eventId === event.id ? admission : undefined,
+    }), 'github_auth_status');
     await assert.rejects(
-      status.execute({ eventId: 'event-unrelated', admissionId: admission.id }),
+      crossSessionStatus.execute({ eventId: event.id }),
       /event admission/i,
     );
   } finally {
@@ -395,11 +436,11 @@ function createFakeAuthService(
 }
 
 function getTool(tools: unknown[], name: string): {
-  execute(args: { eventId: string; admissionId?: string; approvalRequestId?: string }): Promise<string>;
+  execute(args: { eventId: string; approvalRequestId?: string }): Promise<string>;
 } {
   const tool = (tools as Array<{ name: string; execute: unknown }>).find((candidate) => candidate.name === name);
   assert.ok(tool, `Missing ${name} tool.`);
   return tool as unknown as {
-    execute(args: { eventId: string; admissionId?: string; approvalRequestId?: string }): Promise<string>;
+    execute(args: { eventId: string; approvalRequestId?: string }): Promise<string>;
   };
 }

@@ -113,7 +113,7 @@ test('Flue orchestrator routes research to the researcher instead of owning web 
   assert.match(config.instructions ?? '', /Worker-backed capabilities count as capabilities of this main agent/);
   assert.match(config.instructions ?? '', /repository work and GitHub work through the Coding Worker/i);
   assert.match(config.instructions ?? '', /does not establish that a specific provider account is authenticated/i);
-  assert.match(config.instructions ?? '', /Do not use an eventId from a prior or unrelated message/i);
+  assert.match(config.instructions ?? '', /pass only the trusted current `eventId`/i);
 });
 
 test('Flue orchestrator defaults coding-worker workspace root to src/workspace/', async () => {

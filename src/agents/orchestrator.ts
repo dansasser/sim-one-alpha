@@ -66,12 +66,13 @@ export const orchestratorInstructions = [
   createOrchestratorRuntimeCapabilityBlock(),
 ].join('\n\n');
 
-export default createAgent(async ({ env }) => {
+export default createAgent(async ({ id, env }) => {
   const models = configureRuntimeModels(env);
   const selectedModelCard = models.selectedModelCard;
   const codingWorker = await createCodingWorkerSubagent({
     workspaceRoot: resolveCodingWorkerWorkspaceRoot(env),
     env: createCodingWorkerToolEnv(env),
+    trustedAgentInstanceId: id,
   });
   const researcher = createResearcherSubagent();
 

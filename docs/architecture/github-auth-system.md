@@ -37,11 +37,12 @@ private message; a failed send releases the same lease for an explicit retry.
 Synchronous chat ingress binds the normalized current event through request-local
 trusted context while the orchestrator and Coding Worker execute. Telegram's
 Flue `dispatch()` is asynchronous, so its verified ingress persists a short-lived
-admission grant containing the exact event, connector, actor, conversation, and
-purpose. Authentication tools validate the model-supplied `eventId` against the
-request-local event or that durable admission and fail closed on mismatch or
-expiry. The opaque admission id is routing authority only; it is never returned
-to the user or emitted in public progress.
+admission containing the exact event ID, connector, actor, conversation, and
+purpose. The admission is keyed by the Flue agent instance, event ID, and
+purpose; its identifier never enters the agent prompt or a tool argument.
+Authentication tools validate the model-supplied `eventId` against the
+request-local event or that server-bound admission and fail closed on agent,
+event, audience, or expiry mismatch.
 
 `src/workflows/github-auth.ts` is a finite internal Flue workflow that shares the same deep auth runtime as the worker tools. It requires a request-local trusted event whose ID matches its payload, starts or checks one transition, and returns without waiting for browser completion. It deliberately exports no public route: an independent HTTP/SDK workflow invocation needs a durable, short-lived event-scoped admission grant before it can safely cross Flue's asynchronous workflow boundary.
 
