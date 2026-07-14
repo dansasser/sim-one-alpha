@@ -1,0 +1,21 @@
+src/engine/workers/coding-worker/coding-worker.ts
+  s_65db8ffa7c9620::t_6fd39f1d74e990 318
+src/tests/github-credential-boundaries.test.ts
+  s_65db8ffa7c9620::t_62cd8e59f76421 286,300
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "686b9c55d0386e4231bd0da642e04b94d072896d",
+  "prompts": {},
+  "sessions": {
+    "s_65db8ffa7c9620": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f51b3-89d7-7d02-973d-9679f07254a1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
