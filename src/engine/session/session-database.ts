@@ -341,6 +341,38 @@ export class GoromboSessionDatabase {
     return rows.map(toChatSessionRecord);
   }
 
+  listChatSessionsForScope(input: {
+    origin: string;
+    actorId: string;
+    conversationId: string;
+    threadId?: string;
+    limit: number;
+  }): ChatSessionRecord[] {
+    const threadId = cleanScopeValue(input.threadId) ?? null;
+    const rows = this.database
+      .prepare(
+        `SELECT session_id, origin, actor_id, conversation_id, thread_id, title, explicit_name, archived_at, created_at, updated_at
+         FROM chat_sessions
+         WHERE origin = ?
+           AND actor_id = ?
+           AND conversation_id = ?
+           AND ((thread_id IS NULL AND ? IS NULL) OR thread_id = ?)
+           AND archived_at IS NULL
+         ORDER BY updated_at DESC
+         LIMIT ?`,
+      )
+      .all(
+        input.origin,
+        input.actorId,
+        input.conversationId,
+        threadId,
+        threadId,
+        Math.max(1, Math.min(100, Math.floor(input.limit))),
+      ) as unknown as ChatSessionRow[];
+
+    return rows.map(toChatSessionRecord);
+  }
+
   touchChatSession(sessionId: string, title?: string): void {
     this.database
       .prepare(
@@ -966,6 +998,7 @@ export class GoromboSessionDatabase {
 
     this.ensureChatSessionExplicitNameColumn();
     this.ensureSessionMemoryScopeColumns();
+    this.database.prepare(`DELETE FROM active_sessions WHERE surface = 'tui'`).run();
     this.database.exec(`
       CREATE INDEX IF NOT EXISTS idx_session_memory_scope
         ON session_memory_chunks(actor_id, conversation_id, session_name);
@@ -1688,7 +1721,6 @@ function parseJsonStringArray(value: string | null | undefined): string[] {
   }
   return [];
 }
-
 
 
 

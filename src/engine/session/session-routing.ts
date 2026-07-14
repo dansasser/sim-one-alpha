@@ -11,6 +11,20 @@ export class SessionAccessDeniedError extends Error {
   }
 }
 
+export class ChatSessionNotFoundError extends Error {
+  constructor(readonly sessionId: string) {
+    super(`Session ${sessionId} does not exist.`);
+    this.name = 'ChatSessionNotFoundError';
+  }
+}
+
+export interface ChatSessionIdentity {
+  connector: ConnectorKind;
+  actorId: string;
+  conversationId: string;
+  threadId?: string;
+}
+
 export interface ResolveChatSessionInput {
   event: NormalizedMessageEvent;
   requestedSessionId?: string;
@@ -26,65 +40,24 @@ export interface ChatSessionResolution {
   created: boolean;
 }
 
-export function resolveChatSession(input: ResolveChatSessionInput): ChatSessionResolution {
-  const surface = surfaceForEvent(input.event);
-  const persistentConnector = connectorUsesPersistentSession(input.event.connector);
-  const activeLookup = {
-    surface,
-    connector: input.event.connector,
-    actorId: input.event.actor.id,
-    conversationId: input.event.conversation.id,
-    threadId: input.event.conversation.threadId,
-  };
-  const explicitSessionId = cleanSessionId(input.requestedSessionId);
-  const existingActiveSessionId = persistentConnector && !input.forceNew
-    ? goromboPersistenceRuntime.sessionDatabase.getActiveSession(activeLookup)
-    : null;
-  const sessionId = explicitSessionId ?? existingActiveSessionId ?? undefined;
-  const title = input.title ?? titleFromText(input.event.text);
-
-  if (sessionId && !input.forceNew) {
-    const existingSession = goromboPersistenceRuntime.sessionDatabase.getChatSession(sessionId);
-    if (existingSession) {
-      assertSessionBelongsToEvent(existingSession, input.event);
-    }
-    const session = goromboPersistenceRuntime.sessionDatabase.ensureChatSession({
-      sessionId,
-      origin: surface,
-      actorId: input.event.actor.id,
-      conversationId: input.event.conversation.id,
-      threadId: input.event.conversation.threadId,
-      title,
-      displayName: input.displayName,
-    });
-
-    if (persistentConnector) {
-      goromboPersistenceRuntime.sessionDatabase.setActiveSession({
-        ...activeLookup,
-        sessionId,
-      });
-    }
-
-    return {
-      sessionId,
-      surface,
-      session,
-      created: !existingSession,
-    };
-  }
-
+export function createFreshChatSession(input: {
+  identity: ChatSessionIdentity;
+  title?: string;
+  displayName?: string;
+}): ChatSessionResolution {
+  const surface = surfaceForConnector(input.identity.connector);
   const session = goromboPersistenceRuntime.sessionDatabase.createChatSession({
     origin: surface,
-    actorId: input.event.actor.id,
-    conversationId: input.event.conversation.id,
-    threadId: input.event.conversation.threadId,
-    title,
+    actorId: input.identity.actorId,
+    conversationId: input.identity.conversationId,
+    threadId: input.identity.threadId,
+    title: input.title,
     displayName: input.displayName,
   });
 
-  if (persistentConnector) {
+  if (connectorUsesPersistentSession(input.identity.connector)) {
     goromboPersistenceRuntime.sessionDatabase.setActiveSession({
-      ...activeLookup,
+      ...activeSessionLookup(input.identity, surface),
       sessionId: session.sessionId,
     });
   }
@@ -95,6 +68,74 @@ export function resolveChatSession(input: ResolveChatSessionInput): ChatSessionR
     session,
     created: true,
   };
+}
+
+export function resumeOwnedChatSession(input: {
+  identity: ChatSessionIdentity;
+  sessionId: string;
+}): ChatSessionResolution {
+  const sessionId = cleanSessionId(input.sessionId) ?? input.sessionId;
+  const session = goromboPersistenceRuntime.sessionDatabase.getChatSession(sessionId);
+  if (!session) {
+    throw new ChatSessionNotFoundError(sessionId);
+  }
+
+  const surface = surfaceForConnector(input.identity.connector);
+  assertSessionBelongsToIdentity(session, input.identity, surface);
+
+  if (connectorUsesPersistentSession(input.identity.connector)) {
+    goromboPersistenceRuntime.sessionDatabase.setActiveSession({
+      ...activeSessionLookup(input.identity, surface),
+      sessionId,
+    });
+  }
+
+  return {
+    sessionId,
+    surface,
+    session,
+    created: false,
+  };
+}
+
+export function listOwnedChatSessions(input: {
+  identity: ChatSessionIdentity;
+  limit: number;
+}): ChatSessionRecord[] {
+  return goromboPersistenceRuntime.sessionDatabase.listChatSessionsForScope({
+    origin: surfaceForConnector(input.identity.connector),
+    actorId: input.identity.actorId,
+    conversationId: input.identity.conversationId,
+    threadId: input.identity.threadId,
+    limit: input.limit,
+  });
+}
+
+export function resolveChatSession(input: ResolveChatSessionInput): ChatSessionResolution {
+  const identity = identityForEvent(input.event);
+  const surface = surfaceForConnector(identity.connector);
+  const persistentConnector = connectorUsesPersistentSession(input.event.connector);
+  const explicitSessionId = cleanSessionId(input.requestedSessionId);
+  const title = input.title ?? titleFromText(input.event.text);
+
+  if (explicitSessionId && !input.forceNew) {
+    return resumeOwnedChatSession({ identity, sessionId: explicitSessionId });
+  }
+
+  if (persistentConnector && !input.forceNew) {
+    const activeSessionId = goromboPersistenceRuntime.sessionDatabase.getActiveSession(
+      activeSessionLookup(identity, surface),
+    );
+    if (activeSessionId) {
+      return resumeOwnedChatSession({ identity, sessionId: activeSessionId });
+    }
+  }
+
+  return createFreshChatSession({
+    identity,
+    title,
+    displayName: input.displayName,
+  });
 }
 
 export function listChatSessions(limit?: number): ChatSessionRecord[] {
@@ -109,11 +150,11 @@ export function connectorUsesPersistentSession(connector: ConnectorKind): boolea
   return connector === 'telegram';
 }
 
-function surfaceForEvent(event: NormalizedMessageEvent): ChatSurface {
-  if (isGuiSessionManagedConnector(event.connector)) {
+function surfaceForConnector(connector: ConnectorKind): ChatSurface {
+  if (isGuiSessionManagedConnector(connector)) {
     return 'web';
   }
-  if (event.connector === 'tui') {
+  if (connector === 'tui') {
     return 'tui';
   }
   return 'connector';
@@ -124,21 +165,54 @@ function cleanSessionId(value: string | undefined): string | undefined {
   return trimmed || undefined;
 }
 
-function assertSessionBelongsToEvent(session: ChatSessionRecord, event: NormalizedMessageEvent): void {
+function identityForEvent(event: NormalizedMessageEvent): ChatSessionIdentity {
+  return {
+    connector: event.connector,
+    actorId: event.actor.id,
+    conversationId: event.conversation.id,
+    threadId: event.conversation.threadId,
+  };
+}
+
+function activeSessionLookup(identity: ChatSessionIdentity, surface: ChatSurface) {
+  return {
+    surface,
+    connector: identity.connector,
+    actorId: identity.actorId,
+    conversationId: identity.conversationId,
+    threadId: identity.threadId,
+  };
+}
+
+function assertSessionBelongsToIdentity(
+  session: ChatSessionRecord,
+  identity: ChatSessionIdentity,
+  surface: ChatSurface,
+): void {
   const storedActorId = cleanScopeValue(session.actorId);
   const storedConversationId = cleanScopeValue(session.conversationId);
-  const eventActorId = cleanScopeValue(event.actor.id);
-  const eventConversationId = cleanScopeValue(event.conversation.id);
+  const storedThreadId = cleanScopeValue(session.threadId);
+  const identityActorId = cleanScopeValue(identity.actorId);
+  const identityConversationId = cleanScopeValue(identity.conversationId);
+  const identityThreadId = cleanScopeValue(identity.threadId);
 
   if (!storedActorId && !storedConversationId) {
     throw new SessionAccessDeniedError(session.sessionId);
   }
 
-  if (storedActorId && storedActorId !== eventActorId) {
+  if (session.origin !== surface) {
     throw new SessionAccessDeniedError(session.sessionId);
   }
 
-  if (storedConversationId && storedConversationId !== eventConversationId) {
+  if (storedActorId !== identityActorId) {
+    throw new SessionAccessDeniedError(session.sessionId);
+  }
+
+  if (storedConversationId !== identityConversationId) {
+    throw new SessionAccessDeniedError(session.sessionId);
+  }
+
+  if (storedThreadId !== identityThreadId) {
     throw new SessionAccessDeniedError(session.sessionId);
   }
 }

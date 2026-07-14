@@ -21,8 +21,8 @@ import {
   type SessionBudgetReport,
 } from '../../engine/session/session-budget.js';
 import {
+  ChatSessionNotFoundError,
   isGuiSessionManagedConnector,
-  listChatSessions,
   resolveChatSession,
   SessionAccessDeniedError,
   type ChatSessionResolution,
@@ -35,16 +35,6 @@ export interface ChatEventRouteOptions {
 
 export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOptions = {}): void {
   const openDurableSession = options.openDurableSession ?? openDurableOrchestratorSession;
-
-  app.get('/api/chat/sessions', requireApiSecret, (c) => {
-    const parsedLimit = Number.parseInt(c.req.query('limit') ?? '', 10);
-    const limit = Number.isInteger(parsedLimit)
-      ? Math.min(100, Math.max(1, parsedLimit))
-      : 50;
-    return c.json({
-      sessions: listChatSessions(limit),
-    });
-  });
 
   app.post('/api/chat/events', requireApiSecret, async (c) => {
     const headers = new Headers(c.req.raw.headers);
@@ -119,6 +109,9 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
       goromboPersistenceRuntime.sessionDatabase.recordNormalizedMessageEvent({ event });
       if (error instanceof SessionAccessDeniedError) {
         return c.json({ error: error.message, eventId: event.id }, 403);
+      }
+      if (error instanceof ChatSessionNotFoundError) {
+        return c.json({ error: error.message, eventId: event.id }, 404);
       }
       throw error;
     }

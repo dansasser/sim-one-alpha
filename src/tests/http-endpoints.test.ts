@@ -2,13 +2,17 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { FlueEvent, FlueSession } from '@flue/runtime';
 import { Hono } from 'hono';
+import { DatabaseSync } from 'node:sqlite';
+import { resolve } from 'node:path';
 import app from '../app.js';
 import { goromboPersistenceRuntime } from '../db.js';
 import { requireApiSecret } from '../api/middleware/api-secret.js';
 import { registerChatEventRoutes } from '../api/routes/chat-events.js';
+import { registerChatSessionRoutes } from '../api/routes/chat-sessions.js';
 import { registerTelemetryRoutes } from '../api/routes/telemetry.js';
 import { flueTelemetryStore } from '../core/telemetry/flue-telemetry.js';
 import { isSupportedSlashCommand, parseSlashCommand } from '../engine/commands/slash-commands.js';
+import { createFreshChatSession } from '../engine/session/session-routing.js';
 
 test('slash command parser supports session management commands', () => {
   const resume = parseSlashCommand('/resume tui-abc123');
@@ -86,15 +90,12 @@ test('chat event ingress returns 400 for invalid JSON after auth passes', async 
   });
 });
 
-test('chat session list endpoint returns the stored session list after auth passes', async () => {
+test('chat session lifecycle endpoint requires the configured API secret', async () => {
   await withApiSecret('test-secret', async () => {
-    const response = await app.request('/api/chat/sessions', {
-      headers: { 'x-api-secret': 'test-secret' },
-    });
+    const response = await app.request('/api/chat/sessions?connector=tui&actorId=local-tui&conversationId=local-tui');
 
-    assert.equal(response.status, 200);
-    const body = await response.json() as { sessions?: unknown };
-    assert.equal(Array.isArray(body.sessions), true);
+    assert.equal(response.status, 401);
+    assert.deepEqual(await response.json(), { error: 'Unauthorized' });
   });
 });
 
@@ -169,7 +170,17 @@ test('chat event ingress enters the durable orchestrator agent route', async () 
 
 test('chat event compact command compacts the durable orchestrator session without prompting', async () => {
   const testApp = new Hono();
-  const requestedSessionId = `compact-direct-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const actorId = `compact-user-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const conversationId = `compact-thread-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const createdSession = createFreshChatSession({
+    identity: {
+      connector: 'tui',
+      actorId,
+      conversationId,
+    },
+  });
+  const requestedSessionId = createdSession.sessionId;
+  let eventId: string | undefined;
   let openedSessionId: string | undefined;
   let compacted = false;
   let prompted = false;
@@ -193,52 +204,55 @@ test('chat event compact command compacts the durable orchestrator session witho
     throw new Error('compact command should not forward to the agent prompt route');
   });
 
-  await withApiSecret('test-secret', async () => {
-    await withModelEnv(async () => {
-      const response = await testApp.request('/api/chat/events', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-secret': 'test-secret',
-        },
-        body: JSON.stringify({
-          connector: 'tui',
-          text: '/compact',
-          actorId: 'compact-user',
-          conversationId: 'compact-thread',
-          session: requestedSessionId,
-        }),
-      });
+  try {
+    await withApiSecret('test-secret', async () => {
+      await withModelEnv(async () => {
+        const response = await testApp.request('/api/chat/events', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-api-secret': 'test-secret',
+          },
+          body: JSON.stringify({
+            connector: 'tui',
+            text: '/compact',
+            actorId,
+            conversationId,
+            session: requestedSessionId,
+          }),
+        });
 
-      assert.equal(response.status, 200);
-      const body = await response.json() as {
-        result?: {
-          text?: string;
-          command?: { name?: string; handled?: boolean };
-          contextBudget?: { compactedBeforePrompt?: boolean; modelSpecifier?: string };
+        assert.equal(response.status, 200);
+        const body = await response.json() as {
+          result?: {
+            text?: string;
+            command?: { name?: string; handled?: boolean };
+            contextBudget?: { compactedBeforePrompt?: boolean; modelSpecifier?: string };
+          };
+          event?: { id?: string };
+          session?: { id?: string; surface?: string; created?: boolean; title?: string };
         };
-        event?: { id?: string };
-        session?: { id?: string; surface?: string; created?: boolean; title?: string };
-      };
+        eventId = body.event?.id;
 
-      assert.equal(openedSessionId, requestedSessionId);
-      assert.equal(compacted, true);
-      assert.equal(prompted, false);
-      assert.equal(body.result?.text, `Compacted session ${requestedSessionId}.`);
-      assert.equal(body.result?.command?.name, 'compact');
-      assert.equal(body.result?.command?.handled, true);
-      assert.equal(body.result?.contextBudget?.compactedBeforePrompt, true);
-      assert.equal(body.result?.contextBudget?.modelSpecifier, 'ollama-cloud/minimax-m3');
-      assert.equal(body.session?.id, requestedSessionId);
-      assert.equal(body.session?.surface, 'tui');
-      assert.equal(body.session?.created, true);
-
-      if (body.event?.id) {
-        goromboPersistenceRuntime.sessionDatabase.deleteNormalizedMessageEvent(body.event.id);
-      }
-      goromboPersistenceRuntime.sessionDatabase.deleteChatSession(requestedSessionId);
+        assert.equal(openedSessionId, requestedSessionId);
+        assert.equal(compacted, true);
+        assert.equal(prompted, false);
+        assert.equal(body.result?.text, `Compacted session ${requestedSessionId}.`);
+        assert.equal(body.result?.command?.name, 'compact');
+        assert.equal(body.result?.command?.handled, true);
+        assert.equal(body.result?.contextBudget?.compactedBeforePrompt, true);
+        assert.equal(body.result?.contextBudget?.modelSpecifier, 'ollama-cloud/minimax-m3');
+        assert.equal(body.session?.id, requestedSessionId);
+        assert.equal(body.session?.surface, 'tui');
+        assert.equal(body.session?.created, false);
+      });
     });
-  });
+  } finally {
+    if (eventId) {
+      goromboPersistenceRuntime.sessionDatabase.deleteNormalizedMessageEvent(eventId);
+    }
+    goromboPersistenceRuntime.sessionDatabase.deleteChatSession(requestedSessionId);
+  }
 });
 
 test('chat event TUI session commands create resume and rename without prompting', async () => {
@@ -350,80 +364,133 @@ test('chat event TUI session commands create resume and rename without prompting
   }
 });
 
-test('chat event TUI resolves one active session per connector scope without primary', async () => {
+test('chat session lifecycle creates fresh sessions, validates resume, and scopes lists without prompting', async () => {
   const testApp = new Hono();
-  const actorId = `active-tui-user-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const conversationId = `active-tui-thread-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const eventIds: string[] = [];
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const actorId = `lifecycle-user-${suffix}`;
+  const conversationId = `lifecycle-conversation-${suffix}`;
+  const threadId = `lifecycle-thread-${suffix}`;
+  const otherActorId = `${actorId}-other`;
   const sessionIds: string[] = [];
+  let promptedAgent = false;
 
-  testApp.use('/agents/*', requireApiSecret);
-  registerChatEventRoutes(testApp);
+  registerChatSessionRoutes(testApp);
   testApp.post('/agents/orchestrator/:id', () => {
-    throw new Error('session resolution commands should not forward to the agent prompt route');
+    promptedAgent = true;
+    throw new Error('session lifecycle must not forward to the agent prompt route');
   });
 
   try {
     await withApiSecret('test-secret', async () => {
-      const first = await postChat(testApp, {
+      const first = await postLifecycle(testApp, '/api/chat/sessions', {
         connector: 'tui',
-        text: '/session',
         actorId,
         conversationId,
+        threadId,
       });
-      assert.equal(first.status, 200);
-      const firstBody = await first.json() as CommandSessionBody;
-      if (firstBody.event?.id) eventIds.push(firstBody.event.id);
+      assert.equal(first.status, 201);
+      const firstBody = await first.json() as LifecycleSessionBody;
       if (firstBody.session?.id) sessionIds.push(firstBody.session.id);
-      assert.equal(firstBody.result?.command?.name, 'session');
       assert.equal(firstBody.session?.surface, 'tui');
       assert.equal(firstBody.session?.created, true);
       assert.match(firstBody.session?.id ?? '', /^tui-/);
 
-      const second = await postChat(testApp, {
+      const second = await postLifecycle(testApp, '/api/chat/sessions', {
         connector: 'tui',
-        text: '/session',
         actorId,
         conversationId,
+        threadId,
       });
-      assert.equal(second.status, 200);
-      const secondBody = await second.json() as CommandSessionBody;
-      if (secondBody.event?.id) eventIds.push(secondBody.event.id);
-      assert.equal(secondBody.result?.command?.name, 'session');
-      assert.equal(secondBody.session?.id, firstBody.session?.id);
-      assert.equal(secondBody.session?.created, false);
+      assert.equal(second.status, 201);
+      const secondBody = await second.json() as LifecycleSessionBody;
+      if (secondBody.session?.id) sessionIds.push(secondBody.session.id);
+      assert.equal(secondBody.session?.created, true);
+      assert.notEqual(secondBody.session?.id, firstBody.session?.id);
 
-      const cleared = await postChat(testApp, {
+      const other = await postLifecycle(testApp, '/api/chat/sessions', {
         connector: 'tui',
-        text: '/clear',
-        actorId,
+        actorId: otherActorId,
         conversationId,
+        threadId,
       });
-      assert.equal(cleared.status, 200);
-      const clearBody = await cleared.json() as CommandSessionBody;
-      if (clearBody.event?.id) eventIds.push(clearBody.event.id);
-      if (clearBody.session?.id) sessionIds.push(clearBody.session.id);
-      assert.equal(clearBody.result?.command?.name, 'clear');
-      assert.equal(clearBody.session?.surface, 'tui');
-      assert.equal(clearBody.session?.created, true);
-      assert.notEqual(clearBody.session?.id, firstBody.session?.id);
+      assert.equal(other.status, 201);
+      const otherBody = await other.json() as LifecycleSessionBody;
+      if (otherBody.session?.id) sessionIds.push(otherBody.session.id);
 
-      const afterClear = await postChat(testApp, {
+      const firstSessionId = firstBody.session?.id ?? '';
+      const resumed = await postLifecycle(
+        testApp,
+        `/api/chat/sessions/${encodeURIComponent(firstSessionId)}/resume`,
+        {
+          connector: 'tui',
+          actorId,
+          conversationId,
+          threadId,
+        },
+      );
+      assert.equal(resumed.status, 200);
+      const resumedBody = await resumed.json() as LifecycleSessionBody;
+      assert.equal(resumedBody.session?.id, firstSessionId);
+      assert.equal(resumedBody.session?.created, false);
+
+      const denied = await postLifecycle(
+        testApp,
+        `/api/chat/sessions/${encodeURIComponent(firstSessionId)}/resume`,
+        {
+          connector: 'tui',
+          actorId: otherActorId,
+          conversationId,
+          threadId,
+        },
+      );
+      assert.equal(denied.status, 403);
+
+      const missingSessionId = `tui-missing-${suffix}`;
+      const missing = await postLifecycle(
+        testApp,
+        `/api/chat/sessions/${encodeURIComponent(missingSessionId)}/resume`,
+        {
+          connector: 'tui',
+          actorId,
+          conversationId,
+          threadId,
+        },
+      );
+      assert.equal(missing.status, 404);
+      assert.equal(goromboPersistenceRuntime.sessionDatabase.getChatSession(missingSessionId), null);
+
+      const telegram = createFreshChatSession({
+        identity: {
+          connector: 'telegram',
+          actorId,
+          conversationId,
+          threadId,
+        },
+      });
+      sessionIds.push(telegram.sessionId);
+
+      const query = new URLSearchParams({
         connector: 'tui',
-        text: '/session',
         actorId,
         conversationId,
+        threadId,
+        limit: '10',
       });
-      assert.equal(afterClear.status, 200);
-      const afterClearBody = await afterClear.json() as CommandSessionBody;
-      if (afterClearBody.event?.id) eventIds.push(afterClearBody.event.id);
-      assert.equal(afterClearBody.session?.id, clearBody.session?.id);
-      assert.equal(afterClearBody.session?.created, false);
+      const listed = await testApp.request(`/api/chat/sessions?${query}`, {
+        headers: { 'x-api-secret': 'test-secret' },
+      });
+      assert.equal(listed.status, 200);
+      const listedBody = await listed.json() as { sessions?: Array<{ sessionId?: string }> };
+      const listedIds = new Set((listedBody.sessions ?? []).map((session) => session.sessionId));
+      assert.equal(listedIds.has(firstBody.session?.id), true);
+      assert.equal(listedIds.has(secondBody.session?.id), true);
+      assert.equal(listedIds.has(otherBody.session?.id), false);
+      assert.equal(listedIds.has(telegram.sessionId), false);
+
+      assert.equal(promptedAgent, false);
+      assert.equal(countNormalizedEventsForActors([actorId, otherActorId]), 0);
     });
   } finally {
-    for (const eventId of eventIds) {
-      goromboPersistenceRuntime.sessionDatabase.deleteNormalizedMessageEvent(eventId);
-    }
     for (const sessionId of sessionIds) {
       goromboPersistenceRuntime.sessionDatabase.deleteChatSession(sessionId);
     }
@@ -697,6 +764,15 @@ interface CommandSessionBody {
   session?: { id?: string; surface?: string; created?: boolean };
 }
 
+interface LifecycleSessionBody {
+  session?: {
+    id?: string;
+    surface?: string;
+    created?: boolean;
+    title?: string;
+  };
+}
+
 async function postChat(testApp: Hono, body: Record<string, unknown>): Promise<Response> {
   return await testApp.request('/api/chat/events', {
     method: 'POST',
@@ -706,6 +782,31 @@ async function postChat(testApp: Hono, body: Record<string, unknown>): Promise<R
     },
     body: JSON.stringify(body),
   });
+}
+
+async function postLifecycle(testApp: Hono, path: string, body: Record<string, unknown>): Promise<Response> {
+  return await testApp.request(path, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-secret': 'test-secret',
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+function countNormalizedEventsForActors(actorIds: string[]): number {
+  const databasePath = resolve(process.cwd(), goromboPersistenceRuntime.sessionDatabase.filePath);
+  const database = new DatabaseSync(databasePath, { readOnly: true });
+  try {
+    const placeholders = actorIds.map(() => '?').join(', ');
+    const row = database
+      .prepare(`SELECT COUNT(*) AS count FROM normalized_message_events WHERE actor_id IN (${placeholders})`)
+      .get(...actorIds) as { count: number };
+    return row.count;
+  } finally {
+    database.close();
+  }
 }
 
 async function withApiSecret(secret: string | undefined, fn: () => Promise<void>): Promise<void> {
