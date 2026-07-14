@@ -66,21 +66,23 @@ Runtime data:
 .gorombo/db/structured-memory.sqlite
 ```
 
-Normal no-argument launch starts without an agent session id. The TUI asks the gateway to resolve the active durable TUI session for the local `tui` connector scope, switches to the returned `tui-*` session, then attaches the live stream. There is no default `primary` TUI session. Passing `--session <id>` is an explicit existing-session attach. TUI session commands can then clear, create, resume, or switch durable sessions inside the running app.
+Normal no-argument launch starts without an agent session id. The TUI creates a fresh durable session through `POST /api/chat/sessions`, stores the returned `tui-*` id, then attaches its live stream. There is no default `primary` session and no implicit last-TUI-session reuse. Passing `--session <id>` validates and resumes that exact owned session before stream attachment. TUI session commands can then clear, create, resume, or switch durable sessions inside the running app.
 
 ## Startup Preflight
 
 After the gateway is healthy, the TUI startup flow:
 
 ```text
-resolves the active durable TUI session through the gateway
-attaches the stream to that active session
+creates a fresh durable TUI session through the gateway lifecycle API
+attaches the stream to the returned session id
 renders preflight rows in the transcript
 sends a startup greeting prompt to the orchestrator
 uses the built-in Flue greeting-preflight skill for the greeting behavior
 ```
 
 The startup greeting words are produced by the main orchestrator using workspace identity/user context. The Rust TUI sends the preflight report and skill instruction; it does not hardcode the greeting.
+
+For `sim-one --session <id>`, startup instead calls `POST /api/chat/sessions/:id/resume`, verifies the stable local TUI ownership scope, restores explicit title metadata, and attaches history without sending a greeting.
 
 ## Environment Files
 
@@ -122,6 +124,10 @@ sim-one tool list
 sim-one worker list
 sim-one mcp list
 startup preflight through the Ratatui product path
+two consecutive default launches create different durable TUI session ids
+each fresh session records the greeting as its first normal event
+startup records no /session, /new, or /clear lifecycle command
+explicit --session validates and restores the requested named session without a greeting
 clean startup transcript without scaffold rows
 agent greeting through the built-in greeting-preflight skill path
 packaged interactive PTY input through the sim-one wrapper
@@ -138,7 +144,9 @@ renamed session name in final TUI status and stable session id on exit
 fresh, renamed, and resumed transcript header values without status-bar changes
 temporary session-database isolation for product smoke data
 /new
+/clear
 /session
+/sessions
 /compact
 /resume
 /rename
@@ -182,6 +190,8 @@ If gateway startup fails, rerun:
 
 If a session needs to be recovered after exit, use the printed id:
 
-```text
-/resume <session-id>
+```sh
+./.gorombo/sim-one-cli/sim-one --session <session-id>
 ```
+
+Inside a running TUI, `/resume <session-id>` switches to another owned session.

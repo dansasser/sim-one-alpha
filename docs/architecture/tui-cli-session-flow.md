@@ -21,7 +21,11 @@ tui/ratatui/
 
 src/api/routes/chat-events.ts
   App-owned connector-style chat ingress.
-  Owns `/api/chat/events`, `/api/chat/sessions`, trusted event persistence, session resolution, pre-LLM slash command handling, and durable prompt admission to the Flue orchestrator route.
+  Owns `/api/chat/events`, trusted event persistence, prompt session resolution, pre-LLM slash command handling, and durable prompt admission to the Flue orchestrator route.
+
+src/api/routes/chat-sessions.ts
+  Product session lifecycle boundary.
+  Owns fresh TUI creation, ownership-validated explicit resume, and scope-filtered TUI session listing without creating normalized chat events.
 
 src/engine/commands/slash-commands.ts
   Shared pre-LLM slash command parser.
@@ -132,16 +136,16 @@ The launcher only stops a server child that it started. It does not stop a gatew
 
 ## Startup Preflight And Greeting
 
-A normal no-argument TUI launch does not attach to a default `primary` session. It starts with a clean local transcript and no agent session id, asks the gateway to resolve the active durable TUI session for the local `tui` connector scope, attaches the stream to that returned session, reports preflight status, then sends an automatic greeting prompt through `/api/chat/events`.
+A normal no-argument TUI launch does not attach to a default `primary` session or a previous TUI session. It starts with a clean local transcript and no agent session id, creates a fresh durable session through the lifecycle API, attaches the stream to the returned id, reports preflight status, then sends an automatic greeting as the first normal prompt through `/api/chat/events`.
 
 ```text
 TUI opens
 -> render clean preflight shell
 -> confirm gateway startup/reuse result
--> POST /api/chat/events text="/session" with no session field
--> gateway resolves or creates active tui-* session for connector=tui/local-tui
--> switch to returned tui-* session
--> attach live stream for the active session
+-> POST /api/chat/sessions with connector=tui/local-tui identity
+-> gateway creates and returns a fresh durable tui-* session
+-> store returned id/title metadata
+-> attach live stream for the new session
 -> render "preflight: all systems go"
 -> POST /api/chat/events with startup report
 -> orchestrator activates built-in greeting-preflight skill
@@ -150,7 +154,9 @@ TUI opens
 
 The TUI owns only connector checks and transcript/status rendering. The greeting words are not hardcoded in Rust. The startup prompt instructs the main orchestrator to use the built-in Flue skill `greeting-preflight`, which lives at `src/skills/greeting-preflight/SKILL.md` and is registered in `src/agents/orchestrator.ts` through the documented `with { type: 'skill' }` import flow.
 
-Passing `--session <id>` is an explicit resume-style launch. In that mode the TUI attaches to the requested session stream instead of asking the gateway to resolve the active session for the local TUI connector scope.
+Passing `--session <id>` is an explicit resume launch. The TUI first calls `POST /api/chat/sessions/:id/resume` with the stable local identity. Only an owned session is accepted; its explicit title is restored, its stream/history is attached, and no startup greeting is appended. A denied or missing session fails startup and leaves prompt submission locked.
+
+Telegram has a separate connector policy: updates in one Telegram chat/thread reuse that connector-owned active session until a connector command changes it. TUI, Web API, scheduled-job, test, and unknown connectors do not inherit Telegram persistence.
 
 ## Prompt Flow
 
@@ -163,7 +169,7 @@ TUI prompt submit
    actorId: "local-tui"
    conversationId: "local-tui"
    threadId: "local-tui"
-   session: <active-session-id> after startup resolution
+   session: <active-session-id> after lifecycle creation or explicit resume
 -> persist trusted normalized event context
 -> resolve product session
 -> POST /agents/orchestrator/:sessionId?wait=result
@@ -171,7 +177,7 @@ TUI prompt submit
 -> response text rendered in the transcript
 ```
 
-Prompt editing is local TUI state. Enter submits normally; when the character immediately before the cursor is `/`, Enter consumes that slash and inserts a newline instead. Enter repeat events are discarded at the crossterm mapping boundary so the newline press cannot become an immediate second submit. Transcript and prompt rendering share one word-boundary row layout: a word that does not fit moves intact to the next row and is never split across rows. Prompt rows retain source character ranges while wrapping and cursor placement use Unicode terminal display columns. This keeps emoji, CJK double-width glyphs, and combining marks aligned without changing byte-safe prompt editing. The editor grows to five visible rows and then scrolls locally. Prompt-height changes recalculate the transcript viewport while preserving live-tail or scrolled-back state; they do not alter the connector session or Flue stream offset.
+Prompt editing is local TUI state. Enter submits normally; when the character immediately before the cursor is an unescaped trailing backslash, Enter consumes that backslash and inserts a newline instead. Enter repeat events are discarded at the crossterm mapping boundary so the newline press cannot become an immediate second submit. Transcript and prompt rendering share one word-boundary row layout: a word that does not fit moves intact to the next row and is never split across rows. Prompt rows retain source character ranges while wrapping and cursor placement use Unicode terminal display columns. This keeps emoji, CJK double-width glyphs, and combining marks aligned without changing byte-safe prompt editing. The editor grows to five visible rows and then scrolls locally. Prompt-height changes recalculate the transcript viewport while preserving live-tail or scrolled-back state; they do not alter the connector session or Flue stream offset.
 
 Before drawing, canonical transcript strings are converted into semantic rendered rows (`User`, `Assistant`, `Thinking`, tool/task/activity kinds, errors, system/preflight, and fallback rows). The transcript reserves a two-column left margin and deducts it from the row-layout width before wrapping; the margin contracts only when necessary to keep one content column on extremely narrow terminals. Wrapped rows inherit the semantic kind, streaming state, and margin of their source line, including multiline user and assistant continuations. The renderer splits a recognized first-row label, including its colon, into a bold semantic `Span`; the body remains in its normal semantic style, and continuation rows do not repeat the label accent. `theme.rs` owns the terminal palette: assistant cyan, operation yellow, tool blue, task magenta, turn green, system/preflight light green, log dark gray, and error light red. Root assistant rows add the dim modifier while live text is incomplete and remove it at finalization. User rows retain a full-width gray background across the margin, the active prompt editor receives a darker gray background, and thinking uses gray italic body text with a bold gray italic label. Italics and dimming are additive terminal metadata; color and labels remain the fallback distinctions when a terminal ignores those modifiers.
 
@@ -195,7 +201,7 @@ The TUI accepts response text only from root-orchestrator events, identified by 
 
 `transcript_rendered_lines()` appends one virtual blank tail-margin row after wrapping. This sentinel gives the live-tail calculation a deterministic final row and leaves visual space below the newest response. It never enters `transcript_lines`, durable session history, copied context, or Flue persistence.
 
-The stable `local-tui` actor/conversation/thread scope is intentional. The gateway uses that connector scope to resolve the active durable TUI session, matching Telegram-style one-thread behavior. The active session id selects the durable conversation, while the stable scope lets `/new`, `/clear`, `/resume`, `/rename`, and `/compact` operate across session switches without creating unreachable conversation scopes.
+The stable `local-tui` actor/conversation/thread scope is intentional. The gateway uses it to prove ownership for resume and to scope `/sessions`; it is not an active-session pointer. The current session id selects the durable conversation, while the stable identity lets `/new`, `/clear`, `/resume`, `/rename`, and `/compact` operate across explicit session switches without exposing another actor's or connector's sessions.
 
 ## Slash Commands
 
@@ -206,18 +212,17 @@ Backend-owned commands:
 | Command | Owner | Behavior |
 | --- | --- | --- |
 | `/new [title]` | `src/api/routes/chat-events.ts` | Creates a new durable TUI session, returns its id, and the TUI switches to it. |
-| `/clear [title]` | `src/api/routes/chat-events.ts` | Clears the connector thread by creating a new active durable session for the same TUI scope. |
+| `/clear [title]` | `src/api/routes/chat-events.ts` | Replaces the current TUI conversation with a fresh durable session and preserves the old id for resume. |
 | `/resume <session-id>` | `src/api/routes/chat-events.ts` | Validates session access for the TUI actor/conversation scope, returns the session, and the TUI switches to it. |
 | `/rename <title>` | `src/api/routes/chat-events.ts` | Renames the active durable session. |
 | `/compact` | `src/api/routes/chat-events.ts` | Opens the active durable Flue session and calls `session.compact()` without sending `/compact` to the model. |
-| `/session` | `src/api/routes/chat-events.ts` | Resolves and returns the active durable session for connector-owned surfaces. |
 
 TUI-local commands:
 
 | Command | Owner | Behavior |
 | --- | --- | --- |
 | `/session` | `tui/ratatui/src/app.rs` | Prints the current resolved active session id inside the running TUI. |
-| `/sessions [limit]` | `tui/ratatui/src/app.rs` + `/api/chat/sessions` | Lists recent sessions. Default limit is 10, clamped from 1 to 50. |
+| `/sessions [limit]` | `tui/ratatui/src/app.rs` + `GET /api/chat/sessions` | Lists only sessions owned by the stable local TUI scope. Default limit is 10, clamped from 1 to 50. |
 | `/help` | `tui/ratatui/src/app.rs` | Prints command help without reaching the gateway model path. |
 | `/exit` | `tui/ratatui/src/app.rs` + `tui/ratatui/src/main.rs` | Quits cleanly and prints the active session id after terminal restore. |
 
@@ -260,10 +265,15 @@ sim-one tool list
 sim-one worker list
 sim-one mcp list
 startup preflight through the packaged Ratatui path
+two packaged default launches produce different session ids
+SQLite proves one greeting-first event per fresh session and no lifecycle slash command
+explicit --session restores the requested name/history without another greeting
 clean transcript without scaffold scroll rows
 agent greeting through the built-in greeting-preflight skill path
 /new
+/clear
 /session
+/sessions
 /compact
 /resume
 /rename
@@ -293,6 +303,13 @@ Add or change backend slash command effects:
   src/engine/session/session-database.ts
   src/tests/http-endpoints.test.ts
   scripts/test-built-http.mjs
+
+Change fresh-create, explicit-resume, or scoped-list lifecycle behavior:
+  src/api/routes/chat-sessions.ts
+  src/engine/session/session-routing.ts
+  src/engine/session/session-database.ts
+  tui/ratatui/src/agent.rs
+  tui/ratatui/src/app.rs
 
 Change TUI command handling or session switching:
   tui/ratatui/src/app.rs

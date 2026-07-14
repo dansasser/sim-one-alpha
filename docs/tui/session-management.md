@@ -6,11 +6,20 @@ Implementation details live in `docs/architecture/tui-cli-session-flow.md`.
 
 ## Session Model
 
-The TUI sends chat events with connector `tui` and a stable local TUI actor/conversation scope. The gateway owns active-session selection for that connector scope, the same way connector surfaces such as Telegram do. The active session id selects the durable SIM-ONE Alpha conversation to prompt, stream, compact, clear, or resume.
+The TUI sends chat events with connector `tui` and a stable `local-tui` actor/conversation/thread scope. The gateway uses that scope for ownership checks and scoped session listing; it does not use it as an implicit last-session pointer. Only Telegram currently has connector-conversation persistence.
+
+A no-argument TUI launch calls `POST /api/chat/sessions` and always receives a newly created durable `tui-*` id. The TUI attaches the Flue event stream and sends the startup greeting as that session's first normal prompt. Existing TUI context is entered only through `sim-one --session <id>` or `/resume <session-id>`.
 
 When the active session changes, the TUI cancels the old stream handle, clears stream activity rows for the previous live session, and starts a new stream for the selected session.
 
-Normal no-argument launch does not use a default `primary` session. It starts unresolved, asks the gateway for the active TUI session for `connector=tui` and `local-tui` scope, then switches to the returned durable `tui-*` session. Use `--session <id>` at launch or `/resume <session-id>` inside the TUI only when you intentionally want a specific existing session.
+Normal no-argument launch does not use a default `primary` session and never reuses the previous launch. `--session <id>` validates ownership before stream attachment, restores an explicit name when present, and adds no startup greeting to the resumed context.
+
+Launch examples:
+
+```sh
+./.gorombo/sim-one-cli/sim-one
+./.gorombo/sim-one-cli/sim-one --session tui-2026-...
+```
 
 ## Discover Session Commands
 
@@ -65,7 +74,7 @@ Use:
 /clear [title]
 ```
 
-`/clear` is the connector-style reset command. The gateway creates a new active session for the same TUI connector scope and the TUI switches to it. Previous sessions remain stored and can be resumed by id.
+`/clear` replaces the current TUI conversation with a newly created durable session and switches the stream to it. Previous sessions remain stored and can be resumed by id.
 
 Expected transcript shape:
 
@@ -172,7 +181,7 @@ The TUI restores the terminal and prints the active session id after exit:
 Exited SIM-ONE Alpha TUI. Session: <active-session-id>
 ```
 
-Use that id with `/resume <session-id>` the next time you launch the TUI.
+Use that id with `sim-one --session <session-id>` the next time you launch the TUI. Use `/resume <session-id>` to switch from another session while the TUI is already running.
 
 ## Command Reference
 

@@ -119,8 +119,16 @@ src/api/middleware/api-secret.ts
 
 src/api/routes/chat-events.ts
   App-owned /api/chat/events ingress alias.
-  Verifies API-secret middleware, exposes /api/chat/sessions for HTTP chat lists, normalizes the HTTP boundary, persists trusted event context, resolves the product session, handles pre-LLM slash commands (/new, /clear, /resume, /rename, /compact, /session), and prompts the durable /agents/orchestrator/:sessionId route.
+  Verifies API-secret middleware, normalizes the HTTP boundary, persists trusted event context, resolves the prompt's product session, handles pre-LLM slash commands (/new, /clear, /resume, /rename, /compact), and prompts the durable /agents/orchestrator/:sessionId route.
   Does not call c.executionCtx, a workflow route for normal chat execution, or a non-Flue orchestrator.
+
+src/api/routes/chat-sessions.ts
+  Product session lifecycle API.
+  Creates a fresh durable TUI session, validates exact owned-session resume, and lists sessions only for the supplied stable TUI scope. Lifecycle calls do not create normalized message events.
+
+src/engine/session/session-routing.ts
+  Owns session creation/resume access checks and connector persistence policy.
+  Only Telegram currently reuses a connector-scoped active session; TUI and non-messaging surfaces create fresh sessions unless a session id is explicitly resumed.
 
 sim-one-cli/src/cli.tsx
   Product CLI wrapper.
@@ -130,7 +138,7 @@ sim-one-cli/src/cli.tsx
 
 tui/ratatui/src/main.rs
   Ratatui binary entrypoint.
-  Wires gateway startup/reuse, scripted product-smoke prompt modes, terminal setup/restore, event loop, and final `/exit` session-id output.
+  Wires gateway startup/reuse, default fresh creation versus explicit `--session` resume, scripted product-smoke modes through the same lifecycle, terminal setup/restore, event loop, and final `/exit` session-id output.
 
 tui/ratatui/src/gateway.rs
   Packaged gateway launcher.
@@ -138,12 +146,12 @@ tui/ratatui/src/gateway.rs
 
 tui/ratatui/src/agent.rs
   TUI HTTP client.
-  Sends normal prompts and backend-owned slash commands through `/api/chat/events` as connector `tui` with stable `local-tui` actor/conversation/thread scope and the active durable session id.
-  Reads `/api/chat/sessions` for `/sessions`.
+  Creates fresh sessions through `POST /api/chat/sessions`, validates explicit resume through `POST /api/chat/sessions/:id/resume`, and reads the scope-filtered lifecycle list for `/sessions`.
+  Sends normal prompts and backend-owned slash commands through `/api/chat/events` as connector `tui` with stable `local-tui` actor/conversation/thread scope and the current durable session id.
 
 tui/ratatui/src/app.rs
   TUI state reducer.
-  Owns prompt editing and UTF-8-safe selection, slash-command metadata/filtering/keyboard/mouse selection state, pane hit regions, transcript scroll/scrollbar/logical-selection state, queued clipboard text, the product/explicit-session-name header, pending spinner/status, dimmed root-assistant live text, immediate final-message display from root Flue `message_end`, idempotent full-range HTTP reconciliation, final-response/activity ordering, the rendered-only blank tail margin, TUI-local commands (`/session`, `/sessions`, `/help`, `/exit`), backend command response handling for `/new`, `/clear`, `/resume`, `/rename`, `/compact`, active session switching, and stream restart.
+  Owns asynchronous fresh-create and explicit-resume startup phases, greeting-only-on-fresh ordering, fail-closed startup input, prompt editing and UTF-8-safe selection, slash-command metadata/filtering/keyboard/mouse selection state, pane hit regions, transcript scroll/scrollbar/logical-selection state, queued clipboard text, the product/explicit-session-name header, pending spinner/status, dimmed root-assistant live text, immediate final-message display from root Flue `message_end`, idempotent full-range HTTP reconciliation, final-response/activity ordering, the rendered-only blank tail margin, TUI-local commands (`/session`, `/sessions`, `/help`, `/exit`), backend command response handling for `/new`, `/clear`, `/resume`, `/rename`, `/compact`, active session switching, and stream restart.
 
 tui/ratatui/src/input.rs
   Terminal event normalization.

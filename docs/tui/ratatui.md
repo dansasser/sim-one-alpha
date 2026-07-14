@@ -23,7 +23,7 @@ cd /opt/ai/sim-one-alpha-tui-production
 
 The command reuses a healthy local gateway when one is already running. If it cannot find one, it starts the packaged `.gorombo/sim-one-alpha/server.mjs` runtime and connects the TUI to it.
 
-On a normal no-argument launch, the TUI starts clean without a default `primary` session. It asks the gateway for the active durable TUI session for the local TUI connector scope, attaches the live stream to that returned `tui-*` session, shows preflight rows, then sends an automatic startup greeting prompt to the main orchestrator. The greeting uses the built-in Flue `greeting-preflight` skill and the loaded workspace identity/user context.
+On a normal no-argument launch, the TUI starts clean without a default `primary` session or an implicit previous session. It creates a fresh durable TUI session through `POST /api/chat/sessions`, stores the returned `tui-*` id, attaches that session's live stream, shows preflight rows, then sends an automatic startup greeting as the first normal orchestrator prompt. The greeting uses the built-in Flue `greeting-preflight` skill and the loaded workspace identity/user context.
 
 Useful launch flags:
 
@@ -33,7 +33,7 @@ Useful launch flags:
 ./.gorombo/sim-one-cli/sim-one --base-url http://127.0.0.1:3940
 ```
 
-Use `--session <id>` only when you intentionally want to attach to an existing session and stream its current context.
+Use `--session <id>` only when you intentionally want to validate, attach to, and stream an existing TUI session. Explicit resume restores an existing name and history without adding another startup greeting.
 
 ## Layout
 
@@ -45,7 +45,7 @@ Assistant responses render Markdown while preserving the original Markdown in ca
 
 All transcript text uses a two-column left margin inside the pane border. The margin is deducted from the available wrap width so text wraps before the right edge; on extremely narrow terminals it contracts to preserve at least one content column. Word-wrapped and explicit multiline continuation rows keep the same margin and their semantic body style without repeating or extending the label accent. Submitted `you:` rows remain full-width gray bands, including the margin cells, instead of receiving a separate prefix color.
 
-The initial transcript should contain startup/preflight rows, the gateway-resolved active TUI session, and the agent greeting. It should not contain scaffold scroll-test rows or a default `primary` session; specific old sessions are shown only after an explicit `--session` launch or `/resume`.
+The initial transcript should contain startup/preflight rows, the newly created TUI session id, and the agent greeting. It should not contain scaffold scroll-test rows, a default `primary` session, or history from a prior launch; specific old sessions are shown only after an explicit `--session` launch or `/resume`.
 
 The bottom pane contains gateway/session/model status and the editable prompt line. The entire visible prompt-editor interior uses a darker gray background so the active composer remains distinct from transcript content. Prompt editing remains active while the transcript is scrolled. Mouse events are routed by pane: an open command palette receives them first, followed by the prompt, transcript scrollbar, and transcript text.
 
@@ -94,7 +94,7 @@ The status area shows the gateway connection, active session label, stream state
 
 The header is independent from the status bar. Header rendering does not remove, rename, or reorder any status field.
 
-During startup, status and transcript rows show gateway readiness, active TUI session resolution, stream attach, and the greeting turn. After preflight completes, normal prompt entry is available.
+During default startup, status and transcript rows show gateway readiness, fresh TUI session creation, stream attach, and the greeting turn. Explicit `--session` startup shows ownership validation and resume instead, then attaches history without a greeting. Input remains unavailable if lifecycle startup fails.
 
 If a live stream disconnects, the status changes to reconnecting or failed. Prompt submission still uses the gateway request path and reports errors into the transcript.
 
@@ -139,7 +139,7 @@ If the gateway fails to start, run the product smoke:
 pnpm run test:tui:ratatui
 ```
 
-On POSIX systems, this smoke launches the packaged `sim-one` command in a real PTY and verifies keyboard and mouse palette selection, slash-Enter multiline input, prompt click placement, drag-copy/replacement, prompt-local wheel scrolling, and full-range scrollbar navigation against a local gateway stub. It also sends nested worker output, a root live assistant delta, and a multiline Markdown root `message_end` while holding the HTTP prompt response open. The smoke verifies worker payloads remain internal, Markdown source markers are replaced by terminal styles, and the packaged TUI renders the root live/final answer before HTTP settles. Cross-platform Rust integration tests exercise exact multiline consolidation, Markdown styles, pane routing, Unicode selection, input, app-state, ordering, terminal-size, and framebuffer behavior.
+On POSIX systems, this smoke launches the packaged `sim-one` command in a real PTY and verifies keyboard and mouse palette selection, backslash-Enter multiline input, prompt click placement, drag-copy/replacement, prompt-local wheel scrolling, and full-range scrollbar navigation against a local gateway stub. It also launches the packaged product twice against one isolated database, proves distinct default session ids, verifies one greeting event per fresh session with no lifecycle slash command, and resumes an explicitly named session without another greeting. The live-response fixture sends nested worker output, a root live assistant delta, and a multiline Markdown root `message_end` while holding the HTTP prompt response open. Cross-platform Rust integration tests exercise exact multiline consolidation, Markdown styles, pane routing, Unicode selection, input, app-state, ordering, terminal-size, and framebuffer behavior.
 
 OSC52 clipboard delivery depends on terminal and multiplexer support. Selection and highlighting still work when the host refuses OSC52, but the host clipboard may not update until OSC52 passthrough is enabled.
 
@@ -149,8 +149,10 @@ If the TUI exits after `/exit`, use the printed session id to resume:
 Exited SIM-ONE Alpha TUI. Session: <session-id>
 ```
 
-Then launch again and run:
+Resume it directly on the next launch:
 
-```text
-/resume <session-id>
+```sh
+./.gorombo/sim-one-cli/sim-one --session <session-id>
 ```
+
+`/resume <session-id>` remains available when switching sessions inside an already running TUI.

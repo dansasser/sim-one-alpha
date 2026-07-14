@@ -571,6 +571,9 @@ The product wrapper lives in `sim-one-cli/`. The terminal client lives in `tui/r
 # From the build output (recommended)
 ./.gorombo/sim-one-cli/sim-one
 
+# Resume one specific existing TUI session
+./.gorombo/sim-one-cli/sim-one --session tui-2026-...
+
 # Build all product artifacts
 pnpm run build:all
 
@@ -584,6 +587,8 @@ pnpm --filter sim-one-cli exec tsx src/cli.tsx skill list
 pnpm --filter sim-one-cli exec tsx src/cli.tsx skill add /path/to/skill my-skill "My Skill" --enable
 pnpm --filter sim-one-cli exec tsx src/cli.tsx mcp add my-mcp "My MCP" --url http://localhost:8080 --enable
 ```
+
+A no-argument launch creates a fresh durable TUI session through `POST /api/chat/sessions`, attaches its Flue stream, and sends the startup greeting as that session's first normal prompt. It never resumes the last TUI session implicitly. Existing TUI context loads only through `--session <id>` at launch or `/resume <session-id>` inside the app. Telegram retains its own connector-conversation persistence policy; that policy does not apply to the TUI.
 
 Core TUI slash commands:
 
@@ -1094,7 +1099,7 @@ Protected telemetry uses live in-memory Flue observer summaries when available a
 Slash commands are parsed before the prompt reaches the LLM:
 
 - `/new` starts a new trusted connector/TUI session. GUI-managed web chat should use the client new-chat control instead, and generic Web API payloads cannot opt into connector-only behavior by spoofing a connector name.
-- `/clear` resets the active connector/TUI thread by creating a new active durable session for the same connector scope.
+- `/clear` replaces the current TUI conversation with a fresh durable session while preserving the prior session for explicit resume.
 - `/resume <session-id>` resumes an available durable TUI session after access checks.
 - `/rename <title>` renames the active durable TUI session.
 - `/compact` calls Flue `session.compact()` for the resolved durable direct-agent session and returns command telemetry.
