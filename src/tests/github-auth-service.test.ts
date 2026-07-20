@@ -621,26 +621,31 @@ test('GitHub auth expiry cancels and evicts an abandoned authorization process',
   }
 });
 
-test('GitHub auth cancels a login process that starts after the authorization expires', async () => {
+test('GitHub auth cancels a login process that was already starting when authorization expires', async () => {
   const workspaceRoot = mkdtempSync(join(tmpdir(), 'github-auth-workspace-'));
   const authRoot = mkdtempSync(join(tmpdir(), 'github-auth-root-'));
   const loginProcess = deferred<Awaited<ReturnType<GithubAuthLoginRunner['start']>>>();
+  const loginStarted = deferred<void>();
+  const originalNow = Date.now;
+  let now = originalNow();
   let emitOutput: ((value: string) => void) | undefined;
   let cancelled = false;
   let deliveries = 0;
   const loginRunner: GithubAuthLoginRunner = {
     start: async (_args, _env, onOutput) => {
       emitOutput = onOutput;
+      loginStarted.resolve();
       return loginProcess.promise;
     },
   };
 
   try {
+    Date.now = () => now;
     const service = await createGithubAuthService({
       workspaceRoot,
       authRoot,
       loginRunner,
-      sessionTtlMs: 10,
+      sessionTtlMs: 60_000,
     });
     const start = service.start({
       audience: initiatingAudience,
@@ -649,7 +654,9 @@ test('GitHub auth cancels a login process that starts after the authorization ex
       },
     });
 
-    await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
+    await loginStarted.promise;
+    now += 60_001;
+    const expired = await service.status();
     emitOutput?.('Copy your one-time code: WXYZ-1234\nOpen https://github.com/login/device.');
     loginProcess.resolve({
       completion: new Promise(() => undefined),
@@ -659,10 +666,52 @@ test('GitHub auth cancels a login process that starts after the authorization ex
     });
 
     const result = await start;
+    assert.equal(expired.state, 'expired');
     assert.equal(result.state, 'expired');
     assert.equal(cancelled, true);
     assert.equal(deliveries, 0);
   } finally {
+    Date.now = originalNow;
+    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmSync(authRoot, { recursive: true, force: true });
+  }
+});
+
+test('GitHub auth does not start a login process after authorization expires during profile setup', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'github-auth-workspace-'));
+  const authRoot = mkdtempSync(join(tmpdir(), 'github-auth-root-'));
+  const originalNow = Date.now;
+  let now = originalNow();
+  let loginStarts = 0;
+  const loginRunner: GithubAuthLoginRunner = {
+    start: async () => {
+      loginStarts += 1;
+      return {
+        completion: new Promise(() => undefined),
+        cancel: () => undefined,
+      };
+    },
+  };
+
+  try {
+    Date.now = () => now;
+    const service = await createGithubAuthService({
+      workspaceRoot,
+      authRoot,
+      loginRunner,
+      sessionTtlMs: 60_000,
+    });
+    const start = service.start({ audience: initiatingAudience, deliverChallenge: () => undefined });
+
+    now += 60_001;
+    const expired = await service.status();
+    const result = await start;
+
+    assert.equal(expired.state, 'expired');
+    assert.equal(result.state, 'expired');
+    assert.equal(loginStarts, 0);
+  } finally {
+    Date.now = originalNow;
     rmSync(workspaceRoot, { recursive: true, force: true });
     rmSync(authRoot, { recursive: true, force: true });
   }
