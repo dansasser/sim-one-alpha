@@ -1,0 +1,116 @@
+src/engine/session/session-database.ts
+  s_a81fff26d52223::t_cc252b48e9bfb6 87-105,478-551,1008-1022,1108,1112-1114,1137-1146,1148-1149
+  s_a81fff26d52223::t_6555442317aca5 1147
+  s_a81fff26d52223::t_ec864fd304a781 1150
+docs/architecture/gorombo-flue-map.md
+  s_a81fff26d52223::t_cc252b48e9bfb6 122,292-300
+  s_a81fff26d52223::t_f4ef28f485b4ce 301
+.env.example
+  s_a81fff26d52223::t_b659585ceebe6e 52-55
+docs/architecture/flue-architecture.md
+  s_a81fff26d52223::t_9206501fc2bf12 110-111
+docs/architecture/github-auth-system.md
+  s_a81fff26d52223::t_e06e3c08d993f2 1-67
+src/agents/orchestrator.ts
+  s_a81fff26d52223::t_b947029c27f70e 70,76,172,225,227,231-235
+src/api/connectors/telegram/approval-ui/approval-message.ts
+  s_a81fff26d52223::t_bb8c314ea67637 63
+src/api/ingress/github-auth-challenge-relay.ts
+  s_a81fff26d52223::t_6795b867a970b8 1-175
+src/api/ingress/trusted-event-context.ts
+  s_a81fff26d52223::t_89b60a7db24867 1-12
+src/api/routes/chat-events.ts
+  s_a81fff26d52223::t_b362da2d8f4104 31-32,198,206,210,234
+src/api/routes/chat-prompt.ts
+  s_a81fff26d52223::t_03e17c1dc17b06 3-7,9,30-32
+src/channels/telegram.ts
+  s_a81fff26d52223::t_24df94fc73a937 19-25,162,189,245-246,254-265,268,273-275,282-337
+src/engine/workers/coding-worker/approvals/approval-policy.ts
+  s_a81fff26d52223::t_1548c63b45ab35 31-32
+src/engine/workers/coding-worker/approvals/approval-types.ts
+  s_a81fff26d52223::t_71bb7bdb727252 22-23
+src/engine/workers/coding-worker/coding-worker.ts
+  s_a81fff26d52223::t_1dc0aef6aee947 17-20,51-56,98-129,145,155,165,168,177,180,192-199,223,230,241,247,310,314-353
+src/engine/workers/coding-worker/events/coding-worker-events.ts
+  s_a81fff26d52223::t_30f4cd205433c5 29-35,66-73,99,111-114
+src/engine/workers/coding-worker/github/gh-cli-client.ts
+  s_a81fff26d52223::t_bcdb0e6e537a15 548,554-555
+src/engine/workers/coding-worker/github/github-auth-runtime.ts
+  s_a81fff26d52223::t_11e816d12fc73b 1-32
+src/engine/workers/coding-worker/github/github-auth-service.ts
+  s_a81fff26d52223::t_d6cb723d9abd76 1-598
+src/engine/workers/coding-worker/github/github-auth-tools.ts
+  s_a81fff26d52223::t_bc91ed7c5ac73b 1-228
+src/engine/workers/coding-worker/github/github-auth-types.ts
+  s_a81fff26d52223::t_8e6e11bc0330aa 1-59
+src/engine/workers/coding-worker/github/github-auth-utils.ts
+  s_a81fff26d52223::t_b317647536a538 1-24
+src/engine/workers/coding-worker/subagents/github/workspace/SECURITY.md
+  s_a81fff26d52223::t_79142aea1d5691 5
+src/engine/workers/coding-worker/subagents/github/workspace/TOOLS.md
+  s_a81fff26d52223::t_2a5364268c4a2a 5
+src/engine/workers/coding-worker/tools/coding-git-tools.ts
+  s_a81fff26d52223::t_85d526f06d9352 20,28,154,220-223,257,268,287
+src/engine/workers/coding-worker/tools/coding-repo-workflow-tools.ts
+  s_a81fff26d52223::t_025c595627f61c 27-30,39,191-194,263,300-303,311-314,553-560
+src/engine/workers/coding-worker/tools/github-credential-utils.ts
+  s_a81fff26d52223::t_039a7f9b38bc85 1-89
+src/engine/workers/coding-worker/workspace/SECURITY.md
+  s_a81fff26d52223::t_e4401a7ef662ee 10-11
+src/engine/workers/coding-worker/workspace/TOOLS.md
+  s_a81fff26d52223::t_3571203fc47b88 21-32
+src/tests/architecture-contract.test.ts
+  s_a81fff26d52223::t_2e81da093a7275 10,74-77,104-105,114-118,140-175,206-207,214-215,234-245
+src/tests/chat-prompt.test.ts
+  s_a81fff26d52223::t_9f593dc2558e3e 53-77
+src/tests/github-auth-challenge-relay.test.ts
+  s_a81fff26d52223::t_8bb8916376a880 1-266
+src/tests/github-auth-events.test.ts
+  s_a81fff26d52223::t_e8cebb70a34152 1-64
+src/tests/github-auth-live.test.ts
+  s_a81fff26d52223::t_a754ab696f4782 1-79
+src/tests/github-auth-runtime.test.ts
+  s_a81fff26d52223::t_ffcde61328ea01 1-30
+src/tests/github-auth-service.test.ts
+  s_a81fff26d52223::t_c8dd78502dbfd4 1-788
+src/tests/github-auth-telegram.test.ts
+  s_a81fff26d52223::t_e5a5233e39b5e8 1-126
+src/tests/github-auth-tools.test.ts
+  s_a81fff26d52223::t_3dced6e6b0ff16 1-446
+src/tests/github-auth-workflow.test.ts
+  s_a81fff26d52223::t_7fb3fe296cc284 1-218
+src/tests/github-credential-boundaries.test.ts
+  s_a81fff26d52223::t_ff4e2f0587e53a 1-458
+src/tests/github-private-clone.test.ts
+  s_a81fff26d52223::t_a8baf9acdaa4c3 1-95
+src/tests/trusted-event-admission.test.ts
+  s_a81fff26d52223::t_62ad893cc6651c 1-115
+src/workflows/github-auth.ts
+  s_a81fff26d52223::t_d20c21ae47748a 1-143
+src/workspace/AGENTS.md
+  s_a81fff26d52223::t_1c04d11d161c05 30
+src/workspace/IDENTITY.md
+  s_a81fff26d52223::t_822fb413a83e97 32-37
+src/workspace/SECURITY.md
+  s_a81fff26d52223::t_512e82bcd1027b 17-18
+src/workspace/SOUL.md
+  s_a81fff26d52223::t_c1681a8e6c8b58 27
+src/workspace/TOOLS.md
+  s_a81fff26d52223::t_11d2fa7a3a6cb9 18-26,36-38,142
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "bca076828cc79710058441fd151f628de5dc1969",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
