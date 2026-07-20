@@ -17,6 +17,7 @@ import {
 import type { CodingProgressReporter } from '../../../../engine/workers/coding-worker/events/progress-reporter.js';
 import type { CodingWorkspaceTargetInput } from '../../../../engine/workers/coding-worker/repo/workspace-target.js';
 import type { CodingGithubAction } from '../../../../core/schemas/coding-worker.js';
+import { githubCredentialOptions } from './github-credential-utils.js';
 
 export interface CodingGitToolsOptions extends CodingWorkspaceTargetInput {
   env?: Record<string, string | undefined>;
@@ -24,6 +25,7 @@ export interface CodingGitToolsOptions extends CodingWorkspaceTargetInput {
   sessionId?: string;
   approvalService?: CodingApprovalService;
   reporter?: CodingProgressReporter;
+  githubGitEnv?: () => Promise<Record<string, string>>;
 }
 
 export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefinition[] {
@@ -149,6 +151,7 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
         const sandbox = await getSandbox();
         const push = await sandbox.execFile('git', ['push', '-u', remote, branch], {
           timeoutSeconds: 120,
+          ...(await githubCredentialOptions(sandbox, remote, options.githubGitEnv, 'push')),
         });
         return toToolJson({ status: push.exitCode === 0 ? 'pushed' : 'failed', push });
       },
@@ -214,7 +217,10 @@ export function createCodingGitTools(options: CodingGitToolsOptions): ToolDefini
           head ? ['--head', head] : undefined,
         ].filter(Boolean);
         const sandbox = await getSandbox();
-        const pr = await sandbox.execFile('gh', flags.flat() as string[], { timeoutSeconds: 120 });
+        const pr = await sandbox.execFile('gh', flags.flat() as string[], {
+          timeoutSeconds: 120,
+          ...(options.githubGitEnv ? { env: await options.githubGitEnv() } : {}),
+        });
         return toGithubResult({
           action: 'create_pr',
           payload: {
@@ -248,6 +254,7 @@ export async function evaluateGitApproval(
   reason: string;
   risk: string;
   target?: string;
+  expiresAt?: string;
   metadata?: Record<string, string | number | boolean>;
   },
 ) {
@@ -258,6 +265,7 @@ export async function evaluateGitApproval(
     reason: input.reason,
     risk: input.risk,
     target: input.target,
+    expiresAt: input.expiresAt,
     metadata: input.metadata,
   });
   const latest = (await input.approvalService.listRecords(proposedRequest.taskId))
@@ -276,6 +284,7 @@ export async function evaluateGitApproval(
     reason: input.reason,
     risk: input.risk,
     target: input.target,
+    expiresAt: input.expiresAt,
     metadata: input.metadata,
   });
   const evaluation = await input.approvalService.evaluateRequest(request);

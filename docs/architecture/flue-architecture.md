@@ -107,6 +107,8 @@ Workflow files expose HTTP by exporting `route`. Flue workflow HTTP invocation i
 
 Tools are executable capabilities created with `defineTool(...)`.
 
+Managed GitHub authentication is a Coding Worker-owned tool/runtime capability. The orchestrator delegates GitHub work to the Coding Worker and does not receive GitHub-auth tools. See [Managed GitHub Authentication](github-auth-system.md).
+
 Tools must be attached only to agents that should own those capabilities. Do not attach web-search-capable tools to the orchestrator.
 
 ## Skills

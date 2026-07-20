@@ -28,6 +28,8 @@ const defaultApprovalRequiredActions = new Set<CodingApprovalActionType>([
   'github.review_comment',
   'github.check.rerun',
   'github.fork_repo',
+  'github.auth.login',
+  'github.auth.logout',
 ]);
 
 export function requiresCodingApproval(actionType: CodingApprovalActionType): boolean {
