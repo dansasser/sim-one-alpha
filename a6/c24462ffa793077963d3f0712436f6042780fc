@@ -1,0 +1,19 @@
+src/tests/github-auth-service.test.ts
+  s_65db8ffa7c9620::t_98db77545c3841 624,628-630,637,643,648,657-659,669,674-714
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "a6c24462ffa793077963d3f0712436f6042780fc",
+  "prompts": {},
+  "sessions": {
+    "s_65db8ffa7c9620": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f51b3-89d7-7d02-973d-9679f07254a1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
