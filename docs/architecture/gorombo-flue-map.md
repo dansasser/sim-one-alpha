@@ -119,7 +119,7 @@ src/api/middleware/api-secret.ts
 
 src/api/routes/chat-events.ts
   App-owned /api/chat/events ingress alias.
-  Verifies API-secret middleware, normalizes the HTTP boundary, persists trusted event context, resolves the prompt's product session, handles pre-LLM slash commands (/new, /clear, /resume, /rename, /compact), and prompts the durable /agents/orchestrator/:sessionId route.
+  Verifies API-secret middleware, normalizes the HTTP boundary, persists trusted event context, binds the current event through request-local trusted context for model-callable authorization tools, resolves the prompt's product session, handles pre-LLM slash commands (/new, /clear, /resume, /rename, /compact), and prompts the durable /agents/orchestrator/:sessionId route.
   Does not call c.executionCtx, a workflow route for normal chat execution, or a non-Flue orchestrator.
 
 src/api/routes/chat-sessions.ts
@@ -288,6 +288,16 @@ src/core/config/
 src/workflows/research.ts
   Finite direct research harness for testing or direct research runs.
   Initializes the researcher.
+
+src/workflows/github-auth.ts
+  Finite internal workflow for Coding Worker managed GitHub auth.
+  Requires matching request-local trusted event context, shares the worker auth runtime, returns no device code, and never waits for browser completion.
+  Exports no public route until durable event-scoped workflow admission exists.
+
+src/api/ingress/github-auth-challenge-relay.ts
+  One-time, audience-bound delivery for GitHub browser challenges. See
+  `docs/architecture/github-auth-system.md` for private connector delivery and
+  lease semantics.
 
 src/workflows/retrieval.ts
   Shared retrieval machinery.

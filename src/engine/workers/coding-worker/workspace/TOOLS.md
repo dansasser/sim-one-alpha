@@ -18,6 +18,18 @@ Wired worker-local capability groups:
   LSP-backed tools (`lsp_document_symbols`, `lsp_go_to_definition`, `lsp_find_references`, `lsp_hover`, `lsp_prepare_rename`, `lsp_rename`, `lsp_workspace_symbols`) are also available; they are powered by `typescript-language-server`, `@astrojs/language-server` (for `.astro`), and `pyright-langserver` from `node_modules/.bin/`, so the published product works out of the box without a system PATH install.
 - Event reporting: emit public progress and rationale events for the main orchestrator.
 
+## GitHub Authentication
+
+GitHub authentication is runtime state, not a `TOOLS.md` flag. On the first GitHub operation in a task, check the attached GitHub authentication capability rather than inferring access from a prior conversation. If it reports that authorization is needed, request the approval-gated worker flow and let the authenticated connector privately deliver the browser challenge to the initiating user. Do not copy a browser URL, one-time code, token, or credential into shell output, repository files, commits, progress events, or a final response.
+
+If approval completes after the initiating turn, call `github_auth_start` again with the new trusted current `eventId` and the blocked response's `request.id` supplied as `approvalRequestId`. The runtime verifies that the approved request belongs to the same connector, actor, conversation, host, and profile before delivering the challenge to the current response. Never reuse an approval from another conversation.
+
+For asynchronous connectors such as Telegram, pass the trusted current `eventId` to `github_auth_status` and `github_auth_start`; when continuing an approved login, pass the blocked response's `request.id` as `approvalRequestId`. These are the only model-visible routing values; trusted ingress authority is stored server-side and bound to the Flue agent instance plus that event ID. Never invent or substitute either value from an unrelated request or conversation.
+
+Telegram issues this admission only in a private bot chat. Do not attempt device authorization from a group or supergroup event; direct the user to the bot's private chat instead.
+
+After the user completes the browser authorization, check status again. Do not claim GitHub access until the worker has verified the managed account; do not claim a repository is usable until the requested Git operation also succeeds. Use HTTPS Git remotes only for product-managed GitHub access.
+
 The runtime workspace root is the coding worker's access root. Do not treat the agent source checkout or `process.cwd()` as the default user project. Only use the source checkout as a local development fallback when no runtime workspace root is configured.
 
 Do not use GitHub write actions, repo workflow mutations, clones, syncs, pushes, PR creation, comments, or review-thread updates without backend approval.

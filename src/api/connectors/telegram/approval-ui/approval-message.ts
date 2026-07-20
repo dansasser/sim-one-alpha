@@ -60,5 +60,5 @@ export function buildApprovalResolvedMessage(record: CodingApprovalRecord): stri
  * Escapes characters that Telegram MarkdownV2 treats as formatting.
  */
 export function escapeMarkdown(text: string): string {
-  return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
+  return text.replace(/([\\_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
 }

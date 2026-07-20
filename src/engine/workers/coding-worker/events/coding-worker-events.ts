@@ -26,6 +26,13 @@ export type CodingWorkerEventType =
   | 'coding.approval.completed'
   | 'coding.github.approval_requested'
   | 'coding.github.action_completed'
+  | 'coding.github.auth.requested'
+  | 'coding.github.auth.challenge_available'
+  | 'coding.github.auth.verifying'
+  | 'coding.github.auth.verified'
+  | 'coding.github.auth.failed'
+  | 'coding.github.auth.cancelled'
+  | 'coding.github.auth.logged_out'
   | 'coding.completed'
   | 'coding.blocked'
   | 'coding.error';
@@ -56,7 +63,14 @@ const forbiddenPublicTraceKeys = new Set([
   'rawThinking',
   'rawPrompt',
   'internalPrompt',
-]);
+  'userCode',
+  'verificationUri',
+  'deviceCode',
+  'accessToken',
+  'authorization',
+  'token',
+  'githubAuthAdmissionId',
+].map(normalizePublicTraceKey));
 
 export function createCodingWorkerEvent(
   input: Omit<CodingWorkerEvent, 'timestamp'> & { timestamp?: string },
@@ -82,7 +96,7 @@ function findForbiddenKey(value: unknown): string | undefined {
   }
 
   for (const [key, child] of Object.entries(value)) {
-    if (forbiddenPublicTraceKeys.has(key)) {
+    if (forbiddenPublicTraceKeys.has(normalizePublicTraceKey(key))) {
       return key;
     }
 
@@ -93,4 +107,8 @@ function findForbiddenKey(value: unknown): string | undefined {
   }
 
   return undefined;
+}
+
+function normalizePublicTraceKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
