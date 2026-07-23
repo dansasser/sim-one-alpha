@@ -1,0 +1,4347 @@
+{
+  "schema_version": 1,
+  "graph_id": "sim-one-alpha-lifecycle",
+  "graph_version": 1,
+  "title": "SIM-ONE Alpha Development Lifecycle",
+  "purpose": "Govern future SIM-ONE Alpha changes from an authorized request through grounded design, parallel domain implementation, full project verification, approval-gated release, output-level canary and production observation, and bounded repair.",
+  "project": {
+    "name": "sim-one-alpha",
+    "root": "/opt/ai/sim-one-alpha",
+    "instructions": [
+      "/opt/ai/sim-one-alpha/AGENTS.md",
+      "/opt/ai/sim-one-alpha/src/AGENTS.md",
+      "/opt/ai/sim-one-alpha/docs/architecture/flue-architecture.md",
+      "/opt/ai/sim-one-alpha/docs/architecture/gorombo-flue-map.md",
+      "/opt/ai/sim-one-alpha/docs/architecture/product-flow.md",
+      "/opt/ai/sim-one-alpha/docs/architecture/registry-system.md",
+      "/opt/ai/sim-one-alpha/docs/architecture/tool-system.md",
+      "/opt/ai/sim-one-alpha/docs/architecture/capability-system.md",
+      "/opt/ai/sim-one-alpha/docs/architecture/memory-system.md",
+      "/opt/ai/sim-one-alpha/.github/workflows/ci.yml"
+    ],
+    "context_version": "commit:0719563dfd2a3853fd8d1e87be02a8cb29b8b02c"
+  },
+  "status": "validated",
+  "templates": [
+    "discovery-to-delivery",
+    "parallel-fanout-fanin",
+    "human-gate",
+    "bounded-feedback",
+    "rollback-observation"
+  ],
+  "entry_nodes": [
+    "baseline-context"
+  ],
+  "terminal_nodes": [
+    "closeout-release"
+  ],
+  "nodes": [
+    {
+      "id": "baseline-context",
+      "type": "operation",
+      "title": "Bind Change To Current Project Context",
+      "goal": "Bind one authorized change request to the current SIM-ONE Alpha commit, applicable instructions, architecture contracts, affected domains, and external-effect boundaries.",
+      "state": "planned",
+      "executor": {
+        "kind": "agent",
+        "name": "SIM-ONE project context adapter",
+        "instructions": "Read the authorized request, current Git state, AGENTS.md, architecture documents, manifests, and relevant history. Do not mark historical implementation as verified."
+      },
+      "inputs": [
+        {
+          "name": "authorized change request",
+          "artifact": "external:authorized-change-request",
+          "required": true
+        },
+        {
+          "name": "repository checkout",
+          "artifact": "external:repository-checkout",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "grounded project context",
+          "artifact": "artifact:baseline-context",
+          "format": "application/json"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "context-bound-to-commit",
+          "kind": "artifact",
+          "criterion": "The context record names the exact Git commit, instruction files, requested outcome, explicit non-goals, affected domains, and external effects.",
+          "evidence": "runtime:evidence/baseline-context/context.json"
+        },
+        {
+          "id": "boundaries-confirmed",
+          "kind": "review",
+          "criterion": "The context preserves Flue discovery paths, orchestrator/worker ownership, protocol/tool/skill separation, and project naming rules.",
+          "evidence": "runtime:evidence/baseline-context/boundary-review.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "AGENTS.md",
+          "docs/architecture/",
+          "package.json",
+          "pnpm-lock.yaml",
+          ".github/workflows/",
+          "current Git metadata"
+        ],
+        "write": [],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 45,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "none",
+        "description": "Produces evidence without mutating project or external state.",
+        "rollback": "none",
+        "approval_required": false
+      },
+      "resources": [],
+      "tags": [
+        "context",
+        "provenance",
+        "flue"
+      ]
+    },
+    {
+      "id": "install-dependencies",
+      "type": "operation",
+      "title": "Install Pinned Dependencies",
+      "goal": "Prepare the Node 22 and pnpm dependency tree from the committed lockfile without changing dependency intent.",
+      "state": "planned",
+      "executor": {
+        "kind": "deterministic",
+        "name": "pnpm frozen installer",
+        "instructions": "Run the pinned package-manager install and retain complete output, including any blocked build-script warning."
+      },
+      "inputs": [
+        {
+          "name": "grounded project context",
+          "artifact": "artifact:baseline-context",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "dependency environment",
+          "artifact": "artifact:dependency-environment",
+          "format": "evidence-record"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "frozen-install-passed",
+          "kind": "test",
+          "criterion": "pnpm install --frozen-lockfile exits successfully under Node 22 and does not modify pnpm-lock.yaml.",
+          "evidence": "runtime:evidence/install-dependencies/result.json"
+        },
+        {
+          "id": "build-scripts-reviewed",
+          "kind": "policy",
+          "criterion": "Any ignored dependency build scripts are explicitly reviewed and approved before later nodes rely on their artifacts.",
+          "evidence": "runtime:evidence/install-dependencies/stdout.log"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "package.json",
+          "pnpm-lock.yaml",
+          "pnpm-workspace.yaml",
+          "pnpm store"
+        ],
+        "write": [
+          "node_modules/"
+        ],
+        "external": [
+          "package registry downloads"
+        ],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 20,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence.",
+        "command": [
+          "pnpm",
+          "install",
+          "--frozen-lockfile"
+        ],
+        "working_directory": ".",
+        "environment": [],
+        "capture_limit_bytes": 131072,
+        "timeout_seconds": 1200
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Populates the gitignored node_modules dependency tree.",
+        "rollback": "Re-run the pinned install from the prior reviewed lockfile to restore the prior dependency tree.",
+        "approval_required": false
+      },
+      "resources": [
+        "workspace:node-modules"
+      ],
+      "tags": [
+        "environment",
+        "dependencies",
+        "deterministic"
+      ]
+    },
+    {
+      "id": "fetch-embedding-model",
+      "type": "operation",
+      "title": "Fetch Bundled Embedding Model",
+      "goal": "Materialize the pinned local ONNX embedding model and tokenizer assets required by embedding and RAG verification.",
+      "state": "planned",
+      "executor": {
+        "kind": "deterministic",
+        "name": "SIM-ONE embedding model fetcher",
+        "instructions": "Use the repository fetch script and digest the downloaded model assets."
+      },
+      "inputs": [
+        {
+          "name": "dependency environment",
+          "artifact": "artifact:dependency-environment",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "embedding model assets",
+          "artifact": "artifact:embedding-model-assets",
+          "format": "model-artifact"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "model-assets-present",
+          "kind": "artifact",
+          "criterion": "model.onnx, tokenizer.json, tokenizer configuration, vocabulary, and model configuration exist at the documented project path.",
+          "evidence": "assets/models/embeddings/all-MiniLM-L6-v2/"
+        },
+        {
+          "id": "model-assets-digested",
+          "kind": "policy",
+          "criterion": "The runtime evidence records sizes and SHA-256 digests for the downloaded model assets.",
+          "evidence": "runtime:evidence/fetch-embedding-model/result.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "scripts/fetch-embedding-model.mjs",
+          "package.json"
+        ],
+        "write": [
+          "assets/models/embeddings/all-MiniLM-L6-v2/"
+        ],
+        "external": [
+          "Hugging Face model download"
+        ],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 15,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence.",
+        "command": [
+          "pnpm",
+          "fetch-embedding-model"
+        ],
+        "working_directory": ".",
+        "environment": [],
+        "capture_limit_bytes": 131072,
+        "timeout_seconds": 900,
+        "evidence_paths": [
+          "assets/models/embeddings/all-MiniLM-L6-v2"
+        ]
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Writes gitignored embedding model assets under assets/models/embeddings.",
+        "rollback": "Restore the previously reviewed model asset snapshot from the local cache or rerun the pinned fetch script.",
+        "approval_required": false
+      },
+      "resources": [
+        "workspace:embedding-model-assets"
+      ],
+      "tags": [
+        "environment",
+        "embeddings",
+        "rag",
+        "deterministic"
+      ]
+    },
+    {
+      "id": "build-wasm-memory",
+      "type": "operation",
+      "title": "Build Rust Memory WASM",
+      "goal": "Compile the Rust structured-memory engine to the Node-compatible WASM artifact required by real memory execution.",
+      "state": "planned",
+      "executor": {
+        "kind": "deterministic",
+        "name": "SIM-ONE wasm-pack builder",
+        "instructions": "Run the repository WASM build under the pinned Rust toolchain and retain the generated artifact digest."
+      },
+      "inputs": [
+        {
+          "name": "dependency environment",
+          "artifact": "artifact:dependency-environment",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "memory WASM artifact",
+          "artifact": "artifact:memory-wasm",
+          "format": "application/wasm"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "wasm-build-passed",
+          "kind": "test",
+          "criterion": "The wasm-pack build exits successfully for wasm32-unknown-unknown.",
+          "evidence": "runtime:evidence/build-wasm-memory/result.json"
+        },
+        {
+          "id": "wasm-artifact-present",
+          "kind": "artifact",
+          "criterion": "crates/gorombo-memory/pkg/gorombo_memory_bg.wasm exists and its digest is recorded.",
+          "evidence": "crates/gorombo-memory/pkg/gorombo_memory_bg.wasm"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "crates/gorombo-memory/",
+          "rust-toolchain.toml",
+          "Cargo.toml",
+          "scripts/wasm-build.mjs"
+        ],
+        "write": [
+          "crates/gorombo-memory/pkg/",
+          "crates/gorombo-memory/target/"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 20,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence.",
+        "command": [
+          "pnpm",
+          "run",
+          "wasm:build"
+        ],
+        "working_directory": ".",
+        "environment": [],
+        "capture_limit_bytes": 131072,
+        "timeout_seconds": 1200,
+        "evidence_paths": [
+          "crates/gorombo-memory/pkg/gorombo_memory_bg.wasm"
+        ]
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Writes gitignored Rust target and WASM package artifacts.",
+        "rollback": "Rebuild the WASM package from the prior reviewed Rust source and toolchain.",
+        "approval_required": false
+      },
+      "resources": [
+        "workspace:memory-wasm-output"
+      ],
+      "tags": [
+        "environment",
+        "memory",
+        "rust",
+        "wasm",
+        "deterministic"
+      ]
+    },
+    {
+      "id": "define-change-contract",
+      "type": "work",
+      "title": "Define Purpose And Acceptance Contract",
+      "goal": "Turn the authorized request into a project-specific purpose, scope, non-goals, evidence plan, permission boundary, rollback, and user-visible progress contract.",
+      "state": "planned",
+      "executor": {
+        "kind": "agent",
+        "name": "SIM-ONE planning adapter",
+        "instructions": "Create or update /opt/ai/plans/<topic>/plan.md and name every behavioral acceptance test, external effect, approval gate, and rollback."
+      },
+      "inputs": [
+        {
+          "name": "grounded project context",
+          "artifact": "artifact:baseline-context",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "change acceptance contract",
+          "artifact": "artifact:change-contract",
+          "format": "text/markdown"
+        },
+        {
+          "name": "affected domain map",
+          "artifact": "artifact:affected-domain-map",
+          "format": "application/json"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "plan-location-correct",
+          "kind": "artifact",
+          "criterion": "The plan exists at /opt/ai/plans/<topic>/plan.md and does not use memory or the repository as a substitute plan location.",
+          "evidence": "/opt/ai/plans/<topic>/plan.md"
+        },
+        {
+          "id": "acceptance-is-behavioral",
+          "kind": "review",
+          "criterion": "Success criteria prove correct outputs or target-system effects; process, port, file existence, and zero exit alone are not treated as behavioral proof.",
+          "evidence": "runtime:evidence/define-change-contract/acceptance-review.json"
+        },
+        {
+          "id": "authority-is-bounded",
+          "kind": "policy",
+          "criterion": "The contract lists exact authorized mutations and separates read-only discovery from local, GitHub, deployment, sending, spending, and destructive effects.",
+          "evidence": "runtime:evidence/define-change-contract/authority.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "artifact:baseline-context",
+          "AGENTS.md",
+          "/opt/ai/plans/"
+        ],
+        "write": [
+          "/opt/ai/plans/<topic>/plan.md"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 45,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Creates or updates the task plan in the mandatory plans directory.",
+        "rollback": "Restore the previous plan version from version control or its retained prior revision.",
+        "approval_required": false
+      },
+      "resources": [
+        "plans:<topic>"
+      ],
+      "tags": [
+        "contract",
+        "planning",
+        "approval",
+        "progress"
+      ]
+    },
+    {
+      "id": "decide-architecture",
+      "type": "decision",
+      "title": "Resolve Architecture And Ownership",
+      "goal": "Choose the smallest design that satisfies the change contract while preserving SIM-ONE Alpha domain ownership and Flue architecture.",
+      "state": "planned",
+      "executor": {
+        "kind": "agent",
+        "name": "SIM-ONE architecture adapter",
+        "instructions": "Read local architecture sources before version-matched Flue docs. Record alternatives, evidence, ownership, consequences, and revisit triggers; write an ADR only when material."
+      },
+      "inputs": [
+        {
+          "name": "grounded project context",
+          "artifact": "artifact:baseline-context",
+          "required": true
+        },
+        {
+          "name": "change acceptance contract",
+          "artifact": "artifact:change-contract",
+          "required": true
+        },
+        {
+          "name": "affected domain map",
+          "artifact": "artifact:affected-domain-map",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "architecture decision",
+          "artifact": "artifact:architecture-decision",
+          "format": "decision-record"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "alternatives-recorded",
+          "kind": "review",
+          "criterion": "The decision records alternatives, decision criteria, supporting evidence, the selected approach, consequences, and a revisit trigger.",
+          "evidence": "runtime:evidence/decide-architecture/decision.json"
+        },
+        {
+          "id": "ownership-preserved",
+          "kind": "policy",
+          "criterion": "The decision keeps app.ts thin, protocols in SQLite through the Protocol Tool, executable capabilities as tools, workflow knowledge as skills, specialists as workers, and registries outside orchestrator logic.",
+          "evidence": "runtime:evidence/decide-architecture/ownership-review.json"
+        },
+        {
+          "id": "research-boundary-preserved",
+          "kind": "policy",
+          "criterion": "The researcher owns web/current/source-backed retrieval and neither the orchestrator nor Coding Worker gains a direct web-capable path.",
+          "evidence": "runtime:evidence/decide-architecture/research-boundary.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "docs/architecture/",
+          "src/",
+          "version-matched Flue documentation"
+        ],
+        "write": [
+          "docs/adr/ or /opt/ai/plans/<topic>/plan.md"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 60,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Records the reviewed architecture decision in the project ADR area or task plan.",
+        "rollback": "Restore the prior decision record and invalidate downstream work that consumed the superseded decision.",
+        "approval_required": false
+      },
+      "resources": [
+        "architecture-decision:<topic>"
+      ],
+      "tags": [
+        "architecture",
+        "decision",
+        "flue",
+        "ownership"
+      ]
+    },
+    {
+      "id": "plan-implementation",
+      "type": "work",
+      "title": "Plan Bounded Implementation",
+      "goal": "Produce an executable implementation sequence with file ownership, artifact handoffs, progress events, verification commands, approval scopes, and rollback.",
+      "state": "planned",
+      "executor": {
+        "kind": "agent",
+        "name": "SIM-ONE implementation planning adapter",
+        "instructions": "Map the decision to bounded workstreams. Keep shared types and contracts ahead of dependent implementation and name the exact scripts from package.json."
+      },
+      "inputs": [
+        {
+          "name": "change acceptance contract",
+          "artifact": "artifact:change-contract",
+          "required": true
+        },
+        {
+          "name": "architecture decision",
+          "artifact": "artifact:architecture-decision",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "implementation plan",
+          "artifact": "artifact:implementation-plan",
+          "format": "text/markdown"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "workstreams-bounded",
+          "kind": "review",
+          "criterion": "Each workstream has one clear purpose, owned files, declared inputs and outputs, and no hidden dependency on another parallel branch.",
+          "evidence": "runtime:evidence/plan-implementation/workstreams.json"
+        },
+        {
+          "id": "verification-mapped",
+          "kind": "test",
+          "criterion": "The plan maps each acceptance criterion to a focused check and the full applicable project verification matrix.",
+          "evidence": "runtime:evidence/plan-implementation/verification-map.json"
+        },
+        {
+          "id": "progress-events-required",
+          "kind": "policy",
+          "criterion": "Every tool execution, worker handoff, plan update, verification result, and state transition has a durable typed progress-event expectation.",
+          "evidence": "runtime:evidence/plan-implementation/progress-contract.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "artifact:change-contract",
+          "artifact:architecture-decision",
+          "package.json",
+          ".github/workflows/ci.yml"
+        ],
+        "write": [
+          "/opt/ai/plans/<topic>/plan.md"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 60,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Updates the authorized task plan with the reviewed implementation sequence.",
+        "rollback": "Restore the prior plan revision and invalidate downstream work that consumed the superseded plan.",
+        "approval_required": false
+      },
+      "resources": [
+        "plans:<topic>"
+      ],
+      "tags": [
+        "planning",
+        "handoff",
+        "verification",
+        "progress"
+      ]
+    },
+    {
+      "id": "implement-core-contracts",
+      "type": "work",
+      "title": "Implement Core Contracts And Architecture",
+      "goal": "Implement authorized changes to shared types, Valibot schemas, protocols, model cards, configuration, architecture contracts, and Flue-discovered entrypoints.",
+      "state": "planned",
+      "executor": {
+        "kind": "agent",
+        "name": "SIM-ONE Coding Worker lead",
+        "instructions": "Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record."
+      },
+      "inputs": [
+        {
+          "name": "implementation plan",
+          "artifact": "artifact:implementation-plan",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Implement Core Contracts And Architecture",
+          "artifact": "artifact:core-contracts-change",
+          "format": "git-diff-or-no-change-record"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "scope-obeyed",
+          "kind": "policy",
+          "criterion": "The patch or no-change record stays inside the authorized domain and preserves the architecture decision.",
+          "evidence": "runtime:evidence/implement-core-contracts/scope-review.json"
+        },
+        {
+          "id": "focused-verification-recorded",
+          "kind": "test",
+          "criterion": "Focused tests for changed behavior pass, or the no-change record proves why no focused test is applicable.",
+          "evidence": "runtime:evidence/implement-core-contracts/focused-verification.json"
+        },
+        {
+          "id": "progress-visible",
+          "kind": "artifact",
+          "criterion": "Typed durable progress events cover implementation, internal specialist handoffs, tool execution, and verification.",
+          "evidence": "runtime:evidence/implement-core-contracts/progress-events.jsonl"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "artifact:implementation-plan",
+          "authorized project files"
+        ],
+        "write": [
+          "src/core/",
+          "src/app.ts",
+          "src/db.ts",
+          "docs/architecture/",
+          "flue.config.ts"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 3,
+        "timeout_minutes": 180,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Changes only the authorized files in this domain workstream.",
+        "rollback": "Restore this workstream's files from the pre-change Git commit while preserving unrelated workstreams.",
+        "approval_required": false
+      },
+      "resources": [
+        "workspace:core-contracts"
+      ],
+      "tags": [
+        "implementation",
+        "core",
+        "schemas",
+        "protocols",
+        "models",
+        "flue"
+      ]
+    },
+    {
+      "id": "implement-agent-runtime",
+      "type": "work",
+      "title": "Implement Agents, Workflows, Tools, And Workers",
+      "goal": "Implement authorized orchestrator, workflow, tool, skill, workspace, researcher, Coding Worker, and internal-subagent changes without crossing ownership boundaries.",
+      "state": "planned",
+      "executor": {
+        "kind": "agent",
+        "name": "SIM-ONE Coding Worker lead",
+        "instructions": "Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record."
+      },
+      "inputs": [
+        {
+          "name": "implementation plan",
+          "artifact": "artifact:implementation-plan",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Implement Agents, Workflows, Tools, And Workers",
+          "artifact": "artifact:agent-runtime-change",
+          "format": "git-diff-or-no-change-record"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "scope-obeyed",
+          "kind": "policy",
+          "criterion": "The patch or no-change record stays inside the authorized domain and preserves the architecture decision.",
+          "evidence": "runtime:evidence/implement-agent-runtime/scope-review.json"
+        },
+        {
+          "id": "focused-verification-recorded",
+          "kind": "test",
+          "criterion": "Focused tests for changed behavior pass, or the no-change record proves why no focused test is applicable.",
+          "evidence": "runtime:evidence/implement-agent-runtime/focused-verification.json"
+        },
+        {
+          "id": "progress-visible",
+          "kind": "artifact",
+          "criterion": "Typed durable progress events cover implementation, internal specialist handoffs, tool execution, and verification.",
+          "evidence": "runtime:evidence/implement-agent-runtime/progress-events.jsonl"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "artifact:implementation-plan",
+          "authorized project files"
+        ],
+        "write": [
+          "src/agents/",
+          "src/workflows/",
+          "src/workspace/",
+          "src/engine/tools/",
+          "src/engine/skills/",
+          "src/engine/workers/"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 3,
+        "timeout_minutes": 180,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Changes only the authorized files in this domain workstream.",
+        "rollback": "Restore this workstream's files from the pre-change Git commit while preserving unrelated workstreams.",
+        "approval_required": false
+      },
+      "resources": [
+        "workspace:agent-runtime"
+      ],
+      "tags": [
+        "implementation",
+        "agents",
+        "workflows",
+        "tools",
+        "skills",
+        "workers"
+      ]
+    },
+    {
+      "id": "implement-memory-retrieval",
+      "type": "work",
+      "title": "Implement Memory, RAG, And Embeddings",
+      "goal": "Implement authorized structured memory, session memory, document indexing, knowledge storage, retrieval routing, embeddings, and Rust/WASM changes while keeping memory layers distinct.",
+      "state": "planned",
+      "executor": {
+        "kind": "agent",
+        "name": "SIM-ONE Coding Worker lead",
+        "instructions": "Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record."
+      },
+      "inputs": [
+        {
+          "name": "implementation plan",
+          "artifact": "artifact:implementation-plan",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Implement Memory, RAG, And Embeddings",
+          "artifact": "artifact:memory-retrieval-change",
+          "format": "git-diff-or-no-change-record"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "scope-obeyed",
+          "kind": "policy",
+          "criterion": "The patch or no-change record stays inside the authorized domain and preserves the architecture decision.",
+          "evidence": "runtime:evidence/implement-memory-retrieval/scope-review.json"
+        },
+        {
+          "id": "focused-verification-recorded",
+          "kind": "test",
+          "criterion": "Focused tests for changed behavior pass, or the no-change record proves why no focused test is applicable.",
+          "evidence": "runtime:evidence/implement-memory-retrieval/focused-verification.json"
+        },
+        {
+          "id": "progress-visible",
+          "kind": "artifact",
+          "criterion": "Typed durable progress events cover implementation, internal specialist handoffs, tool execution, and verification.",
+          "evidence": "runtime:evidence/implement-memory-retrieval/progress-events.jsonl"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "artifact:implementation-plan",
+          "authorized project files"
+        ],
+        "write": [
+          "src/engine/memory/",
+          "src/engine/rag/",
+          "src/engine/embeddings/",
+          "crates/gorombo-memory/"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 3,
+        "timeout_minutes": 180,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Changes only the authorized files in this domain workstream.",
+        "rollback": "Restore this workstream's files from the pre-change Git commit while preserving unrelated workstreams.",
+        "approval_required": false
+      },
+      "resources": [
+        "workspace:memory-retrieval"
+      ],
+      "tags": [
+        "implementation",
+        "memory",
+        "rag",
+        "embeddings",
+        "wasm"
+      ]
+    },
+    {
+      "id": "implement-capabilities-security",
+      "type": "work",
+      "title": "Implement Capabilities, Registries, And Security",
+      "goal": "Implement authorized capability-store, registry, MCP, approval, GitHub-auth, and policy enforcement changes with fail-closed trust boundaries.",
+      "state": "planned",
+      "executor": {
+        "kind": "agent",
+        "name": "SIM-ONE Coding Worker lead",
+        "instructions": "Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record."
+      },
+      "inputs": [
+        {
+          "name": "implementation plan",
+          "artifact": "artifact:implementation-plan",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Implement Capabilities, Registries, And Security",
+          "artifact": "artifact:capabilities-security-change",
+          "format": "git-diff-or-no-change-record"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "scope-obeyed",
+          "kind": "policy",
+          "criterion": "The patch or no-change record stays inside the authorized domain and preserves the architecture decision.",
+          "evidence": "runtime:evidence/implement-capabilities-security/scope-review.json"
+        },
+        {
+          "id": "focused-verification-recorded",
+          "kind": "test",
+          "criterion": "Focused tests for changed behavior pass, or the no-change record proves why no focused test is applicable.",
+          "evidence": "runtime:evidence/implement-capabilities-security/focused-verification.json"
+        },
+        {
+          "id": "progress-visible",
+          "kind": "artifact",
+          "criterion": "Typed durable progress events cover implementation, internal specialist handoffs, tool execution, and verification.",
+          "evidence": "runtime:evidence/implement-capabilities-security/progress-events.jsonl"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "artifact:implementation-plan",
+          "authorized project files"
+        ],
+        "write": [
+          "src/engine/capabilities/",
+          "src/engine/registries/",
+          "src/engine/approvals/",
+          "src/api/ingress/",
+          "docs/architecture/github-auth-system.md"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 3,
+        "timeout_minutes": 180,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Changes only the authorized files in this domain workstream.",
+        "rollback": "Restore this workstream's files from the pre-change Git commit while preserving unrelated workstreams.",
+        "approval_required": false
+      },
+      "resources": [
+        "workspace:capabilities-security"
+      ],
+      "tags": [
+        "implementation",
+        "capabilities",
+        "registries",
+        "approvals",
+        "security",
+        "github"
+      ]
+    },
+    {
+      "id": "implement-ingress-operations",
+      "type": "work",
+      "title": "Implement Ingress, Sessions, Schedules, And Telemetry",
+      "goal": "Implement authorized connector normalization, authenticated API routes, durable session handling, schedules, and typed progress/telemetry surfaces.",
+      "state": "planned",
+      "executor": {
+        "kind": "agent",
+        "name": "SIM-ONE Coding Worker lead",
+        "instructions": "Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record."
+      },
+      "inputs": [
+        {
+          "name": "implementation plan",
+          "artifact": "artifact:implementation-plan",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Implement Ingress, Sessions, Schedules, And Telemetry",
+          "artifact": "artifact:ingress-operations-change",
+          "format": "git-diff-or-no-change-record"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "scope-obeyed",
+          "kind": "policy",
+          "criterion": "The patch or no-change record stays inside the authorized domain and preserves the architecture decision.",
+          "evidence": "runtime:evidence/implement-ingress-operations/scope-review.json"
+        },
+        {
+          "id": "focused-verification-recorded",
+          "kind": "test",
+          "criterion": "Focused tests for changed behavior pass, or the no-change record proves why no focused test is applicable.",
+          "evidence": "runtime:evidence/implement-ingress-operations/focused-verification.json"
+        },
+        {
+          "id": "progress-visible",
+          "kind": "artifact",
+          "criterion": "Typed durable progress events cover implementation, internal specialist handoffs, tool execution, and verification.",
+          "evidence": "runtime:evidence/implement-ingress-operations/progress-events.jsonl"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "artifact:implementation-plan",
+          "authorized project files"
+        ],
+        "write": [
+          "src/api/",
+          "src/channels/",
+          "src/engine/session/",
+          "src/engine/schedules/",
+          "src/core/telemetry/",
+          "docs/operations/"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 3,
+        "timeout_minutes": 180,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Changes only the authorized files in this domain workstream.",
+        "rollback": "Restore this workstream's files from the pre-change Git commit while preserving unrelated workstreams.",
+        "approval_required": false
+      },
+      "resources": [
+        "workspace:ingress-operations"
+      ],
+      "tags": [
+        "implementation",
+        "api",
+        "connectors",
+        "sessions",
+        "schedules",
+        "telemetry"
+      ]
+    },
+    {
+      "id": "implement-product-delivery",
+      "type": "work",
+      "title": "Implement Product Surfaces And Delivery",
+      "goal": "Implement authorized sim-one CLI, Ink/Ratatui TUI, product packaging, install, build, CI, and release documentation changes.",
+      "state": "planned",
+      "executor": {
+        "kind": "agent",
+        "name": "SIM-ONE Coding Worker lead",
+        "instructions": "Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record."
+      },
+      "inputs": [
+        {
+          "name": "implementation plan",
+          "artifact": "artifact:implementation-plan",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Implement Product Surfaces And Delivery",
+          "artifact": "artifact:product-delivery-change",
+          "format": "git-diff-or-no-change-record"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "scope-obeyed",
+          "kind": "policy",
+          "criterion": "The patch or no-change record stays inside the authorized domain and preserves the architecture decision.",
+          "evidence": "runtime:evidence/implement-product-delivery/scope-review.json"
+        },
+        {
+          "id": "focused-verification-recorded",
+          "kind": "test",
+          "criterion": "Focused tests for changed behavior pass, or the no-change record proves why no focused test is applicable.",
+          "evidence": "runtime:evidence/implement-product-delivery/focused-verification.json"
+        },
+        {
+          "id": "progress-visible",
+          "kind": "artifact",
+          "criterion": "Typed durable progress events cover implementation, internal specialist handoffs, tool execution, and verification.",
+          "evidence": "runtime:evidence/implement-product-delivery/progress-events.jsonl"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "artifact:implementation-plan",
+          "authorized project files"
+        ],
+        "write": [
+          "sim-one-cli/",
+          "tui/",
+          "scripts/",
+          ".github/workflows/",
+          "docs/architecture/product-flow.md",
+          "README.md"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 3,
+        "timeout_minutes": 180,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Changes only the authorized files in this domain workstream.",
+        "rollback": "Restore this workstream's files from the pre-change Git commit while preserving unrelated workstreams.",
+        "approval_required": false
+      },
+      "resources": [
+        "workspace:product-delivery"
+      ],
+      "tags": [
+        "implementation",
+        "cli",
+        "tui",
+        "packaging",
+        "ci",
+        "release"
+      ]
+    },
+    {
+      "id": "integrate-and-repair",
+      "type": "work",
+      "title": "Integrate Change And Apply Bounded Repairs",
+      "goal": "Combine selected domain outputs into one coherent change set, resolve cross-domain contract issues, and apply bounded repairs from verification or observation evidence.",
+      "state": "planned",
+      "executor": {
+        "kind": "hybrid",
+        "name": "SIM-ONE Coding Worker integration adapter",
+        "instructions": "Integrate only authorized outputs. Preserve unrelated verified branches, route failures to the owning domain, and emit a complete diff plus typed progress record."
+      },
+      "inputs": [
+        {
+          "name": "core contracts change",
+          "artifact": "artifact:core-contracts-change",
+          "required": true
+        },
+        {
+          "name": "agent runtime change",
+          "artifact": "artifact:agent-runtime-change",
+          "required": true
+        },
+        {
+          "name": "memory retrieval change",
+          "artifact": "artifact:memory-retrieval-change",
+          "required": true
+        },
+        {
+          "name": "capabilities security change",
+          "artifact": "artifact:capabilities-security-change",
+          "required": true
+        },
+        {
+          "name": "ingress operations change",
+          "artifact": "artifact:ingress-operations-change",
+          "required": true
+        },
+        {
+          "name": "product delivery change",
+          "artifact": "artifact:product-delivery-change",
+          "required": true
+        },
+        {
+          "name": "dependency environment",
+          "artifact": "artifact:dependency-environment",
+          "required": true
+        },
+        {
+          "name": "embedding model assets",
+          "artifact": "artifact:embedding-model-assets",
+          "required": true
+        },
+        {
+          "name": "memory WASM artifact",
+          "artifact": "artifact:memory-wasm",
+          "required": true
+        },
+        {
+          "name": "typecheck report",
+          "artifact": "artifact:typecheck-report",
+          "required": false
+        },
+        {
+          "name": "unit test report",
+          "artifact": "artifact:unit-test-report",
+          "required": false
+        },
+        {
+          "name": "rust test report",
+          "artifact": "artifact:rust-test-report",
+          "required": false
+        },
+        {
+          "name": "runtime build",
+          "artifact": "artifact:runtime-build",
+          "required": false
+        },
+        {
+          "name": "ratatui build",
+          "artifact": "artifact:ratatui-build",
+          "required": false
+        },
+        {
+          "name": "ratatui product report",
+          "artifact": "artifact:ratatui-product-report",
+          "required": false
+        },
+        {
+          "name": "cli build",
+          "artifact": "artifact:cli-build",
+          "required": false
+        },
+        {
+          "name": "cli behavior report",
+          "artifact": "artifact:cli-behavior-report",
+          "required": false
+        },
+        {
+          "name": "http test report",
+          "artifact": "artifact:http-test-report",
+          "required": false
+        },
+        {
+          "name": "tui e2e report",
+          "artifact": "artifact:tui-e2e-report",
+          "required": false
+        },
+        {
+          "name": "memory smoke report",
+          "artifact": "artifact:memory-smoke-report",
+          "required": false
+        },
+        {
+          "name": "verification summary",
+          "artifact": "artifact:verification-summary",
+          "required": false
+        },
+        {
+          "name": "architecture security review",
+          "artifact": "artifact:architecture-security-review",
+          "required": false
+        },
+        {
+          "name": "canary behavior report",
+          "artifact": "artifact:canary-behavior-report",
+          "required": false
+        },
+        {
+          "name": "production observation",
+          "artifact": "artifact:production-observation",
+          "required": false
+        }
+      ],
+      "outputs": [
+        {
+          "name": "integrated change set",
+          "artifact": "artifact:integrated-change",
+          "format": "git-diff"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "diff-authorized",
+          "kind": "policy",
+          "criterion": "The integrated Git diff contains only authorized files and no dependency-approval, generated-asset, secret, or unrelated worktree fallout.",
+          "evidence": "runtime:evidence/integrate-and-repair/diff-scope.json"
+        },
+        {
+          "id": "contracts-consistent",
+          "kind": "schema",
+          "criterion": "Shared types, schemas, registries, handoff contracts, docs, and consumers agree across every changed domain.",
+          "evidence": "runtime:evidence/integrate-and-repair/contract-check.json"
+        },
+        {
+          "id": "repair-bounded",
+          "kind": "policy",
+          "criterion": "Each repair cites the failed evidence, preserves unrelated verified work, and remains within the declared feedback and attempt bounds.",
+          "evidence": "runtime:evidence/integrate-and-repair/repair-ledger.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "authorized project tree",
+          "domain change artifacts",
+          "verification evidence"
+        ],
+        "write": [
+          "authorized project files across affected domains"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 3,
+        "timeout_minutes": 180,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Integrates and repairs authorized project files in the isolated worktree.",
+        "rollback": "Restore the affected files from the pre-integration Git commit while preserving unrelated branches and evidence.",
+        "approval_required": false
+      },
+      "resources": [
+        "workspace:core-contracts",
+        "workspace:agent-runtime",
+        "workspace:memory-retrieval",
+        "workspace:capabilities-security",
+        "workspace:ingress-operations",
+        "workspace:product-delivery"
+      ],
+      "tags": [
+        "integration",
+        "repair",
+        "diff",
+        "progress"
+      ]
+    },
+    {
+      "id": "verify-typecheck",
+      "type": "verification",
+      "title": "Verify TypeScript Types",
+      "goal": "Prove the full TypeScript project satisfies its configured no-emit type contract.",
+      "state": "planned",
+      "executor": {
+        "kind": "deterministic",
+        "name": "Verify TypeScript Types",
+        "instructions": "Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests."
+      },
+      "inputs": [
+        {
+          "name": "integrated change set",
+          "artifact": "artifact:integrated-change",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Verify TypeScript Types",
+          "artifact": "artifact:typecheck-report",
+          "format": "verification-report"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "verification-passed",
+          "kind": "test",
+          "criterion": "The configured TypeScript compiler exits zero with no diagnostics.",
+          "evidence": "runtime:evidence/verify-typecheck/result.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "authorized project tree",
+          "node_modules/"
+        ],
+        "write": [],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 20,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence.",
+        "command": [
+          "pnpm",
+          "run",
+          "typecheck"
+        ],
+        "working_directory": ".",
+        "environment": [],
+        "capture_limit_bytes": 131072,
+        "timeout_seconds": 1200
+      },
+      "side_effects": {
+        "level": "none",
+        "description": "Produces verification evidence without mutating project or external state.",
+        "rollback": "none",
+        "approval_required": false
+      },
+      "resources": [],
+      "tags": [
+        "verification",
+        "deterministic",
+        "typescript"
+      ]
+    },
+    {
+      "id": "verify-unit-tests",
+      "type": "verification",
+      "title": "Verify Unit Test Suite",
+      "goal": "Run the configured SIM-ONE Alpha unit suite with real local embedding assets and WASM available.",
+      "state": "planned",
+      "executor": {
+        "kind": "deterministic",
+        "name": "Verify Unit Test Suite",
+        "instructions": "Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests."
+      },
+      "inputs": [
+        {
+          "name": "integrated change set",
+          "artifact": "artifact:integrated-change",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Verify Unit Test Suite",
+          "artifact": "artifact:unit-test-report",
+          "format": "verification-report"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "verification-passed",
+          "kind": "test",
+          "criterion": "All required unit tests pass; any skips are recorded and do not hide a missing required model or WASM artifact.",
+          "evidence": "runtime:evidence/verify-unit-tests/result.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "authorized project tree",
+          "node_modules/"
+        ],
+        "write": [
+          ".tmp/tsc/"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 40,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence.",
+        "command": [
+          "env",
+          "GOROMBO_TEST_MODE=1",
+          "pnpm",
+          "run",
+          "test:unit"
+        ],
+        "working_directory": ".",
+        "environment": [],
+        "capture_limit_bytes": 131072,
+        "timeout_seconds": 2400
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Writes only documented generated build or test artifacts.",
+        "rollback": "Regenerate the documented build or test artifacts from the prior reviewed commit.",
+        "approval_required": false
+      },
+      "resources": [
+        "workspace:typescript-test-output"
+      ],
+      "tags": [
+        "verification",
+        "deterministic",
+        "unit-tests"
+      ]
+    },
+    {
+      "id": "verify-rust-tests",
+      "type": "verification",
+      "title": "Verify Rust Workspace Tests",
+      "goal": "Run the configured Rust workspace tests for the memory engine and Ratatui crates.",
+      "state": "planned",
+      "executor": {
+        "kind": "deterministic",
+        "name": "Verify Rust Workspace Tests",
+        "instructions": "Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests."
+      },
+      "inputs": [
+        {
+          "name": "integrated change set",
+          "artifact": "artifact:integrated-change",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Verify Rust Workspace Tests",
+          "artifact": "artifact:rust-test-report",
+          "format": "verification-report"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "verification-passed",
+          "kind": "test",
+          "criterion": "Every configured Rust workspace test passes under the pinned toolchain.",
+          "evidence": "runtime:evidence/verify-rust-tests/result.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "authorized project tree",
+          "node_modules/"
+        ],
+        "write": [
+          "target/"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 40,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence.",
+        "command": [
+          "pnpm",
+          "run",
+          "cargo:test"
+        ],
+        "working_directory": ".",
+        "environment": [],
+        "capture_limit_bytes": 131072,
+        "timeout_seconds": 2400
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Writes only documented generated build or test artifacts.",
+        "rollback": "Regenerate the documented build or test artifacts from the prior reviewed commit.",
+        "approval_required": false
+      },
+      "resources": [
+        "workspace:rust-target"
+      ],
+      "tags": [
+        "verification",
+        "deterministic",
+        "rust"
+      ]
+    },
+    {
+      "id": "build-runtime",
+      "type": "verification",
+      "title": "Build Flue Runtime",
+      "goal": "Build the Node-target SIM-ONE Alpha Flue runtime and copy configuration, registries, and memory WASM into the product artifact.",
+      "state": "planned",
+      "executor": {
+        "kind": "deterministic",
+        "name": "Build Flue Runtime",
+        "instructions": "Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests."
+      },
+      "inputs": [
+        {
+          "name": "integrated change set",
+          "artifact": "artifact:integrated-change",
+          "required": true
+        },
+        {
+          "name": "typecheck report",
+          "artifact": "artifact:typecheck-report",
+          "required": true
+        },
+        {
+          "name": "unit test report",
+          "artifact": "artifact:unit-test-report",
+          "required": true
+        },
+        {
+          "name": "Rust test report",
+          "artifact": "artifact:rust-test-report",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Build Flue Runtime",
+          "artifact": "artifact:runtime-build",
+          "format": "verification-report"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "verification-passed",
+          "kind": "test",
+          "criterion": "The Flue Node build succeeds and the runtime server, config, builtin registry, and WASM memory artifact are present with recorded digests.",
+          "evidence": "runtime:evidence/build-runtime/result.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "authorized project tree",
+          "node_modules/"
+        ],
+        "write": [
+          ".gorombo/sim-one-alpha/",
+          ".tmp/",
+          "dist-flue/"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 40,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence.",
+        "command": [
+          "pnpm",
+          "run",
+          "build"
+        ],
+        "working_directory": ".",
+        "environment": [],
+        "capture_limit_bytes": 131072,
+        "timeout_seconds": 2400,
+        "evidence_paths": [
+          ".gorombo/sim-one-alpha/server.mjs",
+          ".gorombo/sim-one-alpha/gorombo.config.json",
+          ".gorombo/sim-one-alpha/memory/gorombo_memory_bg.wasm"
+        ]
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Writes only documented generated build or test artifacts.",
+        "rollback": "Regenerate the documented build or test artifacts from the prior reviewed commit.",
+        "approval_required": false
+      },
+      "resources": [
+        "workspace:runtime-build-output"
+      ],
+      "tags": [
+        "verification",
+        "deterministic",
+        "build",
+        "flue",
+        "runtime"
+      ]
+    },
+    {
+      "id": "build-ratatui",
+      "type": "verification",
+      "title": "Build Ratatui Product TUI",
+      "goal": "Build the release-mode Ratatui TUI product binary and copy it into the product artifact.",
+      "state": "planned",
+      "executor": {
+        "kind": "deterministic",
+        "name": "Build Ratatui Product TUI",
+        "instructions": "Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests."
+      },
+      "inputs": [
+        {
+          "name": "integrated change set",
+          "artifact": "artifact:integrated-change",
+          "required": true
+        },
+        {
+          "name": "runtime build",
+          "artifact": "artifact:runtime-build",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Build Ratatui Product TUI",
+          "artifact": "artifact:ratatui-build",
+          "format": "verification-report"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "verification-passed",
+          "kind": "test",
+          "criterion": "The Ratatui release build succeeds and the product binary exists with an executable mode and recorded digest.",
+          "evidence": "runtime:evidence/build-ratatui/result.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "authorized project tree",
+          "node_modules/"
+        ],
+        "write": [
+          "target/release/",
+          ".gorombo/sim-one-ratatui/"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 40,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence.",
+        "command": [
+          "pnpm",
+          "run",
+          "build:tui:ratatui"
+        ],
+        "working_directory": ".",
+        "environment": [],
+        "capture_limit_bytes": 131072,
+        "timeout_seconds": 2400,
+        "evidence_paths": [
+          ".gorombo/sim-one-ratatui/sim-one-ratatui-tui"
+        ]
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Writes only documented generated build or test artifacts.",
+        "rollback": "Regenerate the documented build or test artifacts from the prior reviewed commit.",
+        "approval_required": false
+      },
+      "resources": [
+        "workspace:ratatui-build-output"
+      ],
+      "tags": [
+        "verification",
+        "deterministic",
+        "build",
+        "ratatui",
+        "tui"
+      ]
+    },
+    {
+      "id": "build-cli",
+      "type": "verification",
+      "title": "Build SIM-ONE CLI",
+      "goal": "Build the TypeScript sim-one CLI and Ink interface product artifact.",
+      "state": "planned",
+      "executor": {
+        "kind": "deterministic",
+        "name": "Build SIM-ONE CLI",
+        "instructions": "Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests."
+      },
+      "inputs": [
+        {
+          "name": "integrated change set",
+          "artifact": "artifact:integrated-change",
+          "required": true
+        },
+        {
+          "name": "runtime build",
+          "artifact": "artifact:runtime-build",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Build SIM-ONE CLI",
+          "artifact": "artifact:cli-build",
+          "format": "verification-report"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "verification-passed",
+          "kind": "test",
+          "criterion": "The CLI build succeeds and .gorombo/sim-one-cli/cli.js has a recorded digest.",
+          "evidence": "runtime:evidence/build-cli/result.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "authorized project tree",
+          "node_modules/"
+        ],
+        "write": [
+          ".gorombo/sim-one-cli/"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 25,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence.",
+        "command": [
+          "pnpm",
+          "run",
+          "build:cli"
+        ],
+        "working_directory": ".",
+        "environment": [],
+        "capture_limit_bytes": 131072,
+        "timeout_seconds": 1500,
+        "evidence_paths": [
+          ".gorombo/sim-one-cli/cli.js"
+        ]
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Writes only documented generated build or test artifacts.",
+        "rollback": "Regenerate the documented build or test artifacts from the prior reviewed commit.",
+        "approval_required": false
+      },
+      "resources": [
+        "workspace:cli-build-output"
+      ],
+      "tags": [
+        "verification",
+        "deterministic",
+        "build",
+        "cli",
+        "ink"
+      ]
+    },
+    {
+      "id": "verify-cli-behavior",
+      "type": "verification",
+      "title": "Verify CLI Behavior",
+      "goal": "Prove the built sim-one CLI starts and exposes its documented command surface.",
+      "state": "planned",
+      "executor": {
+        "kind": "deterministic",
+        "name": "Verify CLI Behavior",
+        "instructions": "Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests."
+      },
+      "inputs": [
+        {
+          "name": "CLI build",
+          "artifact": "artifact:cli-build",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Verify CLI Behavior",
+          "artifact": "artifact:cli-behavior-report",
+          "format": "verification-report"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "verification-passed",
+          "kind": "test",
+          "criterion": "The built CLI exits zero and prints the documented sim-one command/help surface rather than merely existing on disk.",
+          "evidence": "runtime:evidence/verify-cli-behavior/result.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "authorized project tree",
+          "node_modules/"
+        ],
+        "write": [],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 5,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence.",
+        "command": [
+          "node",
+          ".gorombo/sim-one-cli/cli.js",
+          "--help"
+        ],
+        "working_directory": ".",
+        "environment": [],
+        "capture_limit_bytes": 131072,
+        "timeout_seconds": 300
+      },
+      "side_effects": {
+        "level": "none",
+        "description": "Produces verification evidence without mutating project or external state.",
+        "rollback": "none",
+        "approval_required": false
+      },
+      "resources": [],
+      "tags": [
+        "verification",
+        "deterministic",
+        "cli",
+        "behavior"
+      ]
+    },
+    {
+      "id": "verify-http-integration",
+      "type": "verification",
+      "title": "Verify Built HTTP Runtime",
+      "goal": "Exercise the built HTTP server routes, authentication boundaries, and durable chat/runtime behavior.",
+      "state": "planned",
+      "executor": {
+        "kind": "deterministic",
+        "name": "Verify Built HTTP Runtime",
+        "instructions": "Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests."
+      },
+      "inputs": [
+        {
+          "name": "runtime build",
+          "artifact": "artifact:runtime-build",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Verify Built HTTP Runtime",
+          "artifact": "artifact:http-test-report",
+          "format": "verification-report"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "verification-passed",
+          "kind": "test",
+          "criterion": "The configured built-HTTP integration suite passes and proves response behavior, not only that a process or port exists.",
+          "evidence": "runtime:evidence/verify-http-integration/result.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "authorized project tree",
+          "node_modules/"
+        ],
+        "write": [
+          ".gorombo test runtime state",
+          "/tmp SIM-ONE HTTP test workspace"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 20,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence.",
+        "command": [
+          "env",
+          "GOROMBO_TEST_MODE=1",
+          "pnpm",
+          "run",
+          "test:http"
+        ],
+        "working_directory": ".",
+        "environment": [],
+        "capture_limit_bytes": 131072,
+        "timeout_seconds": 1200
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Writes only documented generated build or test artifacts.",
+        "rollback": "Regenerate the documented build or test artifacts from the prior reviewed commit.",
+        "approval_required": false
+      },
+      "resources": [
+        "local-runtime-probe"
+      ],
+      "tags": [
+        "verification",
+        "deterministic",
+        "http",
+        "integration",
+        "behavior"
+      ]
+    },
+    {
+      "id": "verify-ratatui-product",
+      "type": "verification",
+      "title": "Verify Ratatui Product Prompt",
+      "goal": "Prove the built Ratatui TUI can launch the built gateway, submit a real prompt, and receive a non-placeholder assistant response.",
+      "state": "planned",
+      "executor": {
+        "kind": "deterministic",
+        "name": "Verify Ratatui Product Prompt",
+        "instructions": "Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests."
+      },
+      "inputs": [
+        {
+          "name": "runtime build",
+          "artifact": "artifact:runtime-build",
+          "required": true
+        },
+        {
+          "name": "Ratatui build",
+          "artifact": "artifact:ratatui-build",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Verify Ratatui Product Prompt",
+          "artifact": "artifact:ratatui-product-report",
+          "format": "verification-report"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "verification-passed",
+          "kind": "test",
+          "criterion": "The product smoke records a real assistant response of valid content; binary or process existence alone is insufficient.",
+          "evidence": "runtime:evidence/verify-ratatui-product/result.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "authorized project tree",
+          "node_modules/"
+        ],
+        "write": [
+          ".gorombo test runtime configuration",
+          "/tmp Ratatui product workspace"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 6,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence.",
+        "command": [
+          "env",
+          "GOROMBO_TEST_MODE=1",
+          "pnpm",
+          "run",
+          "test:tui:ratatui"
+        ],
+        "working_directory": ".",
+        "environment": [
+          "OLLAMA_API_KEY",
+          "OLLAMA_CLOUD_API_KEY",
+          "CODEX_BRAIN_LOCAL_API_KEY",
+          "CODEX_BRAIN_LOCAL_API_URL"
+        ],
+        "capture_limit_bytes": 131072,
+        "timeout_seconds": 360
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Writes only documented generated build or test artifacts.",
+        "rollback": "Regenerate the documented build or test artifacts from the prior reviewed commit.",
+        "approval_required": false
+      },
+      "resources": [
+        "local-runtime-probe"
+      ],
+      "tags": [
+        "verification",
+        "deterministic",
+        "ratatui",
+        "tui",
+        "live-model",
+        "behavior"
+      ]
+    },
+    {
+      "id": "verify-tui-e2e",
+      "type": "verification",
+      "title": "Verify TUI End To End",
+      "goal": "Exercise the built gateway and terminal client across chat, events, approvals, tool progress, and subagent visibility.",
+      "state": "planned",
+      "executor": {
+        "kind": "deterministic",
+        "name": "Verify TUI End To End",
+        "instructions": "Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests."
+      },
+      "inputs": [
+        {
+          "name": "runtime build",
+          "artifact": "artifact:runtime-build",
+          "required": true
+        },
+        {
+          "name": "CLI build",
+          "artifact": "artifact:cli-build",
+          "required": true
+        },
+        {
+          "name": "Ratatui build",
+          "artifact": "artifact:ratatui-build",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Verify TUI End To End",
+          "artifact": "artifact:tui-e2e-report",
+          "format": "verification-report"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "verification-passed",
+          "kind": "test",
+          "criterion": "The configured TUI end-to-end suite passes with expected user-visible conversation and progress behavior.",
+          "evidence": "runtime:evidence/verify-tui-e2e/result.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "authorized project tree",
+          "node_modules/"
+        ],
+        "write": [
+          ".gorombo test runtime state",
+          "/tmp SIM-ONE TUI test workspace"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 15,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence.",
+        "command": [
+          "env",
+          "GOROMBO_TEST_MODE=1",
+          "pnpm",
+          "run",
+          "test:tui"
+        ],
+        "working_directory": ".",
+        "environment": [
+          "OLLAMA_API_KEY"
+        ],
+        "capture_limit_bytes": 131072,
+        "timeout_seconds": 900
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Writes only documented generated build or test artifacts.",
+        "rollback": "Regenerate the documented build or test artifacts from the prior reviewed commit.",
+        "approval_required": false
+      },
+      "resources": [
+        "local-runtime-probe"
+      ],
+      "tags": [
+        "verification",
+        "deterministic",
+        "tui",
+        "e2e",
+        "progress"
+      ]
+    },
+    {
+      "id": "verify-memory-smoke",
+      "type": "verification",
+      "title": "Verify Real Memory Runtime",
+      "goal": "Exercise the real WASM memory engine, SQLite durability, retrieval, and Coding Worker memory path end to end.",
+      "state": "planned",
+      "executor": {
+        "kind": "deterministic",
+        "name": "Verify Real Memory Runtime",
+        "instructions": "Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests."
+      },
+      "inputs": [
+        {
+          "name": "runtime build",
+          "artifact": "artifact:runtime-build",
+          "required": true
+        },
+        {
+          "name": "memory WASM artifact",
+          "artifact": "artifact:memory-wasm",
+          "required": true
+        },
+        {
+          "name": "embedding model assets",
+          "artifact": "artifact:embedding-model-assets",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Verify Real Memory Runtime",
+          "artifact": "artifact:memory-smoke-report",
+          "format": "verification-report"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "verification-passed",
+          "kind": "test",
+          "criterion": "The deterministic memory smoke proves mutation, restart durability, scoped retrieval, and Coding Worker integration through the real WASM path.",
+          "evidence": "runtime:evidence/verify-memory-smoke/result.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "authorized project tree",
+          "node_modules/"
+        ],
+        "write": [
+          ".gorombo test memory state",
+          "/tmp SIM-ONE memory smoke workspace"
+        ],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 20,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence.",
+        "command": [
+          "env",
+          "GOROMBO_TEST_MODE=1",
+          "pnpm",
+          "run",
+          "smoke:memory"
+        ],
+        "working_directory": ".",
+        "environment": [],
+        "capture_limit_bytes": 131072,
+        "timeout_seconds": 1200
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Writes only documented generated build or test artifacts.",
+        "rollback": "Regenerate the documented build or test artifacts from the prior reviewed commit.",
+        "approval_required": false
+      },
+      "resources": [
+        "local-runtime-probe"
+      ],
+      "tags": [
+        "verification",
+        "deterministic",
+        "memory",
+        "wasm",
+        "sqlite",
+        "behavior"
+      ]
+    },
+    {
+      "id": "aggregate-verification",
+      "type": "verification",
+      "title": "Aggregate Verification Evidence",
+      "goal": "Map fresh project verification evidence back to every change-contract criterion and identify any unproved behavior, skipped requirement, or stale artifact.",
+      "state": "planned",
+      "executor": {
+        "kind": "hybrid",
+        "name": "SIM-ONE verification aggregator",
+        "instructions": "Inspect full outputs and target behavior. Reject coverage claims based only on a narrow test, successful command, process, port, or artifact existence."
+      },
+      "inputs": [
+        {
+          "name": "typecheck report",
+          "artifact": "artifact:typecheck-report",
+          "required": true
+        },
+        {
+          "name": "unit test report",
+          "artifact": "artifact:unit-test-report",
+          "required": true
+        },
+        {
+          "name": "Rust test report",
+          "artifact": "artifact:rust-test-report",
+          "required": true
+        },
+        {
+          "name": "runtime build",
+          "artifact": "artifact:runtime-build",
+          "required": true
+        },
+        {
+          "name": "Ratatui product report",
+          "artifact": "artifact:ratatui-product-report",
+          "required": true
+        },
+        {
+          "name": "CLI behavior report",
+          "artifact": "artifact:cli-behavior-report",
+          "required": true
+        },
+        {
+          "name": "HTTP integration report",
+          "artifact": "artifact:http-test-report",
+          "required": true
+        },
+        {
+          "name": "TUI end-to-end report",
+          "artifact": "artifact:tui-e2e-report",
+          "required": true
+        },
+        {
+          "name": "memory smoke report",
+          "artifact": "artifact:memory-smoke-report",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "verification summary",
+          "artifact": "artifact:verification-summary",
+          "format": "application/json"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "all-criteria-mapped",
+          "kind": "review",
+          "criterion": "Every change-contract criterion names current direct evidence or is explicitly marked unproved and blocks release.",
+          "evidence": "runtime:evidence/aggregate-verification/coverage-map.json"
+        },
+        {
+          "id": "no-false-positive-status",
+          "kind": "policy",
+          "criterion": "Positive status claims rely on correct current output or target-system effects, not process, port, session, file, or command existence.",
+          "evidence": "runtime:evidence/aggregate-verification/output-proof-review.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "all verification evidence",
+          "artifact:change-contract",
+          "Git diff"
+        ],
+        "write": [],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 60,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "none",
+        "description": "Produces evidence without mutating project or external state.",
+        "rollback": "none",
+        "approval_required": false
+      },
+      "resources": [],
+      "tags": [
+        "verification",
+        "coverage",
+        "evidence"
+      ]
+    },
+    {
+      "id": "review-architecture-security",
+      "type": "verification",
+      "title": "Review Architecture, Security, And Product Boundaries",
+      "goal": "Review the integrated change and verification summary for Flue ownership, trusted context, approval gates, durable progress, product identity, and secret boundaries.",
+      "state": "planned",
+      "executor": {
+        "kind": "agent",
+        "name": "SIM-ONE review adapter",
+        "instructions": "Perform a fresh review independent of implementation self-report. Confirm user-visible behavior, fail-closed mutations, research ownership, and documented rollback."
+      },
+      "inputs": [
+        {
+          "name": "integrated change set",
+          "artifact": "artifact:integrated-change",
+          "required": true
+        },
+        {
+          "name": "verification summary",
+          "artifact": "artifact:verification-summary",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "architecture and security review",
+          "artifact": "artifact:architecture-security-review",
+          "format": "review-report"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "architecture-contract-passes",
+          "kind": "policy",
+          "criterion": "The change preserves the local Flue map, orchestrator/worker/tool/skill/protocol/registry boundaries, and required typed contracts.",
+          "evidence": "runtime:evidence/review-architecture-security/architecture.json"
+        },
+        {
+          "id": "trust-boundaries-pass",
+          "kind": "policy",
+          "criterion": "Model-selected inputs cannot choose trusted actor, project, repository, credential, approval, or external destination boundaries.",
+          "evidence": "runtime:evidence/review-architecture-security/security.json"
+        },
+        {
+          "id": "progress-contract-passes",
+          "kind": "review",
+          "criterion": "Every tool execution, subagent delegation, verification, approval, and state transition reaches the user through durable typed progress events.",
+          "evidence": "runtime:evidence/review-architecture-security/progress.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "artifact:integrated-change",
+          "artifact:verification-summary",
+          "AGENTS.md",
+          "docs/architecture/"
+        ],
+        "write": [],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 90,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "none",
+        "description": "Produces evidence without mutating project or external state.",
+        "rollback": "none",
+        "approval_required": false
+      },
+      "resources": [],
+      "tags": [
+        "review",
+        "architecture",
+        "security",
+        "progress"
+      ]
+    },
+    {
+      "id": "approve-release-candidate",
+      "type": "human_gate",
+      "title": "Approve Release Candidate Publication",
+      "goal": "Let the project owner approve or reject the exact diff, verification summary, architecture/security review, rollback, and proposed GitHub effects.",
+      "state": "planned",
+      "executor": {
+        "kind": "human",
+        "name": "SIM-ONE project owner",
+        "instructions": "Review the exact candidate evidence. Approval is bound to this run, graph checksum, candidate target, evidence digest, approver, and time."
+      },
+      "inputs": [
+        {
+          "name": "verification summary",
+          "artifact": "artifact:verification-summary",
+          "required": true
+        },
+        {
+          "name": "architecture and security review",
+          "artifact": "artifact:architecture-security-review",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "release candidate approval",
+          "artifact": "artifact:release-candidate-approval",
+          "format": "approval-record"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "owner-decision-recorded",
+          "kind": "manual",
+          "criterion": "The owner explicitly approves or rejects the exact candidate, evidence digest, rollback, and GitHub mutation scope.",
+          "evidence": "runtime:approval/approve-release-candidate"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "artifact:verification-summary",
+          "artifact:architecture-security-review",
+          "Git diff"
+        ],
+        "write": [],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 1,
+        "timeout_minutes": 1440,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "none",
+        "description": "Produces evidence without mutating project or external state.",
+        "rollback": "none",
+        "approval_required": false
+      },
+      "resources": [],
+      "tags": [
+        "human-gate",
+        "approval",
+        "github"
+      ]
+    },
+    {
+      "id": "publish-release-candidate",
+      "type": "operation",
+      "title": "Publish Branch And Pull Request",
+      "goal": "Commit the authorized change, push its branch, open a non-draft pull request to main, and verify the resulting GitHub state.",
+      "state": "planned",
+      "executor": {
+        "kind": "hybrid",
+        "name": "approval-gated Git and GitHub adapter",
+        "instructions": "Use non-interactive Git and GitHub commands only after current graph-bound approval. Verify commit scope, remote branch, PR base, head, state, draft status, and URL."
+      },
+      "inputs": [
+        {
+          "name": "release candidate approval",
+          "artifact": "artifact:release-candidate-approval",
+          "required": true
+        },
+        {
+          "name": "architecture and security review",
+          "artifact": "artifact:architecture-security-review",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "published release candidate",
+          "artifact": "artifact:release-candidate",
+          "format": "github-pull-request-record"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "commit-scope-correct",
+          "kind": "policy",
+          "criterion": "The commit contains only authorized files and generated/source artifacts intended for review.",
+          "evidence": "runtime:evidence/publish-release-candidate/commit-scope.json"
+        },
+        {
+          "id": "pull-request-verified",
+          "kind": "probe",
+          "criterion": "gh pr view proves the PR is open, non-draft, targets main, uses the expected head branch, and exposes a stable URL.",
+          "evidence": "runtime:evidence/publish-release-candidate/pr-view.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "authorized worktree",
+          "artifact:release-candidate-approval",
+          "GitHub repository metadata"
+        ],
+        "write": [
+          "authorized Git branch",
+          "GitHub pull request"
+        ],
+        "external": [
+          "Git remote push",
+          "GitHub API pull request write"
+        ],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 30,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Creates a Git commit, remote branch update, and pull request.",
+        "rollback": "Revert the candidate commit or close the pull request while preserving Git and review history.",
+        "approval_required": true
+      },
+      "resources": [
+        "external:github-repository"
+      ],
+      "tags": [
+        "release-candidate",
+        "git",
+        "github",
+        "approval"
+      ]
+    },
+    {
+      "id": "approve-canary",
+      "type": "human_gate",
+      "title": "Approve Canary Deployment",
+      "goal": "Let the project owner approve the exact release candidate, canary target, probe plan, rollback, and observation window.",
+      "state": "planned",
+      "executor": {
+        "kind": "human",
+        "name": "SIM-ONE project owner",
+        "instructions": "Review the candidate and canary contract. Approval is target-specific and expires when the graph or candidate changes."
+      },
+      "inputs": [
+        {
+          "name": "published release candidate",
+          "artifact": "artifact:release-candidate",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "canary approval",
+          "artifact": "artifact:canary-approval",
+          "format": "approval-record"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "canary-authority-recorded",
+          "kind": "manual",
+          "criterion": "The owner explicitly approves or rejects the exact candidate, target, probe, rollback, and observation window.",
+          "evidence": "runtime:approval/approve-canary"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "artifact:release-candidate",
+          "canary deployment contract"
+        ],
+        "write": [],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 1,
+        "timeout_minutes": 1440,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "none",
+        "description": "Produces evidence without mutating project or external state.",
+        "rollback": "none",
+        "approval_required": false
+      },
+      "resources": [],
+      "tags": [
+        "human-gate",
+        "approval",
+        "canary"
+      ]
+    },
+    {
+      "id": "deploy-canary",
+      "type": "operation",
+      "title": "Deploy Approved Canary",
+      "goal": "Deploy the exact approved release candidate to the declared canary environment with idempotency fencing and a concrete rollback path.",
+      "state": "planned",
+      "executor": {
+        "kind": "hybrid",
+        "name": "project-specific deployment adapter",
+        "instructions": "Use only the deployment adapter and target approved for this run. Record candidate digest, target, deployment ID, previous release, and rollback command."
+      },
+      "inputs": [
+        {
+          "name": "published release candidate",
+          "artifact": "artifact:release-candidate",
+          "required": true
+        },
+        {
+          "name": "canary approval",
+          "artifact": "artifact:canary-approval",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "canary deployment",
+          "artifact": "artifact:canary-deployment",
+          "format": "deployment-record"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "canary-deployment-bound",
+          "kind": "policy",
+          "criterion": "The deployment record binds the exact candidate digest, target, idempotency key, previous release, and rollback procedure.",
+          "evidence": "runtime:evidence/deploy-canary/deployment.json"
+        },
+        {
+          "id": "deployment-admitted",
+          "kind": "artifact",
+          "criterion": "The target accepted the deployment, without treating submission or process existence as behavioral success.",
+          "evidence": "runtime:evidence/deploy-canary/admission.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "artifact:release-candidate",
+          "artifact:canary-approval",
+          "approved deployment credentials"
+        ],
+        "write": [
+          "approved canary environment"
+        ],
+        "external": [
+          "canary deployment API"
+        ],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 60,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Changes the approved canary environment to the candidate release.",
+        "rollback": "Use the recorded deployment adapter and previous-release identifier to restore the prior canary release.",
+        "approval_required": true
+      },
+      "resources": [
+        "external:canary-environment"
+      ],
+      "tags": [
+        "canary",
+        "deployment",
+        "approval",
+        "idempotency"
+      ]
+    },
+    {
+      "id": "verify-canary-behavior",
+      "type": "observation",
+      "title": "Verify Canary Behavior",
+      "goal": "Prove the canary produces correct user-visible and system-visible behavior across gateway, orchestrator, protocols, memory, workers, progress, and changed product surfaces.",
+      "state": "planned",
+      "executor": {
+        "kind": "hybrid",
+        "name": "SIM-ONE canary probe adapter",
+        "instructions": "Run the approved output-level probes against the canary. Inspect responses, durable side effects, telemetry, and connector/UI visibility; do not infer health from a process or port."
+      },
+      "inputs": [
+        {
+          "name": "canary deployment",
+          "artifact": "artifact:canary-deployment",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "canary behavior report",
+          "artifact": "artifact:canary-behavior-report",
+          "format": "observation-report"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "changed-behavior-proved",
+          "kind": "probe",
+          "criterion": "Every changed user-visible behavior and required target-system side effect passes against the canary.",
+          "evidence": "runtime:evidence/verify-canary-behavior/behavior.json"
+        },
+        {
+          "id": "runtime-boundaries-proved",
+          "kind": "probe",
+          "criterion": "Protocol loading, trusted context, memory/RAG ownership, worker delegation, and progress delivery behave correctly in the running canary.",
+          "evidence": "runtime:evidence/verify-canary-behavior/runtime-boundaries.json"
+        },
+        {
+          "id": "canary-observation-window-complete",
+          "kind": "policy",
+          "criterion": "The approved observation window completes without unresolved regression, security, durability, or telemetry evidence.",
+          "evidence": "runtime:evidence/verify-canary-behavior/window.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "artifact:canary-deployment",
+          "approved probe credentials",
+          "canary telemetry"
+        ],
+        "write": [],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 240,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "none",
+        "description": "Produces evidence without mutating project or external state.",
+        "rollback": "none",
+        "approval_required": false
+      },
+      "resources": [],
+      "tags": [
+        "canary",
+        "behavior",
+        "observation",
+        "output-proof"
+      ]
+    },
+    {
+      "id": "approve-production-release",
+      "type": "human_gate",
+      "title": "Approve Production Release",
+      "goal": "Let the project owner approve or reject production release using the exact candidate, canary behavior, rollback, and production observation plan.",
+      "state": "planned",
+      "executor": {
+        "kind": "human",
+        "name": "SIM-ONE project owner",
+        "instructions": "Review current canary evidence and production risk. Approval is target-specific, graph-bound, candidate-bound, and time-bound."
+      },
+      "inputs": [
+        {
+          "name": "published release candidate",
+          "artifact": "artifact:release-candidate",
+          "required": true
+        },
+        {
+          "name": "canary behavior report",
+          "artifact": "artifact:canary-behavior-report",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "production release approval",
+          "artifact": "artifact:production-release-approval",
+          "format": "approval-record"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "production-authority-recorded",
+          "kind": "manual",
+          "criterion": "The owner explicitly approves or rejects the exact candidate, target, rollback, and production observation plan.",
+          "evidence": "runtime:approval/approve-production-release"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "artifact:release-candidate",
+          "artifact:canary-behavior-report",
+          "production release contract"
+        ],
+        "write": [],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 1,
+        "timeout_minutes": 1440,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "none",
+        "description": "Produces evidence without mutating project or external state.",
+        "rollback": "none",
+        "approval_required": false
+      },
+      "resources": [],
+      "tags": [
+        "human-gate",
+        "approval",
+        "production"
+      ]
+    },
+    {
+      "id": "release-production",
+      "type": "operation",
+      "title": "Release Approved Candidate",
+      "goal": "Release the exact approved candidate to the declared production target with idempotency fencing and recorded rollback.",
+      "state": "planned",
+      "executor": {
+        "kind": "hybrid",
+        "name": "project-specific production deployment adapter",
+        "instructions": "Use only the approved production adapter. Record candidate digest, deployment ID, previous release, idempotency key, and concrete rollback."
+      },
+      "inputs": [
+        {
+          "name": "published release candidate",
+          "artifact": "artifact:release-candidate",
+          "required": true
+        },
+        {
+          "name": "canary behavior report",
+          "artifact": "artifact:canary-behavior-report",
+          "required": true
+        },
+        {
+          "name": "production release approval",
+          "artifact": "artifact:production-release-approval",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "production release",
+          "artifact": "artifact:production-release",
+          "format": "deployment-record"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "production-release-bound",
+          "kind": "policy",
+          "criterion": "The release record binds the exact candidate, target, approval, deployment ID, prior release, idempotency key, and rollback.",
+          "evidence": "runtime:evidence/release-production/release.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "approved candidate and production credentials",
+          "artifact:production-release-approval"
+        ],
+        "write": [
+          "approved production environment"
+        ],
+        "external": [
+          "production deployment API"
+        ],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 90,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Changes the approved production environment to the candidate release.",
+        "rollback": "Use the recorded production adapter and previous-release identifier to restore the prior production release.",
+        "approval_required": true
+      },
+      "resources": [
+        "external:production-environment"
+      ],
+      "tags": [
+        "production",
+        "release",
+        "approval",
+        "idempotency"
+      ]
+    },
+    {
+      "id": "observe-production",
+      "type": "observation",
+      "title": "Observe Production Outcomes",
+      "goal": "Verify correct production behavior and durable target-system outcomes through the approved observation window.",
+      "state": "planned",
+      "executor": {
+        "kind": "hybrid",
+        "name": "SIM-ONE production observation adapter",
+        "instructions": "Inspect real response behavior, connector delivery, durable state, worker progress, error rates, and changed product surfaces. Escalate and invoke the recorded rollback on a release regression."
+      },
+      "inputs": [
+        {
+          "name": "production release",
+          "artifact": "artifact:production-release",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "production observation",
+          "artifact": "artifact:production-observation",
+          "format": "observation-report"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "production-behavior-proved",
+          "kind": "probe",
+          "criterion": "Changed behavior and required side effects are correct in production; process, port, deployment-job, or submission status alone is rejected.",
+          "evidence": "runtime:evidence/observe-production/behavior.json"
+        },
+        {
+          "id": "production-window-complete",
+          "kind": "policy",
+          "criterion": "The approved observation window completes without unresolved regression, durability, security, or telemetry evidence.",
+          "evidence": "runtime:evidence/observe-production/window.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "artifact:production-release",
+          "production probes",
+          "production telemetry"
+        ],
+        "write": [],
+        "external": [],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 1440,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "none",
+        "description": "Produces evidence without mutating project or external state.",
+        "rollback": "none",
+        "approval_required": false
+      },
+      "resources": [],
+      "tags": [
+        "production",
+        "observation",
+        "output-proof",
+        "rollback"
+      ]
+    },
+    {
+      "id": "closeout-release",
+      "type": "work",
+      "title": "Close Out And Preserve Evidence",
+      "goal": "Record the shipped outcome, exact commit and PR/release references, verification and observation evidence, remaining risks, rollback, and follow-up work.",
+      "state": "planned",
+      "executor": {
+        "kind": "agent",
+        "name": "SIM-ONE release closeout adapter",
+        "instructions": "Update the task handoff and issue/PR records without erasing superseded evidence. Confirm the final graph-bound evidence and leave unrelated future work explicit."
+      },
+      "inputs": [
+        {
+          "name": "published release candidate",
+          "artifact": "artifact:release-candidate",
+          "required": true
+        },
+        {
+          "name": "production observation",
+          "artifact": "artifact:production-observation",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "release closeout record",
+          "artifact": "artifact:release-closeout",
+          "format": "handoff-record"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "handoff-complete",
+          "kind": "artifact",
+          "criterion": "The closeout names files changed, commands and tests run, pass/fail results, approvals, PR/release URLs, production evidence, assumptions, risks, rollback, and next step.",
+          "evidence": "runtime:evidence/closeout-release/handoff.json"
+        },
+        {
+          "id": "history-preserved",
+          "kind": "policy",
+          "criterion": "Superseded evidence and failed attempts remain addressable through the append-only graph ledger and version control.",
+          "evidence": "runtime:evidence/closeout-release/history.json"
+        }
+      ],
+      "permissions": {
+        "read": [
+          "all graph evidence",
+          "Git and GitHub state",
+          "/opt/ai/plans/<topic>/"
+        ],
+        "write": [
+          "/opt/ai/plans/<topic>/handoff.md",
+          "authorized issue or pull-request closeout fields"
+        ],
+        "external": [
+          "GitHub issue or pull-request metadata write"
+        ],
+        "destructive": false
+      },
+      "execution": {
+        "max_attempts": 2,
+        "timeout_minutes": 60,
+        "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence."
+      },
+      "side_effects": {
+        "level": "reversible",
+        "description": "Writes the durable task handoff and authorized GitHub closeout metadata.",
+        "rollback": "Restore the prior handoff revision and amend GitHub metadata while preserving the audit history.",
+        "approval_required": false
+      },
+      "resources": [
+        "plans:<topic>",
+        "external:github-repository"
+      ],
+      "tags": [
+        "closeout",
+        "handoff",
+        "evidence",
+        "history"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "baseline-to-install",
+      "from": "baseline-context",
+      "to": "install-dependencies",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:baseline-context"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "install-to-embedding-model",
+      "from": "install-dependencies",
+      "to": "fetch-embedding-model",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:dependency-environment"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "install-to-wasm-build",
+      "from": "install-dependencies",
+      "to": "build-wasm-memory",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:dependency-environment"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "baseline-to-change-contract",
+      "from": "baseline-context",
+      "to": "define-change-contract",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:baseline-context"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "context-and-contract-to-architecture",
+      "from": "baseline-context",
+      "to": "decide-architecture",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:baseline-context"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "contract-to-architecture",
+      "from": "define-change-contract",
+      "to": "decide-architecture",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:change-contract",
+        "artifact:affected-domain-map"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "contract-to-implementation-plan",
+      "from": "define-change-contract",
+      "to": "plan-implementation",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:change-contract"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "architecture-to-implementation-plan",
+      "from": "decide-architecture",
+      "to": "plan-implementation",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:architecture-decision"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "plan-to-implement-core-contracts",
+      "from": "plan-implementation",
+      "to": "implement-core-contracts",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:implementation-plan"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "implement-core-contracts-to-integration",
+      "from": "implement-core-contracts",
+      "to": "integrate-and-repair",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:core-contracts-change"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "plan-to-implement-agent-runtime",
+      "from": "plan-implementation",
+      "to": "implement-agent-runtime",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:implementation-plan"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "implement-agent-runtime-to-integration",
+      "from": "implement-agent-runtime",
+      "to": "integrate-and-repair",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:agent-runtime-change"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "plan-to-implement-memory-retrieval",
+      "from": "plan-implementation",
+      "to": "implement-memory-retrieval",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:implementation-plan"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "implement-memory-retrieval-to-integration",
+      "from": "implement-memory-retrieval",
+      "to": "integrate-and-repair",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:memory-retrieval-change"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "plan-to-implement-capabilities-security",
+      "from": "plan-implementation",
+      "to": "implement-capabilities-security",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:implementation-plan"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "implement-capabilities-security-to-integration",
+      "from": "implement-capabilities-security",
+      "to": "integrate-and-repair",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:capabilities-security-change"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "plan-to-implement-ingress-operations",
+      "from": "plan-implementation",
+      "to": "implement-ingress-operations",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:implementation-plan"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "implement-ingress-operations-to-integration",
+      "from": "implement-ingress-operations",
+      "to": "integrate-and-repair",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:ingress-operations-change"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "plan-to-implement-product-delivery",
+      "from": "plan-implementation",
+      "to": "implement-product-delivery",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:implementation-plan"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "implement-product-delivery-to-integration",
+      "from": "implement-product-delivery",
+      "to": "integrate-and-repair",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:product-delivery-change"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "dependencies-to-integration",
+      "from": "install-dependencies",
+      "to": "integrate-and-repair",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:dependency-environment"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "embedding-model-to-integration",
+      "from": "fetch-embedding-model",
+      "to": "integrate-and-repair",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:embedding-model-assets"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "wasm-to-integration",
+      "from": "build-wasm-memory",
+      "to": "integrate-and-repair",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:memory-wasm"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "integration-to-verify-typecheck",
+      "from": "integrate-and-repair",
+      "to": "verify-typecheck",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:integrated-change"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "integration-to-verify-unit-tests",
+      "from": "integrate-and-repair",
+      "to": "verify-unit-tests",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:integrated-change"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "integration-to-verify-rust-tests",
+      "from": "integrate-and-repair",
+      "to": "verify-rust-tests",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:integrated-change"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "integration-to-runtime-build",
+      "from": "integrate-and-repair",
+      "to": "build-runtime",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:integrated-change"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "typecheck-to-runtime-build",
+      "from": "verify-typecheck",
+      "to": "build-runtime",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:typecheck-report"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "unit-tests-to-runtime-build",
+      "from": "verify-unit-tests",
+      "to": "build-runtime",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:unit-test-report"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "rust-tests-to-runtime-build",
+      "from": "verify-rust-tests",
+      "to": "build-runtime",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:rust-test-report"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "integration-to-ratatui-build",
+      "from": "integrate-and-repair",
+      "to": "build-ratatui",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:integrated-change"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "runtime-to-ratatui-build",
+      "from": "build-runtime",
+      "to": "build-ratatui",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:runtime-build"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "integration-to-cli-build",
+      "from": "integrate-and-repair",
+      "to": "build-cli",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:integrated-change"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "runtime-to-cli-build",
+      "from": "build-runtime",
+      "to": "build-cli",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:runtime-build"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "cli-build-to-cli-behavior",
+      "from": "build-cli",
+      "to": "verify-cli-behavior",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:cli-build"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "runtime-to-http-tests",
+      "from": "build-runtime",
+      "to": "verify-http-integration",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:runtime-build"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "runtime-to-ratatui-product",
+      "from": "build-runtime",
+      "to": "verify-ratatui-product",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:runtime-build"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "ratatui-build-to-product-test",
+      "from": "build-ratatui",
+      "to": "verify-ratatui-product",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:ratatui-build"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "runtime-to-tui-e2e",
+      "from": "build-runtime",
+      "to": "verify-tui-e2e",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:runtime-build"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "cli-build-to-tui-e2e",
+      "from": "build-cli",
+      "to": "verify-tui-e2e",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:cli-build"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "ratatui-build-to-tui-e2e",
+      "from": "build-ratatui",
+      "to": "verify-tui-e2e",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:ratatui-build"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "runtime-to-memory-smoke",
+      "from": "build-runtime",
+      "to": "verify-memory-smoke",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:runtime-build"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "wasm-to-memory-smoke",
+      "from": "build-wasm-memory",
+      "to": "verify-memory-smoke",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:memory-wasm"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "embedding-model-to-memory-smoke",
+      "from": "fetch-embedding-model",
+      "to": "verify-memory-smoke",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:embedding-model-assets"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "verify-typecheck-to-verification-summary",
+      "from": "verify-typecheck",
+      "to": "aggregate-verification",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:typecheck-report"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "verify-unit-tests-to-verification-summary",
+      "from": "verify-unit-tests",
+      "to": "aggregate-verification",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:unit-test-report"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "verify-rust-tests-to-verification-summary",
+      "from": "verify-rust-tests",
+      "to": "aggregate-verification",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:rust-test-report"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "build-runtime-to-verification-summary",
+      "from": "build-runtime",
+      "to": "aggregate-verification",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:runtime-build"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "verify-ratatui-product-to-verification-summary",
+      "from": "verify-ratatui-product",
+      "to": "aggregate-verification",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:ratatui-product-report"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "verify-cli-behavior-to-verification-summary",
+      "from": "verify-cli-behavior",
+      "to": "aggregate-verification",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:cli-behavior-report"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "verify-http-integration-to-verification-summary",
+      "from": "verify-http-integration",
+      "to": "aggregate-verification",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:http-test-report"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "verify-tui-e2e-to-verification-summary",
+      "from": "verify-tui-e2e",
+      "to": "aggregate-verification",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:tui-e2e-report"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "verify-memory-smoke-to-verification-summary",
+      "from": "verify-memory-smoke",
+      "to": "aggregate-verification",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:memory-smoke-report"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "integration-to-architecture-review",
+      "from": "integrate-and-repair",
+      "to": "review-architecture-security",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:integrated-change"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "verification-summary-to-architecture-review",
+      "from": "aggregate-verification",
+      "to": "review-architecture-security",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:verification-summary"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "verification-summary-to-candidate-approval",
+      "from": "aggregate-verification",
+      "to": "approve-release-candidate",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:verification-summary"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "architecture-review-to-candidate-approval",
+      "from": "review-architecture-security",
+      "to": "approve-release-candidate",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:architecture-security-review"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "architecture-review-to-candidate-publication",
+      "from": "review-architecture-security",
+      "to": "publish-release-candidate",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:architecture-security-review"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "candidate-approval-to-publication",
+      "from": "approve-release-candidate",
+      "to": "publish-release-candidate",
+      "type": "approves",
+      "condition": "The owner approved the exact candidate and GitHub mutation scope.",
+      "artifacts": [
+        "artifact:release-candidate-approval"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "candidate-approval-artifact-to-publication",
+      "from": "approve-release-candidate",
+      "to": "publish-release-candidate",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:release-candidate-approval"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "candidate-to-canary-approval",
+      "from": "publish-release-candidate",
+      "to": "approve-canary",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:release-candidate"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "candidate-to-canary-deployment",
+      "from": "publish-release-candidate",
+      "to": "deploy-canary",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:release-candidate"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "canary-approval-to-deployment",
+      "from": "approve-canary",
+      "to": "deploy-canary",
+      "type": "approves",
+      "condition": "The owner approved the exact candidate, canary target, probes, observation window, and rollback.",
+      "artifacts": [
+        "artifact:canary-approval"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "canary-approval-artifact-to-deployment",
+      "from": "approve-canary",
+      "to": "deploy-canary",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:canary-approval"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "canary-deployment-to-behavior",
+      "from": "deploy-canary",
+      "to": "verify-canary-behavior",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:canary-deployment"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "candidate-to-production-approval",
+      "from": "publish-release-candidate",
+      "to": "approve-production-release",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:release-candidate"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "canary-behavior-to-production-approval",
+      "from": "verify-canary-behavior",
+      "to": "approve-production-release",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:canary-behavior-report"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "candidate-to-production-release",
+      "from": "publish-release-candidate",
+      "to": "release-production",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:release-candidate"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "canary-behavior-to-production-release",
+      "from": "verify-canary-behavior",
+      "to": "release-production",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:canary-behavior-report"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "production-approval-to-release",
+      "from": "approve-production-release",
+      "to": "release-production",
+      "type": "approves",
+      "condition": "The owner approved the exact production candidate, target, observation plan, and rollback.",
+      "artifacts": [
+        "artifact:production-release-approval"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "production-approval-artifact-to-release",
+      "from": "approve-production-release",
+      "to": "release-production",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:production-release-approval"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "production-release-to-observation",
+      "from": "release-production",
+      "to": "observe-production",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:production-release"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "candidate-to-closeout",
+      "from": "publish-release-candidate",
+      "to": "closeout-release",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:release-candidate"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "production-observation-to-closeout",
+      "from": "observe-production",
+      "to": "closeout-release",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:production-observation"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "verify-typecheck-feedback-to-integration",
+      "from": "verify-typecheck",
+      "to": "integrate-and-repair",
+      "type": "feedback",
+      "condition": "The evidence identifies a correctable implementation or integration failure.",
+      "artifacts": [
+        "artifact:typecheck-report"
+      ],
+      "max_traversals": 3,
+      "exit_condition": "The failed criterion passes with fresh evidence, or three repair traversals exhaust and the run moves to needs_human."
+    },
+    {
+      "id": "verify-unit-tests-feedback-to-integration",
+      "from": "verify-unit-tests",
+      "to": "integrate-and-repair",
+      "type": "feedback",
+      "condition": "The evidence identifies a correctable implementation or integration failure.",
+      "artifacts": [
+        "artifact:unit-test-report"
+      ],
+      "max_traversals": 3,
+      "exit_condition": "The failed criterion passes with fresh evidence, or three repair traversals exhaust and the run moves to needs_human."
+    },
+    {
+      "id": "verify-rust-tests-feedback-to-integration",
+      "from": "verify-rust-tests",
+      "to": "integrate-and-repair",
+      "type": "feedback",
+      "condition": "The evidence identifies a correctable implementation or integration failure.",
+      "artifacts": [
+        "artifact:rust-test-report"
+      ],
+      "max_traversals": 3,
+      "exit_condition": "The failed criterion passes with fresh evidence, or three repair traversals exhaust and the run moves to needs_human."
+    },
+    {
+      "id": "build-runtime-feedback-to-integration",
+      "from": "build-runtime",
+      "to": "integrate-and-repair",
+      "type": "feedback",
+      "condition": "The evidence identifies a correctable implementation or integration failure.",
+      "artifacts": [
+        "artifact:runtime-build"
+      ],
+      "max_traversals": 3,
+      "exit_condition": "The failed criterion passes with fresh evidence, or three repair traversals exhaust and the run moves to needs_human."
+    },
+    {
+      "id": "build-ratatui-feedback-to-integration",
+      "from": "build-ratatui",
+      "to": "integrate-and-repair",
+      "type": "feedback",
+      "condition": "The evidence identifies a correctable implementation or integration failure.",
+      "artifacts": [
+        "artifact:ratatui-build"
+      ],
+      "max_traversals": 3,
+      "exit_condition": "The failed criterion passes with fresh evidence, or three repair traversals exhaust and the run moves to needs_human."
+    },
+    {
+      "id": "verify-ratatui-product-feedback-to-integration",
+      "from": "verify-ratatui-product",
+      "to": "integrate-and-repair",
+      "type": "feedback",
+      "condition": "The evidence identifies a correctable implementation or integration failure.",
+      "artifacts": [
+        "artifact:ratatui-product-report"
+      ],
+      "max_traversals": 3,
+      "exit_condition": "The failed criterion passes with fresh evidence, or three repair traversals exhaust and the run moves to needs_human."
+    },
+    {
+      "id": "build-cli-feedback-to-integration",
+      "from": "build-cli",
+      "to": "integrate-and-repair",
+      "type": "feedback",
+      "condition": "The evidence identifies a correctable implementation or integration failure.",
+      "artifacts": [
+        "artifact:cli-build"
+      ],
+      "max_traversals": 3,
+      "exit_condition": "The failed criterion passes with fresh evidence, or three repair traversals exhaust and the run moves to needs_human."
+    },
+    {
+      "id": "verify-cli-behavior-feedback-to-integration",
+      "from": "verify-cli-behavior",
+      "to": "integrate-and-repair",
+      "type": "feedback",
+      "condition": "The evidence identifies a correctable implementation or integration failure.",
+      "artifacts": [
+        "artifact:cli-behavior-report"
+      ],
+      "max_traversals": 3,
+      "exit_condition": "The failed criterion passes with fresh evidence, or three repair traversals exhaust and the run moves to needs_human."
+    },
+    {
+      "id": "verify-http-integration-feedback-to-integration",
+      "from": "verify-http-integration",
+      "to": "integrate-and-repair",
+      "type": "feedback",
+      "condition": "The evidence identifies a correctable implementation or integration failure.",
+      "artifacts": [
+        "artifact:http-test-report"
+      ],
+      "max_traversals": 3,
+      "exit_condition": "The failed criterion passes with fresh evidence, or three repair traversals exhaust and the run moves to needs_human."
+    },
+    {
+      "id": "verify-tui-e2e-feedback-to-integration",
+      "from": "verify-tui-e2e",
+      "to": "integrate-and-repair",
+      "type": "feedback",
+      "condition": "The evidence identifies a correctable implementation or integration failure.",
+      "artifacts": [
+        "artifact:tui-e2e-report"
+      ],
+      "max_traversals": 3,
+      "exit_condition": "The failed criterion passes with fresh evidence, or three repair traversals exhaust and the run moves to needs_human."
+    },
+    {
+      "id": "verify-memory-smoke-feedback-to-integration",
+      "from": "verify-memory-smoke",
+      "to": "integrate-and-repair",
+      "type": "feedback",
+      "condition": "The evidence identifies a correctable implementation or integration failure.",
+      "artifacts": [
+        "artifact:memory-smoke-report"
+      ],
+      "max_traversals": 3,
+      "exit_condition": "The failed criterion passes with fresh evidence, or three repair traversals exhaust and the run moves to needs_human."
+    },
+    {
+      "id": "aggregate-verification-feedback-to-integration",
+      "from": "aggregate-verification",
+      "to": "integrate-and-repair",
+      "type": "feedback",
+      "condition": "The evidence identifies a correctable implementation or integration failure.",
+      "artifacts": [
+        "artifact:verification-summary"
+      ],
+      "max_traversals": 3,
+      "exit_condition": "The failed criterion passes with fresh evidence, or three repair traversals exhaust and the run moves to needs_human."
+    },
+    {
+      "id": "review-architecture-security-feedback-to-integration",
+      "from": "review-architecture-security",
+      "to": "integrate-and-repair",
+      "type": "feedback",
+      "condition": "The evidence identifies a correctable implementation or integration failure.",
+      "artifacts": [
+        "artifact:architecture-security-review"
+      ],
+      "max_traversals": 3,
+      "exit_condition": "The failed criterion passes with fresh evidence, or three repair traversals exhaust and the run moves to needs_human."
+    },
+    {
+      "id": "canary-feedback-to-integration",
+      "from": "verify-canary-behavior",
+      "to": "integrate-and-repair",
+      "type": "feedback",
+      "condition": "The canary exposes a correctable release regression and the recorded canary rollback has been invoked when required.",
+      "artifacts": [
+        "artifact:canary-behavior-report"
+      ],
+      "max_traversals": 2,
+      "exit_condition": "Fresh canary evidence passes after repair, or two traversals exhaust and the run moves to needs_human."
+    },
+    {
+      "id": "production-feedback-to-integration",
+      "from": "observe-production",
+      "to": "integrate-and-repair",
+      "type": "feedback",
+      "condition": "Production observation exposes a correctable regression and the recorded rollback has been invoked.",
+      "artifacts": [
+        "artifact:production-observation"
+      ],
+      "max_traversals": 1,
+      "exit_condition": "Fresh verification and canary evidence pass after one repair traversal, or the run remains needs_human."
+    },
+    {
+      "id": "verify-http-integration-conflicts-verify-ratatui-product",
+      "from": "verify-http-integration",
+      "to": "verify-ratatui-product",
+      "type": "conflicts",
+      "condition": "Both probes require exclusive use of the local built runtime and mutable test configuration.",
+      "artifacts": [],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "verify-http-integration-conflicts-verify-tui-e2e",
+      "from": "verify-http-integration",
+      "to": "verify-tui-e2e",
+      "type": "conflicts",
+      "condition": "Both probes require exclusive use of the local built runtime and mutable test configuration.",
+      "artifacts": [],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "verify-http-integration-conflicts-verify-memory-smoke",
+      "from": "verify-http-integration",
+      "to": "verify-memory-smoke",
+      "type": "conflicts",
+      "condition": "Both probes require exclusive use of the local built runtime and mutable test configuration.",
+      "artifacts": [],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "verify-ratatui-product-conflicts-verify-tui-e2e",
+      "from": "verify-ratatui-product",
+      "to": "verify-tui-e2e",
+      "type": "conflicts",
+      "condition": "Both probes require exclusive use of the local built runtime and mutable test configuration.",
+      "artifacts": [],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "verify-ratatui-product-conflicts-verify-memory-smoke",
+      "from": "verify-ratatui-product",
+      "to": "verify-memory-smoke",
+      "type": "conflicts",
+      "condition": "Both probes require exclusive use of the local built runtime and mutable test configuration.",
+      "artifacts": [],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "verify-tui-e2e-conflicts-verify-memory-smoke",
+      "from": "verify-tui-e2e",
+      "to": "verify-memory-smoke",
+      "type": "conflicts",
+      "condition": "Both probes require exclusive use of the local built runtime and mutable test configuration.",
+      "artifacts": [],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "baseline-invalidates-change-contract",
+      "from": "baseline-context",
+      "to": "define-change-contract",
+      "type": "invalidates",
+      "condition": "A changed commit, instruction, or authorized request makes the former contract stale.",
+      "artifacts": [
+        "artifact:change-contract",
+        "artifact:affected-domain-map"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "change-contract-invalidates-architecture",
+      "from": "define-change-contract",
+      "to": "decide-architecture",
+      "type": "invalidates",
+      "condition": "A changed purpose, scope, non-goal, or acceptance criterion makes the former architecture decision stale.",
+      "artifacts": [
+        "artifact:architecture-decision"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "architecture-invalidates-plan",
+      "from": "decide-architecture",
+      "to": "plan-implementation",
+      "type": "invalidates",
+      "condition": "A changed architecture decision makes the former implementation plan stale.",
+      "artifacts": [
+        "artifact:implementation-plan"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "plan-invalidates-implement-core-contracts",
+      "from": "plan-implementation",
+      "to": "implement-core-contracts",
+      "type": "invalidates",
+      "condition": "A changed implementation plan invalidates the affected domain output.",
+      "artifacts": [
+        "artifact:core-contracts-change"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "plan-invalidates-implement-agent-runtime",
+      "from": "plan-implementation",
+      "to": "implement-agent-runtime",
+      "type": "invalidates",
+      "condition": "A changed implementation plan invalidates the affected domain output.",
+      "artifacts": [
+        "artifact:agent-runtime-change"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "plan-invalidates-implement-memory-retrieval",
+      "from": "plan-implementation",
+      "to": "implement-memory-retrieval",
+      "type": "invalidates",
+      "condition": "A changed implementation plan invalidates the affected domain output.",
+      "artifacts": [
+        "artifact:memory-retrieval-change"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "plan-invalidates-implement-capabilities-security",
+      "from": "plan-implementation",
+      "to": "implement-capabilities-security",
+      "type": "invalidates",
+      "condition": "A changed implementation plan invalidates the affected domain output.",
+      "artifacts": [
+        "artifact:capabilities-security-change"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "plan-invalidates-implement-ingress-operations",
+      "from": "plan-implementation",
+      "to": "implement-ingress-operations",
+      "type": "invalidates",
+      "condition": "A changed implementation plan invalidates the affected domain output.",
+      "artifacts": [
+        "artifact:ingress-operations-change"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "plan-invalidates-implement-product-delivery",
+      "from": "plan-implementation",
+      "to": "implement-product-delivery",
+      "type": "invalidates",
+      "condition": "A changed implementation plan invalidates the affected domain output.",
+      "artifacts": [
+        "artifact:product-delivery-change"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "integration-invalidates-verify-typecheck",
+      "from": "integrate-and-repair",
+      "to": "verify-typecheck",
+      "type": "invalidates",
+      "condition": "A changed integrated diff invalidates prior verification evidence.",
+      "artifacts": [
+        "artifact:typecheck-report"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "integration-invalidates-verify-unit-tests",
+      "from": "integrate-and-repair",
+      "to": "verify-unit-tests",
+      "type": "invalidates",
+      "condition": "A changed integrated diff invalidates prior verification evidence.",
+      "artifacts": [
+        "artifact:unit-test-report"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "integration-invalidates-verify-rust-tests",
+      "from": "integrate-and-repair",
+      "to": "verify-rust-tests",
+      "type": "invalidates",
+      "condition": "A changed integrated diff invalidates prior verification evidence.",
+      "artifacts": [
+        "artifact:rust-test-report"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    }
+  ],
+  "assumptions": [
+    "Each runtime run governs one explicitly authorized change against a named Git commit.",
+    "The current commit is project context, not proof that historical implementation is verified.",
+    "The project owner supplies target-specific authority for GitHub, canary, and production mutations at the declared gates.",
+    "Canary and production deployment commands remain adapter bindings until the project documents an approved deployment mechanism.",
+    "Full live-model TUI probes require valid provider credentials supplied through the runtime environment, never stored in this graph."
+  ],
+  "risks": [
+    "Architecture documents or Flue behavior may drift from the context commit; a changed instruction or dependency invalidates downstream evidence.",
+    "A parallel domain may discover a shared contract overlap; the integration node must serialize the repair and preserve unrelated verified branches.",
+    "External GitHub or deployment actions can have uncertain outcomes; adapters must use idempotency fencing and verify resulting state.",
+    "The full verification matrix is intentionally expensive; omitting a required check requires explicit evidence and human review.",
+    "The graph coordinator is not an operating-system sandbox or distributed scheduler; untrusted commands require an approved isolation layer."
+  ]
+}
