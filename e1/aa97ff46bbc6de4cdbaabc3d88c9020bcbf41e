@@ -1,0 +1,21 @@
+development-graph.json
+  s_9b642208052459::t_6dd0f34f2924bd 4,22,189,272,358,695,779,861,943,1027,1111,1306-1311,1456,1467-1468,1472,1484,1493,1529,1624,1708,1791,1911,1994,2088,2178
+development-graph.md
+  s_9b642208052459::t_ba53a55eb6e71b 1,12,17,21,43,192,347,362,377,440,456,472,488,504,520,536,566,575,577,580,587,594,608,622,651,665,679,693
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "e1aa97ff46bbc6de4cdbaabc3d88c9020bcbf41e",
+  "prompts": {},
+  "sessions": {
+    "s_9b642208052459": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f9120-7807-7c51-9bca-3283381774fd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
