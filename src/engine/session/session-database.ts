@@ -510,6 +510,7 @@ export class GoromboSessionDatabase {
                 delivery_stream_url, delivery_offset, accepted_at
          FROM normalized_message_events
          WHERE session_id = ?
+           AND delivery_kind = 'direct-agent'
            AND (
              ? IS NULL
              OR (received_at, event_id) < (
@@ -518,12 +519,12 @@ export class GoromboSessionDatabase {
                WHERE event_id = ? AND session_id = ?
              )
            )
-         ORDER BY received_at ASC, event_id ASC
+         ORDER BY received_at DESC, event_id DESC
          LIMIT ?`,
       )
       .all(input.sessionId, before, before, input.sessionId, limit) as unknown as NormalizedMessageEventRow[];
 
-    return rows.map(toSessionNormalizedMessageRecord);
+    return rows.reverse().map(toSessionNormalizedMessageRecord);
   }
 
   createTrustedEventAdmission(input: CreateTrustedEventAdmissionInput): TrustedEventAdmission {

@@ -43,6 +43,21 @@ test('GOROMBO persistence wrapper loads latest logical session across workflow r
   }
 });
 
+test('GOROMBO persistence runtime reuses its connected Flue event stream store', async () => {
+  const runtime = createTestPersistenceRuntime();
+
+  try {
+    await runtime.adapter.migrate?.();
+    const connected = (await runtime.adapter.connect()).eventStreamStore;
+
+    assert.equal(await runtime.getEventStreamStore(), connected);
+    assert.equal(await runtime.getEventStreamStore(), connected);
+  } finally {
+    await runtime.adapter.close?.();
+    runtime.cleanup();
+  }
+});
+
 test('GOROMBO persistence wrapper deletes the logical session when called from a new run id', async () => {
   const runtime = createTestPersistenceRuntime();
 

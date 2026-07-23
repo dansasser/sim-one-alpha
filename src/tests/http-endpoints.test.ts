@@ -99,6 +99,124 @@ test('chat session lifecycle endpoint requires the configured API secret', async
   });
 });
 
+test('chat transcript route validates canonical session ownership and pagination input', async () => {
+  const testApp = new Hono();
+  const actorId = `transcript-user-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const conversationId = `transcript-conversation-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const identity = {
+    connector: 'tui' as const,
+    actorId,
+    conversationId,
+    threadId: 'transcript-thread',
+  };
+  const created = createFreshChatSession({
+    identity,
+    displayName: 'Transcript Test',
+  });
+  const calls: Array<{ sessionId: string; limit: number; before?: string }> = [];
+
+  registerChatSessionRoutes(testApp, {
+    loadTranscript: async (input) => {
+      calls.push({
+        sessionId: input.session.id,
+        limit: input.limit,
+        ...(input.before ? { before: input.before } : {}),
+      });
+      return {
+        session: {
+          id: input.session.id,
+          title: input.session.title,
+        },
+        exchanges: [{
+          id: 'submission-history',
+          submissionId: 'submission-history',
+          prompt: {
+            id: 'prompt-history',
+            text: 'Historical prompt',
+            receivedAt: '2026-07-20T23:00:00.000Z',
+            visibility: 'user' as const,
+          },
+          activities: [{
+            id: 'submission-history:tool:tool-history',
+            kind: 'tool' as const,
+            name: 'repository_status',
+            status: 'completed' as const,
+            durationMs: 31,
+          }],
+          assistant: {
+            id: 'submission-history:message:2',
+            text: 'Historical response',
+            completedAt: '2026-07-20T23:00:01.000Z',
+          },
+          status: 'completed' as const,
+        }],
+        stream: {
+          nextOffset: '0000000000000000_0000000000000042',
+          upToDate: true,
+        },
+        page: {
+          limit: input.limit,
+          hasOlder: false,
+        },
+      };
+    },
+  });
+
+  await withApiSecret('test-secret', async () => {
+    const query = new URLSearchParams({
+      connector: 'tui',
+      actorId,
+      conversationId,
+      threadId: 'transcript-thread',
+      limit: '25',
+    });
+    const response = await testApp.request(
+      `/api/chat/sessions/${encodeURIComponent(created.sessionId)}/transcript?${query}`,
+      { headers: { 'x-api-secret': 'test-secret' } },
+    );
+    assert.equal(response.status, 200);
+    const body = await response.json() as {
+      session?: { id?: string; title?: string };
+      exchanges?: Array<{ prompt?: { text?: string }; assistant?: { text?: string } }>;
+      stream?: { nextOffset?: string };
+    };
+    assert.equal(body.session?.id, created.sessionId);
+    assert.equal(body.session?.title, 'Transcript Test');
+    assert.equal(body.exchanges?.[0]?.prompt?.text, 'Historical prompt');
+    assert.equal(body.exchanges?.[0]?.assistant?.text, 'Historical response');
+    assert.equal(body.stream?.nextOffset, '0000000000000000_0000000000000042');
+    assert.deepEqual(calls, [{ sessionId: created.sessionId, limit: 25 }]);
+
+    const wrongActor = new URLSearchParams(query);
+    wrongActor.set('actorId', `${actorId}-other`);
+    const denied = await testApp.request(
+      `/api/chat/sessions/${encodeURIComponent(created.sessionId)}/transcript?${wrongActor}`,
+      { headers: { 'x-api-secret': 'test-secret' } },
+    );
+    assert.equal(denied.status, 403);
+
+    const missing = await testApp.request(
+      `/api/chat/sessions/missing-transcript-session/transcript?${query}`,
+      { headers: { 'x-api-secret': 'test-secret' } },
+    );
+    assert.equal(missing.status, 404);
+
+    for (const invalidQuery of [
+      new URLSearchParams({ ...Object.fromEntries(query), limit: '0' }),
+      new URLSearchParams({ ...Object.fromEntries(query), limit: '101' }),
+      new URLSearchParams({ ...Object.fromEntries(query), before: 'not-a-cursor' }),
+    ]) {
+      const invalid = await testApp.request(
+        `/api/chat/sessions/${encodeURIComponent(created.sessionId)}/transcript?${invalidQuery}`,
+        { headers: { 'x-api-secret': 'test-secret' } },
+      );
+      assert.equal(invalid.status, 400);
+    }
+  });
+
+  goromboPersistenceRuntime.sessionDatabase.deleteChatSession(created.sessionId);
+});
+
 test('chat event ingress enters the durable orchestrator agent route', async () => {
   const testApp = new Hono();
   let promptedAgent = false;
