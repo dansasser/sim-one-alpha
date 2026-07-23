@@ -76,6 +76,43 @@ fn posts_prompt_to_tui_chat_event_endpoint_and_extracts_text() {
 }
 
 #[test]
+fn extracts_submission_correlation_metadata_from_agent_response() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("test server should bind");
+    let port = listener
+        .local_addr()
+        .expect("test server should have address")
+        .port();
+
+    thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("client should connect");
+        let _ = read_http_request(&mut stream);
+        let body = r#"{"result":{"text":"correlated response"},"submission":{"id":"submission-42"},"offset":"0000000000000000_0000000000000042"}"#;
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .expect("response should be writable");
+    });
+
+    let response = send_agent_prompt_reply(
+        &format!("http://127.0.0.1:{port}"),
+        "tui-correlation",
+        "correlate this",
+        AgentPromptOrigin::User,
+    )
+    .expect("agent prompt should return correlation metadata");
+
+    assert_eq!(response.text, "correlated response");
+    assert_eq!(response.submission_id.as_deref(), Some("submission-42"));
+    assert_eq!(
+        response.stream_offset.as_deref(),
+        Some("0000000000000000_0000000000000042")
+    );
+}
+
+#[test]
 fn tags_only_startup_preflight_prompts_with_the_internal_workflow() {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("test server should bind");
     let port = listener

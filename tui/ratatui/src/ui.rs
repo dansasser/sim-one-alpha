@@ -125,21 +125,32 @@ fn rendered_transcript_line(row: RenderedTranscriptRow, visible_width: usize) ->
     } else {
         Style::default()
     };
-    let content = row.kind.prefix().and_then(|prefix| {
-        let body = row.text.strip_prefix(prefix)?.to_string();
-        let prefix_style = if row.kind == TranscriptRowKind::Assistant && row.is_streaming {
-            Some(live_assistant_prefix_style())
-        } else {
-            transcript_prefix_style(row.kind)
-        }?;
-        let mut spans = vec![Span::styled(prefix.to_string(), prefix_style)];
-        spans.extend(styled_body_spans(
-            row.styled_spans.clone(),
-            body,
-            body_style,
-        ));
-        Some(spans)
-    });
+    let content = if row.kind == TranscriptRowKind::Error {
+        row.text.split_once(':').and_then(|(prefix, body)| {
+            let prefix = format!("{prefix}:");
+            let prefix_style = transcript_prefix_style(TranscriptRowKind::Error)?;
+            Some(vec![
+                Span::styled(prefix, prefix_style),
+                Span::raw(body.to_string()),
+            ])
+        })
+    } else {
+        row.kind.prefix().and_then(|prefix| {
+            let body = row.text.strip_prefix(prefix)?.to_string();
+            let prefix_style = if row.kind == TranscriptRowKind::Assistant && row.is_streaming {
+                Some(live_assistant_prefix_style())
+            } else {
+                transcript_prefix_style(row.kind)
+            }?;
+            let mut spans = vec![Span::styled(prefix.to_string(), prefix_style)];
+            spans.extend(styled_body_spans(
+                row.styled_spans.clone(),
+                body,
+                body_style,
+            ));
+            Some(spans)
+        })
+    };
     let mut content = apply_selection_style(
         content.unwrap_or_else(|| styled_body_spans(row.styled_spans, row.text, body_style)),
         row.selection_range,

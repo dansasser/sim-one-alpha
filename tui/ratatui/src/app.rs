@@ -14,14 +14,14 @@ use crate::agent::{
 };
 use crate::diagnostics;
 use crate::flue::events::FlueEvent;
-use crate::flue::reducer::{extract_role, extract_text, DisplayRow, EventTranscript};
 use crate::flue::stream::{spawn_agent_stream, AgentStreamHandle, AgentStreamUpdate};
 use crate::history::{
     load_chat_transcript, TranscriptExchange, TranscriptPage, TranscriptPageInfo,
-    TranscriptSession, TranscriptStreamCursor,
+    TranscriptPromptVisibility, TranscriptSession, TranscriptStreamCursor,
 };
 use crate::markdown::render_markdown;
 use crate::text_wrap::{display_width, display_width_between, wrap_words, WrappedLine};
+use crate::transcript::{TranscriptDocument, TranscriptLineKind};
 use unicode_width::UnicodeWidthChar;
 
 pub const SCROLL_PAGE_LINES: usize = 8;
@@ -99,7 +99,7 @@ const TUI_COMMANDS: [SlashCommand; 9] = [
     },
     SlashCommand {
         command: "/resume",
-        usage: "/resume <session-id>",
+        usage: "/resume <session-id-or-name>",
         description: "Resume a durable session",
         insertion: "/resume ",
     },
@@ -215,6 +215,7 @@ pub struct RenderedTranscriptRow {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct TranscriptSourceSpan {
+    id: String,
     line: usize,
     text: String,
     start_char: usize,
@@ -306,7 +307,11 @@ pub struct App {
     prompt_selection: Option<PromptSelection>,
     command_palette_selected: usize,
     command_palette_dismissed: bool,
+    transcript_document: TranscriptDocument,
     transcript_lines: Vec<String>,
+    transcript_line_ids: Vec<String>,
+    transcript_line_kinds: Vec<TranscriptRowKind>,
+    transcript_line_streaming: Vec<bool>,
     transcript_scroll: usize,
     follow_tail: bool,
     should_quit: bool,
@@ -325,17 +330,14 @@ pub struct App {
     pending_response: Option<PendingResponse>,
     pending_session_lifecycle: Option<PendingSessionLifecycle>,
     pending_history: Option<PendingHistory>,
-    loaded_history_exchanges: Vec<TranscriptExchange>,
     history_before: Option<String>,
     history_has_older: bool,
     stream_handle: Option<AgentStreamHandle>,
     stream_start_offset: String,
     stream_status: StreamStatus,
     last_stream_event: Option<String>,
-    event_transcript: EventTranscript,
-    event_row_lines: BTreeMap<String, usize>,
-    final_response_range: Option<(usize, usize)>,
-    response_is_streaming: bool,
+    legacy_submission_sequence: u64,
+    legacy_submission_id: Option<String>,
     transcript_viewport_height: usize,
     transcript_viewport_width: usize,
     mouse_regions: MouseRegions,
@@ -350,7 +352,8 @@ pub struct App {
 #[derive(Debug)]
 struct PendingResponse {
     receiver: Receiver<AgentResponse>,
-    transcript_line: usize,
+    exchange_id: String,
+    expected_submission_id: Option<String>,
     started_at: Instant,
     spinner_frame: usize,
     duplicate_submit_notice: bool,
@@ -612,6 +615,10 @@ impl App {
         session_resumer: SessionResumer,
         history_loader: HistoryLoader,
     ) -> Self {
+        let mut transcript_document = TranscriptDocument::default();
+        transcript_document.push_notice("system", "SIM-ONE Alpha Ratatui TUI");
+        transcript_document.push_notice("preflight", "waiting for gateway startup result");
+        let initial_lines = transcript_document.lines();
         let mut app = Self {
             prompt: String::new(),
             prompt_cursor: 0,
@@ -623,7 +630,14 @@ impl App {
             prompt_selection: None,
             command_palette_selected: 0,
             command_palette_dismissed: false,
-            transcript_lines: initial_transcript(),
+            transcript_document,
+            transcript_lines: initial_lines.iter().map(|line| line.text.clone()).collect(),
+            transcript_line_ids: initial_lines.iter().map(|line| line.id.clone()).collect(),
+            transcript_line_kinds: initial_lines
+                .iter()
+                .map(|line| transcript_row_kind_from_document(line.kind))
+                .collect(),
+            transcript_line_streaming: initial_lines.iter().map(|line| line.is_streaming).collect(),
             transcript_scroll: 0,
             follow_tail: true,
             should_quit: false,
@@ -642,17 +656,14 @@ impl App {
             pending_response: None,
             pending_session_lifecycle: None,
             pending_history: None,
-            loaded_history_exchanges: Vec::new(),
             history_before: None,
             history_has_older: false,
             stream_handle: None,
             stream_start_offset: "-1".to_string(),
             stream_status: StreamStatus::NotAttached,
             last_stream_event: None,
-            event_transcript: EventTranscript::default(),
-            event_row_lines: BTreeMap::new(),
-            final_response_range: None,
-            response_is_streaming: false,
+            legacy_submission_sequence: 0,
+            legacy_submission_id: None,
             transcript_viewport_height: SCROLL_PAGE_LINES,
             transcript_viewport_width: 80,
             mouse_regions: MouseRegions::default(),
@@ -712,7 +723,7 @@ impl App {
             AppEvent::ScrollPageDown => self.scroll_page_down(),
             AppEvent::JumpToTail => self.jump_to_tail(),
             AppEvent::Mouse(mouse) => self.handle_mouse(mouse),
-            AppEvent::Quit => self.copy_prompt_selection_or_quit(),
+            AppEvent::Quit => self.copy_selection_or_quit(),
         }
     }
 
@@ -744,10 +755,9 @@ impl App {
         }
 
         self.startup_phase = StartupPhase::CreatingSession;
+        diagnostics::session_lifecycle_started("fresh", None);
         self.startup_attach_stream = attach_stream;
         self.agent_status = "preflight".to_string();
-        self.final_response_range = None;
-        self.response_is_streaming = false;
         self.push_speaker_text(
             "preflight",
             &format!("gateway ready ({})", self.gateway_status),
@@ -777,11 +787,10 @@ impl App {
         }
 
         let session_id = session_id.trim().to_string();
+        diagnostics::session_lifecycle_started("explicit", Some(&session_id));
         self.startup_phase = StartupPhase::ResumingSession;
         self.startup_attach_stream = attach_stream;
         self.agent_status = "preflight".to_string();
-        self.final_response_range = None;
-        self.response_is_streaming = false;
         self.push_speaker_text(
             "preflight",
             &format!("gateway ready ({})", self.gateway_status),
@@ -835,28 +844,36 @@ impl App {
                 if let Some(event) = events.last() {
                     self.last_stream_event = Some(event.event_type.clone());
                 }
-                let final_message = self
-                    .pending_response
-                    .as_ref()
-                    .and_then(|_| final_assistant_message(&events));
-                let has_root_text_delta = self.pending_response.is_some()
-                    && events
-                        .iter()
-                        .any(|event| event.event_type == "text_delta" && !event.is_nested());
-                self.event_transcript.apply_events(&events);
-                let stream_preview = if final_message.is_none() && has_root_text_delta {
-                    self.event_transcript
-                        .current_assistant_stream_text()
-                        .map(str::to_string)
-                } else {
-                    None
-                };
-                self.sync_event_transcript_rows();
-                if let Some(final_message) = final_message {
-                    self.settle_pending_stream_response(&final_message);
-                } else if let Some(stream_preview) = stream_preview {
-                    self.settle_pending_stream_preview(&stream_preview);
+                let events = self.correlate_stream_events(events);
+                let pending_submission = self.pending_response.as_ref().map(|pending| {
+                    pending
+                        .expected_submission_id
+                        .as_deref()
+                        .unwrap_or(&pending.exchange_id)
+                        .to_string()
+                });
+                let pending_has_final =
+                    pending_submission.as_deref().is_some_and(|submission_id| {
+                        events.iter().any(|event| {
+                            event_submission_id(event) == Some(submission_id)
+                                && is_root_assistant_final(event)
+                        })
+                    });
+                let pending_has_text = pending_submission.as_deref().is_some_and(|submission_id| {
+                    events.iter().any(|event| {
+                        event_submission_id(event) == Some(submission_id)
+                            && event.event_type == "text_delta"
+                            && !event.is_nested()
+                    })
+                });
+                self.transcript_document.apply_events(&events);
+                self.rebuild_transcript_cache();
+                if pending_has_final {
+                    self.agent_status = "finalizing".to_string();
+                } else if pending_has_text {
+                    self.agent_status = "responding".to_string();
                 }
+                self.after_transcript_changed();
             }
             AgentStreamUpdate::Control(control) => {
                 if control.up_to_date {
@@ -892,12 +909,14 @@ impl App {
                         if let Err(error) =
                             self.complete_session_lifecycle(reply, requested_session_id.as_deref())
                         {
+                            diagnostics::session_lifecycle_failed("completion", &error);
                             self.agent_status = "error".to_string();
                             self.push_speaker_text("error", &error);
                             self.fail_startup();
                         }
                     }
                     Err(error) => {
+                        diagnostics::session_lifecycle_failed("request", &error);
                         self.agent_status = "error".to_string();
                         self.push_speaker_text("error", error.trim());
                         self.fail_startup();
@@ -910,6 +929,10 @@ impl App {
                 self.pending_session_lifecycle = None;
                 self.agent_status = "error".to_string();
                 self.push_speaker_text("error", "Session lifecycle response channel disconnected.");
+                diagnostics::session_lifecycle_failed(
+                    "request",
+                    "Session lifecycle response channel disconnected.",
+                );
                 self.fail_startup();
                 self.after_transcript_changed();
             }
@@ -979,7 +1002,8 @@ impl App {
                     elapsed_ms,
                     self.history_has_older,
                 );
-                self.loaded_history_exchanges = page.exchanges;
+                self.transcript_document.install_snapshot(page.exchanges);
+                self.rebuild_transcript_cache();
                 self.stream_start_offset = page.stream.next_offset;
                 self.attach_startup_stream();
                 self.push_speaker_text("preflight", "all systems go");
@@ -987,19 +1011,31 @@ impl App {
                 self.agent_status = "ready".to_string();
             }
             HistoryRequestKind::Older => {
-                let existing_ids = self
-                    .loaded_history_exchanges
-                    .iter()
-                    .map(|exchange| exchange.id.clone())
-                    .collect::<std::collections::BTreeSet<_>>();
-                let mut older = page
-                    .exchanges
-                    .into_iter()
-                    .filter(|exchange| !existing_ids.contains(&exchange.id))
-                    .collect::<Vec<_>>();
-                let added_count = older.len();
-                older.append(&mut self.loaded_history_exchanges);
-                self.loaded_history_exchanges = older;
+                let anchor = self
+                    .transcript_rendered_rows()
+                    .get(self.transcript_scroll)
+                    .and_then(|row| row.source.as_ref())
+                    .map(|source| (source.id.clone(), source.start_char));
+                let old_source_lines = self.transcript_lines.len();
+                let added_count = self.transcript_document.prepend_snapshot(page.exchanges);
+                self.rebuild_transcript_cache();
+                let inserted_source_lines =
+                    self.transcript_lines.len().saturating_sub(old_source_lines);
+                if !self.follow_tail {
+                    if let Some((anchor_id, anchor_start)) = anchor {
+                        self.transcript_scroll = self
+                            .transcript_rendered_rows()
+                            .iter()
+                            .position(|row| {
+                                row.source.as_ref().is_some_and(|source| {
+                                    source.id == anchor_id && source.start_char == anchor_start
+                                })
+                            })
+                            .unwrap_or(self.transcript_scroll)
+                            .min(self.max_scroll());
+                    }
+                }
+                self.shift_transcript_selection_lines(inserted_source_lines);
                 diagnostics::history_page_prepended(
                     added_count,
                     elapsed_ms,
@@ -1028,12 +1064,12 @@ impl App {
         let Some(pending) = &self.pending_response else {
             return;
         };
+        let exchange_id = pending.exchange_id.clone();
+        let received = pending.receiver.try_recv();
 
-        match pending.receiver.try_recv() {
+        match received {
             Ok(response) => {
-                let transcript_line = pending.transcript_line;
                 self.pending_response = None;
-                self.response_is_streaming = false;
                 self.agent_status = "ready".to_string();
                 match response.result {
                     Ok(reply) => {
@@ -1045,11 +1081,26 @@ impl App {
                         .then(|| clean_session_title(reply.session_title.clone()))
                         .flatten();
                         let reply_for_startup = reply.clone();
-                        self.settle_pending_response_line(
-                            transcript_line,
-                            "assistant",
+                        let response_exchange_id = reply
+                            .submission_id
+                            .as_deref()
+                            .and_then(|submission_id| {
+                                self.transcript_document
+                                    .bind_exchange(&exchange_id, submission_id)
+                            })
+                            .unwrap_or(exchange_id);
+                        self.transcript_document
+                            .clear_pending_text(&response_exchange_id);
+                        let _ = self.transcript_document.set_assistant(
+                            &response_exchange_id,
+                            reply
+                                .submission_id
+                                .as_ref()
+                                .map(|submission_id| format!("assistant:{submission_id}:http")),
                             reply.text.trim(),
+                            None,
                         );
+                        self.rebuild_transcript_cache();
                         if let Some(session_id) = session_id {
                             let session_changed = self.session_id != session_id;
                             self.switch_session(session_id);
@@ -1062,7 +1113,7 @@ impl App {
                         self.continue_startup_after_agent_reply(&reply_for_startup);
                     }
                     Err(error) => {
-                        self.settle_pending_response_line(transcript_line, "error", error.trim());
+                        self.settle_pending_error(&exchange_id, error.trim());
                         self.fail_startup();
                     }
                 }
@@ -1070,15 +1121,9 @@ impl App {
             }
             Err(TryRecvError::Empty) => {}
             Err(TryRecvError::Disconnected) => {
-                let transcript_line = pending.transcript_line;
                 self.pending_response = None;
-                self.response_is_streaming = false;
                 self.agent_status = "error".to_string();
-                self.settle_pending_response_line(
-                    transcript_line,
-                    "error",
-                    "Agent response channel disconnected.",
-                );
+                self.settle_pending_error(&exchange_id, "Agent response channel disconnected.");
                 self.fail_startup();
                 self.after_transcript_changed();
             }
@@ -1285,7 +1330,7 @@ impl App {
     }
 
     pub fn loaded_history_exchanges(&self) -> &[TranscriptExchange] {
-        &self.loaded_history_exchanges
+        self.transcript_document.exchanges()
     }
 
     pub fn stream_start_offset(&self) -> &str {
@@ -1329,15 +1374,12 @@ impl App {
     }
 
     pub fn transcript_rendered_rows(&self) -> Vec<RenderedTranscriptRow> {
-        let streaming_range = if self.response_is_streaming {
-            self.final_response_range
-        } else {
-            None
-        };
         let mut rows = wrap_transcript_rows(
             &self.transcript_lines,
+            &self.transcript_line_ids,
+            &self.transcript_line_kinds,
+            &self.transcript_line_streaming,
             self.transcript_viewport_width,
-            streaming_range,
         );
         rows.extend(std::iter::repeat_n(
             RenderedTranscriptRow {
@@ -1544,10 +1586,15 @@ impl App {
         }
     }
 
-    fn copy_prompt_selection_or_quit(&mut self) {
+    fn copy_selection_or_quit(&mut self) {
         if let Some(text) = self.prompt_selection_text() {
+            diagnostics::ctrl_c("copy_prompt", text.chars().count());
+            self.clipboard_text = Some(text);
+        } else if let Some(text) = self.transcript_selection_text() {
+            diagnostics::ctrl_c("copy_transcript", text.chars().count());
             self.clipboard_text = Some(text);
         } else {
+            diagnostics::ctrl_c("exit", 0);
             self.should_quit = true;
         }
     }
@@ -1555,7 +1602,18 @@ impl App {
     fn scroll_lines_up(&mut self, amount: usize) {
         self.transcript_scroll = self.transcript_scroll.saturating_sub(amount);
         self.follow_tail = false;
-        if self.transcript_scroll == 0 {
+        let first_exchange_row = self
+            .transcript_document
+            .first_exchange_line_id()
+            .and_then(|line_id| {
+                self.transcript_rendered_rows().iter().rposition(|row| {
+                    row.source
+                        .as_ref()
+                        .is_some_and(|source| source.id == line_id)
+                })
+            })
+            .unwrap_or(0);
+        if self.transcript_scroll <= first_exchange_row {
             self.request_older_history_page();
         }
     }
@@ -1888,11 +1946,6 @@ impl App {
             }
             return;
         }
-        if !prompt.is_empty() && self.pending_response.is_none() {
-            self.final_response_range = None;
-            self.response_is_streaming = false;
-        }
-
         if self.handle_local_slash_command(&prompt) {
             self.prompt.clear();
             self.prompt_cursor = 0;
@@ -1923,9 +1976,9 @@ impl App {
             return;
         }
 
-        self.transcript_lines.push(String::new());
-        self.push_speaker_text("you", &prompt);
-        let transcript_line = self.transcript_lines.len();
+        let exchange_id = self
+            .transcript_document
+            .begin_exchange(Some(prompt.clone()), TranscriptPromptVisibility::User);
         self.prompt.clear();
         self.prompt_cursor = 0;
         self.prompt_vertical_column = None;
@@ -1946,14 +1999,18 @@ impl App {
         });
         let pending = PendingResponse {
             receiver: rx,
-            transcript_line,
+            exchange_id,
+            expected_submission_id: None,
             started_at,
             spinner_frame: 0,
             duplicate_submit_notice: false,
         };
-        self.transcript_lines
-            .push(pending_transcript_line(&pending, started_at));
+        self.transcript_document.set_pending_text(
+            &pending.exchange_id,
+            pending_transcript_line(&pending, started_at),
+        );
         self.pending_response = Some(pending);
+        self.rebuild_transcript_cache();
         self.jump_to_tail();
     }
 
@@ -1962,7 +2019,9 @@ impl App {
             return;
         }
 
-        let transcript_line = self.transcript_lines.len();
+        let exchange_id = self
+            .transcript_document
+            .begin_exchange(None, TranscriptPromptVisibility::Internal);
         self.agent_status = "thinking".to_string();
 
         let base_url = self.base_url.clone();
@@ -1981,14 +2040,18 @@ impl App {
         });
         let pending = PendingResponse {
             receiver: rx,
-            transcript_line,
+            exchange_id,
+            expected_submission_id: None,
             started_at,
             spinner_frame: 0,
             duplicate_submit_notice: false,
         };
-        self.transcript_lines
-            .push(pending_transcript_line(&pending, started_at));
+        self.transcript_document.set_pending_text(
+            &pending.exchange_id,
+            pending_transcript_line(&pending, started_at),
+        );
         self.pending_response = Some(pending);
+        self.rebuild_transcript_cache();
         self.jump_to_tail();
     }
 
@@ -2184,15 +2247,11 @@ impl App {
 
         self.session_id = session_id;
         self.session_title = None;
-        self.event_transcript = EventTranscript::default();
-        self.event_row_lines.clear();
-        self.loaded_history_exchanges.clear();
         self.history_before = None;
         self.history_has_older = false;
         self.stream_start_offset = "-1".to_string();
-        self.final_response_range = None;
-        self.response_is_streaming = false;
         self.last_stream_event = None;
+        self.legacy_submission_id = None;
         if had_stream {
             self.stream_status = StreamStatus::Connecting;
             self.start_stream();
@@ -2374,89 +2433,19 @@ Use the workspace identity and user context already loaded for this agent. Greet
     }
 
     fn push_speaker_text(&mut self, speaker: &str, text: &str) {
-        self.transcript_lines.extend(speaker_lines(speaker, text));
+        self.transcript_document.push_notice(speaker, text);
+        self.rebuild_transcript_cache();
     }
 
-    fn settle_pending_response_line(&mut self, line_index: usize, speaker: &str, text: &str) {
-        let existing_range = self.final_response_range.take();
-        let replacement = speaker_lines(speaker, text);
-        let replacement_len = replacement.len();
-
-        if let Some((range_start, range_len)) = existing_range.filter(|(range_start, range_len)| {
-            *range_len > 0
-                && *range_start < self.transcript_lines.len()
-                && line_index >= *range_start
-                && line_index < range_start.saturating_add(*range_len)
-        }) {
-            let range_end = range_start
-                .saturating_add(range_len)
-                .min(self.transcript_lines.len());
-            self.transcript_lines
-                .splice(range_start..range_end, replacement);
-            self.reindex_event_rows_after_splice(
-                range_start,
-                range_end.saturating_sub(range_start),
-                replacement_len,
-            );
-            self.final_response_range = Some((range_start, replacement_len));
-            return;
-        }
-
-        if line_index + 1 == self.transcript_lines.len() {
-            self.transcript_lines
-                .splice(line_index..=line_index, replacement);
-            self.reindex_event_rows_after_splice(line_index, 1, replacement_len);
-            self.final_response_range = Some((line_index, replacement_len));
-            return;
-        }
-
-        if line_index < self.transcript_lines.len() {
-            self.transcript_lines.remove(line_index);
-            self.reindex_event_rows_after_splice(line_index, 1, 0);
-        }
-        let final_start = self.transcript_lines.len();
-        self.transcript_lines.extend(replacement);
-        self.final_response_range = Some((final_start, replacement_len));
-    }
-
-    fn settle_pending_stream_response(&mut self, text: &str) {
-        let Some(line_index) = self
-            .pending_response
-            .as_ref()
-            .map(|pending| pending.transcript_line)
-        else {
-            return;
-        };
-
-        self.settle_pending_response_line(line_index, "assistant", text.trim());
-        self.response_is_streaming = false;
-        if let (Some(pending), Some((final_start, _))) =
-            (&mut self.pending_response, self.final_response_range)
-        {
-            pending.transcript_line = final_start;
-        }
-        self.agent_status = "finalizing".to_string();
-        self.after_transcript_changed();
-    }
-
-    fn settle_pending_stream_preview(&mut self, text: &str) {
-        let Some(line_index) = self
-            .pending_response
-            .as_ref()
-            .map(|pending| pending.transcript_line)
-        else {
-            return;
-        };
-
-        self.settle_pending_response_line(line_index, "assistant", text);
-        self.response_is_streaming = true;
-        if let (Some(pending), Some((response_start, _))) =
-            (&mut self.pending_response, self.final_response_range)
-        {
-            pending.transcript_line = response_start;
-        }
-        self.agent_status = "responding".to_string();
-        self.after_transcript_changed();
+    fn rebuild_transcript_cache(&mut self) {
+        let lines = self.transcript_document.lines();
+        self.transcript_lines = lines.iter().map(|line| line.text.clone()).collect();
+        self.transcript_line_ids = lines.iter().map(|line| line.id.clone()).collect();
+        self.transcript_line_kinds = lines
+            .iter()
+            .map(|line| transcript_row_kind_from_document(line.kind))
+            .collect();
+        self.transcript_line_streaming = lines.iter().map(|line| line.is_streaming).collect();
     }
 
     fn after_transcript_changed(&mut self) {
@@ -2466,137 +2455,96 @@ Use the workspace identity and user context already loaded for this agent. Greet
     }
 
     fn update_pending_transcript_line(&mut self) {
-        if self.final_response_range.is_some() {
-            return;
-        }
         let Some(pending) = &self.pending_response else {
             return;
         };
         let now = (self.clock)();
-        if let Some(line) = self.transcript_lines.get_mut(pending.transcript_line) {
-            *line = pending_transcript_line(pending, now);
-        }
+        self.transcript_document
+            .set_pending_text(&pending.exchange_id, pending_transcript_line(pending, now));
+        self.rebuild_transcript_cache();
     }
 
-    fn sync_event_transcript_rows(&mut self) {
-        let rows = self
-            .event_transcript
-            .rows()
-            .iter()
-            .filter(|row| row.is_activity())
-            .cloned()
-            .collect::<Vec<_>>();
-        for row in rows {
-            self.sync_event_transcript_row(&row);
-        }
-        self.after_transcript_changed();
-    }
-
-    fn sync_event_transcript_row(&mut self, row: &DisplayRow) {
-        if let Some(index) = self.event_row_lines.get(&row.id).copied() {
-            if let Some(line) = self.transcript_lines.get_mut(index) {
-                *line = row.text.clone();
-                return;
+    fn correlate_stream_events(&mut self, events: Vec<FlueEvent>) -> Vec<FlueEvent> {
+        let mut correlated = Vec::with_capacity(events.len());
+        for mut event in events {
+            let mut submission_id = event_submission_id(&event).map(str::to_string);
+            if submission_id.is_none() {
+                let pending_submission = self.pending_response.as_ref().map(|pending| {
+                    pending
+                        .expected_submission_id
+                        .clone()
+                        .unwrap_or_else(|| pending.exchange_id.clone())
+                });
+                let fallback = pending_submission.unwrap_or_else(|| {
+                    if event.event_type == "turn_start" || self.legacy_submission_id.is_none() {
+                        self.legacy_submission_sequence =
+                            self.legacy_submission_sequence.saturating_add(1);
+                        self.legacy_submission_id =
+                            Some(format!("legacy:{}", self.legacy_submission_sequence));
+                    }
+                    self.legacy_submission_id
+                        .clone()
+                        .expect("legacy submission id is initialized")
+                });
+                if self.pending_response.is_some() {
+                    self.legacy_submission_id = Some(fallback.clone());
+                }
+                event.value["submissionId"] = serde_json::Value::String(fallback.clone());
+                submission_id = Some(fallback);
             }
-        }
 
-        let index = self
-            .final_response_range
-            .map(|(start, _)| start)
-            .unwrap_or(self.transcript_lines.len());
-        self.transcript_lines.insert(index, row.text.clone());
-        self.reindex_event_rows_after_splice(index, 0, 1);
-        self.event_row_lines.insert(row.id.clone(), index);
-    }
-
-    fn reindex_event_rows_after_splice(&mut self, start: usize, removed: usize, inserted: usize) {
-        self.reindex_final_response_after_splice(start, removed, inserted);
-        self.reindex_pending_response_after_splice(start, removed, inserted);
-        if removed == inserted {
-            return;
-        }
-
-        let removed_end = start.saturating_add(removed);
-        if inserted > removed {
-            let delta = inserted - removed;
-            for index in self.event_row_lines.values_mut() {
-                if *index >= removed_end {
-                    *index = index.saturating_add(delta);
-                } else if *index >= start {
-                    *index = start;
+            let submission_id =
+                submission_id.expect("stream events always have a correlated submission");
+            let should_bind_pending = self.pending_response.as_ref().is_some_and(|pending| {
+                pending.expected_submission_id.is_none()
+                    && pending.exchange_id != submission_id
+                    && !self.transcript_document.contains_submission(&submission_id)
+                    && is_submission_boundary_event(&event)
+            });
+            if should_bind_pending {
+                let pending_exchange_id = self
+                    .pending_response
+                    .as_ref()
+                    .map(|pending| pending.exchange_id.clone())
+                    .expect("pending response exists");
+                if let Some(exchange_id) = self
+                    .transcript_document
+                    .bind_exchange(&pending_exchange_id, &submission_id)
+                {
+                    if let Some(pending) = &mut self.pending_response {
+                        pending.exchange_id = exchange_id;
+                        pending.expected_submission_id = Some(submission_id.clone());
+                    }
                 }
             }
-        } else {
-            let delta = removed - inserted;
-            for index in self.event_row_lines.values_mut() {
-                if *index >= removed_end {
-                    *index = index.saturating_sub(delta);
-                } else if *index >= start {
-                    *index = start;
-                }
-            }
+            correlated.push(event);
         }
+        correlated
     }
 
-    fn reindex_pending_response_after_splice(
-        &mut self,
-        start: usize,
-        removed: usize,
-        inserted: usize,
-    ) {
-        let Some(pending) = &mut self.pending_response else {
+    fn shift_transcript_selection_lines(&mut self, inserted_lines: usize) {
+        if inserted_lines == 0 {
+            return;
+        }
+        let Some(selection) = &mut self.transcript_selection else {
             return;
         };
-        if removed == inserted {
-            return;
-        }
-
-        let removed_end = start.saturating_add(removed);
-        if inserted > removed {
-            let delta = inserted - removed;
-            if pending.transcript_line >= removed_end {
-                pending.transcript_line = pending.transcript_line.saturating_add(delta);
-            } else if pending.transcript_line >= start {
-                pending.transcript_line = start;
-            }
-        } else {
-            let delta = removed - inserted;
-            if pending.transcript_line >= removed_end {
-                pending.transcript_line = pending.transcript_line.saturating_sub(delta);
-            } else if pending.transcript_line >= start {
-                pending.transcript_line = start;
-            }
-        }
+        selection.origin.start.line = selection.origin.start.line.saturating_add(inserted_lines);
+        selection.origin.end.line = selection.origin.end.line.saturating_add(inserted_lines);
+        selection.active.start.line = selection.active.start.line.saturating_add(inserted_lines);
+        selection.active.end.line = selection.active.end.line.saturating_add(inserted_lines);
     }
 
-    fn reindex_final_response_after_splice(
-        &mut self,
-        start: usize,
-        removed: usize,
-        inserted: usize,
-    ) {
-        let Some((range_start, range_len)) = self.final_response_range else {
-            return;
-        };
-        if removed == inserted {
-            return;
-        }
+    fn clear_pending_exchange_display(&mut self, exchange_id: &str) {
+        self.transcript_document.clear_pending_text(exchange_id);
+        self.rebuild_transcript_cache();
+    }
 
-        let removed_end = start.saturating_add(removed);
-        if inserted > removed {
-            let delta = inserted - removed;
-            if range_start >= removed_end {
-                self.final_response_range = Some((range_start.saturating_add(delta), range_len));
-            } else if range_start >= start {
-                self.final_response_range = None;
-            }
-        } else {
-            let delta = removed - inserted;
-            if range_start >= removed_end {
-                self.final_response_range = Some((range_start.saturating_sub(delta), range_len));
-            } else if range_start >= start {
-                self.final_response_range = None;
-            }
+    fn settle_pending_error(&mut self, exchange_id: &str, text: &str) {
+        self.clear_pending_exchange_display(exchange_id);
+        self.push_speaker_text("error", text);
+        if self.follow_tail {
+            self.jump_to_tail();
         }
     }
 }
@@ -2639,17 +2587,12 @@ impl Default for App {
     }
 }
 
-fn initial_transcript() -> Vec<String> {
-    vec![
-        "system: SIM-ONE Alpha Ratatui TUI".to_string(),
-        "preflight: waiting for gateway startup result".to_string(),
-    ]
-}
-
 fn wrap_transcript_rows(
     lines: &[String],
+    line_ids: &[String],
+    line_kinds: &[TranscriptRowKind],
+    line_streaming: &[bool],
     width: usize,
-    streaming_range: Option<(usize, usize)>,
 ) -> Vec<RenderedTranscriptRow> {
     let mut wrapped = Vec::new();
     let mut previous_kind = TranscriptRowKind::Other;
@@ -2658,7 +2601,10 @@ fn wrap_transcript_rows(
 
     while line_index < lines.len() {
         let line = &lines[line_index];
-        let kind = transcript_row_kind(line, previous_kind);
+        let kind = line_kinds
+            .get(line_index)
+            .copied()
+            .unwrap_or_else(|| transcript_row_kind(line, previous_kind));
         if kind != TranscriptRowKind::Other {
             previous_kind = kind;
         }
@@ -2666,7 +2612,9 @@ fn wrap_transcript_rows(
         if kind == TranscriptRowKind::Assistant && line.starts_with("assistant:") {
             let block_end = assistant_block_end(lines, line_index);
             let markdown = assistant_markdown_block(lines, line_index, block_end);
-            let is_streaming = range_intersects(streaming_range, line_index, block_end);
+            let is_streaming = line_streaming
+                .get(line_index..block_end)
+                .is_some_and(|streaming| streaming.iter().any(|streaming| *streaming));
             let prefix = TranscriptRowKind::Assistant
                 .prefix()
                 .expect("assistant rows have a prefix");
@@ -2680,6 +2628,10 @@ fn wrap_transcript_rows(
                 + 1;
             for (markdown_index, markdown_row) in markdown_rows.into_iter().enumerate() {
                 let source_id = source_line + markdown_row.source_line;
+                let stable_source_id = line_ids
+                    .get(line_index + markdown_row.source_line)
+                    .cloned()
+                    .unwrap_or_else(|| format!("source:{source_id}"));
                 let prefix_offset = if markdown_row.source_line == 0 {
                     prefix.chars().count() + 1
                 } else {
@@ -2707,6 +2659,7 @@ fn wrap_transcript_rows(
                         styled_spans: Some(spans),
                         selection_range: None,
                         source: Some(TranscriptSourceSpan {
+                            id: stable_source_id,
                             line: source_id,
                             text: source_text,
                             start_char: source_start,
@@ -2721,6 +2674,7 @@ fn wrap_transcript_rows(
                         styled_spans: Some(markdown_row.spans),
                         selection_range: None,
                         source: Some(TranscriptSourceSpan {
+                            id: stable_source_id,
                             line: source_id,
                             text: source_text,
                             start_char: source_start,
@@ -2734,7 +2688,11 @@ fn wrap_transcript_rows(
             continue;
         }
 
-        let is_streaming = range_intersects(streaming_range, line_index, line_index + 1);
+        let is_streaming = line_streaming.get(line_index).copied().unwrap_or(false);
+        let stable_source_id = line_ids
+            .get(line_index)
+            .cloned()
+            .unwrap_or_else(|| format!("source:{source_line}"));
         wrapped.extend(wrap_words(line, width).into_iter().map(|row| {
             let visible_char_count = row.text.chars().count();
             RenderedTranscriptRow {
@@ -2744,6 +2702,7 @@ fn wrap_transcript_rows(
                 styled_spans: None,
                 selection_range: None,
                 source: Some(TranscriptSourceSpan {
+                    id: stable_source_id.clone(),
                     line: source_line,
                     text: line.clone(),
                     start_char: row.start_char,
@@ -2782,13 +2741,6 @@ fn assistant_markdown_block(lines: &[String], start: usize, end: usize) -> Strin
         .join("\n")
 }
 
-fn range_intersects(streaming_range: Option<(usize, usize)>, start: usize, end: usize) -> bool {
-    streaming_range.is_some_and(|(range_start, len)| {
-        let range_end = range_start.saturating_add(len);
-        start < range_end && range_start < end
-    })
-}
-
 fn transcript_row_kind(line: &str, previous: TranscriptRowKind) -> TranscriptRowKind {
     if line.starts_with("you:") {
         TranscriptRowKind::User
@@ -2819,32 +2771,53 @@ fn transcript_row_kind(line: &str, previous: TranscriptRowKind) -> TranscriptRow
     }
 }
 
-fn speaker_lines(speaker: &str, text: &str) -> Vec<String> {
-    let mut lines = Vec::new();
-    let mut split = text.lines();
-    if let Some(first) = split.next() {
-        lines.push(format!("{speaker}: {first}"));
-    } else {
-        lines.push(format!("{speaker}:"));
+fn transcript_row_kind_from_document(kind: TranscriptLineKind) -> TranscriptRowKind {
+    match kind {
+        TranscriptLineKind::User => TranscriptRowKind::User,
+        TranscriptLineKind::Assistant => TranscriptRowKind::Assistant,
+        TranscriptLineKind::Thinking => TranscriptRowKind::Thinking,
+        TranscriptLineKind::Tool => TranscriptRowKind::Tool,
+        TranscriptLineKind::Task => TranscriptRowKind::Task,
+        TranscriptLineKind::Operation => TranscriptRowKind::Operation,
+        TranscriptLineKind::Log => TranscriptRowKind::Log,
+        TranscriptLineKind::Error => TranscriptRowKind::Error,
+        TranscriptLineKind::System => TranscriptRowKind::System,
+        TranscriptLineKind::Preflight => TranscriptRowKind::Preflight,
+        TranscriptLineKind::Other => TranscriptRowKind::Other,
     }
-
-    for line in split {
-        lines.push(format!("  {line}"));
-    }
-
-    lines
 }
 
-fn final_assistant_message(events: &[FlueEvent]) -> Option<String> {
-    events.iter().rev().find_map(|event| {
-        if event.event_type != "message_end"
-            || extract_role(&event.value).unwrap_or("assistant") != "assistant"
-            || event.is_nested()
-        {
-            return None;
-        }
-        extract_text(&event.value).filter(|text| !text.trim().is_empty())
-    })
+fn event_submission_id(event: &FlueEvent) -> Option<&str> {
+    event
+        .value
+        .get("submissionId")
+        .and_then(serde_json::Value::as_str)
+}
+
+fn is_submission_boundary_event(event: &FlueEvent) -> bool {
+    !event.is_nested()
+        && matches!(
+            event.event_type.as_str(),
+            "operation_start"
+                | "turn_start"
+                | "thinking_start"
+                | "thinking_delta"
+                | "text_delta"
+                | "message_end"
+                | "tool_start"
+                | "task_start"
+                | "log"
+        )
+}
+
+fn is_root_assistant_final(event: &FlueEvent) -> bool {
+    event.event_type == "message_end"
+        && !event.is_nested()
+        && event
+            .value
+            .pointer("/message/role")
+            .and_then(serde_json::Value::as_str)
+            == Some("assistant")
 }
 
 fn pending_transcript_line(pending: &PendingResponse, now: Instant) -> String {
@@ -2885,6 +2858,8 @@ fn parse_sessions_limit(command: &str) -> usize {
 fn agent_reply(text: impl Into<String>) -> AgentReply {
     AgentReply {
         text: text.into(),
+        submission_id: None,
+        stream_offset: None,
         session_id: None,
         session_title: None,
         command_name: None,

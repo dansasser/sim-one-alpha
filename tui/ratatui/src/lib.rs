@@ -10,4 +10,5 @@ mod markdown;
 pub mod terminal;
 mod text_wrap;
 pub mod theme;
+pub mod transcript;
 pub mod ui;

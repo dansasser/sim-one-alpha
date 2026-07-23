@@ -12,8 +12,9 @@ use sim_one_ratatui_tui::app::{App, AppEvent, Clock, MouseRegions, SCROLL_PAGE_L
 use sim_one_ratatui_tui::flue::events::{FlueEvent, StreamControl};
 use sim_one_ratatui_tui::flue::stream::AgentStreamUpdate;
 use sim_one_ratatui_tui::history::{
-    TranscriptActivityStatus, TranscriptExchange, TranscriptPage, TranscriptPageInfo,
-    TranscriptSession, TranscriptStreamCursor,
+    TranscriptActivity, TranscriptActivityKind, TranscriptActivityStatus,
+    TranscriptAssistantMessage, TranscriptExchange, TranscriptPage, TranscriptPageInfo,
+    TranscriptPrompt, TranscriptPromptVisibility, TranscriptSession, TranscriptStreamCursor,
 };
 
 #[test]
@@ -585,6 +586,8 @@ fn startup_preflight_creates_fresh_session_before_sending_one_greeting_prompt() 
                 .push((session_id.clone(), prompt, origin));
             Ok(AgentReply {
                 text: "Hello Daniel, I'm Ollie. All systems are go.".to_string(),
+                submission_id: None,
+                stream_offset: None,
                 session_id: Some("tui-startup-1".to_string()),
                 session_title: None,
                 command_name: None,
@@ -1012,6 +1015,294 @@ fn older_history_failure_preserves_loaded_history_and_keeps_startup_usable() {
 }
 
 #[test]
+fn explicit_resume_renders_sanitized_snapshot_as_the_canonical_transcript() {
+    let mut app = App::with_agent_sender_lifecycle_and_history(
+        "",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| panic!("resume must not generate another greeting")),
+        Arc::new(|_| panic!("resume must not create")),
+        Arc::new(|_, _| {
+            Ok(SessionLifecycleReply {
+                id: "tui-render-history".to_string(),
+                title: Some("Restored Work".to_string()),
+                created: false,
+            })
+        }),
+        Arc::new(|_, _, _, _| {
+            Ok(history_page(
+                "tui-render-history",
+                "0000000000000000_0000000000000042",
+                false,
+                None,
+                vec![
+                    transcript_exchange(
+                        "saved-greeting",
+                        Some((
+                            "INTERNAL_STARTUP_SENTINEL",
+                            TranscriptPromptVisibility::Internal,
+                        )),
+                        Vec::new(),
+                        Some("Hello Daniel. Saved greeting."),
+                    ),
+                    transcript_exchange(
+                        "saved-user-turn",
+                        Some((
+                            "Show the release\nand the remaining risks.",
+                            TranscriptPromptVisibility::User,
+                        )),
+                        vec![
+                            transcript_activity(
+                                "saved-user-turn:operation:root",
+                                TranscriptActivityKind::Operation,
+                                "orchestrate",
+                                TranscriptActivityStatus::Completed,
+                                Some(5_900),
+                            ),
+                            transcript_activity(
+                                "saved-user-turn:tool:docs",
+                                TranscriptActivityKind::Tool,
+                                "load_protocols",
+                                TranscriptActivityStatus::Completed,
+                                Some(13),
+                            ),
+                        ],
+                        Some("Saved **final** response.\nSecond line."),
+                    ),
+                ],
+            ))
+        }),
+    );
+
+    app.start_explicit_resume("Restored Work".to_string(), false);
+    wait_for_startup(&mut app);
+
+    let lines = app.transcript_lines();
+    let transcript = lines.join("\n");
+    assert!(!transcript.contains("INTERNAL_STARTUP_SENTINEL"));
+    assert_eq!(
+        lines
+            .iter()
+            .filter(|line| line.as_str() == "assistant: Hello Daniel. Saved greeting.")
+            .count(),
+        1
+    );
+    assert!(transcript.contains("you: Show the release\n  and the remaining risks."));
+    assert!(transcript.contains("operation: orchestrate completed in 5.9s"));
+    assert!(transcript.contains("tool: load_protocols completed in 13ms"));
+    assert!(transcript.contains("assistant: Saved **final** response.\n  Second line."));
+    let prompt = lines
+        .iter()
+        .position(|line| line == "you: Show the release")
+        .expect("saved prompt should render");
+    let operation = lines
+        .iter()
+        .position(|line| line == "operation: orchestrate completed in 5.9s")
+        .expect("saved operation should render");
+    let final_response = lines
+        .iter()
+        .position(|line| line == "assistant: Saved **final** response.")
+        .expect("saved final should render");
+    assert!(prompt < operation && operation < final_response);
+}
+
+#[test]
+fn older_history_prepend_preserves_the_exact_visible_source_row() {
+    let (release_tx, release_rx) = mpsc::channel();
+    let release_rx = Arc::new(Mutex::new(release_rx));
+    let older_release = Arc::clone(&release_rx);
+    let calls = Arc::new(AtomicUsize::new(0));
+    let loader_calls = Arc::clone(&calls);
+    let mut app = App::with_agent_sender_lifecycle_and_history(
+        "",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| panic!("resume must not greet")),
+        Arc::new(|_| panic!("resume must not create")),
+        Arc::new(|_, _| {
+            Ok(SessionLifecycleReply {
+                id: "tui-anchor-history".to_string(),
+                title: None,
+                created: false,
+            })
+        }),
+        Arc::new(move |_, _, _, before| {
+            let call = loader_calls.fetch_add(1, Ordering::SeqCst);
+            if call == 0 {
+                return Ok(history_page(
+                    "tui-anchor-history",
+                    "0000000000000000_0000000000000042",
+                    true,
+                    Some("older-cursor"),
+                    vec![transcript_exchange(
+                        "newer",
+                        Some((
+                            "VISIBLE_ANCHOR alpha bravo charlie delta",
+                            TranscriptPromptVisibility::User,
+                        )),
+                        Vec::new(),
+                        Some("newer final"),
+                    )],
+                ));
+            }
+            assert_eq!(before.as_deref(), Some("older-cursor"));
+            older_release
+                .lock()
+                .expect("older release should lock")
+                .recv_timeout(Duration::from_secs(5))
+                .expect("older page should be released");
+            Ok(history_page(
+                "tui-anchor-history",
+                "0000000000000000_0000000000000042",
+                false,
+                None,
+                vec![transcript_exchange(
+                    "older",
+                    Some((
+                        "OLDER_HISTORY alpha bravo charlie delta",
+                        TranscriptPromptVisibility::User,
+                    )),
+                    Vec::new(),
+                    Some("older final"),
+                )],
+            ))
+        }),
+    );
+
+    app.start_explicit_resume("tui-anchor-history".to_string(), false);
+    wait_for_startup(&mut app);
+    app.set_transcript_viewport_size(3, 18);
+    app.jump_to_tail();
+    while app
+        .transcript_rendered_lines()
+        .get(app.transcript_scroll())
+        .is_none_or(|line| !line.contains("VISIBLE_ANCHOR"))
+    {
+        app.scroll_line_up();
+        if calls.load(Ordering::SeqCst) > 1 {
+            break;
+        }
+    }
+    let anchor_before = app
+        .transcript_rendered_lines()
+        .get(app.transcript_scroll())
+        .cloned()
+        .expect("anchor row should be visible");
+    assert!(!anchor_before.contains("OLDER_HISTORY"), "{anchor_before}");
+    wait_until(Duration::from_secs(2), || calls.load(Ordering::SeqCst) == 2);
+
+    release_tx.send(()).expect("older page should be released");
+    wait_for_agent(&mut app);
+
+    let anchor_after = app
+        .transcript_rendered_lines()
+        .get(app.transcript_scroll())
+        .cloned()
+        .expect("same anchor row should remain visible");
+    assert_eq!(anchor_after, anchor_before);
+    assert!(!app.follow_tail());
+    assert!(app
+        .transcript_lines()
+        .iter()
+        .any(|line| line.contains("OLDER_HISTORY")));
+}
+
+#[test]
+fn replayed_old_final_cannot_settle_a_new_pending_prompt() {
+    let (release_tx, release_rx) = mpsc::channel();
+    let release_rx = Arc::new(Mutex::new(release_rx));
+    let sender_release = Arc::clone(&release_rx);
+    let mut app = App::with_agent_sender_lifecycle_and_history(
+        "",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(move |_, _, _| {
+            sender_release
+                .lock()
+                .expect("sender release should lock")
+                .recv_timeout(Duration::from_secs(5))
+                .expect("new response should be released");
+            Ok(agent_reply("new authoritative final"))
+        }),
+        Arc::new(|_| panic!("resume must not create")),
+        Arc::new(|_, _| {
+            Ok(SessionLifecycleReply {
+                id: "tui-replay-history".to_string(),
+                title: None,
+                created: false,
+            })
+        }),
+        Arc::new(|_, _, _, _| {
+            Ok(history_page(
+                "tui-replay-history",
+                "0000000000000000_0000000000000042",
+                false,
+                None,
+                vec![transcript_exchange(
+                    "old-submission",
+                    Some(("old prompt", TranscriptPromptVisibility::User)),
+                    Vec::new(),
+                    Some("old authoritative final"),
+                )],
+            ))
+        }),
+    );
+
+    app.start_explicit_resume("tui-replay-history".to_string(), false);
+    wait_for_startup(&mut app);
+    app.handle_event(AppEvent::Text("new prompt".to_string()));
+    app.handle_event(AppEvent::Submit);
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"message_end",
+            "submissionId":"old-submission",
+            "eventIndex":99,
+            "message":{"role":"assistant","content":"STALE_REPLAY_FINAL"}
+        }),
+    )]));
+
+    let after_replay = app.transcript_lines().join("\n");
+    assert!(after_replay.contains("old authoritative final"));
+    assert!(!after_replay.contains("STALE_REPLAY_FINAL"));
+    assert!(after_replay.contains("waiting for final response"));
+    assert!(app.is_agent_pending());
+
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![
+        FlueEvent::from_value(serde_json::json!({
+            "type":"text_delta",
+            "submissionId":"new-submission",
+            "eventIndex":1,
+            "text":"new streamed "
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"message_end",
+            "submissionId":"new-submission",
+            "eventIndex":2,
+            "message":{"role":"assistant","content":"new streamed final"}
+        })),
+    ]));
+    assert!(app
+        .transcript_lines()
+        .iter()
+        .any(|line| line == "assistant: new streamed final"));
+
+    release_tx
+        .send(())
+        .expect("new response should be released");
+    wait_for_agent(&mut app);
+    let final_transcript = app.transcript_lines().join("\n");
+    assert!(final_transcript.contains("old authoritative final"));
+    assert!(final_transcript.contains("assistant: new authoritative final"));
+    assert_eq!(
+        final_transcript
+            .lines()
+            .filter(|line| line.starts_with("assistant: new authoritative final"))
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn explicit_startup_resume_accepts_a_name_resolved_canonical_id_without_greeting() {
     let sender_calls = Arc::new(AtomicUsize::new(0));
     let recorded_sender_calls = Arc::clone(&sender_calls);
@@ -1061,6 +1352,8 @@ fn explicit_startup_missing_session_uses_fresh_session_and_greeting() {
                 .push((session_id, prompt));
             Ok(AgentReply {
                 text: "Fresh fallback greeting".to_string(),
+                submission_id: None,
+                stream_offset: None,
                 session_id: Some("tui-fresh-fallback".to_string()),
                 session_title: None,
                 command_name: None,
@@ -1242,7 +1535,7 @@ fn multiline_agent_response_reindexes_stream_activity_rows() {
         .transcript_lines()
         .iter()
         .any(|line| line == "  second line"));
-    assert!(app
+    assert!(!app
         .transcript_lines()
         .iter()
         .any(|line| line == "turn: completed"));
@@ -1271,27 +1564,27 @@ fn second_turn_start_does_not_rewrite_previous_ephemeral_rows() {
         })),
     ]));
 
-    let first_turn_line = app
-        .transcript_lines()
-        .iter()
-        .position(|line| line == "turn: completed")
-        .expect("first turn should render as completed");
     let first_stream_line = app
         .transcript_lines()
         .iter()
         .position(|line| line == "thinking: first")
         .expect("first thinking activity should render");
 
-    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
-        serde_json::json!({
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![
+        FlueEvent::from_value(serde_json::json!({
             "type":"turn_start",
             "eventIndex":1,
             "timestamp":"2026-07-03T00:01:00Z"
-        }),
-    )]));
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"thinking_delta",
+            "eventIndex":2,
+            "timestamp":"2026-07-03T00:01:01Z",
+            "text":"second"
+        })),
+    ]));
 
     let lines = app.transcript_lines();
-    assert_eq!(lines[first_turn_line], "turn: completed");
     assert_eq!(lines[first_stream_line], "thinking: first");
     assert_eq!(
         lines
@@ -1300,10 +1593,12 @@ fn second_turn_start_does_not_rewrite_previous_ephemeral_rows() {
             .count(),
         1
     );
-    assert!(lines
+    let second_stream_line = lines
         .iter()
-        .skip(first_stream_line + 1)
-        .any(|line| line == "turn: model active"));
+        .position(|line| line == "thinking: second")
+        .expect("second thinking activity should render");
+    assert!(first_stream_line < second_stream_line);
+    assert!(!lines.iter().any(|line| line.starts_with("turn:")));
 }
 
 #[test]
@@ -1527,6 +1822,8 @@ fn rename_reply_updates_status_title_without_changing_session_id() {
         Arc::new(|_, _, _| {
             Ok(AgentReply {
                 text: "Renamed session tui-existing-1 to \"Release Work\".".to_string(),
+                submission_id: None,
+                stream_offset: None,
                 session_id: Some("tui-existing-1".to_string()),
                 session_title: Some("Release Work".to_string()),
                 command_name: Some("rename".to_string()),
@@ -1584,6 +1881,8 @@ fn resume_reply_restores_explicit_name_in_header_and_existing_status_field() {
         Arc::new(|_, _, _| {
             Ok(AgentReply {
                 text: "Resumed session tui-named-1.".to_string(),
+                submission_id: None,
+                stream_offset: None,
                 session_id: Some("tui-named-1".to_string()),
                 session_title: Some("Release Work".to_string()),
                 command_name: Some("resume".to_string()),
@@ -1634,7 +1933,7 @@ fn slash_command_palette_filters_navigates_and_inserts_without_submitting() {
     app.handle_event(AppEvent::NavigateDown);
     assert_eq!(
         app.selected_command().map(|item| item.usage),
-        Some("/resume <session-id>")
+        Some("/resume <session-id-or-name>")
     );
     app.handle_event(AppEvent::Submit);
 
@@ -1646,7 +1945,7 @@ fn slash_command_palette_filters_navigates_and_inserts_without_submitting() {
     app.handle_event(AppEvent::Text("/res".to_string()));
     let filtered = app.command_palette_items();
     assert_eq!(filtered.len(), 1);
-    assert_eq!(filtered[0].usage, "/resume <session-id>");
+    assert_eq!(filtered[0].usage, "/resume <session-id-or-name>");
 }
 
 #[test]
@@ -1868,6 +2167,8 @@ fn command_response_switches_active_session_and_announces_it() {
         Arc::new(|_, _, _| {
             Ok(AgentReply {
                 text: "Started new session tui-new-1.".to_string(),
+                submission_id: None,
+                stream_offset: None,
                 session_id: Some("tui-new-1".to_string()),
                 session_title: None,
                 command_name: Some("new".to_string()),
@@ -1959,9 +2260,56 @@ fn history_exchange(submission_id: &str) -> TranscriptExchange {
     }
 }
 
+fn transcript_exchange(
+    submission_id: &str,
+    prompt: Option<(&str, TranscriptPromptVisibility)>,
+    activities: Vec<TranscriptActivity>,
+    assistant: Option<&str>,
+) -> TranscriptExchange {
+    TranscriptExchange {
+        id: submission_id.to_string(),
+        submission_id: submission_id.to_string(),
+        prompt: prompt.map(|(text, visibility)| TranscriptPrompt {
+            id: format!("{submission_id}:prompt"),
+            text: text.to_string(),
+            received_at: "2026-07-23T10:00:00Z".to_string(),
+            visibility,
+        }),
+        activities,
+        assistant: assistant.map(|text| TranscriptAssistantMessage {
+            id: format!("{submission_id}:assistant"),
+            text: text.to_string(),
+            completed_at: "2026-07-23T10:00:10Z".to_string(),
+        }),
+        status: TranscriptActivityStatus::Completed,
+    }
+}
+
+fn transcript_activity(
+    id: &str,
+    kind: TranscriptActivityKind,
+    name: &str,
+    status: TranscriptActivityStatus,
+    duration_ms: Option<u64>,
+) -> TranscriptActivity {
+    TranscriptActivity {
+        id: id.to_string(),
+        kind,
+        name: name.to_string(),
+        status,
+        started_at: Some("2026-07-23T10:00:01Z".to_string()),
+        completed_at: Some("2026-07-23T10:00:09Z".to_string()),
+        duration_ms,
+        preview: None,
+        error: None,
+    }
+}
+
 fn agent_reply(text: impl Into<String>) -> AgentReply {
     AgentReply {
         text: text.into(),
+        submission_id: None,
+        stream_offset: None,
         session_id: None,
         session_title: None,
         command_name: None,

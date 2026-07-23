@@ -14,6 +14,8 @@ const LOCAL_TUI_SCOPE_ID: &str = "local-tui";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentReply {
     pub text: String,
+    pub submission_id: Option<String>,
+    pub stream_offset: Option<String>,
     pub session_id: Option<String>,
     pub session_title: Option<String>,
     pub command_name: Option<String>,
@@ -284,6 +286,22 @@ fn extract_agent_reply(value: &serde_json::Value) -> Option<AgentReply> {
         .and_then(|session| session.get("id"))
         .and_then(|id| id.as_str())
         .map(str::to_string);
+    let submission = value
+        .get("submission")
+        .and_then(serde_json::Value::as_object);
+    let submission_id = value
+        .get("submissionId")
+        .and_then(serde_json::Value::as_str)
+        .or_else(|| {
+            submission
+                .and_then(|submission| submission.get("id"))
+                .and_then(serde_json::Value::as_str)
+        })
+        .map(str::to_string);
+    let stream_offset = value
+        .get("offset")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
     let session_title = value
         .get("session")
         .and_then(|session| session.get("title"))
@@ -303,6 +321,8 @@ fn extract_agent_reply(value: &serde_json::Value) -> Option<AgentReply> {
 
     Some(AgentReply {
         text,
+        submission_id,
+        stream_offset,
         session_id,
         session_title,
         command_name,

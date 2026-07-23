@@ -96,7 +96,10 @@ fn slash_command_palette_filters_and_scrolls_selected_command_into_view() {
         .expect("filtered command palette should render");
     let filtered = terminal_buffer_lines(&terminal);
     assert!(filtered.contains("Commands 1-1/1"), "{filtered}");
-    assert!(filtered.contains("/resume <session-id>"), "{filtered}");
+    assert!(
+        filtered.contains("/resume <session-id-or-name>"),
+        "{filtered}"
+    );
     assert!(!filtered.contains("/new [title]"), "{filtered}");
 
     app.handle_event(AppEvent::ClearPrompt);
@@ -424,7 +427,7 @@ fn slash_palette_mouse_scroll_click_and_outside_dismiss_are_routed_first() {
     app.handle_event(AppEvent::Mouse(mouse_at(MouseEventKind::ScrollDown, first)));
     assert_eq!(app.command_palette_selected(), 1);
 
-    let resume = find_buffer_cell_text_position(&terminal, "/resume <session-id>");
+    let resume = find_buffer_cell_text_position(&terminal, "/resume <session-id-or-name>");
     click_mouse(&mut app, resume);
     assert_eq!(app.prompt(), "/resume ");
     assert!(!app.command_palette_open());
@@ -449,6 +452,8 @@ fn renamed_session_title_is_rendered_in_header_without_changing_status_bar() {
         Arc::new(|_, _, _| {
             Ok(AgentReply {
                 text: "Renamed session tui-existing-1 to \"Release Work\".".to_string(),
+                submission_id: None,
+                stream_offset: None,
                 session_id: Some("tui-existing-1".to_string()),
                 session_title: Some("Release Work".to_string()),
                 command_name: Some("rename".to_string()),
@@ -483,6 +488,8 @@ fn lifecycle_startup_rows_and_resumed_title_are_rendered() {
         Arc::new(|_, _, _| {
             Ok(AgentReply {
                 text: "Hello Daniel. All systems are go.".to_string(),
+                submission_id: None,
+                stream_offset: None,
                 session_id: Some("tui-fresh-1".to_string()),
                 session_title: None,
                 command_name: None,
@@ -889,6 +896,8 @@ fn retry_completion_renders_final_response_at_live_tail() {
         Arc::new(|_, _, _| {
             Ok(AgentReply {
                 text: "retry completed and the final response is visible at TAIL_OK".to_string(),
+                submission_id: None,
+                stream_offset: None,
                 session_id: None,
                 session_title: None,
                 command_name: None,
@@ -962,6 +971,8 @@ fn flue_final_message_is_visible_before_http_request_settles() {
                 .expect("test should release blocked sender");
             Ok(AgentReply {
                 text: "FINAL_VISIBLE_MARKER".to_string(),
+                submission_id: None,
+                stream_offset: None,
                 session_id: None,
                 session_title: None,
                 command_name: None,
@@ -1038,6 +1049,8 @@ fn live_assistant_stream_is_dimmed_until_final_message_replaces_it() {
                 .expect("test should release blocked sender");
             Ok(AgentReply {
                 text: "Live **answer** finalized.".to_string(),
+                submission_id: None,
+                stream_offset: None,
                 session_id: None,
                 session_title: None,
                 command_name: None,
@@ -1384,7 +1397,7 @@ fn semantic_transcript_prefixes_are_bold_and_color_coded() {
         "operation:",
         Color::Yellow,
     );
-    assert_prefix_style(&terminal, "turn: model active", "turn:", Color::Green);
+    assert!(!terminal_buffer_lines(&terminal).contains("turn: model active"));
     assert_prefix_style(&terminal, "log: frame ready", "log:", Color::DarkGray);
 }
 
@@ -1399,6 +1412,8 @@ fn semantic_prefix_formatting_preserves_body_and_continuation_styles() {
         Arc::new(|_, _, _| {
             Ok(AgentReply {
                 text: "alpha bravo charlie delta echo".to_string(),
+                submission_id: None,
+                stream_offset: None,
                 session_id: None,
                 session_title: None,
                 command_name: None,
@@ -1459,6 +1474,8 @@ fn assistant_markdown_renders_inline_styles_without_source_markers() {
         Arc::new(|_, _, _| {
             Ok(AgentReply {
                 text: "Plain **bold** *italic* `code` [docs](https://example.com)".to_string(),
+                submission_id: None,
+                stream_offset: None,
                 session_id: None,
                 session_title: None,
                 command_name: None,
@@ -1535,6 +1552,8 @@ fn assistant_markdown_renders_blocks_and_preserves_word_wrapping() {
             Ok(AgentReply {
                 text: "# Summary\n\n- alpha bravo charlie delta echo\n- second item\n\n```rust\nlet value = 1;\n```"
                     .to_string(),
+                submission_id: None,
+                stream_offset: None,
                 session_id: None,
                 session_title: None,
                 command_name: None,
@@ -1601,6 +1620,57 @@ fn error_prefix_is_bold_light_red() {
         &terminal,
         "error: gateway rejected",
         "error:",
+        Color::LightRed,
+    );
+}
+
+#[test]
+fn failed_activity_prefixes_keep_their_labels_and_use_error_color() {
+    let backend = TestBackend::new(100, 20);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![
+        FlueEvent::from_value(serde_json::json!({
+            "type":"tool",
+            "submissionId":"failed-activity",
+            "eventIndex":1,
+            "toolCallId":"tool-1",
+            "toolName":"formatter",
+            "isError":true
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"task",
+            "submissionId":"failed-activity",
+            "eventIndex":2,
+            "taskId":"task-1",
+            "taskName":"reviewer",
+            "isError":true
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"operation",
+            "submissionId":"failed-activity",
+            "eventIndex":3,
+            "operationId":"root",
+            "operationKind":"orchestrate",
+            "isError":true
+        })),
+    ]));
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("failed activities should render");
+
+    assert_prefix_style(
+        &terminal,
+        "tool: formatter failed",
+        "tool:",
+        Color::LightRed,
+    );
+    assert_prefix_style(&terminal, "task: reviewer failed", "task:", Color::LightRed);
+    assert_prefix_style(
+        &terminal,
+        "operation: orchestrate failed",
+        "operation:",
         Color::LightRed,
     );
 }
@@ -1753,6 +1823,13 @@ fn transcript_mouse_drag_highlights_and_copies_logical_text_across_wraps() {
         Some("alpha bravo charlie delta echo foxtrot golf hotel")
     );
 
+    app.handle_event(AppEvent::Quit);
+    assert!(!app.should_quit());
+    assert_eq!(
+        app.take_clipboard_text().as_deref(),
+        Some("alpha bravo charlie delta echo foxtrot golf hotel")
+    );
+
     terminal
         .draw(|frame| render(frame, &mut app))
         .expect("selected transcript should render");
@@ -1782,6 +1859,8 @@ fn transcript_reverse_drag_copies_rendered_markdown_text_without_markers() {
         Arc::new(|_, _, _| {
             Ok(AgentReply {
                 text: "Use **bold words** and `code sample` for this test.".to_string(),
+                submission_id: None,
+                stream_offset: None,
                 session_id: None,
                 session_title: None,
                 command_name: None,
@@ -1898,7 +1977,6 @@ fn live_tail_renders_final_content_above_blank_margin_row() {
 #[test]
 fn streamed_final_remains_visible_across_terminal_and_prompt_sizes() {
     for (width, height, draft) in [
-        (22, 9, "short draft"),
         (
             40,
             12,
@@ -1910,8 +1988,18 @@ fn streamed_final_remains_visible_across_terminal_and_prompt_sizes() {
             "line one of a draft\nline two of a draft\nline three of a draft\nline four of a draft\nline five of a draft",
         ),
         (
-            133,
-            35,
+            60,
+            18,
+            "line one of a draft\nline two of a draft\nline three of a draft",
+        ),
+        (
+            100,
+            30,
+            "line one of a draft\nline two of a draft\nline three of a draft\nline four of a draft\nline five of a draft",
+        ),
+        (
+            140,
+            40,
             "line one of a draft\nline two of a draft\nline three of a draft\nline four of a draft\nline five of a draft",
         ),
     ] {
@@ -1924,6 +2012,8 @@ fn streamed_final_remains_visible_across_terminal_and_prompt_sizes() {
             Arc::new(|_, _, _| {
                 Ok(AgentReply {
                     text: "TAIL_OK".to_string(),
+                    submission_id: None,
+                    stream_offset: None,
                     session_id: None,
                     session_title: None,
                     command_name: None,
@@ -1959,6 +2049,12 @@ fn streamed_final_remains_visible_across_terminal_and_prompt_sizes() {
             frame.contains("TAIL_OK"),
             "final response missing at {width}x{height}:\n{frame}"
         );
+        let final_row = find_buffer_row(&terminal, "TAIL_OK");
+        let prompt_row = find_buffer_row(&terminal, "Prompt");
+        assert!(
+            final_row + 1 < prompt_row,
+            "final response overlaps the transcript margin or prompt at {width}x{height}:\n{frame}"
+        );
         assert!(app.follow_tail(), "live tail disabled at {width}x{height}");
         assert_eq!(
             app.transcript_scroll(),
@@ -1976,6 +2072,8 @@ fn app_with_pending_response() -> App {
         Arc::new(|_, _, prompt| {
             Ok(AgentReply {
                 text: format!("done: {prompt}"),
+                submission_id: None,
+                stream_offset: None,
                 session_id: None,
                 session_title: None,
                 command_name: None,

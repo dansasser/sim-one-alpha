@@ -21,6 +21,8 @@ fn backslash_enter_remains_multiline_when_terminal_reports_enter_repeat() {
             sender_calls.fetch_add(1, Ordering::SeqCst);
             Ok(AgentReply {
                 text: format!("done: {prompt}"),
+                submission_id: None,
+                stream_offset: None,
                 session_id: None,
                 session_title: None,
                 command_name: None,
