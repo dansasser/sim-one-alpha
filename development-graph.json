@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "graph_id": "sim-one-alpha-lifecycle",
-  "graph_version": 2,
+  "graph_version": 3,
   "title": "SIM-ONE Alpha Development Lifecycle",
   "purpose": "Govern future SIM-ONE Alpha changes from an authorized request through grounded design, parallel domain implementation, full project verification, approval-gated release, output-level canary and production observation, and bounded repair.",
   "project": {
@@ -19,7 +19,7 @@
       "/opt/ai/sim-one-alpha/docs/architecture/memory-system.md",
       "/opt/ai/sim-one-alpha/.github/workflows/ci.yml"
     ],
-    "context_version": "commit:0f4a72094e9c6aa6b233c633c952a089ef889a1c"
+    "context_version": "commit:e1aa97ff46bbc6de4cdbaabc3d88c9020bcbf41e"
   },
   "status": "validated",
   "templates": [
@@ -45,7 +45,7 @@
       "executor": {
         "kind": "agent",
         "name": "SIM-ONE project context adapter",
-        "instructions": "Read the authorized request, current Git state, AGENTS.md, architecture documents, manifests, and relevant history. Do not mark historical implementation as verified."
+        "instructions": "Read the authorized request, current Git state, AGENTS.md, architecture documents, manifests, and relevant history. Do not mark historical implementation as verified. Classify every workspace-related path as company-owned system instructions, the main-agent persona workspace, a lead-worker persona workspace, a worker-local internal-subagent workspace, or the Coding Worker runtime access root."
       },
       "inputs": [
         {
@@ -76,7 +76,7 @@
         {
           "id": "boundaries-confirmed",
           "kind": "review",
-          "criterion": "The context preserves Flue discovery paths, orchestrator/worker ownership, protocol/tool/skill separation, and project naming rules.",
+          "criterion": "The context preserves Flue discovery paths; company-owned src/AGENTS.md authority; main-agent, lead-worker, and worker-local internal-subagent workspace ownership; Coding Worker runtime-root scope; orchestrator/worker ownership; protocol/tool/skill separation; and project naming rules.",
           "evidence": "runtime:evidence/baseline-context/boundary-review.json"
         }
       ],
@@ -87,7 +87,13 @@
           "package.json",
           "pnpm-lock.yaml",
           ".github/workflows/",
-          "current Git metadata"
+          "current Git metadata",
+          "src/AGENTS.md",
+          "src/workspace-loader.ts",
+          "src/agents/orchestrator.ts",
+          "src/workspace/",
+          "src/engine/workers/*/workspace/",
+          "src/engine/workers/coding-worker/subagents/*/workspace/"
         ],
         "write": [],
         "external": [],
@@ -374,7 +380,7 @@
       "executor": {
         "kind": "agent",
         "name": "SIM-ONE planning adapter",
-        "instructions": "Create or update /opt/ai/plans/<topic>/plan.md and name every behavioral acceptance test, external effect, approval gate, and rollback."
+        "instructions": "Create or update /opt/ai/plans/<topic>/plan.md and name every behavioral acceptance test, external effect, approval gate, and rollback. When workspace-related behavior is in scope, distinguish instruction/persona ownership from Coding Worker sandbox and project-root access."
       },
       "inputs": [
         {
@@ -413,13 +419,22 @@
           "kind": "policy",
           "criterion": "The contract lists exact authorized mutations and separates read-only discovery from local, GitHub, deployment, sending, spending, and destructive effects.",
           "evidence": "runtime:evidence/define-change-contract/authority.json"
+        },
+        {
+          "id": "workspace-scope-explicit",
+          "kind": "policy",
+          "criterion": "A workspace-affecting contract names whether it changes company-owned instructions, the main-agent persona workspace, a lead-worker persona workspace, an internal-subagent workspace, or the Coding Worker runtime access root; non-workspace changes explicitly record this criterion as not applicable.",
+          "evidence": "runtime:evidence/define-change-contract/workspace-scope.json"
         }
       ],
       "permissions": {
         "read": [
           "artifact:baseline-context",
           "AGENTS.md",
-          "/opt/ai/plans/"
+          "/opt/ai/plans/",
+          "src/AGENTS.md",
+          "docs/architecture/flue-architecture.md",
+          "docs/architecture/gorombo-flue-map.md"
         ],
         "write": [
           "/opt/ai/plans/<topic>/plan.md"
@@ -545,7 +560,7 @@
       "executor": {
         "kind": "agent",
         "name": "SIM-ONE implementation planning adapter",
-        "instructions": "Map the decision to bounded workstreams. Keep shared types and contracts ahead of dependent implementation and name the exact scripts from package.json."
+        "instructions": "Map the decision to bounded workstreams. Keep shared types and contracts ahead of dependent implementation, name the exact scripts from package.json, classify every workspace-related change by instruction/persona/runtime-root ownership, and assign every changed file and focused test file to exactly one workstream before parallel execution."
       },
       "inputs": [
         {
@@ -570,7 +585,7 @@
         {
           "id": "workstreams-bounded",
           "kind": "review",
-          "criterion": "Each workstream has one clear purpose, owned files, declared inputs and outputs, and no hidden dependency on another parallel branch.",
+          "criterion": "Each workstream has one clear purpose, exact owned source/documentation/test files, declared inputs and outputs, no file concurrently owned by another parallel branch, and no hidden dependency on another branch; collisions are ordered or assigned to integration.",
           "evidence": "runtime:evidence/plan-implementation/workstreams.json"
         },
         {
@@ -584,6 +599,18 @@
           "kind": "policy",
           "criterion": "Every tool execution, worker handoff, plan update, verification result, and state transition has a durable typed progress-event expectation.",
           "evidence": "runtime:evidence/plan-implementation/progress-contract.json"
+        },
+        {
+          "id": "file-ownership-disjoint",
+          "kind": "policy",
+          "criterion": "The file-ownership matrix assigns every planned source, documentation, generated-definition, and focused-test mutation to exactly one producer; shared files are serialized or deferred to integration.",
+          "evidence": "runtime:evidence/plan-implementation/file-ownership.json"
+        },
+        {
+          "id": "workspace-layers-mapped",
+          "kind": "review",
+          "criterion": "The plan distinguishes src/AGENTS.md, src/workspace/, built-in lead-worker workspaces, Coding Worker internal-subagent workspaces, runtime-loaded user workers, and the Coding Worker runtime access root whenever those layers are affected.",
+          "evidence": "runtime:evidence/plan-implementation/workspace-layers.json"
         }
       ],
       "permissions": {
@@ -591,7 +618,15 @@
           "artifact:change-contract",
           "artifact:architecture-decision",
           "package.json",
-          ".github/workflows/ci.yml"
+          ".github/workflows/ci.yml",
+          "src/AGENTS.md",
+          "src/workspace-loader.ts",
+          "src/agents/orchestrator.ts",
+          "src/engine/workers/",
+          "docs/architecture/flue-architecture.md",
+          "docs/architecture/gorombo-flue-map.md",
+          "src/tests/architecture-contract.test.ts",
+          "src/tests/workspace-loader.test.ts"
         ],
         "write": [
           "/opt/ai/plans/<topic>/plan.md"
@@ -629,7 +664,7 @@
       "executor": {
         "kind": "agent",
         "name": "SIM-ONE Coding Worker lead",
-        "instructions": "Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record."
+        "instructions": "Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record. Follow the implementation plan's exact file-ownership matrix. Stop and replan before editing a file assigned to another parallel workstream; shared or cross-domain files must be serialized or reconciled by the integration node."
       },
       "inputs": [
         {
@@ -649,7 +684,7 @@
         {
           "id": "scope-obeyed",
           "kind": "policy",
-          "criterion": "The patch or no-change record stays inside the authorized domain and preserves the architecture decision.",
+          "criterion": "The patch or no-change record stays inside the authorized domain, contains only files assigned to this workstream by the implementation plan, has no concurrent file owner in another parallel branch, and preserves the architecture decision.",
           "evidence": "runtime:evidence/implement-core-contracts/scope-review.json"
         },
         {
@@ -675,7 +710,9 @@
           "src/app.ts",
           "src/db.ts",
           "docs/architecture/",
-          "flue.config.ts"
+          "flue.config.ts",
+          "src/tests/ files assigned exclusively to this workstream by artifact:implementation-plan",
+          "src/index.ts"
         ],
         "external": [],
         "destructive": false
@@ -706,13 +743,13 @@
     {
       "id": "implement-agent-runtime",
       "type": "work",
-      "title": "Implement Agents, Workflows, Tools, And Workers",
-      "goal": "Implement authorized orchestrator, workflow, tool, skill, workspace, researcher, Coding Worker, and internal-subagent changes without crossing ownership boundaries.",
+      "title": "Implement Agent Runtime And Workspace Boundaries",
+      "goal": "Implement authorized main-orchestrator, workflow, tool, skill, built-in lead-worker, worker-local internal-subagent, and persona-workspace changes while preserving instruction authority, delegation ownership, capability isolation, and the separate Coding Worker runtime access root.",
       "state": "planned",
       "executor": {
         "kind": "agent",
         "name": "SIM-ONE Coding Worker lead",
-        "instructions": "Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record."
+        "instructions": "Use the Coding Worker lead and only its worker-local internal specialists. Treat src/AGENTS.md as company-owned system instructions; src/workspace/ as the main-agent persona workspace and default Coding Worker runtime access root; src/engine/workers/<name>/workspace/ as built-in lead-worker persona guidance; and src/engine/workers/coding-worker/subagents/<name>/workspace/ as Coding Worker internal-subagent guidance. Runtime-loaded user workers remain capability profiles rather than built-in workspace directories. The orchestrator owns worker routing and exposes only lead workers; lead workers own internal-subagent selection. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record. Follow the implementation plan's exact file-ownership matrix and stop for replan before any parallel file collision."
       },
       "inputs": [
         {
@@ -723,7 +760,7 @@
       ],
       "outputs": [
         {
-          "name": "Implement Agents, Workflows, Tools, And Workers",
+          "name": "Agent runtime and workspace boundary change",
           "artifact": "artifact:agent-runtime-change",
           "format": "git-diff-or-no-change-record"
         }
@@ -732,7 +769,7 @@
         {
           "id": "scope-obeyed",
           "kind": "policy",
-          "criterion": "The patch or no-change record stays inside the authorized domain and preserves the architecture decision.",
+          "criterion": "The patch or no-change record stays inside the authorized domain, contains only files assigned to this workstream by the implementation plan, has no concurrent file owner in another parallel branch, and preserves the architecture decision.",
           "evidence": "runtime:evidence/implement-agent-runtime/scope-review.json"
         },
         {
@@ -746,12 +783,39 @@
           "kind": "artifact",
           "criterion": "Typed durable progress events cover implementation, internal specialist handoffs, tool execution, and verification.",
           "evidence": "runtime:evidence/implement-agent-runtime/progress-events.jsonl"
+        },
+        {
+          "id": "persona-workspace-ownership-preserved",
+          "kind": "policy",
+          "criterion": "Company instructions remain in src/AGENTS.md; the orchestrator composes only src/workspace/ as its persona; each built-in lead worker composes its own src/engine/workers/<name>/workspace/; Coding Worker internal subagents compose only their worker-local workspace; and persona content does not rename architecture paths.",
+          "evidence": "runtime:evidence/implement-agent-runtime/workspace-ownership.json"
+        },
+        {
+          "id": "runtime-root-separated",
+          "kind": "policy",
+          "criterion": "The Coding Worker runtime access root and project/repository scope are treated as sandbox authorization boundaries, not as worker persona-instruction ownership; approval and managed-auth state remain outside that root.",
+          "evidence": "runtime:evidence/implement-agent-runtime/runtime-root-boundary.json"
+        },
+        {
+          "id": "delegation-boundary-preserved",
+          "kind": "test",
+          "criterion": "The main orchestrator exposes built-in lead workers but no Coding Worker internal subagent; each profile receives only its declared instructions, tools, skills, and subagents under Flue inheritance rules.",
+          "evidence": "runtime:evidence/implement-agent-runtime/delegation-boundary.json"
         }
       ],
       "permissions": {
         "read": [
           "artifact:implementation-plan",
-          "authorized project files"
+          "authorized project files",
+          "src/AGENTS.md",
+          "src/workspace-loader.ts",
+          "docs/architecture/flue-architecture.md",
+          "docs/architecture/gorombo-flue-map.md",
+          "src/tests/architecture-contract.test.ts",
+          "src/tests/workspace-loader.test.ts",
+          "src/tests/coding-worker.test.ts",
+          "src/tests/coding-worker-internal-subagents.test.ts",
+          "src/tests/research-agent.test.ts"
         ],
         "write": [
           "src/agents/",
@@ -759,7 +823,10 @@
           "src/workspace/",
           "src/engine/tools/",
           "src/engine/skills/",
-          "src/engine/workers/"
+          "src/engine/workers/",
+          "src/tests/ files assigned exclusively to this workstream by artifact:implementation-plan",
+          "src/AGENTS.md",
+          "src/workspace-loader.ts"
         ],
         "external": [],
         "destructive": false
@@ -784,7 +851,9 @@
         "workflows",
         "tools",
         "skills",
-        "workers"
+        "workers",
+        "workspace-boundaries",
+        "delegation"
       ]
     },
     {
@@ -796,7 +865,7 @@
       "executor": {
         "kind": "agent",
         "name": "SIM-ONE Coding Worker lead",
-        "instructions": "Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record."
+        "instructions": "Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record. Follow the implementation plan's exact file-ownership matrix. Stop and replan before editing a file assigned to another parallel workstream; shared or cross-domain files must be serialized or reconciled by the integration node."
       },
       "inputs": [
         {
@@ -816,7 +885,7 @@
         {
           "id": "scope-obeyed",
           "kind": "policy",
-          "criterion": "The patch or no-change record stays inside the authorized domain and preserves the architecture decision.",
+          "criterion": "The patch or no-change record stays inside the authorized domain, contains only files assigned to this workstream by the implementation plan, has no concurrent file owner in another parallel branch, and preserves the architecture decision.",
           "evidence": "runtime:evidence/implement-memory-retrieval/scope-review.json"
         },
         {
@@ -841,7 +910,8 @@
           "src/engine/memory/",
           "src/engine/rag/",
           "src/engine/embeddings/",
-          "crates/gorombo-memory/"
+          "crates/gorombo-memory/",
+          "src/tests/ files assigned exclusively to this workstream by artifact:implementation-plan"
         ],
         "external": [],
         "destructive": false
@@ -877,7 +947,7 @@
       "executor": {
         "kind": "agent",
         "name": "SIM-ONE Coding Worker lead",
-        "instructions": "Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record."
+        "instructions": "Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record. Follow the implementation plan's exact file-ownership matrix. Stop and replan before editing a file assigned to another parallel workstream; shared or cross-domain files must be serialized or reconciled by the integration node."
       },
       "inputs": [
         {
@@ -897,7 +967,7 @@
         {
           "id": "scope-obeyed",
           "kind": "policy",
-          "criterion": "The patch or no-change record stays inside the authorized domain and preserves the architecture decision.",
+          "criterion": "The patch or no-change record stays inside the authorized domain, contains only files assigned to this workstream by the implementation plan, has no concurrent file owner in another parallel branch, and preserves the architecture decision.",
           "evidence": "runtime:evidence/implement-capabilities-security/scope-review.json"
         },
         {
@@ -923,7 +993,8 @@
           "src/engine/registries/",
           "src/engine/approvals/",
           "src/api/ingress/",
-          "docs/architecture/github-auth-system.md"
+          "docs/architecture/github-auth-system.md",
+          "src/tests/ files assigned exclusively to this workstream by artifact:implementation-plan"
         ],
         "external": [],
         "destructive": false
@@ -960,7 +1031,7 @@
       "executor": {
         "kind": "agent",
         "name": "SIM-ONE Coding Worker lead",
-        "instructions": "Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record."
+        "instructions": "Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record. Follow the implementation plan's exact file-ownership matrix. Stop and replan before editing a file assigned to another parallel workstream; shared or cross-domain files must be serialized or reconciled by the integration node."
       },
       "inputs": [
         {
@@ -980,7 +1051,7 @@
         {
           "id": "scope-obeyed",
           "kind": "policy",
-          "criterion": "The patch or no-change record stays inside the authorized domain and preserves the architecture decision.",
+          "criterion": "The patch or no-change record stays inside the authorized domain, contains only files assigned to this workstream by the implementation plan, has no concurrent file owner in another parallel branch, and preserves the architecture decision.",
           "evidence": "runtime:evidence/implement-ingress-operations/scope-review.json"
         },
         {
@@ -1007,7 +1078,8 @@
           "src/engine/session/",
           "src/engine/schedules/",
           "src/core/telemetry/",
-          "docs/operations/"
+          "docs/operations/",
+          "src/tests/ files assigned exclusively to this workstream by artifact:implementation-plan"
         ],
         "external": [],
         "destructive": false
@@ -1044,7 +1116,7 @@
       "executor": {
         "kind": "agent",
         "name": "SIM-ONE Coding Worker lead",
-        "instructions": "Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record."
+        "instructions": "Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record. Follow the implementation plan's exact file-ownership matrix. Stop and replan before editing a file assigned to another parallel workstream; shared or cross-domain files must be serialized or reconciled by the integration node."
       },
       "inputs": [
         {
@@ -1064,7 +1136,7 @@
         {
           "id": "scope-obeyed",
           "kind": "policy",
-          "criterion": "The patch or no-change record stays inside the authorized domain and preserves the architecture decision.",
+          "criterion": "The patch or no-change record stays inside the authorized domain, contains only files assigned to this workstream by the implementation plan, has no concurrent file owner in another parallel branch, and preserves the architecture decision.",
           "evidence": "runtime:evidence/implement-product-delivery/scope-review.json"
         },
         {
@@ -1091,7 +1163,8 @@
           "scripts/",
           ".github/workflows/",
           "docs/architecture/product-flow.md",
-          "README.md"
+          "README.md",
+          "src/tests/ files assigned exclusively to this workstream by artifact:implementation-plan"
         ],
         "external": [],
         "destructive": false
@@ -1128,7 +1201,7 @@
       "executor": {
         "kind": "hybrid",
         "name": "SIM-ONE Coding Worker integration adapter",
-        "instructions": "Integrate only authorized outputs. Preserve unrelated verified branches, route failures to the owning domain, and emit a complete diff plus typed progress record."
+        "instructions": "Integrate only authorized outputs. Preserve unrelated verified branches, route failures to the owning domain, and emit a complete diff plus typed progress record. Reconcile the implementation plan's exact file-ownership matrix before combining changes; a file with multiple parallel producers is a failed integration precondition, not an automatic merge."
       },
       "inputs": [
         {
@@ -1277,6 +1350,12 @@
           "kind": "policy",
           "criterion": "Each repair cites the failed evidence, preserves unrelated verified work, and remains within the declared feedback and attempt bounds.",
           "evidence": "runtime:evidence/integrate-and-repair/repair-ledger.json"
+        },
+        {
+          "id": "parallel-file-ownership-reconciled",
+          "kind": "policy",
+          "criterion": "Every changed file has one recorded producer; shared or cross-domain files were serialized or assigned to integration, and no parallel branch silently overwrote another branch.",
+          "evidence": "runtime:evidence/integrate-and-repair/file-ownership.json"
         }
       ],
       "permissions": {
@@ -1390,7 +1469,7 @@
       "id": "verify-unit-tests",
       "type": "verification",
       "title": "Verify Unit Test Suite",
-      "goal": "Run the configured SIM-ONE Alpha unit suite with real local embedding assets and WASM available.",
+      "goal": "Run the configured SIM-ONE Alpha unit suite with real local embedding assets and WASM available, including the repository's agent/workspace ownership contracts.",
       "state": "planned",
       "executor": {
         "kind": "deterministic",
@@ -1417,12 +1496,23 @@
           "kind": "test",
           "criterion": "All required unit tests pass; any skips are recorded and do not hide a missing required model or WASM artifact.",
           "evidence": "runtime:evidence/verify-unit-tests/result.json"
+        },
+        {
+          "id": "workspace-boundary-tests-passed",
+          "kind": "test",
+          "criterion": "The unit report proves architecture-contract.test.ts, workspace-loader.test.ts, coding-worker.test.ts, coding-worker-internal-subagents.test.ts, and research-agent.test.ts passed, including main/worker/internal workspace composition, runtime-root scoping, and lead-only delegation.",
+          "evidence": "runtime:evidence/verify-unit-tests/workspace-boundary-tests.json"
         }
       ],
       "permissions": {
         "read": [
           "authorized project tree",
-          "node_modules/"
+          "node_modules/",
+          "src/tests/architecture-contract.test.ts",
+          "src/tests/workspace-loader.test.ts",
+          "src/tests/coding-worker.test.ts",
+          "src/tests/coding-worker-internal-subagents.test.ts",
+          "src/tests/research-agent.test.ts"
         ],
         "write": [
           ".tmp/tsc/"
@@ -2325,12 +2415,12 @@
       "id": "review-architecture-security",
       "type": "verification",
       "title": "Review Architecture, Security, And Product Boundaries",
-      "goal": "Review the integrated change and verification summary for Flue ownership, trusted context, approval gates, durable progress, product identity, and secret boundaries.",
+      "goal": "Review the integrated change and verification summary for Flue ownership, instruction and persona workspace boundaries, Coding Worker runtime-root scope, trusted context, approval gates, durable progress, product identity, and secret boundaries.",
       "state": "planned",
       "executor": {
         "kind": "agent",
         "name": "SIM-ONE review adapter",
-        "instructions": "Perform a fresh review independent of implementation self-report. Confirm user-visible behavior, fail-closed mutations, research ownership, and documented rollback."
+        "instructions": "Perform a fresh review independent of implementation self-report. Confirm user-visible behavior, fail-closed mutations, research ownership, workspace instruction composition, lead-only worker exposure, internal-subagent ownership, runtime-root scoping, disjoint parallel file ownership, and documented rollback."
       },
       "inputs": [
         {
@@ -2355,7 +2445,7 @@
         {
           "id": "architecture-contract-passes",
           "kind": "policy",
-          "criterion": "The change preserves the local Flue map, orchestrator/worker/tool/skill/protocol/registry boundaries, and required typed contracts.",
+          "criterion": "The change preserves the local Flue map, company/main-agent/lead-worker/internal-subagent instruction ownership, orchestrator/worker/tool/skill/protocol/registry boundaries, and required typed contracts.",
           "evidence": "runtime:evidence/review-architecture-security/architecture.json"
         },
         {
@@ -2369,6 +2459,18 @@
           "kind": "review",
           "criterion": "Every tool execution, subagent delegation, verification, approval, and state transition reaches the user through durable typed progress events.",
           "evidence": "runtime:evidence/review-architecture-security/progress.json"
+        },
+        {
+          "id": "workspace-boundaries-pass",
+          "kind": "policy",
+          "criterion": "src/AGENTS.md remains company-owned; src/workspace/ remains the main-agent persona workspace even when used as the default Coding Worker runtime root; built-in lead workers and Coding Worker internal subagents compose only their own workspace guidance; runtime-loaded user workers remain capability profiles; and only lead workers are orchestrator-addressable.",
+          "evidence": "runtime:evidence/review-architecture-security/workspaces.json"
+        },
+        {
+          "id": "parallel-ownership-passes",
+          "kind": "review",
+          "criterion": "The final diff matches the plan's one-producer-per-file matrix; any shared file was serialized or reconciled by integration with no hidden parallel overwrite.",
+          "evidence": "runtime:evidence/review-architecture-security/file-ownership.json"
         }
       ],
       "permissions": {
@@ -2376,7 +2478,18 @@
           "artifact:integrated-change",
           "artifact:verification-summary",
           "AGENTS.md",
-          "docs/architecture/"
+          "docs/architecture/",
+          "src/AGENTS.md",
+          "src/workspace-loader.ts",
+          "src/agents/orchestrator.ts",
+          "src/workspace/",
+          "src/engine/workers/*/workspace/",
+          "src/engine/workers/coding-worker/subagents/*/workspace/",
+          "src/tests/architecture-contract.test.ts",
+          "src/tests/workspace-loader.test.ts",
+          "src/tests/coding-worker.test.ts",
+          "src/tests/coding-worker-internal-subagents.test.ts",
+          "src/tests/research-agent.test.ts"
         ],
         "write": [],
         "external": [],
@@ -4335,13 +4448,15 @@
     "The current commit is project context, not proof that historical implementation is verified.",
     "The project owner supplies target-specific authority for GitHub, canary, and production mutations at the declared gates.",
     "Canary and production deployment commands remain adapter bindings until the project documents an approved deployment mechanism.",
-    "Full live-model TUI probes require valid provider credentials supplied through the runtime environment, never stored in this graph."
+    "Full live-model TUI probes require valid provider credentials supplied through the runtime environment, never stored in this graph.",
+    "Every changed source, documentation, generated-definition, and focused-test file is assigned to exactly one implementation workstream; overlapping files are serialized or reconciled by integration."
   ],
   "risks": [
     "Architecture documents or Flue behavior may drift from the context commit; a changed instruction or dependency invalidates downstream evidence.",
     "A parallel domain may discover a shared contract overlap; the integration node must serialize the repair and preserve unrelated verified branches.",
     "External GitHub or deployment actions can have uncertain outcomes; adapters must use idempotency fencing and verify resulting state.",
     "The full verification matrix is intentionally expensive; omitting a required check requires explicit evidence and human review.",
-    "The graph coordinator is not an operating-system sandbox or distributed scheduler; untrusted commands require an approved isolation layer."
+    "The graph coordinator is not an operating-system sandbox or distributed scheduler; untrusted commands require an approved isolation layer.",
+    "The path src/workspace/ is both the main-agent persona workspace and, by default, the Coding Worker runtime access root; lifecycle evidence must distinguish instruction ownership from sandbox/project scope and from worker-local persona workspaces."
   ]
 }

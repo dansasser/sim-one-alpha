@@ -1,4 +1,4 @@
-<!-- development-graph-sha256: 1e48f578208ac8033da10e2d32eb6af140e0f28f157df2860ab3f7286d111a44 -->
+<!-- development-graph-sha256: f68cd85dadc80c274e20d61d79b2eefaca9371bc0106977a06574651f2509210 -->
 <!-- Generated from canonical JSON. Do not edit by hand. -->
 # SIM-ONE Alpha Development Lifecycle
 
@@ -9,16 +9,16 @@ Govern future SIM-ONE Alpha changes from an authorized request through grounded 
 | Field | Value |
 |---|---|
 | Graph ID | `sim-one-alpha-lifecycle` |
-| Graph version | `2` |
+| Graph version | `3` |
 | Schema version | `1` |
 | Status | `validated` |
 | Project | sim-one-alpha |
 | Project root | `/opt/ai/sim-one-alpha` |
-| Context version | `commit:0f4a72094e9c6aa6b233c633c952a089ef889a1c` |
+| Context version | `commit:e1aa97ff46bbc6de4cdbaabc3d88c9020bcbf41e` |
 | Templates | discovery-to-delivery, parallel-fanout-fanin, human-gate, bounded-feedback, rollback-observation |
 | Entry nodes | baseline-context |
 | Terminal nodes | closeout-release |
-| Canonical checksum | `1e48f578208ac8033da10e2d32eb6af140e0f28f157df2860ab3f7286d111a44` |
+| Canonical checksum | `f68cd85dadc80c274e20d61d79b2eefaca9371bc0106977a06574651f2509210` |
 
 ## Flow
 
@@ -32,7 +32,7 @@ flowchart TD
     n_decide_architecture{"Resolve Architecture And Ownership\\n(decision / planned)"}
     n_plan_implementation["Plan Bounded Implementation\\n(work / planned)"]
     n_implement_core_contracts["Implement Core Contracts And Architecture\\n(work / planned)"]
-    n_implement_agent_runtime["Implement Agents, Workflows, Tools, And Workers\\n(work / planned)"]
+    n_implement_agent_runtime["Implement Agent Runtime And Workspace Boundaries\\n(work / planned)"]
     n_implement_memory_retrieval["Implement Memory, RAG, And Embeddings\\n(work / planned)"]
     n_implement_capabilities_security["Implement Capabilities, Registries, And Security\\n(work / planned)"]
     n_implement_ingress_operations["Implement Ingress, Sessions, Schedules, And Telemetry\\n(work / planned)"]
@@ -181,14 +181,14 @@ flowchart TD
 | `decide-architecture` | `decision` | `planned` | agent: SIM-ONE architecture adapter | Choose the smallest design that satisfies the change contract while preserving SIM-ONE Alpha domain ownership and Flue architecture. | artifact:architecture-decision |
 | `plan-implementation` | `work` | `planned` | agent: SIM-ONE implementation planning adapter | Produce an executable implementation sequence with file ownership, artifact handoffs, progress events, verification commands, approval scopes, and rollback. | artifact:implementation-plan |
 | `implement-core-contracts` | `work` | `planned` | agent: SIM-ONE Coding Worker lead | Implement authorized changes to shared types, Valibot schemas, protocols, model cards, configuration, architecture contracts, and Flue-discovered entrypoints. | artifact:core-contracts-change |
-| `implement-agent-runtime` | `work` | `planned` | agent: SIM-ONE Coding Worker lead | Implement authorized orchestrator, workflow, tool, skill, workspace, researcher, Coding Worker, and internal-subagent changes without crossing ownership boundaries. | artifact:agent-runtime-change |
+| `implement-agent-runtime` | `work` | `planned` | agent: SIM-ONE Coding Worker lead | Implement authorized main-orchestrator, workflow, tool, skill, built-in lead-worker, worker-local internal-subagent, and persona-workspace changes while preserving instruction authority, delegation ownership, capability isolation, and the separate Coding Worker runtime access root. | artifact:agent-runtime-change |
 | `implement-memory-retrieval` | `work` | `planned` | agent: SIM-ONE Coding Worker lead | Implement authorized structured memory, session memory, document indexing, knowledge storage, retrieval routing, embeddings, and Rust/WASM changes while keeping memory layers distinct. | artifact:memory-retrieval-change |
 | `implement-capabilities-security` | `work` | `planned` | agent: SIM-ONE Coding Worker lead | Implement authorized capability-store, registry, MCP, approval, GitHub-auth, and policy enforcement changes with fail-closed trust boundaries. | artifact:capabilities-security-change |
 | `implement-ingress-operations` | `work` | `planned` | agent: SIM-ONE Coding Worker lead | Implement authorized connector normalization, authenticated API routes, durable session handling, schedules, and typed progress/telemetry surfaces. | artifact:ingress-operations-change |
 | `implement-product-delivery` | `work` | `planned` | agent: SIM-ONE Coding Worker lead | Implement authorized sim-one CLI, Ink/Ratatui TUI, product packaging, install, build, CI, and release documentation changes. | artifact:product-delivery-change |
 | `integrate-and-repair` | `work` | `planned` | hybrid: SIM-ONE Coding Worker integration adapter | Combine selected domain outputs into one coherent change set, resolve cross-domain contract issues, and apply bounded repairs from verification or observation evidence. | artifact:integrated-change |
 | `verify-typecheck` | `verification` | `planned` | deterministic: Verify TypeScript Types | Prove the full TypeScript project satisfies its configured no-emit type contract. | artifact:typecheck-report |
-| `verify-unit-tests` | `verification` | `planned` | deterministic: Verify Unit Test Suite | Run the configured SIM-ONE Alpha unit suite with real local embedding assets and WASM available. | artifact:unit-test-report |
+| `verify-unit-tests` | `verification` | `planned` | deterministic: Verify Unit Test Suite | Run the configured SIM-ONE Alpha unit suite with real local embedding assets and WASM available, including the repository's agent/workspace ownership contracts. | artifact:unit-test-report |
 | `verify-rust-tests` | `verification` | `planned` | deterministic: Verify Rust Project Tests | Run the configured Rust project tests for the memory engine and Ratatui crates. | artifact:rust-test-report |
 | `build-runtime` | `verification` | `planned` | deterministic: Build Flue Runtime | Build the Node-target SIM-ONE Alpha Flue runtime and copy configuration, registries, and memory WASM into the product artifact. | artifact:runtime-build |
 | `build-ratatui` | `verification` | `planned` | deterministic: Build Ratatui Product TUI | Build the release-mode Ratatui TUI product binary and copy it into the product artifact. | artifact:ratatui-build |
@@ -199,7 +199,7 @@ flowchart TD
 | `verify-tui-e2e` | `verification` | `planned` | deterministic: Verify TUI End To End | Exercise the built gateway and terminal client across chat, events, approvals, tool progress, and subagent visibility. | artifact:tui-e2e-report |
 | `verify-memory-smoke` | `verification` | `planned` | deterministic: Verify Real Memory Runtime | Exercise the real WASM memory engine, SQLite durability, retrieval, and Coding Worker memory path end to end. | artifact:memory-smoke-report |
 | `aggregate-verification` | `verification` | `planned` | hybrid: SIM-ONE verification aggregator | Map fresh project verification evidence back to every change-contract criterion and identify any unproved behavior, skipped requirement, or stale artifact. | artifact:verification-summary |
-| `review-architecture-security` | `verification` | `planned` | agent: SIM-ONE review adapter | Review the integrated change and verification summary for Flue ownership, trusted context, approval gates, durable progress, product identity, and secret boundaries. | artifact:architecture-security-review |
+| `review-architecture-security` | `verification` | `planned` | agent: SIM-ONE review adapter | Review the integrated change and verification summary for Flue ownership, instruction and persona workspace boundaries, Coding Worker runtime-root scope, trusted context, approval gates, durable progress, product identity, and secret boundaries. | artifact:architecture-security-review |
 | `approve-release-candidate` | `human_gate` | `planned` | human: SIM-ONE project owner | Let the project owner approve or reject the exact diff, verification summary, architecture/security review, rollback, and proposed GitHub effects. | artifact:release-candidate-approval |
 | `publish-release-candidate` | `operation` | `planned` | hybrid: approval-gated Git and GitHub adapter | Commit the authorized change, push its branch, open a non-draft pull request to main, and verify the resulting GitHub state. | artifact:release-candidate |
 | `approve-canary` | `human_gate` | `planned` | human: SIM-ONE project owner | Let the project owner approve the exact release candidate, canary target, probe plan, rollback, and observation window. | artifact:canary-approval |
@@ -327,17 +327,17 @@ flowchart TD
 ### `baseline-context` — Bind Change To Current Project Context
 
 - Goal: Bind one authorized change request to the current SIM-ONE Alpha commit, applicable instructions, architecture contracts, affected domains, and external-effect boundaries.
-- Executor instructions: Read the authorized request, current Git state, AGENTS.md, architecture documents, manifests, and relevant history. Do not mark historical implementation as verified.
+- Executor instructions: Read the authorized request, current Git state, AGENTS.md, architecture documents, manifests, and relevant history. Do not mark historical implementation as verified. Classify every workspace-related path as company-owned system instructions, the main-agent persona workspace, a lead-worker persona workspace, a worker-local internal-subagent workspace, or the Coding Worker runtime access root.
 - Inputs: external:authorized-change-request, external:repository-checkout
 - Resources: —
-- Permissions: read [AGENTS.md, docs/architecture/, package.json, pnpm-lock.yaml, .github/workflows/, current Git metadata]; write [—]; external [—]; destructive `false`
+- Permissions: read [AGENTS.md, docs/architecture/, package.json, pnpm-lock.yaml, .github/workflows/, current Git metadata, src/AGENTS.md, src/workspace-loader.ts, src/agents/orchestrator.ts, src/workspace/, src/engine/workers/*/workspace/, src/engine/workers/coding-worker/subagents/*/workspace/]; write [—]; external [—]; destructive `false`
 - Execution: max `2` attempt(s), `45` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `none` — Produces evidence without mutating project or external state.
 - Rollback: none
 - Approval required: `false`
 - Acceptance:
   - `context-bound-to-commit` (artifact): The context record names the exact Git commit, instruction files, requested outcome, explicit non-goals, affected domains, and external effects. Evidence: `runtime:evidence/baseline-context/context.json`
-  - `boundaries-confirmed` (review): The context preserves Flue discovery paths, orchestrator/worker ownership, protocol/tool/skill separation, and project naming rules. Evidence: `runtime:evidence/baseline-context/boundary-review.json`
+  - `boundaries-confirmed` (review): The context preserves Flue discovery paths; company-owned src/AGENTS.md authority; main-agent, lead-worker, and worker-local internal-subagent workspace ownership; Coding Worker runtime-root scope; orchestrator/worker ownership; protocol/tool/skill separation; and project naming rules. Evidence: `runtime:evidence/baseline-context/boundary-review.json`
 
 ### `install-dependencies` — Install Pinned Dependencies
 
@@ -387,10 +387,10 @@ flowchart TD
 ### `define-change-contract` — Define Purpose And Acceptance Contract
 
 - Goal: Turn the authorized request into a project-specific purpose, scope, non-goals, evidence plan, permission boundary, rollback, and user-visible progress contract.
-- Executor instructions: Create or update /opt/ai/plans/<topic>/plan.md and name every behavioral acceptance test, external effect, approval gate, and rollback.
+- Executor instructions: Create or update /opt/ai/plans/<topic>/plan.md and name every behavioral acceptance test, external effect, approval gate, and rollback. When workspace-related behavior is in scope, distinguish instruction/persona ownership from Coding Worker sandbox and project-root access.
 - Inputs: artifact:baseline-context
 - Resources: plans:<topic>
-- Permissions: read [artifact:baseline-context, AGENTS.md, /opt/ai/plans/]; write [/opt/ai/plans/<topic>/plan.md]; external [—]; destructive `false`
+- Permissions: read [artifact:baseline-context, AGENTS.md, /opt/ai/plans/, src/AGENTS.md, docs/architecture/flue-architecture.md, docs/architecture/gorombo-flue-map.md]; write [/opt/ai/plans/<topic>/plan.md]; external [—]; destructive `false`
 - Execution: max `2` attempt(s), `45` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Creates or updates the task plan in the mandatory plans directory.
 - Rollback: Restore the previous plan version from version control or its retained prior revision.
@@ -399,6 +399,7 @@ flowchart TD
   - `plan-location-correct` (artifact): The plan exists at /opt/ai/plans/<topic>/plan.md and does not use memory or the repository as a substitute plan location. Evidence: `/opt/ai/plans/<topic>/plan.md`
   - `acceptance-is-behavioral` (review): Success criteria prove correct outputs or target-system effects; process, port, file existence, and zero exit alone are not treated as behavioral proof. Evidence: `runtime:evidence/define-change-contract/acceptance-review.json`
   - `authority-is-bounded` (policy): The contract lists exact authorized mutations and separates read-only discovery from local, GitHub, deployment, sending, spending, and destructive effects. Evidence: `runtime:evidence/define-change-contract/authority.json`
+  - `workspace-scope-explicit` (policy): A workspace-affecting contract names whether it changes company-owned instructions, the main-agent persona workspace, a lead-worker persona workspace, an internal-subagent workspace, or the Coding Worker runtime access root; non-workspace changes explicitly record this criterion as not applicable. Evidence: `runtime:evidence/define-change-contract/workspace-scope.json`
 
 ### `decide-architecture` — Resolve Architecture And Ownership
 
@@ -419,119 +420,124 @@ flowchart TD
 ### `plan-implementation` — Plan Bounded Implementation
 
 - Goal: Produce an executable implementation sequence with file ownership, artifact handoffs, progress events, verification commands, approval scopes, and rollback.
-- Executor instructions: Map the decision to bounded workstreams. Keep shared types and contracts ahead of dependent implementation and name the exact scripts from package.json.
+- Executor instructions: Map the decision to bounded workstreams. Keep shared types and contracts ahead of dependent implementation, name the exact scripts from package.json, classify every workspace-related change by instruction/persona/runtime-root ownership, and assign every changed file and focused test file to exactly one workstream before parallel execution.
 - Inputs: artifact:change-contract, artifact:architecture-decision
 - Resources: plans:<topic>
-- Permissions: read [artifact:change-contract, artifact:architecture-decision, package.json, .github/workflows/ci.yml]; write [/opt/ai/plans/<topic>/plan.md]; external [—]; destructive `false`
+- Permissions: read [artifact:change-contract, artifact:architecture-decision, package.json, .github/workflows/ci.yml, src/AGENTS.md, src/workspace-loader.ts, src/agents/orchestrator.ts, src/engine/workers/, docs/architecture/flue-architecture.md, docs/architecture/gorombo-flue-map.md, src/tests/architecture-contract.test.ts, src/tests/workspace-loader.test.ts]; write [/opt/ai/plans/<topic>/plan.md]; external [—]; destructive `false`
 - Execution: max `2` attempt(s), `60` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Updates the authorized task plan with the reviewed implementation sequence.
 - Rollback: Restore the prior plan revision and invalidate downstream work that consumed the superseded plan.
 - Approval required: `false`
 - Acceptance:
-  - `workstreams-bounded` (review): Each workstream has one clear purpose, owned files, declared inputs and outputs, and no hidden dependency on another parallel branch. Evidence: `runtime:evidence/plan-implementation/workstreams.json`
+  - `workstreams-bounded` (review): Each workstream has one clear purpose, exact owned source/documentation/test files, declared inputs and outputs, no file concurrently owned by another parallel branch, and no hidden dependency on another branch; collisions are ordered or assigned to integration. Evidence: `runtime:evidence/plan-implementation/workstreams.json`
   - `verification-mapped` (test): The plan maps each acceptance criterion to a focused check and the full applicable project verification matrix. Evidence: `runtime:evidence/plan-implementation/verification-map.json`
   - `progress-events-required` (policy): Every tool execution, worker handoff, plan update, verification result, and state transition has a durable typed progress-event expectation. Evidence: `runtime:evidence/plan-implementation/progress-contract.json`
+  - `file-ownership-disjoint` (policy): The file-ownership matrix assigns every planned source, documentation, generated-definition, and focused-test mutation to exactly one producer; shared files are serialized or deferred to integration. Evidence: `runtime:evidence/plan-implementation/file-ownership.json`
+  - `workspace-layers-mapped` (review): The plan distinguishes src/AGENTS.md, src/workspace/, built-in lead-worker workspaces, Coding Worker internal-subagent workspaces, runtime-loaded user workers, and the Coding Worker runtime access root whenever those layers are affected. Evidence: `runtime:evidence/plan-implementation/workspace-layers.json`
 
 ### `implement-core-contracts` — Implement Core Contracts And Architecture
 
 - Goal: Implement authorized changes to shared types, Valibot schemas, protocols, model cards, configuration, architecture contracts, and Flue-discovered entrypoints.
-- Executor instructions: Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record.
+- Executor instructions: Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record. Follow the implementation plan's exact file-ownership matrix. Stop and replan before editing a file assigned to another parallel workstream; shared or cross-domain files must be serialized or reconciled by the integration node.
 - Inputs: artifact:implementation-plan
 - Resources: project:core-contracts
-- Permissions: read [artifact:implementation-plan, authorized project files]; write [src/core/, src/app.ts, src/db.ts, docs/architecture/, flue.config.ts]; external [—]; destructive `false`
+- Permissions: read [artifact:implementation-plan, authorized project files]; write [src/core/, src/app.ts, src/db.ts, docs/architecture/, flue.config.ts, src/tests/ files assigned exclusively to this workstream by artifact:implementation-plan, src/index.ts]; external [—]; destructive `false`
 - Execution: max `3` attempt(s), `180` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Changes only the authorized files in this domain workstream.
 - Rollback: Restore this workstream's files from the pre-change Git commit while preserving unrelated workstreams.
 - Approval required: `false`
 - Acceptance:
-  - `scope-obeyed` (policy): The patch or no-change record stays inside the authorized domain and preserves the architecture decision. Evidence: `runtime:evidence/implement-core-contracts/scope-review.json`
+  - `scope-obeyed` (policy): The patch or no-change record stays inside the authorized domain, contains only files assigned to this workstream by the implementation plan, has no concurrent file owner in another parallel branch, and preserves the architecture decision. Evidence: `runtime:evidence/implement-core-contracts/scope-review.json`
   - `focused-verification-recorded` (test): Focused tests for changed behavior pass, or the no-change record proves why no focused test is applicable. Evidence: `runtime:evidence/implement-core-contracts/focused-verification.json`
   - `progress-visible` (artifact): Typed durable progress events cover implementation, internal specialist handoffs, tool execution, and verification. Evidence: `runtime:evidence/implement-core-contracts/progress-events.jsonl`
 
-### `implement-agent-runtime` — Implement Agents, Workflows, Tools, And Workers
+### `implement-agent-runtime` — Implement Agent Runtime And Workspace Boundaries
 
-- Goal: Implement authorized orchestrator, workflow, tool, skill, workspace, researcher, Coding Worker, and internal-subagent changes without crossing ownership boundaries.
-- Executor instructions: Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record.
+- Goal: Implement authorized main-orchestrator, workflow, tool, skill, built-in lead-worker, worker-local internal-subagent, and persona-workspace changes while preserving instruction authority, delegation ownership, capability isolation, and the separate Coding Worker runtime access root.
+- Executor instructions: Use the Coding Worker lead and only its worker-local internal specialists. Treat src/AGENTS.md as company-owned system instructions; src/workspace/ as the main-agent persona workspace and default Coding Worker runtime access root; src/engine/workers/<name>/workspace/ as built-in lead-worker persona guidance; and src/engine/workers/coding-worker/subagents/<name>/workspace/ as Coding Worker internal-subagent guidance. Runtime-loaded user workers remain capability profiles rather than built-in workspace directories. The orchestrator owns worker routing and exposes only lead workers; lead workers own internal-subagent selection. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record. Follow the implementation plan's exact file-ownership matrix and stop for replan before any parallel file collision.
 - Inputs: artifact:implementation-plan
 - Resources: project:agent-runtime
-- Permissions: read [artifact:implementation-plan, authorized project files]; write [src/agents/, src/workflows/, src/workspace/, src/engine/tools/, src/engine/skills/, src/engine/workers/]; external [—]; destructive `false`
+- Permissions: read [artifact:implementation-plan, authorized project files, src/AGENTS.md, src/workspace-loader.ts, docs/architecture/flue-architecture.md, docs/architecture/gorombo-flue-map.md, src/tests/architecture-contract.test.ts, src/tests/workspace-loader.test.ts, src/tests/coding-worker.test.ts, src/tests/coding-worker-internal-subagents.test.ts, src/tests/research-agent.test.ts]; write [src/agents/, src/workflows/, src/workspace/, src/engine/tools/, src/engine/skills/, src/engine/workers/, src/tests/ files assigned exclusively to this workstream by artifact:implementation-plan, src/AGENTS.md, src/workspace-loader.ts]; external [—]; destructive `false`
 - Execution: max `3` attempt(s), `180` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Changes only the authorized files in this domain workstream.
 - Rollback: Restore this workstream's files from the pre-change Git commit while preserving unrelated workstreams.
 - Approval required: `false`
 - Acceptance:
-  - `scope-obeyed` (policy): The patch or no-change record stays inside the authorized domain and preserves the architecture decision. Evidence: `runtime:evidence/implement-agent-runtime/scope-review.json`
+  - `scope-obeyed` (policy): The patch or no-change record stays inside the authorized domain, contains only files assigned to this workstream by the implementation plan, has no concurrent file owner in another parallel branch, and preserves the architecture decision. Evidence: `runtime:evidence/implement-agent-runtime/scope-review.json`
   - `focused-verification-recorded` (test): Focused tests for changed behavior pass, or the no-change record proves why no focused test is applicable. Evidence: `runtime:evidence/implement-agent-runtime/focused-verification.json`
   - `progress-visible` (artifact): Typed durable progress events cover implementation, internal specialist handoffs, tool execution, and verification. Evidence: `runtime:evidence/implement-agent-runtime/progress-events.jsonl`
+  - `persona-workspace-ownership-preserved` (policy): Company instructions remain in src/AGENTS.md; the orchestrator composes only src/workspace/ as its persona; each built-in lead worker composes its own src/engine/workers/<name>/workspace/; Coding Worker internal subagents compose only their worker-local workspace; and persona content does not rename architecture paths. Evidence: `runtime:evidence/implement-agent-runtime/workspace-ownership.json`
+  - `runtime-root-separated` (policy): The Coding Worker runtime access root and project/repository scope are treated as sandbox authorization boundaries, not as worker persona-instruction ownership; approval and managed-auth state remain outside that root. Evidence: `runtime:evidence/implement-agent-runtime/runtime-root-boundary.json`
+  - `delegation-boundary-preserved` (test): The main orchestrator exposes built-in lead workers but no Coding Worker internal subagent; each profile receives only its declared instructions, tools, skills, and subagents under Flue inheritance rules. Evidence: `runtime:evidence/implement-agent-runtime/delegation-boundary.json`
 
 ### `implement-memory-retrieval` — Implement Memory, RAG, And Embeddings
 
 - Goal: Implement authorized structured memory, session memory, document indexing, knowledge storage, retrieval routing, embeddings, and Rust/WASM changes while keeping memory layers distinct.
-- Executor instructions: Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record.
+- Executor instructions: Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record. Follow the implementation plan's exact file-ownership matrix. Stop and replan before editing a file assigned to another parallel workstream; shared or cross-domain files must be serialized or reconciled by the integration node.
 - Inputs: artifact:implementation-plan
 - Resources: project:memory-retrieval
-- Permissions: read [artifact:implementation-plan, authorized project files]; write [src/engine/memory/, src/engine/rag/, src/engine/embeddings/, crates/gorombo-memory/]; external [—]; destructive `false`
+- Permissions: read [artifact:implementation-plan, authorized project files]; write [src/engine/memory/, src/engine/rag/, src/engine/embeddings/, crates/gorombo-memory/, src/tests/ files assigned exclusively to this workstream by artifact:implementation-plan]; external [—]; destructive `false`
 - Execution: max `3` attempt(s), `180` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Changes only the authorized files in this domain workstream.
 - Rollback: Restore this workstream's files from the pre-change Git commit while preserving unrelated workstreams.
 - Approval required: `false`
 - Acceptance:
-  - `scope-obeyed` (policy): The patch or no-change record stays inside the authorized domain and preserves the architecture decision. Evidence: `runtime:evidence/implement-memory-retrieval/scope-review.json`
+  - `scope-obeyed` (policy): The patch or no-change record stays inside the authorized domain, contains only files assigned to this workstream by the implementation plan, has no concurrent file owner in another parallel branch, and preserves the architecture decision. Evidence: `runtime:evidence/implement-memory-retrieval/scope-review.json`
   - `focused-verification-recorded` (test): Focused tests for changed behavior pass, or the no-change record proves why no focused test is applicable. Evidence: `runtime:evidence/implement-memory-retrieval/focused-verification.json`
   - `progress-visible` (artifact): Typed durable progress events cover implementation, internal specialist handoffs, tool execution, and verification. Evidence: `runtime:evidence/implement-memory-retrieval/progress-events.jsonl`
 
 ### `implement-capabilities-security` — Implement Capabilities, Registries, And Security
 
 - Goal: Implement authorized capability-store, registry, MCP, approval, GitHub-auth, and policy enforcement changes with fail-closed trust boundaries.
-- Executor instructions: Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record.
+- Executor instructions: Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record. Follow the implementation plan's exact file-ownership matrix. Stop and replan before editing a file assigned to another parallel workstream; shared or cross-domain files must be serialized or reconciled by the integration node.
 - Inputs: artifact:implementation-plan
 - Resources: project:capabilities-security
-- Permissions: read [artifact:implementation-plan, authorized project files]; write [src/engine/capabilities/, src/engine/registries/, src/engine/approvals/, src/api/ingress/, docs/architecture/github-auth-system.md]; external [—]; destructive `false`
+- Permissions: read [artifact:implementation-plan, authorized project files]; write [src/engine/capabilities/, src/engine/registries/, src/engine/approvals/, src/api/ingress/, docs/architecture/github-auth-system.md, src/tests/ files assigned exclusively to this workstream by artifact:implementation-plan]; external [—]; destructive `false`
 - Execution: max `3` attempt(s), `180` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Changes only the authorized files in this domain workstream.
 - Rollback: Restore this workstream's files from the pre-change Git commit while preserving unrelated workstreams.
 - Approval required: `false`
 - Acceptance:
-  - `scope-obeyed` (policy): The patch or no-change record stays inside the authorized domain and preserves the architecture decision. Evidence: `runtime:evidence/implement-capabilities-security/scope-review.json`
+  - `scope-obeyed` (policy): The patch or no-change record stays inside the authorized domain, contains only files assigned to this workstream by the implementation plan, has no concurrent file owner in another parallel branch, and preserves the architecture decision. Evidence: `runtime:evidence/implement-capabilities-security/scope-review.json`
   - `focused-verification-recorded` (test): Focused tests for changed behavior pass, or the no-change record proves why no focused test is applicable. Evidence: `runtime:evidence/implement-capabilities-security/focused-verification.json`
   - `progress-visible` (artifact): Typed durable progress events cover implementation, internal specialist handoffs, tool execution, and verification. Evidence: `runtime:evidence/implement-capabilities-security/progress-events.jsonl`
 
 ### `implement-ingress-operations` — Implement Ingress, Sessions, Schedules, And Telemetry
 
 - Goal: Implement authorized connector normalization, authenticated API routes, durable session handling, schedules, and typed progress/telemetry surfaces.
-- Executor instructions: Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record.
+- Executor instructions: Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record. Follow the implementation plan's exact file-ownership matrix. Stop and replan before editing a file assigned to another parallel workstream; shared or cross-domain files must be serialized or reconciled by the integration node.
 - Inputs: artifact:implementation-plan
 - Resources: project:ingress-operations
-- Permissions: read [artifact:implementation-plan, authorized project files]; write [src/api/, src/channels/, src/engine/session/, src/engine/schedules/, src/core/telemetry/, docs/operations/]; external [—]; destructive `false`
+- Permissions: read [artifact:implementation-plan, authorized project files]; write [src/api/, src/channels/, src/engine/session/, src/engine/schedules/, src/core/telemetry/, docs/operations/, src/tests/ files assigned exclusively to this workstream by artifact:implementation-plan]; external [—]; destructive `false`
 - Execution: max `3` attempt(s), `180` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Changes only the authorized files in this domain workstream.
 - Rollback: Restore this workstream's files from the pre-change Git commit while preserving unrelated workstreams.
 - Approval required: `false`
 - Acceptance:
-  - `scope-obeyed` (policy): The patch or no-change record stays inside the authorized domain and preserves the architecture decision. Evidence: `runtime:evidence/implement-ingress-operations/scope-review.json`
+  - `scope-obeyed` (policy): The patch or no-change record stays inside the authorized domain, contains only files assigned to this workstream by the implementation plan, has no concurrent file owner in another parallel branch, and preserves the architecture decision. Evidence: `runtime:evidence/implement-ingress-operations/scope-review.json`
   - `focused-verification-recorded` (test): Focused tests for changed behavior pass, or the no-change record proves why no focused test is applicable. Evidence: `runtime:evidence/implement-ingress-operations/focused-verification.json`
   - `progress-visible` (artifact): Typed durable progress events cover implementation, internal specialist handoffs, tool execution, and verification. Evidence: `runtime:evidence/implement-ingress-operations/progress-events.jsonl`
 
 ### `implement-product-delivery` — Implement Product Surfaces And Delivery
 
 - Goal: Implement authorized sim-one CLI, Ink/Ratatui TUI, product packaging, install, build, CI, and release documentation changes.
-- Executor instructions: Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record.
+- Executor instructions: Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record. Follow the implementation plan's exact file-ownership matrix. Stop and replan before editing a file assigned to another parallel workstream; shared or cross-domain files must be serialized or reconciled by the integration node.
 - Inputs: artifact:implementation-plan
 - Resources: project:product-delivery
-- Permissions: read [artifact:implementation-plan, authorized project files]; write [sim-one-cli/, tui/, scripts/, .github/workflows/, docs/architecture/product-flow.md, README.md]; external [—]; destructive `false`
+- Permissions: read [artifact:implementation-plan, authorized project files]; write [sim-one-cli/, tui/, scripts/, .github/workflows/, docs/architecture/product-flow.md, README.md, src/tests/ files assigned exclusively to this workstream by artifact:implementation-plan]; external [—]; destructive `false`
 - Execution: max `3` attempt(s), `180` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Changes only the authorized files in this domain workstream.
 - Rollback: Restore this workstream's files from the pre-change Git commit while preserving unrelated workstreams.
 - Approval required: `false`
 - Acceptance:
-  - `scope-obeyed` (policy): The patch or no-change record stays inside the authorized domain and preserves the architecture decision. Evidence: `runtime:evidence/implement-product-delivery/scope-review.json`
+  - `scope-obeyed` (policy): The patch or no-change record stays inside the authorized domain, contains only files assigned to this workstream by the implementation plan, has no concurrent file owner in another parallel branch, and preserves the architecture decision. Evidence: `runtime:evidence/implement-product-delivery/scope-review.json`
   - `focused-verification-recorded` (test): Focused tests for changed behavior pass, or the no-change record proves why no focused test is applicable. Evidence: `runtime:evidence/implement-product-delivery/focused-verification.json`
   - `progress-visible` (artifact): Typed durable progress events cover implementation, internal specialist handoffs, tool execution, and verification. Evidence: `runtime:evidence/implement-product-delivery/progress-events.jsonl`
 
 ### `integrate-and-repair` — Integrate Change And Apply Bounded Repairs
 
 - Goal: Combine selected domain outputs into one coherent change set, resolve cross-domain contract issues, and apply bounded repairs from verification or observation evidence.
-- Executor instructions: Integrate only authorized outputs. Preserve unrelated verified branches, route failures to the owning domain, and emit a complete diff plus typed progress record.
+- Executor instructions: Integrate only authorized outputs. Preserve unrelated verified branches, route failures to the owning domain, and emit a complete diff plus typed progress record. Reconcile the implementation plan's exact file-ownership matrix before combining changes; a file with multiple parallel producers is a failed integration precondition, not an automatic merge.
 - Inputs: artifact:core-contracts-change, artifact:agent-runtime-change, artifact:memory-retrieval-change, artifact:capabilities-security-change, artifact:ingress-operations-change, artifact:product-delivery-change, artifact:dependency-environment, artifact:embedding-model-assets, artifact:memory-wasm, artifact:typecheck-report, artifact:unit-test-report, artifact:rust-test-report, artifact:runtime-build, artifact:ratatui-build, artifact:ratatui-product-report, artifact:cli-build, artifact:cli-behavior-report, artifact:http-test-report, artifact:tui-e2e-report, artifact:memory-smoke-report, artifact:verification-summary, artifact:architecture-security-review, artifact:canary-behavior-report, artifact:production-observation
 - Resources: project:core-contracts, project:agent-runtime, project:memory-retrieval, project:capabilities-security, project:ingress-operations, project:product-delivery
 - Permissions: read [authorized project tree, domain change artifacts, verification evidence]; write [authorized project files across affected domains]; external [—]; destructive `false`
@@ -543,6 +549,7 @@ flowchart TD
   - `diff-authorized` (policy): The integrated Git diff contains only authorized files and no dependency-approval, generated-asset, secret, or unrelated worktree fallout. Evidence: `runtime:evidence/integrate-and-repair/diff-scope.json`
   - `contracts-consistent` (schema): Shared types, schemas, registries, handoff contracts, docs, and consumers agree across every changed domain. Evidence: `runtime:evidence/integrate-and-repair/contract-check.json`
   - `repair-bounded` (policy): Each repair cites the failed evidence, preserves unrelated verified work, and remains within the declared feedback and attempt bounds. Evidence: `runtime:evidence/integrate-and-repair/repair-ledger.json`
+  - `parallel-file-ownership-reconciled` (policy): Every changed file has one recorded producer; shared or cross-domain files were serialized or assigned to integration, and no parallel branch silently overwrote another branch. Evidence: `runtime:evidence/integrate-and-repair/file-ownership.json`
 
 ### `verify-typecheck` — Verify TypeScript Types
 
@@ -560,17 +567,18 @@ flowchart TD
 
 ### `verify-unit-tests` — Verify Unit Test Suite
 
-- Goal: Run the configured SIM-ONE Alpha unit suite with real local embedding assets and WASM available.
+- Goal: Run the configured SIM-ONE Alpha unit suite with real local embedding assets and WASM available, including the repository's agent/workspace ownership contracts.
 - Executor instructions: Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests.
 - Inputs: artifact:integrated-change
 - Resources: project:typescript-test-output
-- Permissions: read [authorized project tree, node_modules/]; write [.tmp/tsc/]; external [—]; destructive `false`
+- Permissions: read [authorized project tree, node_modules/, src/tests/architecture-contract.test.ts, src/tests/workspace-loader.test.ts, src/tests/coding-worker.test.ts, src/tests/coding-worker-internal-subagents.test.ts, src/tests/research-agent.test.ts]; write [.tmp/tsc/]; external [—]; destructive `false`
 - Execution: max `2` attempt(s), `40` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Writes only documented generated build or test artifacts.
 - Rollback: Regenerate the documented build or test artifacts from the prior reviewed commit.
 - Approval required: `false`
 - Acceptance:
   - `verification-passed` (test): All required unit tests pass; any skips are recorded and do not hide a missing required model or WASM artifact. Evidence: `runtime:evidence/verify-unit-tests/result.json`
+  - `workspace-boundary-tests-passed` (test): The unit report proves architecture-contract.test.ts, workspace-loader.test.ts, coding-worker.test.ts, coding-worker-internal-subagents.test.ts, and research-agent.test.ts passed, including main/worker/internal workspace composition, runtime-root scoping, and lead-only delegation. Evidence: `runtime:evidence/verify-unit-tests/workspace-boundary-tests.json`
 
 ### `verify-rust-tests` — Verify Rust Project Tests
 
@@ -715,19 +723,21 @@ flowchart TD
 
 ### `review-architecture-security` — Review Architecture, Security, And Product Boundaries
 
-- Goal: Review the integrated change and verification summary for Flue ownership, trusted context, approval gates, durable progress, product identity, and secret boundaries.
-- Executor instructions: Perform a fresh review independent of implementation self-report. Confirm user-visible behavior, fail-closed mutations, research ownership, and documented rollback.
+- Goal: Review the integrated change and verification summary for Flue ownership, instruction and persona workspace boundaries, Coding Worker runtime-root scope, trusted context, approval gates, durable progress, product identity, and secret boundaries.
+- Executor instructions: Perform a fresh review independent of implementation self-report. Confirm user-visible behavior, fail-closed mutations, research ownership, workspace instruction composition, lead-only worker exposure, internal-subagent ownership, runtime-root scoping, disjoint parallel file ownership, and documented rollback.
 - Inputs: artifact:integrated-change, artifact:verification-summary
 - Resources: —
-- Permissions: read [artifact:integrated-change, artifact:verification-summary, AGENTS.md, docs/architecture/]; write [—]; external [—]; destructive `false`
+- Permissions: read [artifact:integrated-change, artifact:verification-summary, AGENTS.md, docs/architecture/, src/AGENTS.md, src/workspace-loader.ts, src/agents/orchestrator.ts, src/workspace/, src/engine/workers/*/workspace/, src/engine/workers/coding-worker/subagents/*/workspace/, src/tests/architecture-contract.test.ts, src/tests/workspace-loader.test.ts, src/tests/coding-worker.test.ts, src/tests/coding-worker-internal-subagents.test.ts, src/tests/research-agent.test.ts]; write [—]; external [—]; destructive `false`
 - Execution: max `2` attempt(s), `90` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `none` — Produces evidence without mutating project or external state.
 - Rollback: none
 - Approval required: `false`
 - Acceptance:
-  - `architecture-contract-passes` (policy): The change preserves the local Flue map, orchestrator/worker/tool/skill/protocol/registry boundaries, and required typed contracts. Evidence: `runtime:evidence/review-architecture-security/architecture.json`
+  - `architecture-contract-passes` (policy): The change preserves the local Flue map, company/main-agent/lead-worker/internal-subagent instruction ownership, orchestrator/worker/tool/skill/protocol/registry boundaries, and required typed contracts. Evidence: `runtime:evidence/review-architecture-security/architecture.json`
   - `trust-boundaries-pass` (policy): Model-selected inputs cannot choose trusted actor, project, repository, credential, approval, or external destination boundaries. Evidence: `runtime:evidence/review-architecture-security/security.json`
   - `progress-contract-passes` (review): Every tool execution, subagent delegation, verification, approval, and state transition reaches the user through durable typed progress events. Evidence: `runtime:evidence/review-architecture-security/progress.json`
+  - `workspace-boundaries-pass` (policy): src/AGENTS.md remains company-owned; src/workspace/ remains the main-agent persona workspace even when used as the default Coding Worker runtime root; built-in lead workers and Coding Worker internal subagents compose only their own workspace guidance; runtime-loaded user workers remain capability profiles; and only lead workers are orchestrator-addressable. Evidence: `runtime:evidence/review-architecture-security/workspaces.json`
+  - `parallel-ownership-passes` (review): The final diff matches the plan's one-producer-per-file matrix; any shared file was serialized or reconciled by integration with no hidden parallel overwrite. Evidence: `runtime:evidence/review-architecture-security/file-ownership.json`
 
 ### `approve-release-candidate` — Approve Release Candidate Publication
 
@@ -868,6 +878,7 @@ flowchart TD
 - The project owner supplies target-specific authority for GitHub, canary, and production mutations at the declared gates.
 - Canary and production deployment commands remain adapter bindings until the project documents an approved deployment mechanism.
 - Full live-model TUI probes require valid provider credentials supplied through the runtime environment, never stored in this graph.
+- Every changed source, documentation, generated-definition, and focused-test file is assigned to exactly one implementation workstream; overlapping files are serialized or reconciled by integration.
 
 ## Risks
 
@@ -876,6 +887,7 @@ flowchart TD
 - External GitHub or deployment actions can have uncertain outcomes; adapters must use idempotency fencing and verify resulting state.
 - The full verification matrix is intentionally expensive; omitting a required check requires explicit evidence and human review.
 - The graph coordinator is not an operating-system sandbox or distributed scheduler; untrusted commands require an approved isolation layer.
+- The path src/workspace/ is both the main-agent persona workspace and, by default, the Coding Worker runtime access root; lifecycle evidence must distinguish instruction ownership from sandbox/project scope and from worker-local persona workspaces.
 
 ## Provenance and validation
 
