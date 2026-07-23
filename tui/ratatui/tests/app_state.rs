@@ -5,7 +5,9 @@ use std::time::{Duration, Instant};
 
 use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
-use sim_one_ratatui_tui::agent::{AgentReply, SessionLifecycleReply, SessionSummary};
+use sim_one_ratatui_tui::agent::{
+    AgentPromptOrigin, AgentReply, SessionLifecycleReply, SessionSummary,
+};
 use sim_one_ratatui_tui::app::{App, AppEvent, Clock, MouseRegions, SCROLL_PAGE_LINES};
 use sim_one_ratatui_tui::flue::events::{FlueEvent, StreamControl};
 use sim_one_ratatui_tui::flue::stream::AgentStreamUpdate;
@@ -564,19 +566,19 @@ fn initial_transcript_is_clean_preflight_shell() {
 
 #[test]
 fn startup_preflight_creates_fresh_session_before_sending_one_greeting_prompt() {
-    let prompts = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
+    let prompts = Arc::new(Mutex::new(Vec::<(String, String, AgentPromptOrigin)>::new()));
     let sent_prompts = Arc::clone(&prompts);
     let creator_calls = Arc::new(AtomicUsize::new(0));
     let recorded_creator_calls = Arc::clone(&creator_calls);
-    let mut app = App::with_agent_sender_and_lifecycle(
+    let mut app = App::with_agent_request_sender_and_lifecycle(
         "",
         "http://127.0.0.1:3940 started:false",
         "http://127.0.0.1:3940",
-        Arc::new(move |_, session_id, prompt| {
+        Arc::new(move |_, session_id, prompt, origin| {
             sent_prompts
                 .lock()
                 .expect("prompt recorder should lock")
-                .push((session_id.clone(), prompt));
+                .push((session_id.clone(), prompt, origin));
             Ok(AgentReply {
                 text: "Hello Daniel, I'm Ollie. All systems are go.".to_string(),
                 session_id: Some("tui-startup-1".to_string()),
@@ -605,6 +607,7 @@ fn startup_preflight_creates_fresh_session_before_sending_one_greeting_prompt() 
     assert_eq!(prompts.len(), 1);
     assert_eq!(prompts[0].0, "tui-startup-1");
     assert!(prompts[0].1.contains("greeting-preflight"));
+    assert_eq!(prompts[0].2, AgentPromptOrigin::StartupPreflight);
     assert!(prompts[0].1.contains("Daniel T Sasser II"));
     assert!(prompts[0].1.contains("all systems go"));
     assert!(prompts[0].1.contains("status = \"all systems go\""));

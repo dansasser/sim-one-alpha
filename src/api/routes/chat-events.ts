@@ -27,6 +27,7 @@ import {
   SessionAccessDeniedError,
   type ChatSessionResolution,
 } from '../../engine/session/session-routing.js';
+import type { AgentDeliveryReference } from '../../engine/session/session-database.js';
 import { createChatPrompt } from '../../api/routes/chat-prompt.js';
 import { getGithubAuthChallengeRelay, githubAuthAudienceFromEvent } from '../../api/ingress/github-auth-challenge-relay.js';
 import { runWithTrustedMessageEvent } from '../../api/ingress/trusted-event-context.js';
@@ -208,13 +209,15 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
     const body = await readJsonResponse(agentResponse.clone());
     if (isRecord(body)) {
       const githubAuthChallenge = getGithubAuthChallengeRelay().consume(githubAuthAudienceFromEvent(event));
-      const deliveryId = readDeliveryId(body);
-      if (deliveryId) {
+      const delivery = readDeliveryReference(body);
+      const deliveryId = legacyDeliveryId(delivery);
+      if (deliveryId || Object.keys(delivery).length > 0) {
         goromboPersistenceRuntime.sessionDatabase.recordNormalizedMessageEvent({
           event,
           sessionId: sessionResolution.sessionId,
           deliveryKind: 'direct-agent',
           deliveryId,
+          delivery,
         });
       }
 
@@ -365,19 +368,30 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
-function readDeliveryId(body: Record<string, unknown>): string | undefined {
+function readDeliveryReference(body: Record<string, unknown>): AgentDeliveryReference {
   const submission = isRecord(body.submission) ? body.submission : undefined;
-  const submissionId = typeof submission?.id === 'string' && submission.id.trim()
-    ? submission.id.trim()
-    : undefined;
-  if (submissionId) {
-    return submissionId;
-  }
+  const submissionId = readNonEmptyString(body.submissionId)
+    ?? readNonEmptyString(submission?.id);
+  const streamUrl = readNonEmptyString(body.streamUrl);
+  const offset = readNonEmptyString(body.offset);
 
-  const offset = typeof body.offset === 'string' ? body.offset : undefined;
-  const streamUrl = typeof body.streamUrl === 'string' ? body.streamUrl : undefined;
-  if (!offset && !streamUrl) {
+  return {
+    ...(submissionId ? { submissionId } : {}),
+    ...(streamUrl ? { streamUrl } : {}),
+    ...(offset ? { offset } : {}),
+  };
+}
+
+function legacyDeliveryId(delivery: AgentDeliveryReference): string | undefined {
+  if (delivery.submissionId) {
+    return delivery.submissionId;
+  }
+  if (!delivery.streamUrl && !delivery.offset) {
     return undefined;
   }
-  return [streamUrl ?? '', offset ?? ''].join('#');
+  return [delivery.streamUrl ?? '', delivery.offset ?? ''].join('#');
+}
+
+function readNonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }

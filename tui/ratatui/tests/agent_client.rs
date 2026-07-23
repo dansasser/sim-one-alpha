@@ -5,7 +5,7 @@ use std::thread;
 
 use sim_one_ratatui_tui::agent::{
     create_chat_session, list_chat_sessions, resume_chat_session, send_agent_prompt,
-    send_agent_prompt_reply,
+    send_agent_prompt_reply, AgentPromptOrigin,
 };
 
 #[test]
@@ -71,6 +71,52 @@ fn posts_prompt_to_tui_chat_event_endpoint_and_extracts_text() {
     assert_eq!(
         body.get("session").and_then(|value| value.as_str()),
         Some("session with spaces")
+    );
+    assert_eq!(body.get("workflow"), None);
+}
+
+#[test]
+fn tags_only_startup_preflight_prompts_with_the_internal_workflow() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("test server should bind");
+    let port = listener
+        .local_addr()
+        .expect("test server should have address")
+        .port();
+    let (tx, rx) = mpsc::channel();
+
+    thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("client should connect");
+        let request = read_http_request(&mut stream);
+        tx.send(request).expect("request should be reported");
+
+        let body = r#"{"result":{"text":"startup greeting"}}"#;
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .expect("response should be writable");
+    });
+
+    let prompt = "Use greeting-preflight with status = \"all systems go\".";
+    let response = send_agent_prompt_reply(
+        &format!("http://127.0.0.1:{port}"),
+        "tui-startup-1",
+        prompt,
+        AgentPromptOrigin::StartupPreflight,
+    )
+    .expect("startup prompt should return response metadata");
+
+    assert_eq!(response.text, "startup greeting");
+    let body = request_body_json(&rx.recv().expect("request should be captured"));
+    assert_eq!(
+        body.get("text").and_then(|value| value.as_str()),
+        Some(prompt)
+    );
+    assert_eq!(
+        body.get("workflow").and_then(|value| value.as_str()),
+        Some("tui.startup-preflight")
     );
 }
 
@@ -292,6 +338,7 @@ fn extracts_command_session_metadata_from_chat_event_response() {
         &format!("http://127.0.0.1:{port}"),
         "tui-existing-1",
         "/new Demo",
+        AgentPromptOrigin::User,
     )
     .expect("agent prompt should return response metadata");
 

@@ -10,7 +10,7 @@ use ratatui::text::Span;
 
 use crate::agent::{
     create_chat_session, list_chat_sessions, resume_chat_session, send_agent_prompt_reply,
-    AgentReply, SessionLifecycleReply, SessionSummary,
+    AgentPromptOrigin, AgentReply, SessionLifecycleReply, SessionSummary,
 };
 use crate::flue::events::FlueEvent;
 use crate::flue::reducer::{extract_role, extract_text, DisplayRow, EventTranscript};
@@ -26,6 +26,12 @@ const TRANSCRIPT_TAIL_MARGIN_ROWS: usize = 1;
 
 pub type AgentSender =
     Arc<dyn Fn(String, String, String) -> Result<AgentReply, String> + Send + Sync + 'static>;
+pub type AgentRequestSender = Arc<
+    dyn Fn(String, String, String, AgentPromptOrigin) -> Result<AgentReply, String>
+        + Send
+        + Sync
+        + 'static,
+>;
 pub type SessionLister =
     Arc<dyn Fn(String, usize) -> Result<Vec<SessionSummary>, String> + Send + Sync + 'static>;
 pub type SessionCreator =
@@ -33,6 +39,10 @@ pub type SessionCreator =
 pub type SessionResumer =
     Arc<dyn Fn(String, String) -> Result<SessionLifecycleReply, String> + Send + Sync + 'static>;
 pub type Clock = Arc<dyn Fn() -> Instant + Send + Sync + 'static>;
+
+fn ignore_prompt_origin(agent_sender: AgentSender) -> AgentRequestSender {
+    Arc::new(move |base_url, session_id, prompt, _| agent_sender(base_url, session_id, prompt))
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SlashCommand {
@@ -274,7 +284,7 @@ pub struct App {
     gateway_status: String,
     base_url: String,
     agent_status: String,
-    agent_sender: AgentSender,
+    agent_sender: AgentRequestSender,
     session_lister: SessionLister,
     session_creator: SessionCreator,
     session_resumer: SessionResumer,
@@ -363,13 +373,31 @@ impl App {
         gateway_status: impl Into<String>,
         base_url: impl Into<String>,
     ) -> Self {
-        Self::with_agent_sender(
+        Self::with_agent_request_sender(
             session_id,
             gateway_status,
             base_url,
-            Arc::new(|base_url, session_id, prompt| {
-                send_agent_prompt_reply(&base_url, &session_id, &prompt)
+            Arc::new(|base_url, session_id, prompt, origin| {
+                send_agent_prompt_reply(&base_url, &session_id, &prompt, origin)
             }),
+        )
+    }
+
+    fn with_agent_request_sender(
+        session_id: impl Into<String>,
+        gateway_status: impl Into<String>,
+        base_url: impl Into<String>,
+        agent_sender: AgentRequestSender,
+    ) -> Self {
+        Self::with_dependencies(
+            session_id,
+            gateway_status,
+            base_url,
+            agent_sender,
+            Arc::new(|base_url, limit| list_chat_sessions(&base_url, limit)),
+            Arc::new(Instant::now),
+            Arc::new(|base_url| create_chat_session(&base_url)),
+            Arc::new(|base_url, session_id| resume_chat_session(&base_url, &session_id)),
         )
     }
 
@@ -393,6 +421,26 @@ impl App {
         gateway_status: impl Into<String>,
         base_url: impl Into<String>,
         agent_sender: AgentSender,
+        session_creator: SessionCreator,
+        session_resumer: SessionResumer,
+    ) -> Self {
+        Self::with_dependencies(
+            session_id,
+            gateway_status,
+            base_url,
+            ignore_prompt_origin(agent_sender),
+            Arc::new(|base_url, limit| list_chat_sessions(&base_url, limit)),
+            Arc::new(Instant::now),
+            session_creator,
+            session_resumer,
+        )
+    }
+
+    pub fn with_agent_request_sender_and_lifecycle(
+        session_id: impl Into<String>,
+        gateway_status: impl Into<String>,
+        base_url: impl Into<String>,
+        agent_sender: AgentRequestSender,
         session_creator: SessionCreator,
         session_resumer: SessionResumer,
     ) -> Self {
@@ -437,7 +485,7 @@ impl App {
             session_id,
             gateway_status,
             base_url,
-            agent_sender,
+            ignore_prompt_origin(agent_sender),
             session_lister,
             clock,
             Arc::new(|base_url| create_chat_session(&base_url)),
@@ -450,7 +498,7 @@ impl App {
         session_id: impl Into<String>,
         gateway_status: impl Into<String>,
         base_url: impl Into<String>,
-        agent_sender: AgentSender,
+        agent_sender: AgentRequestSender,
         session_lister: SessionLister,
         clock: Clock,
         session_creator: SessionCreator,
@@ -1655,7 +1703,7 @@ impl App {
         let started_at = (self.clock)();
         let (tx, rx) = mpsc::channel();
         thread::spawn(move || {
-            let result = sender(base_url, session_id, prompt);
+            let result = sender(base_url, session_id, prompt, AgentPromptOrigin::User);
             let _ = tx.send(AgentResponse { result });
         });
         let pending = PendingResponse {
@@ -1685,7 +1733,12 @@ impl App {
         let started_at = (self.clock)();
         let (tx, rx) = mpsc::channel();
         thread::spawn(move || {
-            let result = sender(base_url, session_id, prompt);
+            let result = sender(
+                base_url,
+                session_id,
+                prompt,
+                AgentPromptOrigin::StartupPreflight,
+            );
             let _ = tx.send(AgentResponse { result });
         });
         let pending = PendingResponse {

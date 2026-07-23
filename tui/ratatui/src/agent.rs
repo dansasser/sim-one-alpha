@@ -20,6 +20,12 @@ pub struct AgentReply {
     pub session_created: Option<bool>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AgentPromptOrigin {
+    User,
+    StartupPreflight,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionSummary {
     pub id: String,
@@ -54,13 +60,15 @@ pub fn resume_chat_session(
 }
 
 pub fn send_agent_prompt(base_url: &str, session_id: &str, prompt: &str) -> Result<String, String> {
-    send_agent_prompt_reply(base_url, session_id, prompt).map(|reply| reply.text)
+    send_agent_prompt_reply(base_url, session_id, prompt, AgentPromptOrigin::User)
+        .map(|reply| reply.text)
 }
 
 pub fn send_agent_prompt_reply(
     base_url: &str,
     session_id: &str,
     prompt: &str,
+    origin: AgentPromptOrigin,
 ) -> Result<AgentReply, String> {
     let endpoint = HttpEndpoint::parse(base_url)?;
     let path = "/api/chat/events";
@@ -74,6 +82,9 @@ pub fn send_agent_prompt_reply(
     });
     if !session_id.trim().is_empty() {
         body["session"] = serde_json::Value::String(session_id.to_string());
+    }
+    if origin == AgentPromptOrigin::StartupPreflight {
+        body["workflow"] = serde_json::Value::String("tui.startup-preflight".to_string());
     }
     let body = body.to_string();
 
