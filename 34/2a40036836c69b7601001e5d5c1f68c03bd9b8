@@ -1,0 +1,44 @@
+src/tests/http-endpoints.test.ts
+  s_a81fff26d52223::t_c35927765ecb7f 121,123,159-166
+tui/ratatui/src/app.rs
+  s_a81fff26d52223::t_76c08f32a9e327 43-46
+  s_a81fff26d52223::t_b961f71875e8fb 439-445
+  s_a81fff26d52223::t_b3232f81bd6568 13,29-34,287,376,380-381,386-403,426-433,435,488,501,1706,1736-1739
+  s_a81fff26d52223::t_d4d9f6724fe6ff 434,436-438,1740-1741
+src/tests/flue-session-store.test.ts
+  s_a81fff26d52223::t_c35927765ecb7f 6,13,227,235-239,243-245,266-273,280-357
+  s_a81fff26d52223::t_c7cd53e5325c65 229
+  s_a81fff26d52223::t_8dd9f1d049e249 225-226
+  s_a81fff26d52223::t_c07abfc12a7071 228
+  s_a81fff26d52223::t_536ba0113b5e02 358-359
+tui/ratatui/tests/app_state.rs
+  s_a81fff26d52223::t_b961f71875e8fb 8-10,569,573,577,581,610
+tui/ratatui/src/agent.rs
+  s_a81fff26d52223::t_b3232f81bd6568 23-28,63-64,71,86-87
+  s_a81fff26d52223::t_d46c3b9b88661b 88
+src/engine/session/session-database.ts
+  s_a81fff26d52223::t_b3232f81bd6568 84,88-100,436-437,454-456,477-479,498-528,1051-1053,1162,1192-1211,1770-1788,1872,1887-1889
+tui/ratatui/tests/agent_client.rs
+  s_a81fff26d52223::t_c35927765ecb7f 8,75-120
+  s_a81fff26d52223::t_69caaec1555426 341
+src/api/routes/chat-events.ts
+  s_a81fff26d52223::t_76c08f32a9e327 30
+  s_a81fff26d52223::t_b3232f81bd6568 212-214,220,371,373-383,385-389,392-395
+  s_a81fff26d52223::t_ea4bcc4df2b05d 396
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "342a40036836c69b7601001e5d5c1f68c03bd9b8",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
