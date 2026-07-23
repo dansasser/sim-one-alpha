@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "graph_id": "sim-one-alpha-lifecycle",
-  "graph_version": 1,
+  "graph_version": 2,
   "title": "SIM-ONE Alpha Development Lifecycle",
   "purpose": "Govern future SIM-ONE Alpha changes from an authorized request through grounded design, parallel domain implementation, full project verification, approval-gated release, output-level canary and production observation, and bounded repair.",
   "project": {
@@ -19,7 +19,7 @@
       "/opt/ai/sim-one-alpha/docs/architecture/memory-system.md",
       "/opt/ai/sim-one-alpha/.github/workflows/ci.yml"
     ],
-    "context_version": "commit:0719563dfd2a3853fd8d1e87be02a8cb29b8b02c"
+    "context_version": "commit:0f4a72094e9c6aa6b233c633c952a089ef889a1c"
   },
   "status": "validated",
   "templates": [
@@ -186,7 +186,7 @@
         "approval_required": false
       },
       "resources": [
-        "workspace:node-modules"
+        "project:node-modules"
       ],
       "tags": [
         "environment",
@@ -269,7 +269,7 @@
         "approval_required": false
       },
       "resources": [
-        "workspace:embedding-model-assets"
+        "project:embedding-model-assets"
       ],
       "tags": [
         "environment",
@@ -355,7 +355,7 @@
         "approval_required": false
       },
       "resources": [
-        "workspace:memory-wasm-output"
+        "project:memory-wasm-output"
       ],
       "tags": [
         "environment",
@@ -692,7 +692,7 @@
         "approval_required": false
       },
       "resources": [
-        "workspace:core-contracts"
+        "project:core-contracts"
       ],
       "tags": [
         "implementation",
@@ -776,7 +776,7 @@
         "approval_required": false
       },
       "resources": [
-        "workspace:agent-runtime"
+        "project:agent-runtime"
       ],
       "tags": [
         "implementation",
@@ -858,7 +858,7 @@
         "approval_required": false
       },
       "resources": [
-        "workspace:memory-retrieval"
+        "project:memory-retrieval"
       ],
       "tags": [
         "implementation",
@@ -940,7 +940,7 @@
         "approval_required": false
       },
       "resources": [
-        "workspace:capabilities-security"
+        "project:capabilities-security"
       ],
       "tags": [
         "implementation",
@@ -1024,7 +1024,7 @@
         "approval_required": false
       },
       "resources": [
-        "workspace:ingress-operations"
+        "project:ingress-operations"
       ],
       "tags": [
         "implementation",
@@ -1108,7 +1108,7 @@
         "approval_required": false
       },
       "resources": [
-        "workspace:product-delivery"
+        "project:product-delivery"
       ],
       "tags": [
         "implementation",
@@ -1303,12 +1303,12 @@
         "approval_required": false
       },
       "resources": [
-        "workspace:core-contracts",
-        "workspace:agent-runtime",
-        "workspace:memory-retrieval",
-        "workspace:capabilities-security",
-        "workspace:ingress-operations",
-        "workspace:product-delivery"
+        "project:core-contracts",
+        "project:agent-runtime",
+        "project:memory-retrieval",
+        "project:capabilities-security",
+        "project:ingress-operations",
+        "project:product-delivery"
       ],
       "tags": [
         "integration",
@@ -1453,7 +1453,7 @@
         "approval_required": false
       },
       "resources": [
-        "workspace:typescript-test-output"
+        "project:typescript-test-output"
       ],
       "tags": [
         "verification",
@@ -1464,12 +1464,12 @@
     {
       "id": "verify-rust-tests",
       "type": "verification",
-      "title": "Verify Rust Workspace Tests",
-      "goal": "Run the configured Rust workspace tests for the memory engine and Ratatui crates.",
+      "title": "Verify Rust Project Tests",
+      "goal": "Run the configured Rust project tests for the memory engine and Ratatui crates.",
       "state": "planned",
       "executor": {
         "kind": "deterministic",
-        "name": "Verify Rust Workspace Tests",
+        "name": "Verify Rust Project Tests",
         "instructions": "Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests."
       },
       "inputs": [
@@ -1481,7 +1481,7 @@
       ],
       "outputs": [
         {
-          "name": "Verify Rust Workspace Tests",
+          "name": "Verify Rust Project Tests",
           "artifact": "artifact:rust-test-report",
           "format": "verification-report"
         }
@@ -1490,7 +1490,7 @@
         {
           "id": "verification-passed",
           "kind": "test",
-          "criterion": "Every configured Rust workspace test passes under the pinned toolchain.",
+          "criterion": "Every configured Rust project test passes under the pinned toolchain.",
           "evidence": "runtime:evidence/verify-rust-tests/result.json"
         }
       ],
@@ -1526,7 +1526,7 @@
         "approval_required": false
       },
       "resources": [
-        "workspace:rust-target"
+        "project:rust-target"
       ],
       "tags": [
         "verification",
@@ -1621,7 +1621,7 @@
         "approval_required": false
       },
       "resources": [
-        "workspace:runtime-build-output"
+        "project:runtime-build-output"
       ],
       "tags": [
         "verification",
@@ -1705,7 +1705,7 @@
         "approval_required": false
       },
       "resources": [
-        "workspace:ratatui-build-output"
+        "project:ratatui-build-output"
       ],
       "tags": [
         "verification",
@@ -1788,7 +1788,7 @@
         "approval_required": false
       },
       "resources": [
-        "workspace:cli-build-output"
+        "project:cli-build-output"
       ],
       "tags": [
         "verification",
@@ -1908,7 +1908,7 @@
         ],
         "write": [
           ".gorombo test runtime state",
-          "/tmp SIM-ONE HTTP test workspace"
+          "/tmp SIM-ONE HTTP test runtime root"
         ],
         "external": [],
         "destructive": false
@@ -1991,7 +1991,7 @@
         ],
         "write": [
           ".gorombo test runtime configuration",
-          "/tmp Ratatui product workspace"
+          "/tmp Ratatui product runtime root"
         ],
         "external": [],
         "destructive": false
@@ -2085,7 +2085,7 @@
         ],
         "write": [
           ".gorombo test runtime state",
-          "/tmp SIM-ONE TUI test workspace"
+          "/tmp SIM-ONE TUI test runtime root"
         ],
         "external": [],
         "destructive": false
@@ -2175,7 +2175,7 @@
         ],
         "write": [
           ".gorombo test memory state",
-          "/tmp SIM-ONE memory smoke workspace"
+          "/tmp SIM-ONE memory smoke runtime root"
         ],
         "external": [],
         "destructive": false

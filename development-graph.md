@@ -1,4 +1,4 @@
-<!-- development-graph-sha256: 2449186f0ad04592681a2e7e9ad4f204e084d9226a77023172c722543e90d0e0 -->
+<!-- development-graph-sha256: 1e48f578208ac8033da10e2d32eb6af140e0f28f157df2860ab3f7286d111a44 -->
 <!-- Generated from canonical JSON. Do not edit by hand. -->
 # SIM-ONE Alpha Development Lifecycle
 
@@ -9,16 +9,16 @@ Govern future SIM-ONE Alpha changes from an authorized request through grounded 
 | Field | Value |
 |---|---|
 | Graph ID | `sim-one-alpha-lifecycle` |
-| Graph version | `1` |
+| Graph version | `2` |
 | Schema version | `1` |
 | Status | `validated` |
 | Project | sim-one-alpha |
 | Project root | `/opt/ai/sim-one-alpha` |
-| Context version | `commit:0719563dfd2a3853fd8d1e87be02a8cb29b8b02c` |
+| Context version | `commit:0f4a72094e9c6aa6b233c633c952a089ef889a1c` |
 | Templates | discovery-to-delivery, parallel-fanout-fanin, human-gate, bounded-feedback, rollback-observation |
 | Entry nodes | baseline-context |
 | Terminal nodes | closeout-release |
-| Canonical checksum | `2449186f0ad04592681a2e7e9ad4f204e084d9226a77023172c722543e90d0e0` |
+| Canonical checksum | `1e48f578208ac8033da10e2d32eb6af140e0f28f157df2860ab3f7286d111a44` |
 
 ## Flow
 
@@ -40,7 +40,7 @@ flowchart TD
     n_integrate_and_repair["Integrate Change And Apply Bounded Repairs\\n(work / planned)"]
     n_verify_typecheck(["Verify TypeScript Types\\n(verification / planned)"])
     n_verify_unit_tests(["Verify Unit Test Suite\\n(verification / planned)"])
-    n_verify_rust_tests(["Verify Rust Workspace Tests\\n(verification / planned)"])
+    n_verify_rust_tests(["Verify Rust Project Tests\\n(verification / planned)"])
     n_build_runtime(["Build Flue Runtime\\n(verification / planned)"])
     n_build_ratatui(["Build Ratatui Product TUI\\n(verification / planned)"])
     n_build_cli(["Build SIM-ONE CLI\\n(verification / planned)"])
@@ -189,7 +189,7 @@ flowchart TD
 | `integrate-and-repair` | `work` | `planned` | hybrid: SIM-ONE Coding Worker integration adapter | Combine selected domain outputs into one coherent change set, resolve cross-domain contract issues, and apply bounded repairs from verification or observation evidence. | artifact:integrated-change |
 | `verify-typecheck` | `verification` | `planned` | deterministic: Verify TypeScript Types | Prove the full TypeScript project satisfies its configured no-emit type contract. | artifact:typecheck-report |
 | `verify-unit-tests` | `verification` | `planned` | deterministic: Verify Unit Test Suite | Run the configured SIM-ONE Alpha unit suite with real local embedding assets and WASM available. | artifact:unit-test-report |
-| `verify-rust-tests` | `verification` | `planned` | deterministic: Verify Rust Workspace Tests | Run the configured Rust workspace tests for the memory engine and Ratatui crates. | artifact:rust-test-report |
+| `verify-rust-tests` | `verification` | `planned` | deterministic: Verify Rust Project Tests | Run the configured Rust project tests for the memory engine and Ratatui crates. | artifact:rust-test-report |
 | `build-runtime` | `verification` | `planned` | deterministic: Build Flue Runtime | Build the Node-target SIM-ONE Alpha Flue runtime and copy configuration, registries, and memory WASM into the product artifact. | artifact:runtime-build |
 | `build-ratatui` | `verification` | `planned` | deterministic: Build Ratatui Product TUI | Build the release-mode Ratatui TUI product binary and copy it into the product artifact. | artifact:ratatui-build |
 | `build-cli` | `verification` | `planned` | deterministic: Build SIM-ONE CLI | Build the TypeScript sim-one CLI and Ink interface product artifact. | artifact:cli-build |
@@ -344,7 +344,7 @@ flowchart TD
 - Goal: Prepare the Node 22 and pnpm dependency tree from the committed lockfile without changing dependency intent.
 - Executor instructions: Run the pinned package-manager install and retain complete output, including any blocked build-script warning.
 - Inputs: artifact:baseline-context
-- Resources: workspace:node-modules
+- Resources: project:node-modules
 - Permissions: read [package.json, pnpm-lock.yaml, pnpm-workspace.yaml, pnpm store]; write [node_modules/]; external [package registry downloads]; destructive `false`
 - Execution: max `2` attempt(s), `20` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Populates the gitignored node_modules dependency tree.
@@ -359,7 +359,7 @@ flowchart TD
 - Goal: Materialize the pinned local ONNX embedding model and tokenizer assets required by embedding and RAG verification.
 - Executor instructions: Use the repository fetch script and digest the downloaded model assets.
 - Inputs: artifact:dependency-environment
-- Resources: workspace:embedding-model-assets
+- Resources: project:embedding-model-assets
 - Permissions: read [scripts/fetch-embedding-model.mjs, package.json]; write [assets/models/embeddings/all-MiniLM-L6-v2/]; external [Hugging Face model download]; destructive `false`
 - Execution: max `2` attempt(s), `15` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Writes gitignored embedding model assets under assets/models/embeddings.
@@ -374,7 +374,7 @@ flowchart TD
 - Goal: Compile the Rust structured-memory engine to the Node-compatible WASM artifact required by real memory execution.
 - Executor instructions: Run the repository WASM build under the pinned Rust toolchain and retain the generated artifact digest.
 - Inputs: artifact:dependency-environment
-- Resources: workspace:memory-wasm-output
+- Resources: project:memory-wasm-output
 - Permissions: read [crates/gorombo-memory/, rust-toolchain.toml, Cargo.toml, scripts/wasm-build.mjs]; write [crates/gorombo-memory/pkg/, crates/gorombo-memory/target/]; external [—]; destructive `false`
 - Execution: max `2` attempt(s), `20` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Writes gitignored Rust target and WASM package artifacts.
@@ -437,7 +437,7 @@ flowchart TD
 - Goal: Implement authorized changes to shared types, Valibot schemas, protocols, model cards, configuration, architecture contracts, and Flue-discovered entrypoints.
 - Executor instructions: Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record.
 - Inputs: artifact:implementation-plan
-- Resources: workspace:core-contracts
+- Resources: project:core-contracts
 - Permissions: read [artifact:implementation-plan, authorized project files]; write [src/core/, src/app.ts, src/db.ts, docs/architecture/, flue.config.ts]; external [—]; destructive `false`
 - Execution: max `3` attempt(s), `180` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Changes only the authorized files in this domain workstream.
@@ -453,7 +453,7 @@ flowchart TD
 - Goal: Implement authorized orchestrator, workflow, tool, skill, workspace, researcher, Coding Worker, and internal-subagent changes without crossing ownership boundaries.
 - Executor instructions: Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record.
 - Inputs: artifact:implementation-plan
-- Resources: workspace:agent-runtime
+- Resources: project:agent-runtime
 - Permissions: read [artifact:implementation-plan, authorized project files]; write [src/agents/, src/workflows/, src/workspace/, src/engine/tools/, src/engine/skills/, src/engine/workers/]; external [—]; destructive `false`
 - Execution: max `3` attempt(s), `180` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Changes only the authorized files in this domain workstream.
@@ -469,7 +469,7 @@ flowchart TD
 - Goal: Implement authorized structured memory, session memory, document indexing, knowledge storage, retrieval routing, embeddings, and Rust/WASM changes while keeping memory layers distinct.
 - Executor instructions: Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record.
 - Inputs: artifact:implementation-plan
-- Resources: workspace:memory-retrieval
+- Resources: project:memory-retrieval
 - Permissions: read [artifact:implementation-plan, authorized project files]; write [src/engine/memory/, src/engine/rag/, src/engine/embeddings/, crates/gorombo-memory/]; external [—]; destructive `false`
 - Execution: max `3` attempt(s), `180` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Changes only the authorized files in this domain workstream.
@@ -485,7 +485,7 @@ flowchart TD
 - Goal: Implement authorized capability-store, registry, MCP, approval, GitHub-auth, and policy enforcement changes with fail-closed trust boundaries.
 - Executor instructions: Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record.
 - Inputs: artifact:implementation-plan
-- Resources: workspace:capabilities-security
+- Resources: project:capabilities-security
 - Permissions: read [artifact:implementation-plan, authorized project files]; write [src/engine/capabilities/, src/engine/registries/, src/engine/approvals/, src/api/ingress/, docs/architecture/github-auth-system.md]; external [—]; destructive `false`
 - Execution: max `3` attempt(s), `180` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Changes only the authorized files in this domain workstream.
@@ -501,7 +501,7 @@ flowchart TD
 - Goal: Implement authorized connector normalization, authenticated API routes, durable session handling, schedules, and typed progress/telemetry surfaces.
 - Executor instructions: Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record.
 - Inputs: artifact:implementation-plan
-- Resources: workspace:ingress-operations
+- Resources: project:ingress-operations
 - Permissions: read [artifact:implementation-plan, authorized project files]; write [src/api/, src/channels/, src/engine/session/, src/engine/schedules/, src/core/telemetry/, docs/operations/]; external [—]; destructive `false`
 - Execution: max `3` attempt(s), `180` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Changes only the authorized files in this domain workstream.
@@ -517,7 +517,7 @@ flowchart TD
 - Goal: Implement authorized sim-one CLI, Ink/Ratatui TUI, product packaging, install, build, CI, and release documentation changes.
 - Executor instructions: Use the Coding Worker lead and only its worker-local internal specialists. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record.
 - Inputs: artifact:implementation-plan
-- Resources: workspace:product-delivery
+- Resources: project:product-delivery
 - Permissions: read [artifact:implementation-plan, authorized project files]; write [sim-one-cli/, tui/, scripts/, .github/workflows/, docs/architecture/product-flow.md, README.md]; external [—]; destructive `false`
 - Execution: max `3` attempt(s), `180` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Changes only the authorized files in this domain workstream.
@@ -533,7 +533,7 @@ flowchart TD
 - Goal: Combine selected domain outputs into one coherent change set, resolve cross-domain contract issues, and apply bounded repairs from verification or observation evidence.
 - Executor instructions: Integrate only authorized outputs. Preserve unrelated verified branches, route failures to the owning domain, and emit a complete diff plus typed progress record.
 - Inputs: artifact:core-contracts-change, artifact:agent-runtime-change, artifact:memory-retrieval-change, artifact:capabilities-security-change, artifact:ingress-operations-change, artifact:product-delivery-change, artifact:dependency-environment, artifact:embedding-model-assets, artifact:memory-wasm, artifact:typecheck-report, artifact:unit-test-report, artifact:rust-test-report, artifact:runtime-build, artifact:ratatui-build, artifact:ratatui-product-report, artifact:cli-build, artifact:cli-behavior-report, artifact:http-test-report, artifact:tui-e2e-report, artifact:memory-smoke-report, artifact:verification-summary, artifact:architecture-security-review, artifact:canary-behavior-report, artifact:production-observation
-- Resources: workspace:core-contracts, workspace:agent-runtime, workspace:memory-retrieval, workspace:capabilities-security, workspace:ingress-operations, workspace:product-delivery
+- Resources: project:core-contracts, project:agent-runtime, project:memory-retrieval, project:capabilities-security, project:ingress-operations, project:product-delivery
 - Permissions: read [authorized project tree, domain change artifacts, verification evidence]; write [authorized project files across affected domains]; external [—]; destructive `false`
 - Execution: max `3` attempt(s), `180` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Integrates and repairs authorized project files in the isolated worktree.
@@ -563,7 +563,7 @@ flowchart TD
 - Goal: Run the configured SIM-ONE Alpha unit suite with real local embedding assets and WASM available.
 - Executor instructions: Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests.
 - Inputs: artifact:integrated-change
-- Resources: workspace:typescript-test-output
+- Resources: project:typescript-test-output
 - Permissions: read [authorized project tree, node_modules/]; write [.tmp/tsc/]; external [—]; destructive `false`
 - Execution: max `2` attempt(s), `40` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Writes only documented generated build or test artifacts.
@@ -572,26 +572,26 @@ flowchart TD
 - Acceptance:
   - `verification-passed` (test): All required unit tests pass; any skips are recorded and do not hide a missing required model or WASM artifact. Evidence: `runtime:evidence/verify-unit-tests/result.json`
 
-### `verify-rust-tests` — Verify Rust Workspace Tests
+### `verify-rust-tests` — Verify Rust Project Tests
 
-- Goal: Run the configured Rust workspace tests for the memory engine and Ratatui crates.
+- Goal: Run the configured Rust project tests for the memory engine and Ratatui crates.
 - Executor instructions: Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests.
 - Inputs: artifact:integrated-change
-- Resources: workspace:rust-target
+- Resources: project:rust-target
 - Permissions: read [authorized project tree, node_modules/]; write [target/]; external [—]; destructive `false`
 - Execution: max `2` attempt(s), `40` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Writes only documented generated build or test artifacts.
 - Rollback: Regenerate the documented build or test artifacts from the prior reviewed commit.
 - Approval required: `false`
 - Acceptance:
-  - `verification-passed` (test): Every configured Rust workspace test passes under the pinned toolchain. Evidence: `runtime:evidence/verify-rust-tests/result.json`
+  - `verification-passed` (test): Every configured Rust project test passes under the pinned toolchain. Evidence: `runtime:evidence/verify-rust-tests/result.json`
 
 ### `build-runtime` — Build Flue Runtime
 
 - Goal: Build the Node-target SIM-ONE Alpha Flue runtime and copy configuration, registries, and memory WASM into the product artifact.
 - Executor instructions: Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests.
 - Inputs: artifact:integrated-change, artifact:typecheck-report, artifact:unit-test-report, artifact:rust-test-report
-- Resources: workspace:runtime-build-output
+- Resources: project:runtime-build-output
 - Permissions: read [authorized project tree, node_modules/]; write [.gorombo/sim-one-alpha/, .tmp/, dist-flue/]; external [—]; destructive `false`
 - Execution: max `2` attempt(s), `40` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Writes only documented generated build or test artifacts.
@@ -605,7 +605,7 @@ flowchart TD
 - Goal: Build the release-mode Ratatui TUI product binary and copy it into the product artifact.
 - Executor instructions: Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests.
 - Inputs: artifact:integrated-change, artifact:runtime-build
-- Resources: workspace:ratatui-build-output
+- Resources: project:ratatui-build-output
 - Permissions: read [authorized project tree, node_modules/]; write [target/release/, .gorombo/sim-one-ratatui/]; external [—]; destructive `false`
 - Execution: max `2` attempt(s), `40` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Writes only documented generated build or test artifacts.
@@ -619,7 +619,7 @@ flowchart TD
 - Goal: Build the TypeScript sim-one CLI and Ink interface product artifact.
 - Executor instructions: Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests.
 - Inputs: artifact:integrated-change, artifact:runtime-build
-- Resources: workspace:cli-build-output
+- Resources: project:cli-build-output
 - Permissions: read [authorized project tree, node_modules/]; write [.gorombo/sim-one-cli/]; external [—]; destructive `false`
 - Execution: max `2` attempt(s), `25` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Writes only documented generated build or test artifacts.
@@ -648,7 +648,7 @@ flowchart TD
 - Executor instructions: Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests.
 - Inputs: artifact:runtime-build
 - Resources: local-runtime-probe
-- Permissions: read [authorized project tree, node_modules/]; write [.gorombo test runtime state, /tmp SIM-ONE HTTP test workspace]; external [—]; destructive `false`
+- Permissions: read [authorized project tree, node_modules/]; write [.gorombo test runtime state, /tmp SIM-ONE HTTP test runtime root]; external [—]; destructive `false`
 - Execution: max `2` attempt(s), `20` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Writes only documented generated build or test artifacts.
 - Rollback: Regenerate the documented build or test artifacts from the prior reviewed commit.
@@ -662,7 +662,7 @@ flowchart TD
 - Executor instructions: Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests.
 - Inputs: artifact:runtime-build, artifact:ratatui-build
 - Resources: local-runtime-probe
-- Permissions: read [authorized project tree, node_modules/]; write [.gorombo test runtime configuration, /tmp Ratatui product workspace]; external [—]; destructive `false`
+- Permissions: read [authorized project tree, node_modules/]; write [.gorombo test runtime configuration, /tmp Ratatui product runtime root]; external [—]; destructive `false`
 - Execution: max `2` attempt(s), `6` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Writes only documented generated build or test artifacts.
 - Rollback: Regenerate the documented build or test artifacts from the prior reviewed commit.
@@ -676,7 +676,7 @@ flowchart TD
 - Executor instructions: Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests.
 - Inputs: artifact:runtime-build, artifact:cli-build, artifact:ratatui-build
 - Resources: local-runtime-probe
-- Permissions: read [authorized project tree, node_modules/]; write [.gorombo test runtime state, /tmp SIM-ONE TUI test workspace]; external [—]; destructive `false`
+- Permissions: read [authorized project tree, node_modules/]; write [.gorombo test runtime state, /tmp SIM-ONE TUI test runtime root]; external [—]; destructive `false`
 - Execution: max `2` attempt(s), `15` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Writes only documented generated build or test artifacts.
 - Rollback: Regenerate the documented build or test artifacts from the prior reviewed commit.
@@ -690,7 +690,7 @@ flowchart TD
 - Executor instructions: Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests.
 - Inputs: artifact:runtime-build, artifact:memory-wasm, artifact:embedding-model-assets
 - Resources: local-runtime-probe
-- Permissions: read [authorized project tree, node_modules/]; write [.gorombo test memory state, /tmp SIM-ONE memory smoke workspace]; external [—]; destructive `false`
+- Permissions: read [authorized project tree, node_modules/]; write [.gorombo test memory state, /tmp SIM-ONE memory smoke runtime root]; external [—]; destructive `false`
 - Execution: max `2` attempt(s), `20` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Writes only documented generated build or test artifacts.
 - Rollback: Regenerate the documented build or test artifacts from the prior reviewed commit.
