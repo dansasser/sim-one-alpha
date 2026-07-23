@@ -913,6 +913,7 @@ dependencies = [
  "crossterm",
  "ratatui",
  "ratatui-textarea",
+ "serde",
  "serde_json",
  "tui-markdown",
  "unicode-width",

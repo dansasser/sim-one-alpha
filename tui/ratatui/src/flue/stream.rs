@@ -111,13 +111,17 @@ impl SseParser {
     }
 }
 
-pub fn spawn_agent_stream(base_url: String, session_id: String) -> AgentStreamHandle {
+pub fn spawn_agent_stream(
+    base_url: String,
+    session_id: String,
+    initial_offset: String,
+) -> AgentStreamHandle {
     let (tx, receiver) = mpsc::channel();
     let cancel = Arc::new(AtomicBool::new(false));
     let thread_cancel = Arc::clone(&cancel);
 
     thread::spawn(move || {
-        run_agent_stream(base_url, session_id, tx, thread_cancel);
+        run_agent_stream(base_url, session_id, initial_offset, tx, thread_cancel);
     });
 
     AgentStreamHandle { receiver, cancel }
@@ -126,10 +130,11 @@ pub fn spawn_agent_stream(base_url: String, session_id: String) -> AgentStreamHa
 fn run_agent_stream(
     base_url: String,
     session_id: String,
+    initial_offset: String,
     tx: Sender<AgentStreamUpdate>,
     cancel: Arc<AtomicBool>,
 ) {
-    let mut offset = "-1".to_string();
+    let mut offset = initial_offset;
 
     while !cancel.load(Ordering::Relaxed) {
         let _ = tx.send(AgentStreamUpdate::Connecting);

@@ -11,6 +11,10 @@ use sim_one_ratatui_tui::agent::{
 use sim_one_ratatui_tui::app::{App, AppEvent, Clock, MouseRegions, SCROLL_PAGE_LINES};
 use sim_one_ratatui_tui::flue::events::{FlueEvent, StreamControl};
 use sim_one_ratatui_tui::flue::stream::AgentStreamUpdate;
+use sim_one_ratatui_tui::history::{
+    TranscriptActivityStatus, TranscriptExchange, TranscriptPage, TranscriptPageInfo,
+    TranscriptSession, TranscriptStreamCursor,
+};
 
 #[test]
 fn typing_updates_prompt_without_changing_transcript_scroll() {
@@ -758,6 +762,337 @@ fn explicit_startup_resume_validates_and_restores_title_without_greeting() {
     let transcript = app.transcript_lines().join("\n");
     assert!(transcript.contains("preflight: resumed TUI session tui-existing-1"));
     assert!(!transcript.contains("greeting-preflight"));
+}
+
+#[test]
+fn explicit_resume_locks_input_until_history_and_snapshot_offset_are_installed() {
+    let sender_calls = Arc::new(AtomicUsize::new(0));
+    let recorded_sender_calls = Arc::clone(&sender_calls);
+    let history_calls = Arc::new(AtomicUsize::new(0));
+    let recorded_history_calls = Arc::clone(&history_calls);
+    let (release_tx, release_rx) = mpsc::channel();
+    let release_rx = Arc::new(Mutex::new(release_rx));
+    let history_release = Arc::clone(&release_rx);
+    let mut app = App::with_agent_sender_lifecycle_and_history(
+        "",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(move |_, _, _| {
+            recorded_sender_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(agent_reply("must not send while history is loading"))
+        }),
+        Arc::new(|_| panic!("explicit resume must not create a session")),
+        Arc::new(|_, selector| {
+            assert_eq!(selector, "Release Work");
+            Ok(SessionLifecycleReply {
+                id: "tui-history-1".to_string(),
+                title: Some("Release Work".to_string()),
+                created: false,
+            })
+        }),
+        Arc::new(move |_, session_id, limit, before| {
+            recorded_history_calls.fetch_add(1, Ordering::SeqCst);
+            assert_eq!(session_id, "tui-history-1");
+            assert_eq!(limit, 50);
+            assert_eq!(before, None);
+            history_release
+                .lock()
+                .expect("history release should lock")
+                .recv()
+                .expect("history load should be released");
+            Ok(history_page(
+                "tui-history-1",
+                "0000000000000000_0000000000000042",
+                false,
+                None,
+                vec![history_exchange("submission-history")],
+            ))
+        }),
+    );
+
+    app.start_explicit_resume("Release Work".to_string(), false);
+    wait_until(Duration::from_secs(2), || {
+        app.poll_agent();
+        history_calls.load(Ordering::SeqCst) == 1
+    });
+
+    assert_eq!(app.session_id(), "tui-history-1");
+    assert_eq!(app.session_title(), Some("Release Work"));
+    assert!(!app.startup_complete());
+    assert!(app.is_agent_pending());
+    app.handle_event(AppEvent::Text("must stay locked".to_string()));
+    app.handle_event(AppEvent::Submit);
+    assert_eq!(app.prompt(), "must stay locked");
+    assert_eq!(sender_calls.load(Ordering::SeqCst), 0);
+
+    release_tx
+        .send(())
+        .expect("history load should be released");
+    wait_for_startup(&mut app);
+
+    assert!(app.startup_succeeded());
+    assert_eq!(app.loaded_history_exchanges().len(), 1);
+    assert_eq!(
+        app.stream_start_offset(),
+        "0000000000000000_0000000000000042"
+    );
+    assert_eq!(sender_calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn explicit_resume_history_failure_stops_startup_without_greeting() {
+    let sender_calls = Arc::new(AtomicUsize::new(0));
+    let recorded_sender_calls = Arc::clone(&sender_calls);
+    let mut app = App::with_agent_sender_lifecycle_and_history(
+        "",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(move |_, _, _| {
+            recorded_sender_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(agent_reply("must not greet"))
+        }),
+        Arc::new(|_| panic!("explicit resume must not create a session")),
+        Arc::new(|_, _| {
+            Ok(SessionLifecycleReply {
+                id: "tui-history-failed".to_string(),
+                title: Some("Failed History".to_string()),
+                created: false,
+            })
+        }),
+        Arc::new(|_, _, _, _| Err("history unavailable".to_string())),
+    );
+
+    app.start_explicit_resume("tui-history-failed".to_string(), false);
+    wait_for_startup(&mut app);
+
+    assert!(!app.startup_succeeded());
+    assert_eq!(sender_calls.load(Ordering::SeqCst), 0);
+    let transcript = app.transcript_lines().join("\n");
+    assert!(transcript.contains("error: Could not load session history."));
+    assert!(transcript.contains("preflight: startup preflight failed"));
+}
+
+#[test]
+fn fresh_startup_uses_the_fresh_stream_tail_and_never_loads_history() {
+    let history_calls = Arc::new(AtomicUsize::new(0));
+    let recorded_history_calls = Arc::clone(&history_calls);
+    let mut app = App::with_agent_sender_lifecycle_and_history(
+        "",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| Ok(agent_reply("Fresh greeting"))),
+        Arc::new(|_| {
+            Ok(SessionLifecycleReply {
+                id: "tui-fresh-history".to_string(),
+                title: None,
+                created: true,
+            })
+        }),
+        Arc::new(|_, _| panic!("fresh startup must not resume")),
+        Arc::new(move |_, _, _, _| {
+            recorded_history_calls.fetch_add(1, Ordering::SeqCst);
+            panic!("fresh startup must not load transcript history")
+        }),
+    );
+
+    app.start_startup_preflight(false);
+    wait_for_startup(&mut app);
+
+    assert!(app.startup_succeeded());
+    assert_eq!(history_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(app.stream_start_offset(), "now");
+}
+
+#[test]
+fn scrolling_to_loaded_history_top_requests_one_older_page_and_prepends_it() {
+    let calls = Arc::new(Mutex::new(Vec::<Option<String>>::new()));
+    let recorded_calls = Arc::clone(&calls);
+    let mut app = App::with_agent_sender_lifecycle_and_history(
+        "",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| panic!("resume must not greet")),
+        Arc::new(|_| panic!("resume must not create")),
+        Arc::new(|_, _| {
+            Ok(SessionLifecycleReply {
+                id: "tui-paged-history".to_string(),
+                title: None,
+                created: false,
+            })
+        }),
+        Arc::new(move |_, _, _, before| {
+            recorded_calls
+                .lock()
+                .expect("history calls should lock")
+                .push(before.clone());
+            if before.is_none() {
+                Ok(history_page(
+                    "tui-paged-history",
+                    "0000000000000000_0000000000000042",
+                    true,
+                    Some("older-cursor"),
+                    vec![history_exchange("submission-new")],
+                ))
+            } else {
+                assert_eq!(before.as_deref(), Some("older-cursor"));
+                Ok(history_page(
+                    "tui-paged-history",
+                    "0000000000000000_0000000000000042",
+                    false,
+                    None,
+                    vec![history_exchange("submission-old")],
+                ))
+            }
+        }),
+    );
+
+    app.start_explicit_resume("tui-paged-history".to_string(), false);
+    wait_for_startup(&mut app);
+    app.scroll_page_up();
+    app.scroll_page_up();
+    wait_for_agent(&mut app);
+
+    assert_eq!(
+        calls.lock().expect("history calls should lock").as_slice(),
+        [None, Some("older-cursor".to_string())]
+    );
+    assert_eq!(
+        app.loaded_history_exchanges()
+            .iter()
+            .map(|exchange| exchange.id.as_str())
+            .collect::<Vec<_>>(),
+        ["submission-old", "submission-new"]
+    );
+}
+
+#[test]
+fn older_history_failure_preserves_loaded_history_and_keeps_startup_usable() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let recorded_calls = Arc::clone(&calls);
+    let mut app = App::with_agent_sender_lifecycle_and_history(
+        "",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| panic!("resume must not greet")),
+        Arc::new(|_| panic!("resume must not create")),
+        Arc::new(|_, _| {
+            Ok(SessionLifecycleReply {
+                id: "tui-history-page-error".to_string(),
+                title: None,
+                created: false,
+            })
+        }),
+        Arc::new(move |_, _, _, before| {
+            recorded_calls.fetch_add(1, Ordering::SeqCst);
+            if before.is_none() {
+                Ok(history_page(
+                    "tui-history-page-error",
+                    "0000000000000000_0000000000000042",
+                    true,
+                    Some("older-cursor"),
+                    vec![history_exchange("submission-loaded")],
+                ))
+            } else {
+                Err("private older page failure details".to_string())
+            }
+        }),
+    );
+
+    app.start_explicit_resume("tui-history-page-error".to_string(), false);
+    wait_for_startup(&mut app);
+    app.scroll_page_up();
+    wait_for_agent(&mut app);
+
+    assert!(app.startup_succeeded());
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert_eq!(app.loaded_history_exchanges().len(), 1);
+    let transcript = app.transcript_lines().join("\n");
+    assert!(transcript.contains("error: Could not load older session history."));
+    assert!(!transcript.contains("private older page failure details"));
+}
+
+#[test]
+fn explicit_startup_resume_accepts_a_name_resolved_canonical_id_without_greeting() {
+    let sender_calls = Arc::new(AtomicUsize::new(0));
+    let recorded_sender_calls = Arc::clone(&sender_calls);
+    let mut app = App::with_agent_sender_and_lifecycle(
+        "",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(move |_, _, _| {
+            recorded_sender_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(agent_reply("must not greet"))
+        }),
+        Arc::new(|_| panic!("explicit resume must not create a session through the client")),
+        Arc::new(|_, selector| {
+            assert_eq!(selector, "Release Work");
+            Ok(SessionLifecycleReply {
+                id: "tui-existing-by-name".to_string(),
+                title: Some("Release Work".to_string()),
+                created: false,
+            })
+        }),
+    );
+
+    app.start_explicit_resume("Release Work".to_string(), false);
+    wait_for_startup(&mut app);
+
+    assert!(app.startup_succeeded());
+    assert_eq!(app.session_id(), "tui-existing-by-name");
+    assert_eq!(app.session_title(), Some("Release Work"));
+    assert_eq!(sender_calls.load(Ordering::SeqCst), 0);
+    let transcript = app.transcript_lines().join("\n");
+    assert!(transcript.contains("preflight: resumed TUI session tui-existing-by-name"));
+    assert!(!transcript.contains("greeting-preflight"));
+}
+
+#[test]
+fn explicit_startup_missing_session_uses_fresh_session_and_greeting() {
+    let prompts = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
+    let sent_prompts = Arc::clone(&prompts);
+    let mut app = App::with_agent_sender_and_lifecycle(
+        "",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(move |_, session_id, prompt| {
+            sent_prompts
+                .lock()
+                .expect("prompt recorder should lock")
+                .push((session_id, prompt));
+            Ok(AgentReply {
+                text: "Fresh fallback greeting".to_string(),
+                session_id: Some("tui-fresh-fallback".to_string()),
+                session_title: None,
+                command_name: None,
+                session_created: Some(false),
+            })
+        }),
+        Arc::new(|_| panic!("fallback is returned by the resume lifecycle request")),
+        Arc::new(|_, selector| {
+            assert_eq!(selector, "missing-session");
+            Ok(SessionLifecycleReply {
+                id: "tui-fresh-fallback".to_string(),
+                title: None,
+                created: true,
+            })
+        }),
+    );
+
+    app.start_explicit_resume("missing-session".to_string(), false);
+    wait_for_startup(&mut app);
+
+    assert!(app.startup_succeeded());
+    assert_eq!(app.session_id(), "tui-fresh-fallback");
+    let prompts = prompts.lock().expect("prompt recorder should lock");
+    assert_eq!(prompts.len(), 1);
+    assert_eq!(prompts[0].0, "tui-fresh-fallback");
+    assert!(prompts[0].1.contains("greeting-preflight"));
+    let transcript = app.transcript_lines().join("\n");
+    assert!(transcript.contains(
+        "preflight: session missing-session was not found; created fresh TUI session tui-fresh-fallback"
+    ));
+    assert!(transcript.contains("assistant: Fresh fallback greeting"));
+    assert!(!transcript.contains("preflight: startup preflight failed"));
 }
 
 #[test]
@@ -1574,6 +1909,54 @@ fn wait_for_startup(app: &mut App) {
         !app.is_agent_pending(),
         "startup agent response did not settle"
     );
+}
+
+fn wait_until(mut timeout: Duration, mut condition: impl FnMut() -> bool) {
+    let interval = Duration::from_millis(10);
+    while timeout > Duration::ZERO {
+        if condition() {
+            return;
+        }
+        thread::sleep(interval);
+        timeout = timeout.saturating_sub(interval);
+    }
+    assert!(condition(), "condition did not become true");
+}
+
+fn history_page(
+    session_id: &str,
+    next_offset: &str,
+    has_older: bool,
+    before: Option<&str>,
+    exchanges: Vec<TranscriptExchange>,
+) -> TranscriptPage {
+    TranscriptPage {
+        session: TranscriptSession {
+            id: session_id.to_string(),
+            title: None,
+        },
+        exchanges,
+        stream: TranscriptStreamCursor {
+            next_offset: next_offset.to_string(),
+            up_to_date: true,
+        },
+        page: TranscriptPageInfo {
+            limit: 50,
+            has_older,
+            before: before.map(str::to_string),
+        },
+    }
+}
+
+fn history_exchange(submission_id: &str) -> TranscriptExchange {
+    TranscriptExchange {
+        id: submission_id.to_string(),
+        submission_id: submission_id.to_string(),
+        prompt: None,
+        activities: Vec::new(),
+        assistant: None,
+        status: TranscriptActivityStatus::Completed,
+    }
 }
 
 fn agent_reply(text: impl Into<String>) -> AgentReply {

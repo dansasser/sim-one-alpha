@@ -12,9 +12,14 @@ use crate::agent::{
     create_chat_session, list_chat_sessions, resume_chat_session, send_agent_prompt_reply,
     AgentPromptOrigin, AgentReply, SessionLifecycleReply, SessionSummary,
 };
+use crate::diagnostics;
 use crate::flue::events::FlueEvent;
 use crate::flue::reducer::{extract_role, extract_text, DisplayRow, EventTranscript};
 use crate::flue::stream::{spawn_agent_stream, AgentStreamHandle, AgentStreamUpdate};
+use crate::history::{
+    load_chat_transcript, TranscriptExchange, TranscriptPage, TranscriptPageInfo,
+    TranscriptSession, TranscriptStreamCursor,
+};
 use crate::markdown::render_markdown;
 use crate::text_wrap::{display_width, display_width_between, wrap_words, WrappedLine};
 use unicode_width::UnicodeWidthChar;
@@ -38,10 +43,37 @@ pub type SessionCreator =
     Arc<dyn Fn(String) -> Result<SessionLifecycleReply, String> + Send + Sync + 'static>;
 pub type SessionResumer =
     Arc<dyn Fn(String, String) -> Result<SessionLifecycleReply, String> + Send + Sync + 'static>;
+pub type HistoryLoader = Arc<
+    dyn Fn(String, String, usize, Option<String>) -> Result<TranscriptPage, String>
+        + Send
+        + Sync
+        + 'static,
+>;
 pub type Clock = Arc<dyn Fn() -> Instant + Send + Sync + 'static>;
 
 fn ignore_prompt_origin(agent_sender: AgentSender) -> AgentRequestSender {
     Arc::new(move |base_url, session_id, prompt, _| agent_sender(base_url, session_id, prompt))
+}
+
+fn empty_history_loader() -> HistoryLoader {
+    Arc::new(|_, session_id, limit, _| {
+        Ok(TranscriptPage {
+            session: TranscriptSession {
+                id: session_id,
+                title: None,
+            },
+            exchanges: Vec::new(),
+            stream: TranscriptStreamCursor {
+                next_offset: "-1".to_string(),
+                up_to_date: true,
+            },
+            page: TranscriptPageInfo {
+                limit,
+                has_older: false,
+                before: None,
+            },
+        })
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -288,10 +320,16 @@ pub struct App {
     session_lister: SessionLister,
     session_creator: SessionCreator,
     session_resumer: SessionResumer,
+    history_loader: HistoryLoader,
     clock: Clock,
     pending_response: Option<PendingResponse>,
     pending_session_lifecycle: Option<PendingSessionLifecycle>,
+    pending_history: Option<PendingHistory>,
+    loaded_history_exchanges: Vec<TranscriptExchange>,
+    history_before: Option<String>,
+    history_has_older: bool,
     stream_handle: Option<AgentStreamHandle>,
+    stream_start_offset: String,
     stream_status: StreamStatus,
     last_stream_event: Option<String>,
     event_transcript: EventTranscript,
@@ -334,6 +372,24 @@ struct SessionLifecycleResponse {
     result: Result<SessionLifecycleReply, String>,
 }
 
+#[derive(Debug)]
+struct PendingHistory {
+    receiver: Receiver<HistoryResponse>,
+    started_at: Instant,
+    kind: HistoryRequestKind,
+}
+
+#[derive(Debug)]
+struct HistoryResponse {
+    result: Result<TranscriptPage, String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HistoryRequestKind {
+    Startup,
+    Older,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum StreamStatus {
     NotAttached,
@@ -349,6 +405,7 @@ enum StartupPhase {
     Idle,
     CreatingSession,
     ResumingSession,
+    LoadingHistory,
     Greeting,
     Complete,
     Failed,
@@ -424,7 +481,7 @@ impl App {
         session_creator: SessionCreator,
         session_resumer: SessionResumer,
     ) -> Self {
-        Self::with_dependencies(
+        Self::with_dependencies_and_history(
             session_id,
             gateway_status,
             base_url,
@@ -433,6 +490,29 @@ impl App {
             Arc::new(Instant::now),
             session_creator,
             session_resumer,
+            empty_history_loader(),
+        )
+    }
+
+    pub fn with_agent_sender_lifecycle_and_history(
+        session_id: impl Into<String>,
+        gateway_status: impl Into<String>,
+        base_url: impl Into<String>,
+        agent_sender: AgentSender,
+        session_creator: SessionCreator,
+        session_resumer: SessionResumer,
+        history_loader: HistoryLoader,
+    ) -> Self {
+        Self::with_dependencies_and_history(
+            session_id,
+            gateway_status,
+            base_url,
+            ignore_prompt_origin(agent_sender),
+            Arc::new(|base_url, limit| list_chat_sessions(&base_url, limit)),
+            Arc::new(Instant::now),
+            session_creator,
+            session_resumer,
+            history_loader,
         )
     }
 
@@ -444,7 +524,7 @@ impl App {
         session_creator: SessionCreator,
         session_resumer: SessionResumer,
     ) -> Self {
-        Self::with_dependencies(
+        Self::with_dependencies_and_history(
             session_id,
             gateway_status,
             base_url,
@@ -453,6 +533,7 @@ impl App {
             Arc::new(Instant::now),
             session_creator,
             session_resumer,
+            empty_history_loader(),
         )
     }
 
@@ -504,6 +585,33 @@ impl App {
         session_creator: SessionCreator,
         session_resumer: SessionResumer,
     ) -> Self {
+        Self::with_dependencies_and_history(
+            session_id,
+            gateway_status,
+            base_url,
+            agent_sender,
+            session_lister,
+            clock,
+            session_creator,
+            session_resumer,
+            Arc::new(|base_url, session_id, limit, before| {
+                load_chat_transcript(&base_url, &session_id, limit, before.as_deref())
+            }),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn with_dependencies_and_history(
+        session_id: impl Into<String>,
+        gateway_status: impl Into<String>,
+        base_url: impl Into<String>,
+        agent_sender: AgentRequestSender,
+        session_lister: SessionLister,
+        clock: Clock,
+        session_creator: SessionCreator,
+        session_resumer: SessionResumer,
+        history_loader: HistoryLoader,
+    ) -> Self {
         let mut app = Self {
             prompt: String::new(),
             prompt_cursor: 0,
@@ -529,10 +637,16 @@ impl App {
             session_lister,
             session_creator,
             session_resumer,
+            history_loader,
             clock,
             pending_response: None,
             pending_session_lifecycle: None,
+            pending_history: None,
+            loaded_history_exchanges: Vec::new(),
+            history_before: None,
+            history_has_older: false,
             stream_handle: None,
+            stream_start_offset: "-1".to_string(),
             stream_status: StreamStatus::NotAttached,
             last_stream_event: None,
             event_transcript: EventTranscript::default(),
@@ -617,6 +731,7 @@ impl App {
         self.stream_handle = Some(spawn_agent_stream(
             self.base_url.clone(),
             self.session_id.clone(),
+            self.stream_start_offset.clone(),
         ));
     }
 
@@ -801,8 +916,115 @@ impl App {
         }
     }
 
+    fn poll_history(&mut self) {
+        let Some(pending) = &self.pending_history else {
+            return;
+        };
+        let received = pending.receiver.try_recv();
+        let elapsed_ms = pending.started_at.elapsed().as_millis();
+        let kind = pending.kind;
+
+        match received {
+            Ok(response) => {
+                self.pending_history = None;
+                match response.result {
+                    Ok(page) => {
+                        if page.session.id != self.session_id {
+                            let error = "Transcript history did not match the active session.";
+                            diagnostics::history_load_failed(error, elapsed_ms);
+                            self.agent_status = "error".to_string();
+                            self.handle_history_failure(kind);
+                        } else {
+                            self.install_history_page(page, kind, elapsed_ms);
+                        }
+                    }
+                    Err(error) => {
+                        diagnostics::history_load_failed(&error, elapsed_ms);
+                        self.handle_history_failure(kind);
+                    }
+                }
+                self.after_transcript_changed();
+            }
+            Err(TryRecvError::Empty) => {}
+            Err(TryRecvError::Disconnected) => {
+                self.pending_history = None;
+                let error = "Transcript history response channel disconnected.";
+                diagnostics::history_load_failed(error, elapsed_ms);
+                self.handle_history_failure(kind);
+                self.after_transcript_changed();
+            }
+        }
+    }
+
+    fn install_history_page(
+        &mut self,
+        page: TranscriptPage,
+        kind: HistoryRequestKind,
+        elapsed_ms: u128,
+    ) {
+        let exchange_count = page.exchanges.len();
+        let activity_count = page
+            .exchanges
+            .iter()
+            .map(|exchange| exchange.activities.len())
+            .sum();
+        self.history_before = page.page.before;
+        self.history_has_older = page.page.has_older;
+
+        match kind {
+            HistoryRequestKind::Startup => {
+                diagnostics::history_load_completed(
+                    exchange_count,
+                    activity_count,
+                    elapsed_ms,
+                    self.history_has_older,
+                );
+                self.loaded_history_exchanges = page.exchanges;
+                self.stream_start_offset = page.stream.next_offset;
+                self.attach_startup_stream();
+                self.push_speaker_text("preflight", "all systems go");
+                self.startup_phase = StartupPhase::Complete;
+                self.agent_status = "ready".to_string();
+            }
+            HistoryRequestKind::Older => {
+                let existing_ids = self
+                    .loaded_history_exchanges
+                    .iter()
+                    .map(|exchange| exchange.id.clone())
+                    .collect::<std::collections::BTreeSet<_>>();
+                let mut older = page
+                    .exchanges
+                    .into_iter()
+                    .filter(|exchange| !existing_ids.contains(&exchange.id))
+                    .collect::<Vec<_>>();
+                let added_count = older.len();
+                older.append(&mut self.loaded_history_exchanges);
+                self.loaded_history_exchanges = older;
+                diagnostics::history_page_prepended(
+                    added_count,
+                    elapsed_ms,
+                    self.history_has_older,
+                );
+            }
+        }
+    }
+
+    fn handle_history_failure(&mut self, kind: HistoryRequestKind) {
+        match kind {
+            HistoryRequestKind::Startup => {
+                self.agent_status = "error".to_string();
+                self.push_speaker_text("error", "Could not load session history.");
+                self.fail_startup();
+            }
+            HistoryRequestKind::Older => {
+                self.push_speaker_text("error", "Could not load older session history.");
+            }
+        }
+    }
+
     pub fn poll_agent(&mut self) {
         self.poll_session_lifecycle();
+        self.poll_history();
         let Some(pending) = &self.pending_response else {
             return;
         };
@@ -1057,7 +1279,17 @@ impl App {
     }
 
     pub fn is_agent_pending(&self) -> bool {
-        self.pending_response.is_some() || self.pending_session_lifecycle.is_some()
+        self.pending_response.is_some()
+            || self.pending_session_lifecycle.is_some()
+            || self.pending_history.is_some()
+    }
+
+    pub fn loaded_history_exchanges(&self) -> &[TranscriptExchange] {
+        &self.loaded_history_exchanges
+    }
+
+    pub fn stream_start_offset(&self) -> &str {
+        &self.stream_start_offset
     }
 
     pub fn max_scroll(&self) -> usize {
@@ -1323,6 +1555,9 @@ impl App {
     fn scroll_lines_up(&mut self, amount: usize) {
         self.transcript_scroll = self.transcript_scroll.saturating_sub(amount);
         self.follow_tail = false;
+        if self.transcript_scroll == 0 {
+            self.request_older_history_page();
+        }
     }
 
     fn scroll_lines_down(&mut self, amount: usize) {
@@ -1644,7 +1879,10 @@ impl App {
         }
 
         let prompt = self.prompt.trim().to_string();
-        if self.pending_session_lifecycle.is_some() || self.startup_phase == StartupPhase::Failed {
+        if self.pending_session_lifecycle.is_some()
+            || self.pending_history.is_some()
+            || self.startup_phase == StartupPhase::Failed
+        {
             if self.startup_phase != StartupPhase::Failed {
                 self.agent_status = "busy".to_string();
             }
@@ -1948,6 +2186,10 @@ impl App {
         self.session_title = None;
         self.event_transcript = EventTranscript::default();
         self.event_row_lines.clear();
+        self.loaded_history_exchanges.clear();
+        self.history_before = None;
+        self.history_has_older = false;
+        self.stream_start_offset = "-1".to_string();
         self.final_response_range = None;
         self.response_is_streaming = false;
         self.last_stream_event = None;
@@ -1977,38 +2219,47 @@ impl App {
                 if !reply.created {
                     return Err("Gateway did not create a fresh TUI session.".to_string());
                 }
-                self.switch_session_with_announcement(session_id.to_string(), false);
-                self.session_title = clean_session_title(reply.title);
-                self.push_speaker_text(
-                    "preflight",
-                    &format!("created fresh TUI session {session_id}"),
+                self.complete_fresh_startup(
+                    session_id,
+                    reply.title,
+                    format!("created fresh TUI session {session_id}"),
                 );
-                self.attach_startup_stream();
-                self.push_speaker_text("preflight", "all systems go");
-                self.startup_phase = StartupPhase::Greeting;
-                self.submit_internal_prompt(self.startup_greeting_prompt());
+                diagnostics::session_lifecycle_completed("fresh", None, session_id);
             }
             StartupPhase::ResumingSession => {
-                let requested_session_id = requested_session_id
+                let requested_session_selector = requested_session_id
                     .map(str::trim)
                     .filter(|requested| !requested.is_empty())
                     .ok_or_else(|| "A session id is required for explicit resume.".to_string())?;
                 if reply.created {
-                    return Err("Gateway created a session during explicit resume.".to_string());
-                }
-                if session_id != requested_session_id {
-                    return Err(format!(
-                        "Gateway resumed session {session_id} instead of {requested_session_id}."
-                    ));
+                    self.complete_fresh_startup(
+                        session_id,
+                        reply.title,
+                        format!(
+                            "session {requested_session_selector} was not found; created fresh TUI session {session_id}"
+                        ),
+                    );
+                    diagnostics::session_lifecycle_completed(
+                        "fresh_fallback",
+                        Some(requested_session_selector),
+                        session_id,
+                    );
+                    return Ok(());
                 }
 
                 self.switch_session_with_announcement(session_id.to_string(), false);
                 self.session_title = clean_session_title(reply.title);
                 self.push_speaker_text("preflight", &format!("resumed TUI session {session_id}"));
-                self.attach_startup_stream();
-                self.push_speaker_text("preflight", "all systems go");
-                self.startup_phase = StartupPhase::Complete;
-                self.agent_status = "ready".to_string();
+                self.start_history_load();
+                diagnostics::session_lifecycle_completed(
+                    if requested_session_selector == session_id {
+                        "id_resolved"
+                    } else {
+                        "name_resolved"
+                    },
+                    Some(requested_session_selector),
+                    session_id,
+                );
             }
             _ => return Err("Session lifecycle completed outside startup.".to_string()),
         }
@@ -2016,8 +2267,29 @@ impl App {
         Ok(())
     }
 
+    fn complete_fresh_startup(
+        &mut self,
+        session_id: &str,
+        session_title: Option<String>,
+        announcement: String,
+    ) {
+        self.switch_session_with_announcement(session_id.to_string(), false);
+        self.session_title = clean_session_title(session_title);
+        self.stream_start_offset = "now".to_string();
+        self.push_speaker_text("preflight", &announcement);
+        self.attach_startup_stream();
+        self.push_speaker_text("preflight", "all systems go");
+        self.startup_phase = StartupPhase::Greeting;
+        self.submit_internal_prompt(self.startup_greeting_prompt());
+    }
+
     fn attach_startup_stream(&mut self) {
         if self.startup_attach_stream {
+            diagnostics::stream_attach_started(if self.stream_start_offset == "now" {
+                "fresh_tail"
+            } else {
+                "snapshot_tail"
+            });
             self.start_stream();
             self.push_speaker_text("preflight", "event stream attached");
         } else {
@@ -2031,10 +2303,49 @@ impl App {
         }
     }
 
+    fn start_history_load(&mut self) {
+        self.startup_phase = StartupPhase::LoadingHistory;
+        self.agent_status = "loading history".to_string();
+        diagnostics::history_load_started();
+        self.start_history_request(None, HistoryRequestKind::Startup);
+    }
+
+    fn request_older_history_page(&mut self) {
+        if self.startup_phase != StartupPhase::Complete
+            || self.pending_history.is_some()
+            || !self.history_has_older
+        {
+            return;
+        }
+        let Some(before) = self.history_before.clone() else {
+            return;
+        };
+        self.start_history_request(Some(before), HistoryRequestKind::Older);
+    }
+
+    fn start_history_request(&mut self, before: Option<String>, kind: HistoryRequestKind) {
+        let base_url = self.base_url.clone();
+        let session_id = self.session_id.clone();
+        let loader = Arc::clone(&self.history_loader);
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || {
+            let result = loader(base_url, session_id, 50, before);
+            let _ = tx.send(HistoryResponse { result });
+        });
+        self.pending_history = Some(PendingHistory {
+            receiver: rx,
+            started_at: Instant::now(),
+            kind,
+        });
+    }
+
     fn fail_startup(&mut self) {
         if matches!(
             self.startup_phase,
-            StartupPhase::CreatingSession | StartupPhase::ResumingSession | StartupPhase::Greeting
+            StartupPhase::CreatingSession
+                | StartupPhase::ResumingSession
+                | StartupPhase::LoadingHistory
+                | StartupPhase::Greeting
         ) {
             self.startup_phase = StartupPhase::Failed;
             self.push_speaker_text("preflight", "startup preflight failed");
