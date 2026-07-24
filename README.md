@@ -34,7 +34,7 @@ SIM-ONE Alpha is a protocol-governed AI employee from [Gorombo](https://gorombo.
 
 ## Status
 
-SIM-ONE Alpha is the base architecture behind [Gorombo](https://gorombo.com)'s AI Employees. It ships as a self-hosted AI employee runtime with the `sim-one` CLI, Ratatui terminal UI, Web UI, gateway API, connectors, scheduled jobs, runtime capability management, memory/RAG, worker delegation, protocol loading, and approval-gated local actions.
+SIM-ONE Alpha is the base architecture behind [Gorombo](https://gorombo.com)'s AI Employees. It ships as a self-hosted AI employee runtime with the `sim-one` CLI, SIM-ONE terminal UI, Web UI, gateway API, connectors, scheduled jobs, runtime capability management, memory/RAG, worker delegation, protocol loading, and approval-gated local actions.
 
 ## What Is SIM-ONE Alpha?
 
@@ -54,7 +54,7 @@ The difference is architectural. SIM-ONE Alpha uses [Flue](https://flueframework
 | --- | --- | --- | --- |
 | Product class | Local-first personal AI assistant and agent gateway | Self-improving assistant and automation agent | Protocol-governed AI employee runtime |
 | Primary promise | A personal assistant that can connect across messaging surfaces and local automation | An agent that grows through tools, skills, memory, MCP, schedules, and gateway control | AI employees that receive work, remember context, delegate execution, and act through governed runtime paths |
-| Interfaces | Messaging gateway, local app/runtime, and assistant surfaces | CLI, messaging gateway, scheduled execution, and agent runtime surfaces | `sim-one` CLI, Ratatui terminal UI, Web UI, gateway API, connectors, and scheduled jobs |
+| Interfaces | Messaging gateway, local app/runtime, and assistant surfaces | CLI, messaging gateway, scheduled execution, and agent runtime surfaces | `sim-one` CLI, SIM-ONE terminal UI, Web UI, gateway API, connectors, and scheduled jobs |
 | Security architecture | Controls sit around the assistant session, gateway, and tool execution path | Controls sit around the agent loop, tools, skills, MCP, schedules, approvals, and subagents | The orchestrator is the required enforcement layer for every action: protocols are loaded from the runtime database, capabilities are selected through registries, workers report back, and disallowed work is rejected before it continues |
 | Authority model | The assistant session is the primary control surface for reasoning, tool use, and user interaction | The agent control loop coordinates tools, skills, memory, schedules, approvals, and subagents | The orchestrator is the mandatory control plane between users, protocols, memory, tools, workers, approvals, and final response |
 | Governance source | Assistant instructions, settings, tool policies, workflow behavior, and gateway configuration | Assistant instructions, skills, tools, approval flows, gateway configuration, and runtime settings | SQLite-backed protocol records loaded at runtime before reasoning, tool execution, worker delegation, or response generation |
@@ -122,7 +122,7 @@ That is the SIM-ONE Alpha difference: security and governance are part of the ru
 ### Interfaces And Operations
 
 - Product `sim-one` CLI for launching the local experience and managing capabilities.
-- Ratatui terminal UI with separate transcript/context pane, editable prompt pane, status bar, live progress rows, and durable session controls.
+- SIM-ONE terminal UI with separate transcript/context pane, editable prompt pane, status bar, live progress rows, and durable session controls.
 - TUI slash commands for `/session`, `/sessions`, `/new`, `/clear`, `/resume`, `/rename`, `/compact`, `/help`, and `/exit`.
 - Web UI, gateway API, Telegram connector, scheduled jobs, and app-owned HTTP routes for chat events, sessions, knowledge, approvals, telemetry, and schedules.
 
@@ -134,11 +134,89 @@ That is the SIM-ONE Alpha difference: security and governance are part of the ru
 
 ## Quick Start
 
-<!-- Fastest path from clone to running local TUI/server. -->
+Install SIM-ONE Alpha from a POSIX shell:
+
+```bash
+curl -fsSL https://github.com/dansasser/sim-one-alpha/releases/latest/download/sim-one.sh | sh
+```
+
+The installer adds the `sim-one` command, installs the self-hosted runtime, and opens the onboarding TUI. Onboarding walks through model-provider API keys, agent and service tokens, Gmail app authorization, and the other credentials and settings required by the services you enable. It validates the setup, starts the local gateway, and opens the SIM-ONE TUI for the first conversation.
+
+Once the first TUI session is working, ask SIM-ONE to connect Telegram, Discord, or another supported connector. SIM-ONE guides the connector-specific setup and pairing from that authenticated local session, leaving the user with secure local TUI access and approved connector access.
+
+After onboarding, launch the terminal interface at any time with:
+
+```bash
+sim-one
+```
 
 ## Installation
 
-<!-- Prerequisites, clone, dependencies, one-time assets, build-from-source notes. -->
+### Install With `sim-one.sh`
+
+The packaged installer is the recommended installation method. It installs the SIM-ONE runtime, terminal interface, `sim-one` command, structured-memory engine, and required local assets under `~/.gorombo/`. Node.js, npm, pnpm, Rust, and `wasm-pack` are not required for a packaged installation.
+
+```bash
+curl -fsSL https://github.com/dansasser/sim-one-alpha/releases/latest/download/sim-one.sh | sh
+```
+
+The installer continues directly into onboarding. API keys, service tokens, Gmail authorization, and other secrets are collected there rather than placed in shell commands or committed configuration files. Connector pairing follows from the first working SIM-ONE TUI session.
+
+### Build From Source
+
+Building from source produces the same runtime, terminal interface, and `sim-one` product command as the packaged installer.
+
+Prerequisites:
+
+- Git
+- Node.js 22.18 or newer
+- npm (included with Node.js) or pnpm 10
+- Rust stable with the `wasm32-unknown-unknown` target
+- `wasm-pack` 0.13.1
+
+Clone the repository:
+
+```bash
+git clone https://github.com/dansasser/sim-one-alpha.git
+cd sim-one-alpha
+```
+
+Choose either npm or pnpm for the build.
+
+#### npm
+
+```bash
+npm install
+npm --prefix sim-one-cli install
+npm run fetch-embedding-model
+npm run build
+npm run build:tui
+npm --prefix sim-one-cli run build
+```
+
+#### pnpm
+
+```bash
+pnpm install
+pnpm fetch-embedding-model
+pnpm run build
+pnpm run build:tui
+pnpm run build:cli
+```
+
+Start onboarding from the locally built product command:
+
+```bash
+./.gorombo/sim-one-cli/sim-one install
+```
+
+After onboarding, start SIM-ONE with:
+
+```bash
+./.gorombo/sim-one-cli/sim-one
+```
+
+Both source-build paths fetch the bundled embedding model, compile the Rust/WASM structured-memory engine, build the Flue Node runtime, build the terminal interface, and create the `sim-one` product wrapper. Onboarding then follows the same credential, validation, first-chat, and connector-pairing flow as the packaged installer.
 
 ## Configuration
 
@@ -162,7 +240,7 @@ That is the SIM-ONE Alpha difference: security and governance are part of the ru
 
 ## Development
 
-<!-- Setup, build, test, typecheck, useful scripts, worktree expectations. -->
+<!-- Contributor setup, build, test, and typecheck guidance. -->
 
 ## Contributing
 
