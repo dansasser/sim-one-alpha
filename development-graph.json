@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "graph_id": "sim-one-alpha-lifecycle",
-  "graph_version": 7,
+  "graph_version": 8,
   "title": "SIM-ONE Alpha Development Lifecycle",
   "purpose": "Govern future SIM-ONE Alpha changes from an authorized request through grounded design, parallel domain implementation, full project verification, approval-gated release, output-level canary and production observation, and bounded repair.",
   "project": {
@@ -17,9 +17,13 @@
       "/opt/ai/sim-one-alpha/docs/architecture/tool-system.md",
       "/opt/ai/sim-one-alpha/docs/architecture/capability-system.md",
       "/opt/ai/sim-one-alpha/docs/architecture/memory-system.md",
+      "/opt/ai/sim-one-alpha/docs/architecture/tui-cli-session-flow.md",
+      "/opt/ai/sim-one-alpha/docs/operations/product-tui.md",
+      "/opt/ai/sim-one-alpha/docs/tui/ratatui.md",
+      "/opt/ai/sim-one-alpha/docs/tui/session-management.md",
       "/opt/ai/sim-one-alpha/.github/workflows/ci.yml"
     ],
-    "context_version": "commit:302e7ed8066daf43d66e709fb0138a1df982c08e"
+    "context_version": "commit:2a9ca2934d0b4c8d793a1eaeb5528f6aaccfb8f8"
   },
   "status": "validated",
   "templates": [
@@ -834,7 +838,7 @@
           "src/workflows/",
           "src/workspace/",
           "src/engine/tools/",
-          "src/engine/skills/",
+          "src/skills/",
           "src/engine/workers/",
           "src/tests/ files assigned exclusively to this workstream by artifact:implementation-plan",
           "src/workspace-loader.ts"
@@ -1037,7 +1041,7 @@
       "id": "implement-ingress-operations",
       "type": "work",
       "title": "Implement Ingress, Sessions, Schedules, And Telemetry",
-      "goal": "Implement authorized connector normalization, authenticated API routes, durable session handling, schedules, and typed progress/telemetry surfaces.",
+      "goal": "Implement authorized connector normalization, authenticated API routes, connector-specific session policy, fresh and explicit-resume TUI lifecycle, durable transcript projection, schedules, and typed progress/telemetry surfaces.",
       "state": "planned",
       "executor": {
         "kind": "agent",
@@ -1089,7 +1093,8 @@
           "src/engine/session/",
           "src/engine/schedules/",
           "src/core/telemetry/",
-          "docs/operations/",
+          "docs/operations/ files assigned exclusively to this workstream by artifact:implementation-plan",
+          "docs/architecture/tui-cli-session-flow.md when assigned to this workstream or integration",
           "src/tests/ files assigned exclusively to this workstream by artifact:implementation-plan"
         ],
         "external": [],
@@ -1122,7 +1127,7 @@
       "id": "implement-product-delivery",
       "type": "work",
       "title": "Implement Product Surfaces And Delivery",
-      "goal": "Implement authorized sim-one CLI, Ink/Ratatui TUI, product packaging, install, build, CI, and release documentation changes.",
+      "goal": "Implement authorized sim-one command, primary Ratatui TUI, product packaging, install, build, CI, and release documentation changes while preserving capability-management subcommands.",
       "state": "planned",
       "executor": {
         "kind": "agent",
@@ -1174,6 +1179,9 @@
           "scripts/",
           ".github/workflows/",
           "docs/architecture/product-flow.md",
+          "docs/architecture/tui-cli-session-flow.md when assigned to this workstream or integration",
+          "docs/operations/product-tui.md",
+          "docs/tui/",
           "README.md",
           "src/tests/ files assigned exclusively to this workstream by artifact:implementation-plan"
         ],
@@ -1486,7 +1494,7 @@
       "id": "verify-unit-tests",
       "type": "verification",
       "title": "Verify Unit Test Suite",
-      "goal": "Run the configured SIM-ONE Alpha unit suite with real local embedding assets and WASM available, including agent/workspace ownership, approval/progress routing, trusted session admission, memory scoping, and telemetry-redaction contracts.",
+      "goal": "Run the configured SIM-ONE Alpha unit suite with real local embedding assets and WASM available, including agent/workspace ownership, approval/progress routing, connector-scoped session lifecycle, durable transcript projection, product artifact locking, memory scoping, and telemetry-redaction contracts.",
       "state": "planned",
       "executor": {
         "kind": "deterministic",
@@ -1531,6 +1539,18 @@
           "kind": "test",
           "criterion": "The unit report proves flue-session-store.test.ts, memory-tool.test.ts, memory-telemetry.test.ts, trusted-event-admission.test.ts, flue-telemetry.test.ts, and http-endpoints.test.ts passed, including actor/conversation scoping, trusted-event admission, raw-payload omission, and telemetry redaction.",
           "evidence": "runtime:evidence/verify-unit-tests/session-memory-privacy-tests.json"
+        },
+        {
+          "id": "tui-session-transcript-contracts-passed",
+          "kind": "test",
+          "criterion": "The unit report proves session-routing.test.ts, session-transcript.test.ts, and http-endpoints.test.ts passed, including fresh default TUI sessions, owner-scoped exact resume, missing-selector fallback, chronological transcript paging, immutable completed exchanges, stream-offset handoff, and exclusion of private startup, tool, and nested-worker content.",
+          "evidence": "runtime:evidence/verify-unit-tests/tui-session-transcript-tests.json"
+        },
+        {
+          "id": "product-build-contracts-passed",
+          "kind": "test",
+          "criterion": "The unit report proves build-script-regressions.test.ts and product-artifact-lock.test.mjs passed, including imported built-in Flue skill discovery and serialized packaged-product test artifacts.",
+          "evidence": "runtime:evidence/verify-unit-tests/product-build-contract-tests.json"
         }
       ],
       "permissions": {
@@ -1548,7 +1568,11 @@
           "src/tests/memory-telemetry.test.ts",
           "src/tests/trusted-event-admission.test.ts",
           "src/tests/flue-telemetry.test.ts",
-          "src/tests/http-endpoints.test.ts"
+          "src/tests/http-endpoints.test.ts",
+          "src/tests/session-routing.test.ts",
+          "src/tests/session-transcript.test.ts",
+          "src/tests/build-script-regressions.test.ts",
+          "scripts/product-artifact-lock.test.mjs"
         ],
         "write": [
           ".tmp/tsc/",
@@ -1626,13 +1650,23 @@
           "kind": "test",
           "criterion": "The Rust report proves the Ratatui event reducer and application state handle thinking, tool, and delegated-task progress, while the rendered terminal surface proves thinking and tool rows and preserves stream state; delegated-task rendering and approval UI require separate evidence.",
           "evidence": "runtime:evidence/verify-rust-tests/ratatui-progress-rendering.json"
+        },
+        {
+          "id": "ratatui-session-transcript-interaction-passed",
+          "kind": "test",
+          "criterion": "The Rust report proves durable transcript pages and live events converge in one document, completed responses remain immutable, newest and prepended history preserve viewport anchors, live-tail reaches the rendered bottom, and keyboard, multiline prompt, command-palette, mouse selection, copy, and scrollbar behavior remain covered.",
+          "evidence": "runtime:evidence/verify-rust-tests/ratatui-session-transcript-interaction.json"
         }
       ],
       "permissions": {
         "read": [
           "authorized project tree",
           "node_modules/",
+          "tui/ratatui/tests/agent_client.rs",
           "tui/ratatui/tests/event_reducer.rs",
+          "tui/ratatui/tests/history_client.rs",
+          "tui/ratatui/tests/input_mapping.rs",
+          "tui/ratatui/tests/terminal_interaction.rs",
           "tui/ratatui/tests/ui_render.rs",
           "tui/ratatui/tests/app_state.rs"
         ],
@@ -1675,7 +1709,7 @@
       "id": "build-runtime",
       "type": "verification",
       "title": "Build Flue Runtime",
-      "goal": "Build the Node-target SIM-ONE Alpha Flue runtime and copy configuration, registries, and memory WASM into the product artifact.",
+      "goal": "Build the Node-target SIM-ONE Alpha Flue runtime and copy configuration, imported built-in Flue skills, registries, persona workspaces, and memory WASM into the product artifact.",
       "state": "planned",
       "executor": {
         "kind": "deterministic",
@@ -1715,7 +1749,7 @@
         {
           "id": "verification-passed",
           "kind": "test",
-          "criterion": "The Flue Node build succeeds and the runtime server, config, builtin registry, and WASM memory artifact are present with recorded digests.",
+          "criterion": "The Flue Node build succeeds and the runtime server, config, builtin registry, imported greeting-preflight skill, main persona workspace, and WASM memory artifact are present with recorded digests.",
           "evidence": "runtime:evidence/build-runtime/result.json"
         }
       ],
@@ -1750,6 +1784,9 @@
         "evidence_paths": [
           ".gorombo/sim-one-alpha/server.mjs",
           ".gorombo/sim-one-alpha/gorombo.config.json",
+          ".gorombo/sim-one-alpha/builtin-capabilities.json",
+          ".gorombo/sim-one-alpha/skills/greeting-preflight/SKILL.md",
+          ".gorombo/sim-one-alpha/workspace/USER.md",
           ".gorombo/sim-one-alpha/memory/gorombo_memory_bg.wasm"
         ]
       },
@@ -1858,7 +1895,7 @@
       "id": "build-cli",
       "type": "verification",
       "title": "Build SIM-ONE CLI",
-      "goal": "Build the TypeScript sim-one CLI and Ink interface product artifact.",
+      "goal": "Build the TypeScript sim-one command launcher and capability-management CLI that selects the packaged Ratatui TUI by default.",
       "state": "planned",
       "executor": {
         "kind": "deterministic",
@@ -1888,7 +1925,7 @@
         {
           "id": "verification-passed",
           "kind": "test",
-          "criterion": "The CLI build succeeds and .gorombo/sim-one-cli/cli.js has a recorded digest.",
+          "criterion": "The CLI build succeeds and cli.js plus the platform launchers sim-one and sim-one.cmd have recorded digests.",
           "evidence": "runtime:evidence/build-cli/result.json"
         }
       ],
@@ -1917,7 +1954,9 @@
         "capture_limit_bytes": 131072,
         "timeout_seconds": 1500,
         "evidence_paths": [
-          ".gorombo/sim-one-cli/cli.js"
+          ".gorombo/sim-one-cli/cli.js",
+          ".gorombo/sim-one-cli/sim-one",
+          ".gorombo/sim-one-cli/sim-one.cmd"
         ]
       },
       "side_effects": {
@@ -1934,14 +1973,15 @@
         "deterministic",
         "build",
         "cli",
-        "ink"
+        "launcher",
+        "ratatui"
       ]
     },
     {
       "id": "verify-cli-behavior",
       "type": "verification",
       "title": "Verify CLI Behavior",
-      "goal": "Prove the built sim-one CLI starts and exposes its documented command surface.",
+      "goal": "Prove the packaged sim-one launcher exposes its documented command surface and delegates startup to the built Ratatui product path.",
       "state": "planned",
       "executor": {
         "kind": "deterministic",
@@ -1949,6 +1989,16 @@
         "instructions": "Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests."
       },
       "inputs": [
+        {
+          "name": "runtime build",
+          "artifact": "artifact:runtime-build",
+          "required": true
+        },
+        {
+          "name": "Ratatui build",
+          "artifact": "artifact:ratatui-build",
+          "required": true
+        },
         {
           "name": "CLI build",
           "artifact": "artifact:cli-build",
@@ -1966,7 +2016,7 @@
         {
           "id": "verification-passed",
           "kind": "test",
-          "criterion": "The built CLI exits zero and prints the documented sim-one command/help surface rather than merely existing on disk.",
+          "criterion": "The platform sim-one launcher exits zero for --help, prints the documented SIM-ONE Alpha capability-management surface, and completes --smoke-startup through the packaged Ratatui launcher rather than merely proving cli.js exists.",
           "evidence": "runtime:evidence/verify-cli-behavior/result.json"
         }
       ],
@@ -1975,7 +2025,9 @@
           "authorized project tree",
           "node_modules/"
         ],
-        "write": [],
+        "write": [
+          ".gorombo test runtime state"
+        ],
         "external": [],
         "destructive": false
       },
@@ -1985,8 +2037,7 @@
         "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence.",
         "command": [
           "node",
-          ".gorombo/sim-one-cli/cli.js",
-          "--help"
+          "scripts/check-sim-one-product-command.mjs"
         ],
         "working_directory": ".",
         "environment": [],
@@ -1994,16 +2045,20 @@
         "timeout_seconds": 300
       },
       "side_effects": {
-        "level": "none",
-        "description": "Produces verification evidence without mutating project or external state.",
-        "rollback": "none",
+        "level": "reversible",
+        "description": "May write temporary local packaged-runtime state while exercising Ratatui startup.",
+        "rollback": "Remove the isolated test runtime state or regenerate it from the reviewed build.",
         "approval_required": false
       },
-      "resources": [],
+      "resources": [
+        "local-runtime-probe"
+      ],
       "tags": [
         "verification",
         "deterministic",
         "cli",
+        "ratatui",
+        "packaged-product",
         "behavior"
       ]
     },
@@ -2011,7 +2066,7 @@
       "id": "verify-http-integration",
       "type": "verification",
       "title": "Verify Built HTTP Runtime",
-      "goal": "Exercise the built HTTP server routes, authentication boundaries, and durable chat/runtime behavior.",
+      "goal": "Exercise the built HTTP server routes, authentication boundaries, connector-scoped session lifecycle, durable transcript projection, and chat/runtime behavior.",
       "state": "planned",
       "executor": {
         "kind": "deterministic",
@@ -2044,6 +2099,18 @@
           "kind": "test",
           "criterion": "The built HTTP suite rejects an explicit session resume from a different actor/conversation and returns the expected authorization failure.",
           "evidence": "runtime:evidence/verify-http-integration/session-resume-boundary.json"
+        },
+        {
+          "id": "tui-session-lifecycle-passed",
+          "kind": "test",
+          "criterion": "The built HTTP suite proves fresh TUI session creation, exact owned id-or-name resume, missing-selector fresh fallback, duplicate-name rejection, and separation from Telegram connector persistence.",
+          "evidence": "runtime:evidence/verify-http-integration/tui-session-lifecycle.json"
+        },
+        {
+          "id": "durable-transcript-projection-passed",
+          "kind": "test",
+          "criterion": "The built HTTP suite returns newest chronological transcript pages with stable cursors and nextOffset while preserving prompt/final correlation and excluding private startup instructions, raw tool results, and nested-worker responses.",
+          "evidence": "runtime:evidence/verify-http-integration/durable-transcript-projection.json"
         }
       ],
       "permissions": {
@@ -2094,8 +2161,8 @@
     {
       "id": "verify-ratatui-product",
       "type": "verification",
-      "title": "Verify Ratatui Product Prompt",
-      "goal": "Prove the built Ratatui TUI can launch the built gateway, submit a real prompt, and receive a non-placeholder assistant response.",
+      "title": "Verify Packaged Ratatui Product",
+      "goal": "Prove the packaged sim-one command launches Ratatui, manages fresh and resumed sessions, restores durable transcripts, preserves terminal interaction, submits a real prompt, and renders the authoritative assistant response.",
       "state": "planned",
       "executor": {
         "kind": "deterministic",
@@ -2112,11 +2179,16 @@
           "name": "Ratatui build",
           "artifact": "artifact:ratatui-build",
           "required": true
+        },
+        {
+          "name": "CLI build",
+          "artifact": "artifact:cli-build",
+          "required": true
         }
       ],
       "outputs": [
         {
-          "name": "Verify Ratatui Product Prompt",
+          "name": "Verify Packaged Ratatui Product",
           "artifact": "artifact:ratatui-product-report",
           "format": "verification-report"
         }
@@ -2127,6 +2199,30 @@
           "kind": "test",
           "criterion": "The product smoke records a real assistant response of valid content; binary or process existence alone is insufficient.",
           "evidence": "runtime:evidence/verify-ratatui-product/result.json"
+        },
+        {
+          "id": "packaged-launch-and-session-lifecycle-passed",
+          "kind": "test",
+          "criterion": "The product smoke launches through .gorombo/sim-one-cli/sim-one, proves consecutive default launches create distinct fresh durable sessions, verifies workspace-derived greeting-preflight behavior, and resumes an exact owned id or explicit name without sending a second greeting.",
+          "evidence": "runtime:evidence/verify-ratatui-product/packaged-session-lifecycle.json"
+        },
+        {
+          "id": "transcript-replay-live-convergence-passed",
+          "kind": "test",
+          "criterion": "The product smoke restores newest and older transcript pages, attaches strictly after snapshot nextOffset, preserves completed exchanges, deduplicates reconnect replay, hides private and nested output, and renders one authoritative Markdown final in terminal order.",
+          "evidence": "runtime:evidence/verify-ratatui-product/transcript-replay-live-convergence.json"
+        },
+        {
+          "id": "interactive-terminal-controls-passed",
+          "kind": "test",
+          "criterion": "On the canonical POSIX host, the packaged PTY evidence proves prompt editing and multiline submission remain active during transcript scrollback, command-palette selection works, mouse selection and copy do not exit, history prepend preserves the visible anchor, and scrollbar/live-tail controls reach the true transcript ends; cross-platform terminal-event coverage remains separately owned by verify-rust-tests.",
+          "evidence": "runtime:evidence/verify-ratatui-product/interactive-terminal-controls.json"
+        },
+        {
+          "id": "session-command-surface-passed",
+          "kind": "test",
+          "criterion": "The product smoke proves /new, /clear, /session, /sessions, /compact, /resume, /rename, and /exit operate through the active TUI connector session and preserve the documented header, status, and exit identity behavior.",
+          "evidence": "runtime:evidence/verify-ratatui-product/session-command-surface.json"
         }
       ],
       "permissions": {
@@ -2145,7 +2241,7 @@
       },
       "execution": {
         "max_attempts": 2,
-        "timeout_minutes": 6,
+        "timeout_minutes": 15,
         "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence.",
         "command": [
           "env",
@@ -2162,7 +2258,7 @@
           "CODEX_BRAIN_LOCAL_API_URL"
         ],
         "capture_limit_bytes": 131072,
-        "timeout_seconds": 360
+        "timeout_seconds": 900
       },
       "side_effects": {
         "level": "reversible",
@@ -2185,12 +2281,12 @@
     {
       "id": "verify-tui-e2e",
       "type": "verification",
-      "title": "Verify TUI End To End",
-      "goal": "Exercise the built gateway request path used by the terminal client and verify the built CLI command surface, without treating this smoke as proof of approval, tool-progress, or subagent rendering.",
+      "title": "Verify Gateway And CLI Smoke",
+      "goal": "Exercise the direct built-gateway model path and built CLI help surface without treating this narrow smoke as packaged Ratatui end-to-end evidence.",
       "state": "planned",
       "executor": {
         "kind": "deterministic",
-        "name": "Verify TUI End To End",
+        "name": "Verify Gateway And CLI Smoke",
         "instructions": "Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests."
       },
       "inputs": [
@@ -2207,7 +2303,7 @@
       ],
       "outputs": [
         {
-          "name": "Verify TUI End To End",
+          "name": "Verify Gateway And CLI Smoke",
           "artifact": "artifact:tui-e2e-report",
           "format": "verification-report"
         }
@@ -2228,7 +2324,7 @@
         {
           "id": "evidence-scope-honest",
           "kind": "policy",
-          "criterion": "This node reports only gateway prompt and CLI-smoke behavior. Approval routing and typed progress are mapped to unit evidence, Ratatui thinking/tool rendering and delegated-task reducer/state handling are mapped to Rust evidence, and missing user-visible approval, delegated-task rendering, or subagent end-to-end proof remains an architecture-review blocker.",
+          "criterion": "This node reports only direct gateway prompt and CLI-help behavior. Packaged sim-one/Ratatui launch, sessions, transcript replay, interaction, and visible-final behavior belong to verify-ratatui-product; approval routing and typed progress belong to unit evidence; missing user-visible approval or subagent end-to-end proof remains an architecture-review blocker.",
           "evidence": "runtime:evidence/verify-tui-e2e/evidence-scope.json"
         }
       ],
@@ -2276,9 +2372,10 @@
       "tags": [
         "verification",
         "deterministic",
-        "tui",
-        "e2e",
-        "progress"
+        "gateway",
+        "cli",
+        "live-model",
+        "smoke"
       ]
     },
     {
@@ -2419,7 +2516,7 @@
           "required": true
         },
         {
-          "name": "TUI end-to-end report",
+          "name": "gateway and CLI smoke report",
           "artifact": "artifact:tui-e2e-report",
           "required": true
         },
@@ -2448,6 +2545,12 @@
           "kind": "policy",
           "criterion": "Positive status claims rely on correct current output or target-system effects, not process, port, session, file, or command existence.",
           "evidence": "runtime:evidence/aggregate-verification/output-proof-review.json"
+        },
+        {
+          "id": "product-evidence-scopes-separated",
+          "kind": "review",
+          "criterion": "The coverage map keeps direct gateway/CLI smoke, built HTTP session/transcript behavior, Rust Ratatui state/rendering, and packaged sim-one/Ratatui PTY behavior as distinct evidence scopes and rejects claims that exceed the probe that produced them.",
+          "evidence": "runtime:evidence/aggregate-verification/product-evidence-scope.json"
         }
       ],
       "permissions": {
@@ -2542,7 +2645,7 @@
         {
           "id": "verification-claims-match-probes",
           "kind": "review",
-          "criterion": "Every release claim is mapped to a probe that actually exercises it. The gateway/CLI smoke, TypeScript approval/progress tests, Rust Ratatui progress-rendering tests, and any user-visible approval/subagent end-to-end evidence remain distinct; missing applicable evidence blocks approval.",
+          "criterion": "Every release claim is mapped to a probe that actually exercises it. Direct gateway/CLI smoke, built HTTP session/transcript tests, TypeScript approval/progress tests, Rust Ratatui state/rendering tests, packaged sim-one/Ratatui PTY tests, and any user-visible approval/subagent end-to-end evidence remain distinct; missing applicable evidence blocks approval.",
           "evidence": "runtime:evidence/review-architecture-security/probe-claim-map.json"
         }
       ],
@@ -3681,6 +3784,30 @@
       "exit_condition": null
     },
     {
+      "id": "runtime-to-cli-behavior",
+      "from": "build-runtime",
+      "to": "verify-cli-behavior",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:runtime-build"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "ratatui-build-to-cli-behavior",
+      "from": "build-ratatui",
+      "to": "verify-cli-behavior",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:ratatui-build"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
       "id": "runtime-to-http-tests",
       "from": "build-runtime",
       "to": "verify-http-integration",
@@ -3712,6 +3839,18 @@
       "condition": "Upstream artifacts are current, accepted, and bound to this run.",
       "artifacts": [
         "artifact:ratatui-build"
+      ],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "cli-build-to-ratatui-product",
+      "from": "build-cli",
+      "to": "verify-ratatui-product",
+      "type": "consumes",
+      "condition": "Upstream artifacts are current, accepted, and bound to this run.",
+      "artifacts": [
+        "artifact:cli-build"
       ],
       "max_traversals": null,
       "exit_condition": null
@@ -4327,6 +4466,46 @@
       "exit_condition": null
     },
     {
+      "id": "verify-cli-behavior-conflicts-verify-http-integration",
+      "from": "verify-cli-behavior",
+      "to": "verify-http-integration",
+      "type": "conflicts",
+      "condition": "Both probes require exclusive use of the local built runtime and mutable test state.",
+      "artifacts": [],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "verify-cli-behavior-conflicts-verify-ratatui-product",
+      "from": "verify-cli-behavior",
+      "to": "verify-ratatui-product",
+      "type": "conflicts",
+      "condition": "Both probes require exclusive use of the local built runtime and mutable test state.",
+      "artifacts": [],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "verify-cli-behavior-conflicts-verify-tui-e2e",
+      "from": "verify-cli-behavior",
+      "to": "verify-tui-e2e",
+      "type": "conflicts",
+      "condition": "Both probes require exclusive use of the local built runtime and mutable test state.",
+      "artifacts": [],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
+      "id": "verify-cli-behavior-conflicts-verify-memory-smoke",
+      "from": "verify-cli-behavior",
+      "to": "verify-memory-smoke",
+      "type": "conflicts",
+      "condition": "Both probes require exclusive use of the local built runtime and mutable test state.",
+      "artifacts": [],
+      "max_traversals": null,
+      "exit_condition": null
+    },
+    {
       "id": "verify-http-integration-conflicts-verify-tui-e2e",
       "from": "verify-http-integration",
       "to": "verify-tui-e2e",
@@ -4554,7 +4733,7 @@
     "Full live-model TUI probes require valid provider credentials supplied through the runtime environment, never stored in this graph.",
     "Every changed source, documentation, generated-definition, and focused-test file is assigned to exactly one implementation workstream; overlapping files are serialized or reconciled by integration.",
     "The checked-in definition is deliberately bound to the canonical host checkout /opt/ai/sim-one-alpha under the project-local graph contract; review worktrees and CI clones may validate or render it, but executable claims require an explicit canonical-root authorization or a separately reviewed rebind.",
-    "The configured pnpm run test:tui smoke proves the built gateway prompt path and CLI command surface only; TypeScript and Rust verification nodes own approval/progress routing and Ratatui rendering evidence.",
+    "The configured pnpm run test:tui smoke proves only the direct built-gateway prompt path and CLI help surface; pnpm run test:tui:ratatui owns packaged sim-one/Ratatui session, transcript, interaction, and visible-final evidence, while TypeScript and Rust suites own their narrower contracts.",
     "Company-owned src/AGENTS.md is an immutable input to ordinary implementation workstreams; changing it requires a separately scoped lifecycle and explicit owner human gate."
   ],
   "risks": [
@@ -4565,6 +4744,6 @@
     "The graph coordinator is not an operating-system sandbox or distributed scheduler; untrusted commands require an approved isolation layer.",
     "The path src/workspace/ is both the main-agent persona workspace and, by default, the Coding Worker runtime access root; lifecycle evidence must distinguish instruction ownership from sandbox/project scope and from worker-local persona workspaces.",
     "Executing deterministic nodes from a review worktree while project.root names the canonical main checkout could operate on the wrong tree; baseline evidence must reject any unapproved root mismatch before claims.",
-    "Current gateway and product smoke commands do not by themselves prove user-visible approval or subagent progress; release review must require separate applicable evidence and reject overclaims."
+    "Current gateway and packaged Ratatui product probes do not by themselves prove user-visible approval or complete subagent progress; release review must require separate applicable evidence and reject overclaims."
   ]
 }
