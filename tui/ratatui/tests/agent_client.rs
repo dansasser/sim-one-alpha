@@ -2,6 +2,7 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::mpsc;
 use std::thread;
+use std::time::{Duration, Instant};
 
 use sim_one_ratatui_tui::agent::{
     create_chat_session, list_chat_sessions, resume_chat_session, send_agent_prompt,
@@ -73,6 +74,44 @@ fn posts_prompt_to_tui_chat_event_endpoint_and_extracts_text() {
         Some("session with spaces")
     );
     assert_eq!(body.get("workflow"), None);
+}
+
+#[test]
+fn prompt_response_finishes_after_content_length_without_waiting_for_socket_close() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("test server should bind");
+    let port = listener
+        .local_addr()
+        .expect("test server should have address")
+        .port();
+
+    thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("client should connect");
+        let _ = read_http_request(&mut stream);
+        let body = r#"{"result":{"text":"framed response"}}"#;
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: keep-alive\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .expect("response should be writable");
+        stream.flush().expect("response should flush");
+        thread::sleep(Duration::from_millis(750));
+    });
+
+    let started = Instant::now();
+    let response = send_agent_prompt(
+        &format!("http://127.0.0.1:{port}"),
+        "keep-alive-session",
+        "return after the framed body",
+    )
+    .expect("framed prompt response should return");
+
+    assert_eq!(response, "framed response");
+    assert!(
+        started.elapsed() < Duration::from_millis(500),
+        "client waited for socket close instead of Content-Length"
+    );
 }
 
 #[test]

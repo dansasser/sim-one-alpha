@@ -661,6 +661,7 @@ test('loads transcript pages from bounded event-store reads without page overlap
     assert.equal(newest.page.hasOlder, true);
     assert.equal(typeof newest.page.before, 'string');
     assert.deepEqual(reads, [
+      '-1',
       '0000000000000000_0000000000000000',
       '0000000000000000_0000000000000001',
     ]);
@@ -680,7 +681,11 @@ test('loads transcript pages from bounded event-store reads without page overlap
       older.exchanges.some((exchange) => newest.exchanges.some((item) => item.id === exchange.id)),
       false,
     );
-    assert.deepEqual(reads, ['-1']);
+    assert.deepEqual(reads, [
+      '-1',
+      '0000000000000000_0000000000000000',
+      '0000000000000000_0000000000000001',
+    ]);
 
     const otherSession = prompt({
       eventId: 'prompt-other-session',
@@ -718,6 +723,162 @@ test('loads transcript pages from bounded event-store reads without page overlap
   }
 });
 
+test('older transcript pages retain replies that complete after a newer prompt starts', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'gorombo-transcript-overlap-'));
+  const database = new GoromboSessionDatabase(join(directory, 'sessions.sqlite'));
+  const sessionId = 'tui-overlapping-prompts';
+  const entries = [
+    streamEvent('0000000000000000_0000000000000000', {
+      type: 'operation_start',
+      operationId: 'op-first',
+      submissionId: 'submission-first',
+      eventIndex: 0,
+      timestamp: '2026-07-21T00:00:00.100Z',
+    }),
+    streamEvent('0000000000000000_0000000000000001', {
+      type: 'operation_start',
+      operationId: 'op-second',
+      submissionId: 'submission-second',
+      eventIndex: 0,
+      timestamp: '2026-07-21T00:00:01.100Z',
+    }),
+    streamEvent('0000000000000000_0000000000000002', {
+      type: 'message_end',
+      submissionId: 'submission-first',
+      eventIndex: 1,
+      timestamp: '2026-07-21T00:00:02.100Z',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'First response completed late' }],
+      },
+    }),
+    streamEvent('0000000000000000_0000000000000003', {
+      type: 'operation',
+      operationId: 'op-first',
+      submissionId: 'submission-first',
+      eventIndex: 2,
+      timestamp: '2026-07-21T00:00:02.200Z',
+    }),
+  ];
+
+  try {
+    recordTranscriptPrompt(database, sessionId, prompt({
+      eventId: 'prompt-first',
+      text: 'First prompt',
+      receivedAt: '2026-07-21T00:00:00.000Z',
+      submissionId: 'submission-first',
+      offset: '-1',
+    }));
+    recordTranscriptPrompt(database, sessionId, prompt({
+      eventId: 'prompt-second',
+      text: 'Second prompt',
+      receivedAt: '2026-07-21T00:00:01.000Z',
+      submissionId: 'submission-second',
+      offset: '0000000000000000_0000000000000000',
+    }));
+    const store = eventStoreFor(`agents/orchestrator/${sessionId}`, entries);
+
+    const newest = await loadSessionTranscriptPage({
+      session: { id: sessionId },
+      sessionDatabase: database,
+      eventStreamStore: store,
+      limit: 1,
+    });
+    const older = await loadSessionTranscriptPage({
+      session: { id: sessionId },
+      sessionDatabase: database,
+      eventStreamStore: store,
+      limit: 1,
+      before: newest.page.before,
+    });
+
+    assert.equal(older.exchanges[0]?.prompt?.text, 'First prompt');
+    assert.equal(older.exchanges[0]?.assistant?.text, 'First response completed late');
+    assert.equal(older.exchanges[0]?.status, 'completed');
+  } finally {
+    database.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('transcript pagination fills pages past hidden internal prompt rows', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'gorombo-transcript-hidden-'));
+  const database = new GoromboSessionDatabase(join(directory, 'sessions.sqlite'));
+  const sessionId = 'tui-hidden-page-boundary';
+  const entries = [
+    streamEvent('0000000000000000_0000000000000000', {
+      type: 'message_end',
+      submissionId: 'submission-visible-old',
+      eventIndex: 0,
+      timestamp: '2026-07-21T01:00:00.100Z',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Visible old response' }],
+      },
+    }),
+    streamEvent('0000000000000000_0000000000000001', {
+      type: 'message_end',
+      submissionId: 'submission-visible-new',
+      eventIndex: 0,
+      timestamp: '2026-07-21T01:00:02.100Z',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Visible new response' }],
+      },
+    }),
+  ];
+
+  try {
+    recordTranscriptPrompt(database, sessionId, prompt({
+      eventId: 'prompt-visible-old',
+      text: 'Visible old prompt',
+      receivedAt: '2026-07-21T01:00:00.000Z',
+      submissionId: 'submission-visible-old',
+      offset: '-1',
+    }));
+    recordTranscriptPrompt(database, sessionId, prompt({
+      eventId: 'prompt-hidden',
+      text: 'INTERNAL_STARTUP_SENTINEL',
+      receivedAt: '2026-07-21T01:00:01.000Z',
+      submissionId: 'submission-hidden',
+      offset: '0000000000000000_0000000000000000',
+      workflow: 'tui.startup-preflight',
+    }));
+    recordTranscriptPrompt(database, sessionId, prompt({
+      eventId: 'prompt-visible-new',
+      text: 'Visible new prompt',
+      receivedAt: '2026-07-21T01:00:02.000Z',
+      submissionId: 'submission-visible-new',
+      offset: '0000000000000000_0000000000000000',
+    }));
+    const store = eventStoreFor(`agents/orchestrator/${sessionId}`, entries);
+
+    const newest = await loadSessionTranscriptPage({
+      session: { id: sessionId },
+      sessionDatabase: database,
+      eventStreamStore: store,
+      limit: 1,
+    });
+    const older = await loadSessionTranscriptPage({
+      session: { id: sessionId },
+      sessionDatabase: database,
+      eventStreamStore: store,
+      limit: 1,
+      before: newest.page.before,
+    });
+
+    assert.deepEqual(
+      older.exchanges.map((exchange) => exchange.prompt?.text),
+      ['Visible old prompt'],
+    );
+    assert.equal(older.page.hasOlder, false);
+    assert.equal(older.page.before, undefined);
+  } finally {
+    database.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 function prompt(input: {
   eventId: string;
   text: string;
@@ -749,4 +910,53 @@ function prompt(input: {
 
 function streamEvent(offset: string, data: Record<string, unknown>) {
   return { offset, data };
+}
+
+function recordTranscriptPrompt(
+  database: GoromboSessionDatabase,
+  sessionId: string,
+  record: SessionNormalizedMessageRecord,
+): void {
+  database.recordNormalizedMessageEvent({
+    event: record.event,
+    sessionId,
+    deliveryKind: 'direct-agent',
+    deliveryId: record.delivery.submissionId,
+    delivery: record.delivery,
+  });
+}
+
+function eventStoreFor(
+  expectedPath: string,
+  entries: ReturnType<typeof streamEvent>[],
+): EventStreamStore {
+  return {
+    async createStream() {},
+    async appendEvent() {
+      throw new Error('append is not used by transcript reads');
+    },
+    async readEvents(path, options) {
+      assert.equal(path, expectedPath);
+      const offset = options?.offset ?? '-1';
+      const remaining = entries.filter((entry) =>
+        parseOffset(entry.offset) > parseOffset(offset));
+      const batch = remaining.slice(0, options?.limit ?? remaining.length);
+      return {
+        events: batch,
+        nextOffset: batch.at(-1)?.offset ?? offset,
+        upToDate: batch.length === remaining.length,
+        closed: false,
+      };
+    },
+    async closeStream() {},
+    async getStreamMeta() {
+      return {
+        nextOffset: entries.at(-1)?.offset ?? '-1',
+        closed: false,
+      };
+    },
+    subscribe() {
+      return () => {};
+    },
+  };
 }

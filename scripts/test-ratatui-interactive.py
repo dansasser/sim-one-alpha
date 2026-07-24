@@ -33,6 +33,12 @@ RESTORED_INITIAL_ANCHOR = "RESTORED_INITIAL_ANCHOR"
 RESTORED_NEWEST_FINAL = "RESTORED_NEWEST_FINAL"
 OLDER_PAGE_REQUESTED = threading.Event()
 RELEASE_OLDER_PAGE = threading.Event()
+RESPONSE_FINAL_MARKERS = (
+    "AAAAAAAAAAAAAAAAAAAAAAAA",
+    "BBBBBBBBBBBBBBBBBBBBBBBB",
+    "CCCCCCCCCCCCCCCCCCCCCCCC",
+    "DDDDDDDDDDDDDDDDDDDDDDDD",
+)
 
 
 class GatewayHandler(BaseHTTPRequestHandler):
@@ -156,7 +162,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
         response_lines.extend(
             f"response detail {index:02d}" for index in range(1, 13)
         )
-        response_lines.append(f"response-final-{len(REQUESTS)}")
+        response_lines.append(RESPONSE_FINAL_MARKERS[len(REQUESTS) - 1])
         response = json.dumps(
             {
                 "result": {
@@ -447,7 +453,7 @@ def main():
             )
 
         click_mouse(master_fd, 100, 18)
-        read_until(master_fd, b"response-final-1", 5)
+        read_until(master_fd, RESPONSE_FINAL_MARKERS[0].encode(), 5)
 
         os.write(master_fd, b"/res")
         read_until(master_fd, b"Resume a durable session", 5)
@@ -491,7 +497,7 @@ def main():
             raise AssertionError(
                 f"multiline prompt payload mismatch: expected 'first line updated\\nsecond line', got {prompt!r}"
             )
-        read_until(master_fd, b"response-final-2", 5)
+        read_until(master_fd, RESPONSE_FINAL_MARKERS[1].encode(), 5)
 
         os.write(master_fd, b"keep remove tail")
         drag_mouse(master_fd, 9, 22, 14, 22)
@@ -503,7 +509,7 @@ def main():
             raise AssertionError(
                 f"mouse selection replacement payload mismatch: {REQUESTS[2]!r}"
             )
-        read_until(master_fd, b"response-final-3", 5)
+        read_until(master_fd, RESPONSE_FINAL_MARKERS[2].encode(), 5)
 
         os.write(master_fd, b"mouse alpha bravo")
         click_mouse(master_fd, 16, 22)
@@ -514,7 +520,7 @@ def main():
             raise AssertionError(
                 f"mouse cursor placement payload mismatch: {REQUESTS[3]!r}"
             )
-        read_until(master_fd, b"response-final-4", 5)
+        read_until(master_fd, RESPONSE_FINAL_MARKERS[3].encode(), 5)
 
         for line in (b"alpha", b"bravo", b"charlie", b"delta", b"echo", b"foxtrot"):
             os.write(master_fd, line + b"\\\r")
@@ -534,7 +540,7 @@ def main():
         drain_output(master_fd)
         click_mouse(master_fd, 100, 18)
         tail_redraw = read_output(master_fd, 0.5)
-        if b"response-fina" not in tail_redraw or b"-4" not in tail_redraw:
+        if RESPONSE_FINAL_MARKERS[3].encode() not in tail_redraw:
             raise AssertionError(
                 f"scrollbar bottom click did not reveal the latest response: {tail_redraw!r}"
             )

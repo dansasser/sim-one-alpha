@@ -1,8 +1,7 @@
-use std::io::Read;
 use std::time::Duration;
 
 use crate::http::{
-    connect_tcp, parse_http_response, percent_encode, write_http_request, HttpEndpoint,
+    connect_tcp, percent_encode, read_http_response, write_http_request, HttpEndpoint, HttpResponse,
 };
 
 const AGENT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -112,12 +111,7 @@ Connection: close\r\n\
 
     write_http_request(&mut stream, &request, "prompt")?;
 
-    let mut response = Vec::new();
-    stream
-        .read_to_end(&mut response)
-        .map_err(|error| format!("Could not read gateway response: {error}"))?;
-
-    parse_agent_response(&response)
+    parse_agent_response(read_http_response(&mut stream, "Gateway")?)
 }
 
 pub fn list_chat_sessions(base_url: &str, limit: usize) -> Result<Vec<SessionSummary>, String> {
@@ -147,12 +141,7 @@ Connection: close\r\n\
 
     write_http_request(&mut stream, &request, "session list")?;
 
-    let mut response = Vec::new();
-    stream
-        .read_to_end(&mut response)
-        .map_err(|error| format!("Could not read gateway session list response: {error}"))?;
-
-    parse_session_list_response(&response)
+    parse_session_list_response(read_http_response(&mut stream, "Gateway")?)
 }
 
 fn send_session_lifecycle_request(
@@ -181,11 +170,7 @@ Connection: close\r\n\
     );
     write_http_request(&mut stream, &request, "session lifecycle")?;
 
-    let mut response = Vec::new();
-    stream
-        .read_to_end(&mut response)
-        .map_err(|error| format!("Could not read gateway session lifecycle response: {error}"))?;
-    parse_session_lifecycle_response(&response)
+    parse_session_lifecycle_response(read_http_response(&mut stream, "Gateway")?)
 }
 
 fn local_tui_identity_body() -> String {
@@ -198,8 +183,9 @@ fn local_tui_identity_body() -> String {
     .to_string()
 }
 
-fn parse_session_lifecycle_response(response: &[u8]) -> Result<SessionLifecycleReply, String> {
-    let response = parse_http_response(response, "Gateway")?;
+fn parse_session_lifecycle_response(
+    response: HttpResponse,
+) -> Result<SessionLifecycleReply, String> {
     let body = String::from_utf8(response.body)
         .map_err(|error| format!("Gateway returned a non-UTF-8 session lifecycle body: {error}"))?;
     if !(200..300).contains(&response.status) {
@@ -250,8 +236,7 @@ fn parse_session_lifecycle_response(response: &[u8]) -> Result<SessionLifecycleR
     })
 }
 
-fn parse_agent_response(response: &[u8]) -> Result<AgentReply, String> {
-    let response = parse_http_response(response, "Gateway")?;
+fn parse_agent_response(response: HttpResponse) -> Result<AgentReply, String> {
     let body = String::from_utf8(response.body)
         .map_err(|error| format!("Gateway returned a non-UTF-8 response body: {error}"))?;
 
@@ -330,8 +315,7 @@ fn extract_agent_reply(value: &serde_json::Value) -> Option<AgentReply> {
     })
 }
 
-fn parse_session_list_response(response: &[u8]) -> Result<Vec<SessionSummary>, String> {
-    let response = parse_http_response(response, "Gateway")?;
+fn parse_session_list_response(response: HttpResponse) -> Result<Vec<SessionSummary>, String> {
     let body = String::from_utf8(response.body)
         .map_err(|error| format!("Gateway returned a non-UTF-8 session list body: {error}"))?;
 

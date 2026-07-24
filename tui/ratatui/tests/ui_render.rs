@@ -1851,6 +1851,36 @@ fn transcript_mouse_drag_highlights_and_copies_logical_text_across_wraps() {
 }
 
 #[test]
+fn transcript_mouse_selection_copies_an_emoji_grapheme_as_one_cell() {
+    let backend = TestBackend::new(50, 16);
+    let mut terminal = Terminal::new(backend).expect("test backend should initialize");
+    let mut app = App::new_for_test();
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"log",
+            "eventIndex":451,
+            "text":"before 👩‍💻 after"
+        }),
+    )]));
+
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("emoji transcript should render");
+    let emoji = find_buffer_symbol_positions(&terminal, "👩‍💻");
+    assert_eq!(emoji.len(), 1, "{}", terminal_buffer_lines(&terminal));
+
+    for kind in [
+        MouseEventKind::Down(MouseButton::Left),
+        MouseEventKind::Drag(MouseButton::Left),
+        MouseEventKind::Up(MouseButton::Left),
+    ] {
+        app.handle_event(AppEvent::Mouse(mouse_at(kind, emoji[0])));
+    }
+
+    assert_eq!(app.take_clipboard_text().as_deref(), Some("👩‍💻"));
+}
+
+#[test]
 fn transcript_reverse_drag_copies_rendered_markdown_text_without_markers() {
     let backend = TestBackend::new(40, 16);
     let mut terminal = Terminal::new(backend).expect("test backend should initialize");

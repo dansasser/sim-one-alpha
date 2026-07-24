@@ -54,6 +54,7 @@ pub struct TranscriptDocument {
     submission_index: BTreeMap<String, usize>,
     blocks: Vec<TranscriptBlock>,
     snapshot_submissions: BTreeSet<String>,
+    resumable_snapshot_submissions: BTreeSet<String>,
     seen_events: BTreeSet<String>,
     streaming_text: BTreeMap<String, String>,
     pending_text: BTreeMap<String, String>,
@@ -75,8 +76,7 @@ impl TranscriptDocument {
             if self.contains_exchange(&exchange.id, &exchange.submission_id) {
                 continue;
             }
-            self.snapshot_submissions
-                .insert(exchange.submission_id.clone());
+            self.track_snapshot_submission(&exchange);
             inserted_ids.push(exchange.id.clone());
             inserted_exchanges.push(exchange);
         }
@@ -422,7 +422,7 @@ impl TranscriptDocument {
             "text_delta" => {
                 if let Some(text) = extract_event_text(event) {
                     self.streaming_text
-                        .entry(submission_id)
+                        .entry(submission_id.clone())
                         .or_default()
                         .push_str(&text);
                 }
@@ -452,6 +452,12 @@ impl TranscriptDocument {
                 self.set_exchange_terminal_status(&exchange_id, event_has_error(event));
             }
             _ => {}
+        }
+        if self.resumable_snapshot_submissions.contains(&submission_id)
+            && matches!(event_type, "operation" | "turn")
+        {
+            self.resumable_snapshot_submissions.remove(&submission_id);
+            self.snapshot_submissions.insert(submission_id);
         }
     }
 
@@ -504,8 +510,7 @@ impl TranscriptDocument {
             if self.contains_exchange(&exchange.id, &exchange.submission_id) {
                 continue;
             }
-            self.snapshot_submissions
-                .insert(exchange.submission_id.clone());
+            self.track_snapshot_submission(&exchange);
             self.blocks
                 .push(TranscriptBlock::Exchange(exchange.id.clone()));
             self.exchanges.push(exchange);
@@ -517,6 +522,19 @@ impl TranscriptDocument {
 
     fn contains_exchange(&self, id: &str, submission_id: &str) -> bool {
         self.exchange_index.contains_key(id) || self.submission_index.contains_key(submission_id)
+    }
+
+    fn track_snapshot_submission(&mut self, exchange: &TranscriptExchange) {
+        if matches!(
+            exchange.status,
+            TranscriptActivityStatus::Completed | TranscriptActivityStatus::Failed
+        ) {
+            self.snapshot_submissions
+                .insert(exchange.submission_id.clone());
+        } else {
+            self.resumable_snapshot_submissions
+                .insert(exchange.submission_id.clone());
+        }
     }
 
     fn ensure_live_exchange(&mut self, submission_id: &str) -> String {

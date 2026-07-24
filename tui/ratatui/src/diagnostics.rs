@@ -121,6 +121,23 @@ pub fn stream_attach_started(mode: &str) {
     record("stream.attach.started", json!({ "mode": mode }));
 }
 
+pub fn prompt_request_completed(succeeded: bool, elapsed_ms: u128) {
+    record(
+        "prompt.request.completed",
+        json!({
+            "outcome": if succeeded { "success" } else { "error" },
+            "elapsedMs": elapsed_ms,
+        }),
+    );
+}
+
+pub fn prompt_response_applied(elapsed_ms: u128) {
+    record(
+        "prompt.response.applied",
+        json!({ "elapsedMs": elapsed_ms }),
+    );
+}
+
 pub fn history_page_prepended(exchange_count: usize, elapsed_ms: u128, has_older: bool) {
     record(
         "history.page.prepended",

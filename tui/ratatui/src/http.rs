@@ -106,6 +106,72 @@ pub fn read_http_head(stream: &mut TcpStream, context: &str) -> Result<(String, 
     }
 }
 
+pub fn read_http_response(stream: &mut TcpStream, context: &str) -> Result<HttpResponse, String> {
+    let (head, initial_body) = read_http_head(stream, context)?;
+    let status = parse_status_code(&head, context)?;
+    let body = if has_chunked_encoding(&head) {
+        read_chunked_http_body(stream, initial_body, context)?
+    } else if let Some(length) = header_value(&head, "content-length") {
+        let expected = length.parse::<usize>().map_err(|error| {
+            format!("{context} response had an invalid Content-Length: {error}")
+        })?;
+        read_fixed_http_body(stream, initial_body, expected, context)?
+    } else {
+        let mut body = initial_body;
+        stream
+            .read_to_end(&mut body)
+            .map_err(|error| format!("Could not read {context} response body: {error}"))?;
+        body
+    };
+
+    Ok(HttpResponse { head, status, body })
+}
+
+fn read_fixed_http_body(
+    stream: &mut TcpStream,
+    mut body: Vec<u8>,
+    expected: usize,
+    context: &str,
+) -> Result<Vec<u8>, String> {
+    body.truncate(expected);
+    while body.len() < expected {
+        let remaining = expected - body.len();
+        let mut buffer = [0; 8_192];
+        let read_size = remaining.min(buffer.len());
+        let size = stream
+            .read(&mut buffer[..read_size])
+            .map_err(|error| format!("Could not read {context} response body: {error}"))?;
+        if size == 0 {
+            return Err(format!(
+                "{context} response ended after {} of {expected} body bytes.",
+                body.len()
+            ));
+        }
+        body.extend_from_slice(&buffer[..size]);
+    }
+    Ok(body)
+}
+
+fn read_chunked_http_body(
+    stream: &mut TcpStream,
+    initial_body: Vec<u8>,
+    context: &str,
+) -> Result<Vec<u8>, String> {
+    let mut decoder = ChunkedBodyDecoder::new(context);
+    let mut body = decoder.push(&initial_body)?;
+    let mut buffer = [0; 8_192];
+    while !decoder.is_finished() {
+        let size = stream
+            .read(&mut buffer)
+            .map_err(|error| format!("Could not read {context} response body: {error}"))?;
+        if size == 0 {
+            return Err(format!("{context} ended before the final chunk."));
+        }
+        body.extend(decoder.push(&buffer[..size])?);
+    }
+    Ok(body)
+}
+
 pub fn parse_http_response(response: &[u8], context: &str) -> Result<HttpResponse, String> {
     let header_end = find_header_end(response)
         .ok_or_else(|| format!("{context} returned a malformed HTTP response."))?;

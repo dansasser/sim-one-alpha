@@ -394,6 +394,45 @@ fn completed_snapshot_exchange_is_immutable_under_replayed_live_events() {
 }
 
 #[test]
+fn running_snapshot_exchange_accepts_later_live_completion() {
+    let mut document = TranscriptDocument::default();
+    document.install_snapshot(vec![TranscriptExchange {
+        id: "snapshot-running".to_string(),
+        submission_id: "snapshot-running".to_string(),
+        prompt: Some(TranscriptPrompt {
+            id: "snapshot-running:prompt".to_string(),
+            text: "finish after resume".to_string(),
+            received_at: "2026-07-23T10:00:00Z".to_string(),
+            visibility: TranscriptPromptVisibility::User,
+        }),
+        activities: Vec::new(),
+        assistant: None,
+        status: TranscriptActivityStatus::Running,
+    }]);
+
+    document.apply_event(&event_for(
+        "snapshot-running",
+        4,
+        serde_json::json!({
+            "type":"message_end",
+            "message":{"role":"assistant","content":"completed after resume"}
+        }),
+    ));
+
+    assert_eq!(
+        document.exchanges()[0]
+            .assistant
+            .as_ref()
+            .map(|message| message.text.as_str()),
+        Some("completed after resume")
+    );
+    assert_eq!(
+        document.exchanges()[0].status,
+        TranscriptActivityStatus::Completed
+    );
+}
+
+#[test]
 fn reduces_user_and_assistant_message_end_events() {
     let mut transcript = EventTranscript::default();
 

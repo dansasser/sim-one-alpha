@@ -21,6 +21,24 @@ test('SKILL.md loader accepts CRLF frontmatter', () => {
   });
 });
 
+test('SKILL.md loader parses YAML scalar styles and comments', () => {
+  const script = [
+    "import { parseFrontmatter } from './scripts/skill-md-loader.mjs';",
+    "const value = parseFrontmatter('---\\nname: \"yaml-skill\" # display id\\ndescription: >\\n  First line\\n  continues here.\\n---\\nBody\\n', 'fixture');",
+    'process.stdout.write(JSON.stringify(value));',
+  ].join('');
+  const result = spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    name: 'yaml-skill',
+    description: 'First line continues here.\n',
+  });
+});
+
 test('built-in registry reserves a Markdown skill by parent directory name', () => {
   const result = spawnSync(process.execPath, ['scripts/generate-builtin-registry.mjs'], {
     cwd: process.cwd(),

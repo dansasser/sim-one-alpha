@@ -1,7 +1,8 @@
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use tui_markdown::{from_str_with_options, Options};
-use unicode_width::UnicodeWidthChar;
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
 use crate::text_wrap::wrap_ranges;
 use crate::theme::TranscriptMarkdownStyleSheet;
@@ -20,6 +21,14 @@ pub(crate) struct StyledMarkdownLine {
 struct StyledChar {
     ch: char,
     style: Style,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct StyledGrapheme {
+    start_char: usize,
+    end_char: usize,
+    width: usize,
+    whitespace: bool,
 }
 
 pub(crate) fn render_markdown(
@@ -98,24 +107,53 @@ fn wrap_styled_line(
         return;
     }
 
+    let graphemes = styled_graphemes(source_text);
     for range in wrap_ranges(
         0,
-        chars.len(),
+        graphemes.len(),
         first_width,
         continuation_width,
-        |index| UnicodeWidthChar::width(chars[index].ch).unwrap_or_default(),
-        |index| chars[index].ch.is_whitespace(),
+        |index| graphemes[index].width,
+        |index| graphemes[index].whitespace,
     ) {
+        let start = grapheme_boundary(&graphemes, range.start, chars.len());
+        let visible_end = grapheme_boundary(&graphemes, range.visible_end, chars.len());
+        let source_end = grapheme_boundary(&graphemes, range.source_end, chars.len());
         push_row(
             chars,
-            range.start,
-            range.visible_end,
-            range.source_end,
+            start,
+            visible_end,
+            source_end,
             source_line,
             source_text,
             rows,
         );
     }
+}
+
+fn styled_graphemes(source_text: &str) -> Vec<StyledGrapheme> {
+    let mut char_index = 0;
+    source_text
+        .graphemes(true)
+        .map(|grapheme| {
+            let start_char = char_index;
+            char_index += grapheme.chars().count();
+            StyledGrapheme {
+                start_char,
+                end_char: char_index,
+                width: UnicodeWidthStr::width(grapheme),
+                whitespace: grapheme.chars().all(char::is_whitespace),
+            }
+        })
+        .collect()
+}
+
+fn grapheme_boundary(graphemes: &[StyledGrapheme], index: usize, total_chars: usize) -> usize {
+    graphemes
+        .get(index)
+        .map(|grapheme| grapheme.start_char)
+        .or_else(|| graphemes.last().map(|grapheme| grapheme.end_char))
+        .unwrap_or(total_chars)
 }
 
 fn push_row(
@@ -173,6 +211,15 @@ mod tests {
         assert_eq!(
             rows.iter().map(|row| row.text.as_str()).collect::<Vec<_>>(),
             ["test", "界界"]
+        );
+    }
+
+    #[test]
+    fn preserves_emoji_graphemes_across_markdown_wrapping() {
+        let rows = render_markdown("**👩‍💻x**", 2, 2);
+        assert_eq!(
+            rows.iter().map(|row| row.text.as_str()).collect::<Vec<_>>(),
+            ["👩‍💻", "x"]
         );
     }
 

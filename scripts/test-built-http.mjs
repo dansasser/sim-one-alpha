@@ -18,7 +18,7 @@ const nodeArgs = existsSync('.env') ? ['--env-file=.env', '.gorombo/sim-one-alph
 const codingWorkspaceRoot = mkdtempSync(join(tmpdir(), 'built-http-coding-workspace-'));
 const configPath = '.gorombo/sim-one-alpha/gorombo.config.json';
 const releaseArtifactLock = await acquireProductArtifactLock();
-const originalConfig = readFileSync(configPath, 'utf8');
+let originalConfig;
 const sessionDatabasePath = join(codingWorkspaceRoot, 'sessions.sqlite');
 const modelEnv = {
   OLLAMA_API_KEY: process.env.OLLAMA_API_KEY || envFileValues.OLLAMA_API_KEY || 'built-http-test-key',
@@ -33,6 +33,7 @@ let stdout = '';
 let child;
 
 try {
+  originalConfig = readFileSync(configPath, 'utf8');
   const config = JSON.parse(originalConfig);
   config.storage = {
     ...(config.storage ?? {}),
@@ -479,7 +480,9 @@ try {
       await stopChild(child);
     }
   } finally {
-    writeFileSync(configPath, originalConfig);
+    if (originalConfig !== undefined) {
+      writeFileSync(configPath, originalConfig);
+    }
     rmSync(codingWorkspaceRoot, { recursive: true, force: true });
     await releaseArtifactLock();
   }

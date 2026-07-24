@@ -59,13 +59,14 @@ const codingWorkspaceRoot = mkdtempSync(join(tmpdir(), 'ratatui-product-workspac
 const tuiDiagnosticsPath = join(codingWorkspaceRoot, 'logs', 'sim-one-ratatui.jsonl');
 const configPath = join(serverDir, 'gorombo.config.json');
 const releaseArtifactLock = await acquireProductArtifactLock();
-const originalConfig = readFileSync(configPath, 'utf8');
+let originalConfig;
 
 let stdout = '';
 let stderr = '';
 let child;
 
 try {
+  originalConfig = readFileSync(configPath, 'utf8');
   const config = JSON.parse(originalConfig);
   config.gateway = { ...(config.gateway ?? {}), port };
   config.storage = {
@@ -266,7 +267,9 @@ try {
       child.kill('SIGKILL');
     }
   } finally {
-    writeFileSync(configPath, originalConfig);
+    if (originalConfig !== undefined) {
+      writeFileSync(configPath, originalConfig);
+    }
     rmSync(codingWorkspaceRoot, { recursive: true, force: true });
     await releaseArtifactLock();
   }

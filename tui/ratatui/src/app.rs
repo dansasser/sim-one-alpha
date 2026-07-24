@@ -20,9 +20,13 @@ use crate::history::{
     TranscriptPromptVisibility, TranscriptSession, TranscriptStreamCursor,
 };
 use crate::markdown::render_markdown;
-use crate::text_wrap::{display_width, display_width_between, wrap_words, WrappedLine};
+use crate::text_wrap::{
+    display_width, display_width_between, next_grapheme_boundary, previous_grapheme_boundary,
+    wrap_words, WrappedLine,
+};
 use crate::transcript::{TranscriptDocument, TranscriptLineKind};
-use unicode_width::UnicodeWidthChar;
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
 pub const SCROLL_PAGE_LINES: usize = 8;
 const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
@@ -1102,6 +1106,7 @@ impl App {
 
         match received {
             Ok(response) => {
+                diagnostics::prompt_response_applied(pending.started_at.elapsed().as_millis());
                 self.pending_response = None;
                 self.agent_status = "ready".to_string();
                 match response.result {
@@ -2033,6 +2038,7 @@ impl App {
         let (tx, rx) = mpsc::channel();
         thread::spawn(move || {
             let result = sender(base_url, session_id, prompt, AgentPromptOrigin::User);
+            diagnostics::prompt_request_completed(result.is_ok(), started_at.elapsed().as_millis());
             let _ = tx.send(AgentResponse { result });
         });
         let pending = PendingResponse {
@@ -2974,23 +2980,11 @@ fn agent_reply(text: impl Into<String>) -> AgentReply {
 }
 
 fn previous_char_boundary(value: &str, cursor: usize) -> Option<usize> {
-    if cursor == 0 {
-        return None;
-    }
-    value[..cursor]
-        .char_indices()
-        .last()
-        .map(|(index, _)| index)
+    previous_grapheme_boundary(value, cursor)
 }
 
 fn next_char_boundary(value: &str, cursor: usize) -> Option<usize> {
-    if cursor >= value.len() {
-        return None;
-    }
-    value[cursor..]
-        .chars()
-        .next()
-        .map(|ch| cursor + ch.len_utf8())
+    next_grapheme_boundary(value, cursor)
 }
 
 fn previous_word_boundary(value: &str, cursor: usize) -> usize {
@@ -3052,19 +3046,20 @@ fn char_index_at_display_column(
     end_char: usize,
     target_column: usize,
 ) -> usize {
-    let mut column = 0;
-    let mut index = start_char;
-    for ch in value
+    let slice = value
         .chars()
         .skip(start_char)
         .take(end_char.saturating_sub(start_char))
-    {
-        let next_column = column + UnicodeWidthChar::width(ch).unwrap_or_default();
+        .collect::<String>();
+    let mut column = 0;
+    let mut index = start_char;
+    for grapheme in slice.graphemes(true) {
+        let next_column = column + UnicodeWidthStr::width(grapheme);
         if next_column > target_column {
             break;
         }
         column = next_column;
-        index += 1;
+        index += grapheme.chars().count();
     }
     index
 }
@@ -3074,22 +3069,17 @@ fn transcript_text_cell(
     target_column: usize,
 ) -> Option<TranscriptTextCell> {
     let source = row.source.as_ref()?;
-    let chars = row.text.chars().collect::<Vec<_>>();
     let mut display_column = 0;
-    for (index, ch) in chars.iter().copied().enumerate() {
-        let width = UnicodeWidthChar::width(ch).unwrap_or_default();
+    let mut char_index = 0;
+    for grapheme in row.text.graphemes(true) {
+        let width = UnicodeWidthStr::width(grapheme);
         let next_column = display_column + width;
         if target_column < next_column || (width == 0 && target_column == display_column) {
-            let mut end_index = index + 1;
-            while end_index < chars.len()
-                && UnicodeWidthChar::width(chars[end_index]).unwrap_or_default() == 0
-            {
-                end_index += 1;
-            }
+            let end_index = char_index + grapheme.chars().count();
             return Some(TranscriptTextCell {
                 start: TranscriptTextPosition {
                     line: source.line,
-                    char_index: source.start_char + index,
+                    char_index: source.start_char + char_index,
                 },
                 end: TranscriptTextPosition {
                     line: source.line,
@@ -3098,6 +3088,7 @@ fn transcript_text_cell(
             });
         }
         display_column = next_column;
+        char_index += grapheme.chars().count();
     }
 
     let end = TranscriptTextPosition {

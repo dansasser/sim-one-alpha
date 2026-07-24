@@ -1897,6 +1897,22 @@ fn prompt_cursor_allows_insertion_navigation_and_word_delete() {
 }
 
 #[test]
+fn prompt_cursor_and_backspace_treat_emoji_zwj_sequences_as_one_unit() {
+    let mut app = App::new_for_test();
+    app.handle_event(AppEvent::Text("A👩‍💻B".to_string()));
+
+    app.handle_event(AppEvent::MovePromptLeft);
+    assert_eq!(&app.prompt()[..app.prompt_cursor()], "A👩‍💻");
+    app.handle_event(AppEvent::MovePromptLeft);
+    assert_eq!(&app.prompt()[..app.prompt_cursor()], "A");
+
+    app.handle_event(AppEvent::MovePromptRight);
+    app.handle_event(AppEvent::Backspace);
+    assert_eq!(app.prompt(), "AB");
+    assert_eq!(&app.prompt()[..app.prompt_cursor()], "A");
+}
+
+#[test]
 fn prompt_arrows_move_across_explicit_lines_and_preserve_preferred_column() {
     let mut app = App::new_for_test();
     app.set_prompt_viewport_width(40);

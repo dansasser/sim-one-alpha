@@ -138,91 +138,173 @@ export async function loadSessionTranscriptPage(input: {
   before?: string;
 }): Promise<ChatTranscriptPage> {
   const cursor = input.before ? decodeTranscriptCursor(input.before) : undefined;
-  const cursorPrompt = cursor
-    ? input.sessionDatabase.getSessionNormalizedMessageEvent({
-        sessionId: input.session.id,
-        eventId: cursor.eventId,
-      })
-    : undefined;
-  if (cursor && !cursorPrompt) {
-    throw new TranscriptCursorError();
+  if (cursor) {
+    const cursorPrompt = input.sessionDatabase.getSessionNormalizedMessageEvent({
+      sessionId: input.session.id,
+      eventId: cursor.eventId,
+    });
+    if (!cursorPrompt) {
+      throw new TranscriptCursorError();
+    }
   }
-  const promptWindow = input.sessionDatabase.listNormalizedMessageEventsForSession({
-    sessionId: input.session.id,
-    limit: input.limit + 1,
-    ...(cursor ? { before: cursor.eventId } : {}),
-  });
-  const hasOlder = promptWindow.length > input.limit;
-  const prompts = hasOlder ? promptWindow.slice(1) : promptWindow;
-  const before = hasOlder && prompts[0]
-    ? encodeTranscriptCursor({
-        v: 1,
-        receivedAt: prompts[0].event.receivedAt,
-        eventId: prompts[0].event.id,
-      })
-    : undefined;
   const streamPath = `agents/orchestrator/${input.session.id}`;
+  const meta = await input.eventStreamStore.getStreamMeta(streamPath);
+  const snapshotOffset = meta?.nextOffset ?? '-1';
+  const batchSize = Math.min(1_000, Math.max(input.limit + 1, 100));
+  let scanBefore = cursor?.eventId;
+  let prompts: SessionNormalizedMessageRecord[] = [];
+  let entries: PromptTranscriptEntry[] = [];
+  let reachedOldestPrompt = false;
 
-  if (prompts.length === 0) {
-    const meta = await input.eventStreamStore.getStreamMeta(streamPath);
+  while (entries.length <= input.limit && !reachedOldestPrompt) {
+    const batch = input.sessionDatabase.listNormalizedMessageEventsForSession({
+      sessionId: input.session.id,
+      limit: batchSize,
+      ...(scanBefore ? { before: scanBefore } : {}),
+    });
+    if (batch.length === 0) {
+      reachedOldestPrompt = true;
+      break;
+    }
+    prompts = [...batch, ...prompts];
+    const events = await readTranscriptSnapshot(
+      input.eventStreamStore,
+      streamPath,
+      earliestPromptOffset(prompts),
+      snapshotOffset,
+    );
+    entries = projectPromptTranscriptEntries(prompts, events);
+
+    if (batch.length < batchSize) {
+      reachedOldestPrompt = true;
+      break;
+    }
+    const nextBefore = batch[0]?.event.id;
+    if (!nextBefore || nextBefore === scanBefore) {
+      throw new Error('Transcript prompt pagination did not advance.');
+    }
+    scanBefore = nextBefore;
+  }
+
+  if (entries.length === 0) {
     return {
       session: input.session,
       exchanges: [],
       stream: {
-        nextOffset: meta?.nextOffset ?? '-1',
+        nextOffset: snapshotOffset,
         upToDate: true,
       },
       page: {
         limit: input.limit,
-        hasOlder,
-        ...(before ? { before } : {}),
+        hasOlder: false,
       },
     };
   }
 
-  const events: SanitizedEvent[] = [];
-  const seen = new Set<string>();
-  const sanitizationState: SanitizationState = {};
-  let offset = earliestPromptOffset(prompts);
-  let upToDate = false;
-  const endOffset = cursorPrompt ? promptOffset(cursorPrompt) : undefined;
+  const selected = entries.slice(-input.limit);
+  const hasOlder = entries.length > input.limit || !reachedOldestPrompt;
+  const oldestSelectedPrompt = selected[0]?.prompt;
+  const before = hasOlder && oldestSelectedPrompt
+    ? encodeTranscriptCursor({
+        v: 1,
+        receivedAt: oldestSelectedPrompt.event.receivedAt,
+        eventId: oldestSelectedPrompt.event.id,
+      })
+    : undefined;
 
-  while (!upToDate) {
-    const result = await input.eventStreamStore.readEvents(streamPath, {
-      offset,
-      limit: EVENT_STREAM_READ_LIMIT,
-    });
-    const pageEvents = endOffset
-      ? result.events.filter((event) => compareOffsets(event.offset, endOffset) <= 0)
-      : result.events;
-    sanitizeEventsInto(pageEvents, events, seen, sanitizationState);
-    if (endOffset && (pageEvents.length < result.events.length
-      || compareOffsets(result.nextOffset, endOffset) >= 0)) {
-      offset = endOffset;
-      upToDate = false;
-      break;
-    }
-    upToDate = result.upToDate;
-    if (!upToDate && result.nextOffset === offset) {
-      throw new Error('Transcript event stream did not advance.');
-    }
-    offset = result.nextOffset;
-  }
-
-  return projectSanitizedSessionTranscript({
+  return {
     session: input.session,
-    prompts,
-    events: [],
+    exchanges: selected.map((entry) => entry.exchange),
     stream: {
-      nextOffset: offset,
-      upToDate,
+      nextOffset: snapshotOffset,
+      upToDate: true,
     },
     page: {
       limit: input.limit,
       hasOlder,
       ...(before ? { before } : {}),
     },
-  }, events);
+  };
+}
+
+async function readTranscriptSnapshot(
+  eventStreamStore: EventStreamStore,
+  streamPath: string,
+  startOffset: string,
+  snapshotOffset: string,
+): Promise<SanitizedEvent[]> {
+  if (compareOffsets(startOffset, snapshotOffset) >= 0) {
+    return [];
+  }
+
+  const events: SanitizedEvent[] = [];
+  const seen = new Set<string>();
+  const sanitizationState: SanitizationState = {};
+  let offset = startOffset;
+
+  while (compareOffsets(offset, snapshotOffset) < 0) {
+    const result = await eventStreamStore.readEvents(streamPath, {
+      offset,
+      limit: EVENT_STREAM_READ_LIMIT,
+    });
+    const pageEvents = result.events.filter(
+      (event) => compareOffsets(event.offset, snapshotOffset) <= 0,
+    );
+    sanitizeEventsInto(pageEvents, events, seen, sanitizationState);
+    if (compareOffsets(result.nextOffset, snapshotOffset) >= 0) {
+      break;
+    }
+    if (result.nextOffset === offset) {
+      throw new Error('Transcript event stream did not advance.');
+    }
+    if (result.upToDate) {
+      throw new Error('Transcript event stream ended before its snapshot offset.');
+    }
+    offset = result.nextOffset;
+  }
+
+  return events;
+}
+
+interface PromptTranscriptEntry {
+  prompt: SessionNormalizedMessageRecord;
+  exchange: ChatTranscriptExchange;
+}
+
+function projectPromptTranscriptEntries(
+  sourcePrompts: SessionNormalizedMessageRecord[],
+  events: SanitizedEvent[],
+): PromptTranscriptEntry[] {
+  const prompts = sourcePrompts.filter(isReplayablePrompt);
+  const builders = buildExchanges(events);
+  const promptMatches = correlatePrompts(prompts, builders, events);
+  const entries: PromptTranscriptEntry[] = [];
+
+  for (const prompt of prompts) {
+    const submissionId = promptMatches.get(prompt.event.id);
+    const builder = submissionId ? builders.get(submissionId) : undefined;
+    const publicPrompt = toPublicTranscriptPrompt(prompt);
+    if (builder) {
+      entries.push({
+        prompt,
+        exchange: finalizeExchange(builder, publicPrompt),
+      });
+    } else if (publicPrompt) {
+      const syntheticId = `prompt:${prompt.event.id}`;
+      entries.push({
+        prompt,
+        exchange: {
+          id: syntheticId,
+          submissionId: syntheticId,
+          prompt: publicPrompt,
+          activities: [],
+          status: 'running',
+        },
+      });
+    }
+  }
+
+  return entries;
 }
 
 function projectSanitizedSessionTranscript(
@@ -689,9 +771,12 @@ function correlatePrompts(
   for (const prompt of prompts) {
     const exact = prompt.delivery.submissionId
       ?? legacySubmissionId(prompt.legacyDeliveryId);
-    if (exact && builders.has(exact) && !used.has(exact)) {
-      matches.set(prompt.event.id, exact);
-      used.add(exact);
+    if (exact) {
+      const available = builders.has(exact) && !used.has(exact);
+      matches.set(prompt.event.id, available ? exact : undefined);
+      if (available) {
+        used.add(exact);
+      }
     }
   }
 
@@ -798,10 +883,6 @@ function earliestPromptOffset(prompts: SessionNormalizedMessageRecord[]): string
     }
   }
   return '-1';
-}
-
-function promptOffset(prompt: SessionNormalizedMessageRecord): string | undefined {
-  return prompt.delivery.offset ?? legacyOffset(prompt.legacyDeliveryId);
 }
 
 function compareOffsets(left: string, right: string): number {

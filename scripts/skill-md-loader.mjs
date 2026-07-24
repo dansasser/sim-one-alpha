@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { load as loadYaml } from 'js-yaml';
 
 export async function load(url, context, nextLoad) {
   if (!url.endsWith('/SKILL.md')) {
@@ -32,18 +33,25 @@ export function parseFrontmatter(content, path) {
     throw new Error(`SKILL.md is missing YAML frontmatter: ${path}`);
   }
 
-  const fields = {};
-  for (const line of match[1].split(/\r?\n/)) {
-    const separator = line.indexOf(':');
-    if (separator === -1) continue;
-    const key = line.slice(0, separator).trim();
-    const value = line.slice(separator + 1).trim().replace(/^['"]|['"]$/g, '');
-    fields[key] = value;
+  let fields;
+  try {
+    fields = loadYaml(match[1], { filename: path });
+  } catch (error) {
+    throw new Error(`SKILL.md has invalid YAML frontmatter: ${path}`, { cause: error });
   }
 
-  if (!fields.name || !fields.description) {
+  if (!fields
+    || typeof fields !== 'object'
+    || Array.isArray(fields)
+    || typeof fields.name !== 'string'
+    || !fields.name.trim()
+    || typeof fields.description !== 'string'
+    || !fields.description.trim()) {
     throw new Error(`SKILL.md frontmatter must define name and description: ${path}`);
   }
 
-  return fields;
+  return {
+    name: fields.name,
+    description: fields.description,
+  };
 }

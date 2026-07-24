@@ -161,12 +161,12 @@ test('owned lifecycle resume returns the requested session without recreating it
 test('owned lifecycle resume moves the session to the front of recent sessions', () => {
   const identity = uniqueIdentity('tui', 'lifecycle-resume-recency');
   const first = createFreshChatSession({ identity, displayName: 'Older session' });
-  sleepForTimestampChange();
+  waitForTimestampAfter(first.session.updatedAt);
   const second = createFreshChatSession({ identity, displayName: 'Newer session' });
 
   try {
     assert.equal(listOwnedChatSessions({ identity, limit: 10 })[0]?.sessionId, second.sessionId);
-    sleepForTimestampChange();
+    waitForTimestampAfter(second.session.updatedAt);
 
     const resumed = resumeOwnedChatSession({ identity, sessionId: first.sessionId });
     const listed = listOwnedChatSessions({ identity, limit: 10 });
@@ -366,6 +366,12 @@ function deleteSessions(sessionIds: string[]): void {
   }
 }
 
-function sleepForTimestampChange(): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2);
+function waitForTimestampAfter(timestamp: string): void {
+  const deadline = Date.now() + 2_000;
+  while (new Date().toISOString() <= timestamp) {
+    if (Date.now() >= deadline) {
+      throw new Error(`Clock did not advance beyond ${timestamp}.`);
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1);
+  }
 }

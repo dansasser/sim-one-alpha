@@ -40,6 +40,7 @@ STALE_REPLAY_OFFSET = "0000000000000000_0000000000000011"
 IN_FLIGHT_OFFSET = "0000000000000000_0000000000000013"
 FINAL_OFFSET = "0000000000000000_0000000000000016"
 HISTORY_REQUESTED = threading.Event()
+RESUME_COMPLETED = threading.Event()
 RELEASE_HISTORY = threading.Event()
 LIVE_CONNECTED = threading.Event()
 PROMPT_RECEIVED = threading.Event()
@@ -228,6 +229,8 @@ class GatewayHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response)
+            self.wfile.flush()
+            RESUME_COMPLETED.set()
             return
         payload = json.loads(body)
         if payload.get("text") != "race prompt":
@@ -377,6 +380,18 @@ def main():
             raise AssertionError(
                 "packaged TUI did not request transcript history; "
                 f"requests={REQUEST_PATHS!r}; output tail={bytes(startup_output[-3000:])!r}"
+            )
+        if not RESUME_COMPLETED.wait(5):
+            raise AssertionError(
+                "packaged TUI requested transcript history before session resume completed; "
+                f"requests={REQUEST_PATHS!r}"
+            )
+        if (
+            "POST",
+            "/api/chat/sessions/tui-visible-final-smoke/resume",
+        ) not in REQUEST_PATHS:
+            raise AssertionError(
+                "packaged TUI did not POST the explicit session resume before history"
             )
         os.write(master_fd, b"race prompt\r")
         time.sleep(0.3)
