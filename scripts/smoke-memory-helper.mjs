@@ -46,12 +46,12 @@ function compileTs() {
 async function loadModules() {
   const base = `file://${TSC_ROOT}`;
   return {
-    runtime: await import(`${base}/memory/structured-memory-runtime.js`),
-    tools: await import(`${base}/tools/index.js`),
-    memoryTool: await import(`${base}/tools/memory-tool.js`),
-    cwMemory: await import(`${base}/workers/coding-worker/tools/coding-task-memory-tools.js`),
-    cwApproval: await import(`${base}/workers/coding-worker/approvals/approval-service.js`),
-    taskRunStore: await import(`${base}/workers/coding-worker/session/task-run-store.js`),
+    runtime: await import(`${base}/engine/memory/structured-memory-runtime.js`),
+    tools: await import(`${base}/engine/tools/index.js`),
+    memoryTool: await import(`${base}/engine/tools/memory-tool.js`),
+    cwMemory: await import(`${base}/engine/workers/coding-worker/tools/coding-task-memory-tools.js`),
+    cwApproval: await import(`${base}/engine/workers/coding-worker/approvals/approval-service.js`),
+    taskRunStore: await import(`${base}/engine/workers/coding-worker/session/task-run-store.js`),
   };
 }
 
