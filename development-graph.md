@@ -1,4 +1,4 @@
-<!-- development-graph-sha256: f68cd85dadc80c274e20d61d79b2eefaca9371bc0106977a06574651f2509210 -->
+<!-- development-graph-sha256: 057dc653039f101940a4bc2cf47dd40954cc22e28be630cad8fd81e5711f798a -->
 <!-- Generated from canonical JSON. Do not edit by hand. -->
 # SIM-ONE Alpha Development Lifecycle
 
@@ -9,57 +9,57 @@ Govern future SIM-ONE Alpha changes from an authorized request through grounded 
 | Field | Value |
 |---|---|
 | Graph ID | `sim-one-alpha-lifecycle` |
-| Graph version | `3` |
+| Graph version | `5` |
 | Schema version | `1` |
 | Status | `validated` |
 | Project | sim-one-alpha |
 | Project root | `/opt/ai/sim-one-alpha` |
-| Context version | `commit:e1aa97ff46bbc6de4cdbaabc3d88c9020bcbf41e` |
+| Context version | `commit:cd212f1a72a2f09148242c42d4ace80a9d94992d` |
 | Templates | discovery-to-delivery, parallel-fanout-fanin, human-gate, bounded-feedback, rollback-observation |
 | Entry nodes | baseline-context |
 | Terminal nodes | closeout-release |
-| Canonical checksum | `f68cd85dadc80c274e20d61d79b2eefaca9371bc0106977a06574651f2509210` |
+| Canonical checksum | `057dc653039f101940a4bc2cf47dd40954cc22e28be630cad8fd81e5711f798a` |
 
 ## Flow
 
 ```mermaid
 flowchart TD
-    n_baseline_context[["Bind Change To Current Project Context\\n(operation / planned)"]]
-    n_install_dependencies[["Install Pinned Dependencies\\n(operation / planned)"]]
-    n_fetch_embedding_model[["Fetch Bundled Embedding Model\\n(operation / planned)"]]
-    n_build_wasm_memory[["Build Rust Memory WASM\\n(operation / planned)"]]
-    n_define_change_contract["Define Purpose And Acceptance Contract\\n(work / planned)"]
-    n_decide_architecture{"Resolve Architecture And Ownership\\n(decision / planned)"}
-    n_plan_implementation["Plan Bounded Implementation\\n(work / planned)"]
-    n_implement_core_contracts["Implement Core Contracts And Architecture\\n(work / planned)"]
-    n_implement_agent_runtime["Implement Agent Runtime And Workspace Boundaries\\n(work / planned)"]
-    n_implement_memory_retrieval["Implement Memory, RAG, And Embeddings\\n(work / planned)"]
-    n_implement_capabilities_security["Implement Capabilities, Registries, And Security\\n(work / planned)"]
-    n_implement_ingress_operations["Implement Ingress, Sessions, Schedules, And Telemetry\\n(work / planned)"]
-    n_implement_product_delivery["Implement Product Surfaces And Delivery\\n(work / planned)"]
-    n_integrate_and_repair["Integrate Change And Apply Bounded Repairs\\n(work / planned)"]
-    n_verify_typecheck(["Verify TypeScript Types\\n(verification / planned)"])
-    n_verify_unit_tests(["Verify Unit Test Suite\\n(verification / planned)"])
-    n_verify_rust_tests(["Verify Rust Project Tests\\n(verification / planned)"])
-    n_build_runtime(["Build Flue Runtime\\n(verification / planned)"])
-    n_build_ratatui(["Build Ratatui Product TUI\\n(verification / planned)"])
-    n_build_cli(["Build SIM-ONE CLI\\n(verification / planned)"])
-    n_verify_cli_behavior(["Verify CLI Behavior\\n(verification / planned)"])
-    n_verify_http_integration(["Verify Built HTTP Runtime\\n(verification / planned)"])
-    n_verify_ratatui_product(["Verify Ratatui Product Prompt\\n(verification / planned)"])
-    n_verify_tui_e2e(["Verify TUI End To End\\n(verification / planned)"])
-    n_verify_memory_smoke(["Verify Real Memory Runtime\\n(verification / planned)"])
-    n_aggregate_verification(["Aggregate Verification Evidence\\n(verification / planned)"])
-    n_review_architecture_security(["Review Architecture, Security, And Product Boundaries\\n(verification / planned)"])
-    n_approve_release_candidate{{"Approve Release Candidate Publication\\n(human_gate / planned)"}}
-    n_publish_release_candidate[["Publish Branch And Pull Request\\n(operation / planned)"]]
-    n_approve_canary{{"Approve Canary Deployment\\n(human_gate / planned)"}}
-    n_deploy_canary[["Deploy Approved Canary\\n(operation / planned)"]]
-    n_verify_canary_behavior(["Verify Canary Behavior\\n(observation / planned)"])
-    n_approve_production_release{{"Approve Production Release\\n(human_gate / planned)"}}
-    n_release_production[["Release Approved Candidate\\n(operation / planned)"]]
-    n_observe_production(["Observe Production Outcomes\\n(observation / planned)"])
-    n_closeout_release["Close Out And Preserve Evidence\\n(work / planned)"]
+    n_baseline_context[["Bind Change To Current Project Context<br/>(operation / planned)"]]
+    n_install_dependencies[["Install Pinned Dependencies<br/>(operation / planned)"]]
+    n_fetch_embedding_model[["Fetch Bundled Embedding Model<br/>(operation / planned)"]]
+    n_build_wasm_memory[["Build Rust Memory WASM<br/>(operation / planned)"]]
+    n_define_change_contract["Define Purpose And Acceptance Contract<br/>(work / planned)"]
+    n_decide_architecture{"Resolve Architecture And Ownership<br/>(decision / planned)"}
+    n_plan_implementation["Plan Bounded Implementation<br/>(work / planned)"]
+    n_implement_core_contracts["Implement Core Contracts And Architecture<br/>(work / planned)"]
+    n_implement_agent_runtime["Implement Agent Runtime And Workspace Boundaries<br/>(work / planned)"]
+    n_implement_memory_retrieval["Implement Memory, RAG, And Embeddings<br/>(work / planned)"]
+    n_implement_capabilities_security["Implement Capabilities, Registries, And Security<br/>(work / planned)"]
+    n_implement_ingress_operations["Implement Ingress, Sessions, Schedules, And Telemetry<br/>(work / planned)"]
+    n_implement_product_delivery["Implement Product Surfaces And Delivery<br/>(work / planned)"]
+    n_integrate_and_repair["Integrate Change And Apply Bounded Repairs<br/>(work / planned)"]
+    n_verify_typecheck(["Verify TypeScript Types<br/>(verification / planned)"])
+    n_verify_unit_tests(["Verify Unit Test Suite<br/>(verification / planned)"])
+    n_verify_rust_tests(["Verify Rust Project Tests<br/>(verification / planned)"])
+    n_build_runtime(["Build Flue Runtime<br/>(verification / planned)"])
+    n_build_ratatui(["Build Ratatui Product TUI<br/>(verification / planned)"])
+    n_build_cli(["Build SIM-ONE CLI<br/>(verification / planned)"])
+    n_verify_cli_behavior(["Verify CLI Behavior<br/>(verification / planned)"])
+    n_verify_http_integration(["Verify Built HTTP Runtime<br/>(verification / planned)"])
+    n_verify_ratatui_product(["Verify Ratatui Product Prompt<br/>(verification / planned)"])
+    n_verify_tui_e2e(["Verify TUI End To End<br/>(verification / planned)"])
+    n_verify_memory_smoke(["Verify Real Memory Runtime<br/>(verification / planned)"])
+    n_aggregate_verification(["Aggregate Verification Evidence<br/>(verification / planned)"])
+    n_review_architecture_security(["Review Architecture, Security, And Product Boundaries<br/>(verification / planned)"])
+    n_approve_release_candidate{{"Approve Release Candidate Publication<br/>(human_gate / planned)"}}
+    n_publish_release_candidate[["Publish Branch And Pull Request<br/>(operation / planned)"]]
+    n_approve_canary{{"Approve Canary Deployment<br/>(human_gate / planned)"}}
+    n_deploy_canary[["Deploy Approved Canary<br/>(operation / planned)"]]
+    n_verify_canary_behavior(["Verify Canary Behavior<br/>(observation / planned)"])
+    n_approve_production_release{{"Approve Production Release<br/>(human_gate / planned)"}}
+    n_release_production[["Release Approved Candidate<br/>(operation / planned)"]]
+    n_observe_production(["Observe Production Outcomes<br/>(observation / planned)"])
+    n_closeout_release["Close Out And Preserve Evidence<br/>(work / planned)"]
     n_baseline_context -- "consumes" --> n_install_dependencies
     n_install_dependencies -- "consumes" --> n_fetch_embedding_model
     n_install_dependencies -- "consumes" --> n_build_wasm_memory
@@ -181,14 +181,14 @@ flowchart TD
 | `decide-architecture` | `decision` | `planned` | agent: SIM-ONE architecture adapter | Choose the smallest design that satisfies the change contract while preserving SIM-ONE Alpha domain ownership and Flue architecture. | artifact:architecture-decision |
 | `plan-implementation` | `work` | `planned` | agent: SIM-ONE implementation planning adapter | Produce an executable implementation sequence with file ownership, artifact handoffs, progress events, verification commands, approval scopes, and rollback. | artifact:implementation-plan |
 | `implement-core-contracts` | `work` | `planned` | agent: SIM-ONE Coding Worker lead | Implement authorized changes to shared types, Valibot schemas, protocols, model cards, configuration, architecture contracts, and Flue-discovered entrypoints. | artifact:core-contracts-change |
-| `implement-agent-runtime` | `work` | `planned` | agent: SIM-ONE Coding Worker lead | Implement authorized main-orchestrator, workflow, tool, skill, built-in lead-worker, worker-local internal-subagent, and persona-workspace changes while preserving instruction authority, delegation ownership, capability isolation, and the separate Coding Worker runtime access root. | artifact:agent-runtime-change |
+| `implement-agent-runtime` | `work` | `planned` | agent: SIM-ONE Coding Worker lead | Implement authorized main-orchestrator, workflow, tool, skill, built-in lead-worker, worker-local internal-subagent, and persona-workspace changes while treating company-owned system instructions as read-only, preserving delegation ownership and capability isolation, and keeping the Coding Worker runtime access root separate. | artifact:agent-runtime-change |
 | `implement-memory-retrieval` | `work` | `planned` | agent: SIM-ONE Coding Worker lead | Implement authorized structured memory, session memory, document indexing, knowledge storage, retrieval routing, embeddings, and Rust/WASM changes while keeping memory layers distinct. | artifact:memory-retrieval-change |
 | `implement-capabilities-security` | `work` | `planned` | agent: SIM-ONE Coding Worker lead | Implement authorized capability-store, registry, MCP, approval, GitHub-auth, and policy enforcement changes with fail-closed trust boundaries. | artifact:capabilities-security-change |
 | `implement-ingress-operations` | `work` | `planned` | agent: SIM-ONE Coding Worker lead | Implement authorized connector normalization, authenticated API routes, durable session handling, schedules, and typed progress/telemetry surfaces. | artifact:ingress-operations-change |
 | `implement-product-delivery` | `work` | `planned` | agent: SIM-ONE Coding Worker lead | Implement authorized sim-one CLI, Ink/Ratatui TUI, product packaging, install, build, CI, and release documentation changes. | artifact:product-delivery-change |
 | `integrate-and-repair` | `work` | `planned` | hybrid: SIM-ONE Coding Worker integration adapter | Combine selected domain outputs into one coherent change set, resolve cross-domain contract issues, and apply bounded repairs from verification or observation evidence. | artifact:integrated-change |
 | `verify-typecheck` | `verification` | `planned` | deterministic: Verify TypeScript Types | Prove the full TypeScript project satisfies its configured no-emit type contract. | artifact:typecheck-report |
-| `verify-unit-tests` | `verification` | `planned` | deterministic: Verify Unit Test Suite | Run the configured SIM-ONE Alpha unit suite with real local embedding assets and WASM available, including the repository's agent/workspace ownership contracts. | artifact:unit-test-report |
+| `verify-unit-tests` | `verification` | `planned` | deterministic: Verify Unit Test Suite | Run the configured SIM-ONE Alpha unit suite with real local embedding assets and WASM available, including agent/workspace ownership, approval/progress routing, trusted session admission, memory scoping, and telemetry-redaction contracts. | artifact:unit-test-report |
 | `verify-rust-tests` | `verification` | `planned` | deterministic: Verify Rust Project Tests | Run the configured Rust project tests for the memory engine and Ratatui crates. | artifact:rust-test-report |
 | `build-runtime` | `verification` | `planned` | deterministic: Build Flue Runtime | Build the Node-target SIM-ONE Alpha Flue runtime and copy configuration, registries, and memory WASM into the product artifact. | artifact:runtime-build |
 | `build-ratatui` | `verification` | `planned` | deterministic: Build Ratatui Product TUI | Build the release-mode Ratatui TUI product binary and copy it into the product artifact. | artifact:ratatui-build |
@@ -196,7 +196,7 @@ flowchart TD
 | `verify-cli-behavior` | `verification` | `planned` | deterministic: Verify CLI Behavior | Prove the built sim-one CLI starts and exposes its documented command surface. | artifact:cli-behavior-report |
 | `verify-http-integration` | `verification` | `planned` | deterministic: Verify Built HTTP Runtime | Exercise the built HTTP server routes, authentication boundaries, and durable chat/runtime behavior. | artifact:http-test-report |
 | `verify-ratatui-product` | `verification` | `planned` | deterministic: Verify Ratatui Product Prompt | Prove the built Ratatui TUI can launch the built gateway, submit a real prompt, and receive a non-placeholder assistant response. | artifact:ratatui-product-report |
-| `verify-tui-e2e` | `verification` | `planned` | deterministic: Verify TUI End To End | Exercise the built gateway and terminal client across chat, events, approvals, tool progress, and subagent visibility. | artifact:tui-e2e-report |
+| `verify-tui-e2e` | `verification` | `planned` | deterministic: Verify TUI End To End | Exercise the built gateway request path used by the terminal client and verify the built CLI command surface, without treating this smoke as proof of approval, tool-progress, or subagent rendering. | artifact:tui-e2e-report |
 | `verify-memory-smoke` | `verification` | `planned` | deterministic: Verify Real Memory Runtime | Exercise the real WASM memory engine, SQLite durability, retrieval, and Coding Worker memory path end to end. | artifact:memory-smoke-report |
 | `aggregate-verification` | `verification` | `planned` | hybrid: SIM-ONE verification aggregator | Map fresh project verification evidence back to every change-contract criterion and identify any unproved behavior, skipped requirement, or stale artifact. | artifact:verification-summary |
 | `review-architecture-security` | `verification` | `planned` | agent: SIM-ONE review adapter | Review the integrated change and verification summary for Flue ownership, instruction and persona workspace boundaries, Coding Worker runtime-root scope, trusted context, approval gates, durable progress, product identity, and secret boundaries. | artifact:architecture-security-review |
@@ -327,7 +327,7 @@ flowchart TD
 ### `baseline-context` — Bind Change To Current Project Context
 
 - Goal: Bind one authorized change request to the current SIM-ONE Alpha commit, applicable instructions, architecture contracts, affected domains, and external-effect boundaries.
-- Executor instructions: Read the authorized request, current Git state, AGENTS.md, architecture documents, manifests, and relevant history. Do not mark historical implementation as verified. Classify every workspace-related path as company-owned system instructions, the main-agent persona workspace, a lead-worker persona workspace, a worker-local internal-subagent workspace, or the Coding Worker runtime access root.
+- Executor instructions: Read the authorized request, current Git state, AGENTS.md, architecture documents, manifests, and relevant history. Do not mark historical implementation as verified. Classify every workspace-related path as company-owned system instructions, the main-agent persona workspace, a lead-worker persona workspace, a worker-local internal-subagent workspace, or the Coding Worker runtime access root. Before any executable node is claimed, compare the active checkout containing development-graph.json with project.root. If they differ, record explicit operator authority for canonical-root execution or stop; never silently execute against another checkout.
 - Inputs: external:authorized-change-request, external:repository-checkout
 - Resources: —
 - Permissions: read [AGENTS.md, docs/architecture/, package.json, pnpm-lock.yaml, .github/workflows/, current Git metadata, src/AGENTS.md, src/workspace-loader.ts, src/agents/orchestrator.ts, src/workspace/, src/engine/workers/*/workspace/, src/engine/workers/coding-worker/subagents/*/workspace/]; write [—]; external [—]; destructive `false`
@@ -338,6 +338,7 @@ flowchart TD
 - Acceptance:
   - `context-bound-to-commit` (artifact): The context record names the exact Git commit, instruction files, requested outcome, explicit non-goals, affected domains, and external effects. Evidence: `runtime:evidence/baseline-context/context.json`
   - `boundaries-confirmed` (review): The context preserves Flue discovery paths; company-owned src/AGENTS.md authority; main-agent, lead-worker, and worker-local internal-subagent workspace ownership; Coding Worker runtime-root scope; orchestrator/worker ownership; protocol/tool/skill separation; and project naming rules. Evidence: `runtime:evidence/baseline-context/boundary-review.json`
+  - `execution-root-authorized` (policy): The context record proves that the checkout containing development-graph.json matches the declared canonical project.root, or records explicit operator authority to execute against that canonical root; an unapproved worktree/CI mismatch blocks executable claims. Evidence: `runtime:evidence/baseline-context/execution-root.json`
 
 ### `install-dependencies` — Install Pinned Dependencies
 
@@ -453,11 +454,11 @@ flowchart TD
 
 ### `implement-agent-runtime` — Implement Agent Runtime And Workspace Boundaries
 
-- Goal: Implement authorized main-orchestrator, workflow, tool, skill, built-in lead-worker, worker-local internal-subagent, and persona-workspace changes while preserving instruction authority, delegation ownership, capability isolation, and the separate Coding Worker runtime access root.
+- Goal: Implement authorized main-orchestrator, workflow, tool, skill, built-in lead-worker, worker-local internal-subagent, and persona-workspace changes while treating company-owned system instructions as read-only, preserving delegation ownership and capability isolation, and keeping the Coding Worker runtime access root separate.
 - Executor instructions: Use the Coding Worker lead and only its worker-local internal specialists. Treat src/AGENTS.md as company-owned system instructions; src/workspace/ as the main-agent persona workspace and default Coding Worker runtime access root; src/engine/workers/<name>/workspace/ as built-in lead-worker persona guidance; and src/engine/workers/coding-worker/subagents/<name>/workspace/ as Coding Worker internal-subagent guidance. Runtime-loaded user workers remain capability profiles rather than built-in workspace directories. The orchestrator owns worker routing and exposes only lead workers; lead workers own internal-subagent selection. Emit typed progress events for every handoff, tool call, edit group, and verification result. If the domain is unaffected, produce an evidence-backed no-change record. Follow the implementation plan's exact file-ownership matrix and stop for replan before any parallel file collision.
 - Inputs: artifact:implementation-plan
 - Resources: project:agent-runtime
-- Permissions: read [artifact:implementation-plan, authorized project files, src/AGENTS.md, src/workspace-loader.ts, docs/architecture/flue-architecture.md, docs/architecture/gorombo-flue-map.md, src/tests/architecture-contract.test.ts, src/tests/workspace-loader.test.ts, src/tests/coding-worker.test.ts, src/tests/coding-worker-internal-subagents.test.ts, src/tests/research-agent.test.ts]; write [src/agents/, src/workflows/, src/workspace/, src/engine/tools/, src/engine/skills/, src/engine/workers/, src/tests/ files assigned exclusively to this workstream by artifact:implementation-plan, src/AGENTS.md, src/workspace-loader.ts]; external [—]; destructive `false`
+- Permissions: read [artifact:implementation-plan, authorized project files, src/AGENTS.md, src/workspace-loader.ts, docs/architecture/flue-architecture.md, docs/architecture/gorombo-flue-map.md, src/tests/architecture-contract.test.ts, src/tests/workspace-loader.test.ts, src/tests/coding-worker.test.ts, src/tests/coding-worker-internal-subagents.test.ts, src/tests/research-agent.test.ts]; write [src/agents/, src/workflows/, src/workspace/, src/engine/tools/, src/engine/skills/, src/engine/workers/, src/tests/ files assigned exclusively to this workstream by artifact:implementation-plan, src/workspace-loader.ts]; external [—]; destructive `false`
 - Execution: max `3` attempt(s), `180` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Changes only the authorized files in this domain workstream.
 - Rollback: Restore this workstream's files from the pre-change Git commit while preserving unrelated workstreams.
@@ -469,6 +470,7 @@ flowchart TD
   - `persona-workspace-ownership-preserved` (policy): Company instructions remain in src/AGENTS.md; the orchestrator composes only src/workspace/ as its persona; each built-in lead worker composes its own src/engine/workers/<name>/workspace/; Coding Worker internal subagents compose only their worker-local workspace; and persona content does not rename architecture paths. Evidence: `runtime:evidence/implement-agent-runtime/workspace-ownership.json`
   - `runtime-root-separated` (policy): The Coding Worker runtime access root and project/repository scope are treated as sandbox authorization boundaries, not as worker persona-instruction ownership; approval and managed-auth state remain outside that root. Evidence: `runtime:evidence/implement-agent-runtime/runtime-root-boundary.json`
   - `delegation-boundary-preserved` (test): The main orchestrator exposes built-in lead workers but no Coding Worker internal subagent; each profile receives only its declared instructions, tools, skills, and subagents under Flue inheritance rules. Evidence: `runtime:evidence/implement-agent-runtime/delegation-boundary.json`
+  - `company-instructions-human-gated` (policy): src/AGENTS.md remains read-only in this ordinary Coding Worker workstream. Any authorized change to company-owned system instructions uses a separately scoped lifecycle with an explicit owner human gate before implementation. Evidence: `runtime:evidence/implement-agent-runtime/company-instruction-gate.json`
 
 ### `implement-memory-retrieval` — Implement Memory, RAG, And Embeddings
 
@@ -540,7 +542,7 @@ flowchart TD
 - Executor instructions: Integrate only authorized outputs. Preserve unrelated verified branches, route failures to the owning domain, and emit a complete diff plus typed progress record. Reconcile the implementation plan's exact file-ownership matrix before combining changes; a file with multiple parallel producers is a failed integration precondition, not an automatic merge.
 - Inputs: artifact:core-contracts-change, artifact:agent-runtime-change, artifact:memory-retrieval-change, artifact:capabilities-security-change, artifact:ingress-operations-change, artifact:product-delivery-change, artifact:dependency-environment, artifact:embedding-model-assets, artifact:memory-wasm, artifact:typecheck-report, artifact:unit-test-report, artifact:rust-test-report, artifact:runtime-build, artifact:ratatui-build, artifact:ratatui-product-report, artifact:cli-build, artifact:cli-behavior-report, artifact:http-test-report, artifact:tui-e2e-report, artifact:memory-smoke-report, artifact:verification-summary, artifact:architecture-security-review, artifact:canary-behavior-report, artifact:production-observation
 - Resources: project:core-contracts, project:agent-runtime, project:memory-retrieval, project:capabilities-security, project:ingress-operations, project:product-delivery
-- Permissions: read [authorized project tree, domain change artifacts, verification evidence]; write [authorized project files across affected domains]; external [—]; destructive `false`
+- Permissions: read [authorized project tree, domain change artifacts, verification evidence]; write [authorized project files across affected domains, excluding src/AGENTS.md]; external [—]; destructive `false`
 - Execution: max `3` attempt(s), `180` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Integrates and repairs authorized project files in the isolated worktree.
 - Rollback: Restore the affected files from the pre-integration Git commit while preserving unrelated branches and evidence.
@@ -550,6 +552,7 @@ flowchart TD
   - `contracts-consistent` (schema): Shared types, schemas, registries, handoff contracts, docs, and consumers agree across every changed domain. Evidence: `runtime:evidence/integrate-and-repair/contract-check.json`
   - `repair-bounded` (policy): Each repair cites the failed evidence, preserves unrelated verified work, and remains within the declared feedback and attempt bounds. Evidence: `runtime:evidence/integrate-and-repair/repair-ledger.json`
   - `parallel-file-ownership-reconciled` (policy): Every changed file has one recorded producer; shared or cross-domain files were serialized or assigned to integration, and no parallel branch silently overwrote another branch. Evidence: `runtime:evidence/integrate-and-repair/file-ownership.json`
+  - `company-instruction-exclusion-preserved` (policy): Integration and repair never writes src/AGENTS.md. Any company-owned system-instruction change remains outside this ordinary lifecycle and requires a separately scoped owner-approved gate. Evidence: `runtime:evidence/integrate-and-repair/company-instruction-exclusion.json`
 
 ### `verify-typecheck` — Verify TypeScript Types
 
@@ -567,11 +570,11 @@ flowchart TD
 
 ### `verify-unit-tests` — Verify Unit Test Suite
 
-- Goal: Run the configured SIM-ONE Alpha unit suite with real local embedding assets and WASM available, including the repository's agent/workspace ownership contracts.
+- Goal: Run the configured SIM-ONE Alpha unit suite with real local embedding assets and WASM available, including agent/workspace ownership, approval/progress routing, trusted session admission, memory scoping, and telemetry-redaction contracts.
 - Executor instructions: Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests.
 - Inputs: artifact:integrated-change
 - Resources: project:typescript-test-output
-- Permissions: read [authorized project tree, node_modules/, src/tests/architecture-contract.test.ts, src/tests/workspace-loader.test.ts, src/tests/coding-worker.test.ts, src/tests/coding-worker-internal-subagents.test.ts, src/tests/research-agent.test.ts]; write [.tmp/tsc/]; external [—]; destructive `false`
+- Permissions: read [authorized project tree, node_modules/, src/tests/architecture-contract.test.ts, src/tests/workspace-loader.test.ts, src/tests/coding-worker.test.ts, src/tests/coding-worker-internal-subagents.test.ts, src/tests/research-agent.test.ts, src/tests/approval-ingress.test.ts, src/tests/flue-session-store.test.ts, src/tests/memory-tool.test.ts, src/tests/memory-telemetry.test.ts, src/tests/trusted-event-admission.test.ts, src/tests/flue-telemetry.test.ts, src/tests/http-endpoints.test.ts]; write [.tmp/tsc/]; external [—]; destructive `false`
 - Execution: max `2` attempt(s), `40` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Writes only documented generated build or test artifacts.
 - Rollback: Regenerate the documented build or test artifacts from the prior reviewed commit.
@@ -579,6 +582,8 @@ flowchart TD
 - Acceptance:
   - `verification-passed` (test): All required unit tests pass; any skips are recorded and do not hide a missing required model or WASM artifact. Evidence: `runtime:evidence/verify-unit-tests/result.json`
   - `workspace-boundary-tests-passed` (test): The unit report proves architecture-contract.test.ts, workspace-loader.test.ts, coding-worker.test.ts, coding-worker-internal-subagents.test.ts, and research-agent.test.ts passed, including main/worker/internal workspace composition, runtime-root scoping, and lead-only delegation. Evidence: `runtime:evidence/verify-unit-tests/workspace-boundary-tests.json`
+  - `approval-progress-routing-passed` (test): The unit report proves approval-ingress.test.ts and coding-worker.test.ts passed, covering typed approval/progress events, durable routing, tool execution progress, and worker handoffs without claiming Ratatui rendering that these TypeScript tests do not exercise. Evidence: `runtime:evidence/verify-unit-tests/approval-progress-tests.json`
+  - `session-memory-privacy-passed` (test): The unit report proves flue-session-store.test.ts, memory-tool.test.ts, memory-telemetry.test.ts, trusted-event-admission.test.ts, flue-telemetry.test.ts, and http-endpoints.test.ts passed, including actor/conversation scoping, trusted-event admission, raw-payload omission, telemetry redaction, and safe session-resume behavior. Evidence: `runtime:evidence/verify-unit-tests/session-memory-privacy-tests.json`
 
 ### `verify-rust-tests` — Verify Rust Project Tests
 
@@ -586,13 +591,14 @@ flowchart TD
 - Executor instructions: Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests.
 - Inputs: artifact:integrated-change
 - Resources: project:rust-target
-- Permissions: read [authorized project tree, node_modules/]; write [target/]; external [—]; destructive `false`
+- Permissions: read [authorized project tree, node_modules/, tui/ratatui/tests/event_reducer.rs, tui/ratatui/tests/ui_render.rs, tui/ratatui/tests/app_state.rs]; write [target/]; external [—]; destructive `false`
 - Execution: max `2` attempt(s), `40` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Writes only documented generated build or test artifacts.
 - Rollback: Regenerate the documented build or test artifacts from the prior reviewed commit.
 - Approval required: `false`
 - Acceptance:
   - `verification-passed` (test): Every configured Rust project test passes under the pinned toolchain. Evidence: `runtime:evidence/verify-rust-tests/result.json`
+  - `ratatui-progress-rendering-passed` (test): The Rust report proves the Ratatui event reducer, application state, and rendered terminal surface display thinking, tool, and delegated-task progress and preserve stream state; approval UI is not claimed without separate evidence. Evidence: `runtime:evidence/verify-rust-tests/ratatui-progress-rendering.json`
 
 ### `build-runtime` — Build Flue Runtime
 
@@ -663,6 +669,7 @@ flowchart TD
 - Approval required: `false`
 - Acceptance:
   - `verification-passed` (test): The configured built-HTTP integration suite passes and proves response behavior, not only that a process or port exists. Evidence: `runtime:evidence/verify-http-integration/result.json`
+  - `session-resume-boundary-passed` (test): The built HTTP suite rejects an explicit session resume from a different actor/conversation and returns the expected authorization failure. Evidence: `runtime:evidence/verify-http-integration/session-resume-boundary.json`
 
 ### `verify-ratatui-product` — Verify Ratatui Product Prompt
 
@@ -670,7 +677,7 @@ flowchart TD
 - Executor instructions: Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests.
 - Inputs: artifact:runtime-build, artifact:ratatui-build
 - Resources: local-runtime-probe
-- Permissions: read [authorized project tree, node_modules/]; write [.gorombo test runtime configuration, /tmp Ratatui product runtime root]; external [—]; destructive `false`
+- Permissions: read [authorized project tree, node_modules/]; write [.gorombo test runtime configuration, /tmp Ratatui product runtime root]; external [configured model-provider HTTPS endpoint declared by project model cards]; destructive `false`
 - Execution: max `2` attempt(s), `6` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Writes only documented generated build or test artifacts.
 - Rollback: Regenerate the documented build or test artifacts from the prior reviewed commit.
@@ -680,17 +687,19 @@ flowchart TD
 
 ### `verify-tui-e2e` — Verify TUI End To End
 
-- Goal: Exercise the built gateway and terminal client across chat, events, approvals, tool progress, and subagent visibility.
+- Goal: Exercise the built gateway request path used by the terminal client and verify the built CLI command surface, without treating this smoke as proof of approval, tool-progress, or subagent rendering.
 - Executor instructions: Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests.
 - Inputs: artifact:runtime-build, artifact:cli-build, artifact:ratatui-build
 - Resources: local-runtime-probe
-- Permissions: read [authorized project tree, node_modules/]; write [.gorombo test runtime state, /tmp SIM-ONE TUI test runtime root]; external [—]; destructive `false`
+- Permissions: read [authorized project tree, node_modules/]; write [.gorombo test runtime state, /tmp SIM-ONE TUI test runtime root]; external [configured model-provider HTTPS endpoint declared by project model cards]; destructive `false`
 - Execution: max `2` attempt(s), `15` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Writes only documented generated build or test artifacts.
 - Rollback: Regenerate the documented build or test artifacts from the prior reviewed commit.
 - Approval required: `false`
 - Acceptance:
-  - `verification-passed` (test): The configured TUI end-to-end suite passes with expected user-visible conversation and progress behavior. Evidence: `runtime:evidence/verify-tui-e2e/result.json`
+  - `gateway-prompt-passed` (test): The configured smoke posts through the built gateway agent route and receives a nonempty, non-error assistant response. Evidence: `runtime:evidence/verify-tui-e2e/gateway-prompt.json`
+  - `cli-smoke-passed` (test): The built CLI --help command exits zero and returns a nonempty command surface. Evidence: `runtime:evidence/verify-tui-e2e/cli-smoke.json`
+  - `evidence-scope-honest` (policy): This node reports only gateway prompt and CLI-smoke behavior. Approval routing and typed progress are mapped to unit evidence, Ratatui tool/task rendering is mapped to Rust evidence, and missing user-visible approval or subagent end-to-end proof remains an architecture-review blocker. Evidence: `runtime:evidence/verify-tui-e2e/evidence-scope.json`
 
 ### `verify-memory-smoke` — Verify Real Memory Runtime
 
@@ -738,6 +747,7 @@ flowchart TD
   - `progress-contract-passes` (review): Every tool execution, subagent delegation, verification, approval, and state transition reaches the user through durable typed progress events. Evidence: `runtime:evidence/review-architecture-security/progress.json`
   - `workspace-boundaries-pass` (policy): src/AGENTS.md remains company-owned; src/workspace/ remains the main-agent persona workspace even when used as the default Coding Worker runtime root; built-in lead workers and Coding Worker internal subagents compose only their own workspace guidance; runtime-loaded user workers remain capability profiles; and only lead workers are orchestrator-addressable. Evidence: `runtime:evidence/review-architecture-security/workspaces.json`
   - `parallel-ownership-passes` (review): The final diff matches the plan's one-producer-per-file matrix; any shared file was serialized or reconciled by integration with no hidden parallel overwrite. Evidence: `runtime:evidence/review-architecture-security/file-ownership.json`
+  - `verification-claims-match-probes` (review): Every release claim is mapped to a probe that actually exercises it. The gateway/CLI smoke, TypeScript approval/progress tests, Rust Ratatui progress-rendering tests, and any user-visible approval/subagent end-to-end evidence remain distinct; missing applicable evidence blocks approval. Evidence: `runtime:evidence/review-architecture-security/probe-claim-map.json`
 
 ### `approve-release-candidate` — Approve Release Candidate Publication
 
@@ -879,6 +889,9 @@ flowchart TD
 - Canary and production deployment commands remain adapter bindings until the project documents an approved deployment mechanism.
 - Full live-model TUI probes require valid provider credentials supplied through the runtime environment, never stored in this graph.
 - Every changed source, documentation, generated-definition, and focused-test file is assigned to exactly one implementation workstream; overlapping files are serialized or reconciled by integration.
+- The checked-in definition is deliberately bound to the canonical host checkout /opt/ai/sim-one-alpha under the project-local graph contract; review worktrees and CI clones may validate or render it, but executable claims require an explicit canonical-root authorization or a separately reviewed rebind.
+- The configured pnpm run test:tui smoke proves the built gateway prompt path and CLI command surface only; TypeScript and Rust verification nodes own approval/progress routing and Ratatui rendering evidence.
+- Company-owned src/AGENTS.md is an immutable input to ordinary implementation workstreams; changing it requires a separately scoped lifecycle and explicit owner human gate.
 
 ## Risks
 
@@ -888,6 +901,8 @@ flowchart TD
 - The full verification matrix is intentionally expensive; omitting a required check requires explicit evidence and human review.
 - The graph coordinator is not an operating-system sandbox or distributed scheduler; untrusted commands require an approved isolation layer.
 - The path src/workspace/ is both the main-agent persona workspace and, by default, the Coding Worker runtime access root; lifecycle evidence must distinguish instruction ownership from sandbox/project scope and from worker-local persona workspaces.
+- Executing deterministic nodes from a review worktree while project.root names the canonical main checkout could operate on the wrong tree; baseline evidence must reject any unapproved root mismatch before claims.
+- Current gateway and product smoke commands do not by themselves prove user-visible approval or subagent progress; release review must require separate applicable evidence and reject overclaims.
 
 ## Provenance and validation
 

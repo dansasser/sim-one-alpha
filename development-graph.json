@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "graph_id": "sim-one-alpha-lifecycle",
-  "graph_version": 3,
+  "graph_version": 5,
   "title": "SIM-ONE Alpha Development Lifecycle",
   "purpose": "Govern future SIM-ONE Alpha changes from an authorized request through grounded design, parallel domain implementation, full project verification, approval-gated release, output-level canary and production observation, and bounded repair.",
   "project": {
@@ -19,7 +19,7 @@
       "/opt/ai/sim-one-alpha/docs/architecture/memory-system.md",
       "/opt/ai/sim-one-alpha/.github/workflows/ci.yml"
     ],
-    "context_version": "commit:e1aa97ff46bbc6de4cdbaabc3d88c9020bcbf41e"
+    "context_version": "commit:cd212f1a72a2f09148242c42d4ace80a9d94992d"
   },
   "status": "validated",
   "templates": [
@@ -45,7 +45,7 @@
       "executor": {
         "kind": "agent",
         "name": "SIM-ONE project context adapter",
-        "instructions": "Read the authorized request, current Git state, AGENTS.md, architecture documents, manifests, and relevant history. Do not mark historical implementation as verified. Classify every workspace-related path as company-owned system instructions, the main-agent persona workspace, a lead-worker persona workspace, a worker-local internal-subagent workspace, or the Coding Worker runtime access root."
+        "instructions": "Read the authorized request, current Git state, AGENTS.md, architecture documents, manifests, and relevant history. Do not mark historical implementation as verified. Classify every workspace-related path as company-owned system instructions, the main-agent persona workspace, a lead-worker persona workspace, a worker-local internal-subagent workspace, or the Coding Worker runtime access root. Before any executable node is claimed, compare the active checkout containing development-graph.json with project.root. If they differ, record explicit operator authority for canonical-root execution or stop; never silently execute against another checkout."
       },
       "inputs": [
         {
@@ -78,6 +78,12 @@
           "kind": "review",
           "criterion": "The context preserves Flue discovery paths; company-owned src/AGENTS.md authority; main-agent, lead-worker, and worker-local internal-subagent workspace ownership; Coding Worker runtime-root scope; orchestrator/worker ownership; protocol/tool/skill separation; and project naming rules.",
           "evidence": "runtime:evidence/baseline-context/boundary-review.json"
+        },
+        {
+          "id": "execution-root-authorized",
+          "kind": "policy",
+          "criterion": "The context record proves that the checkout containing development-graph.json matches the declared canonical project.root, or records explicit operator authority to execute against that canonical root; an unapproved worktree/CI mismatch blocks executable claims.",
+          "evidence": "runtime:evidence/baseline-context/execution-root.json"
         }
       ],
       "permissions": {
@@ -744,7 +750,7 @@
       "id": "implement-agent-runtime",
       "type": "work",
       "title": "Implement Agent Runtime And Workspace Boundaries",
-      "goal": "Implement authorized main-orchestrator, workflow, tool, skill, built-in lead-worker, worker-local internal-subagent, and persona-workspace changes while preserving instruction authority, delegation ownership, capability isolation, and the separate Coding Worker runtime access root.",
+      "goal": "Implement authorized main-orchestrator, workflow, tool, skill, built-in lead-worker, worker-local internal-subagent, and persona-workspace changes while treating company-owned system instructions as read-only, preserving delegation ownership and capability isolation, and keeping the Coding Worker runtime access root separate.",
       "state": "planned",
       "executor": {
         "kind": "agent",
@@ -801,6 +807,12 @@
           "kind": "test",
           "criterion": "The main orchestrator exposes built-in lead workers but no Coding Worker internal subagent; each profile receives only its declared instructions, tools, skills, and subagents under Flue inheritance rules.",
           "evidence": "runtime:evidence/implement-agent-runtime/delegation-boundary.json"
+        },
+        {
+          "id": "company-instructions-human-gated",
+          "kind": "policy",
+          "criterion": "src/AGENTS.md remains read-only in this ordinary Coding Worker workstream. Any authorized change to company-owned system instructions uses a separately scoped lifecycle with an explicit owner human gate before implementation.",
+          "evidence": "runtime:evidence/implement-agent-runtime/company-instruction-gate.json"
         }
       ],
       "permissions": {
@@ -825,7 +837,6 @@
           "src/engine/skills/",
           "src/engine/workers/",
           "src/tests/ files assigned exclusively to this workstream by artifact:implementation-plan",
-          "src/AGENTS.md",
           "src/workspace-loader.ts"
         ],
         "external": [],
@@ -1356,6 +1367,12 @@
           "kind": "policy",
           "criterion": "Every changed file has one recorded producer; shared or cross-domain files were serialized or assigned to integration, and no parallel branch silently overwrote another branch.",
           "evidence": "runtime:evidence/integrate-and-repair/file-ownership.json"
+        },
+        {
+          "id": "company-instruction-exclusion-preserved",
+          "kind": "policy",
+          "criterion": "Integration and repair never writes src/AGENTS.md. Any company-owned system-instruction change remains outside this ordinary lifecycle and requires a separately scoped owner-approved gate.",
+          "evidence": "runtime:evidence/integrate-and-repair/company-instruction-exclusion.json"
         }
       ],
       "permissions": {
@@ -1365,7 +1382,7 @@
           "verification evidence"
         ],
         "write": [
-          "authorized project files across affected domains"
+          "authorized project files across affected domains, excluding src/AGENTS.md"
         ],
         "external": [],
         "destructive": false
@@ -1469,7 +1486,7 @@
       "id": "verify-unit-tests",
       "type": "verification",
       "title": "Verify Unit Test Suite",
-      "goal": "Run the configured SIM-ONE Alpha unit suite with real local embedding assets and WASM available, including the repository's agent/workspace ownership contracts.",
+      "goal": "Run the configured SIM-ONE Alpha unit suite with real local embedding assets and WASM available, including agent/workspace ownership, approval/progress routing, trusted session admission, memory scoping, and telemetry-redaction contracts.",
       "state": "planned",
       "executor": {
         "kind": "deterministic",
@@ -1502,6 +1519,18 @@
           "kind": "test",
           "criterion": "The unit report proves architecture-contract.test.ts, workspace-loader.test.ts, coding-worker.test.ts, coding-worker-internal-subagents.test.ts, and research-agent.test.ts passed, including main/worker/internal workspace composition, runtime-root scoping, and lead-only delegation.",
           "evidence": "runtime:evidence/verify-unit-tests/workspace-boundary-tests.json"
+        },
+        {
+          "id": "approval-progress-routing-passed",
+          "kind": "test",
+          "criterion": "The unit report proves approval-ingress.test.ts and coding-worker.test.ts passed, covering typed approval/progress events, durable routing, tool execution progress, and worker handoffs without claiming Ratatui rendering that these TypeScript tests do not exercise.",
+          "evidence": "runtime:evidence/verify-unit-tests/approval-progress-tests.json"
+        },
+        {
+          "id": "session-memory-privacy-passed",
+          "kind": "test",
+          "criterion": "The unit report proves flue-session-store.test.ts, memory-tool.test.ts, memory-telemetry.test.ts, trusted-event-admission.test.ts, flue-telemetry.test.ts, and http-endpoints.test.ts passed, including actor/conversation scoping, trusted-event admission, raw-payload omission, telemetry redaction, and safe session-resume behavior.",
+          "evidence": "runtime:evidence/verify-unit-tests/session-memory-privacy-tests.json"
         }
       ],
       "permissions": {
@@ -1512,7 +1541,14 @@
           "src/tests/workspace-loader.test.ts",
           "src/tests/coding-worker.test.ts",
           "src/tests/coding-worker-internal-subagents.test.ts",
-          "src/tests/research-agent.test.ts"
+          "src/tests/research-agent.test.ts",
+          "src/tests/approval-ingress.test.ts",
+          "src/tests/flue-session-store.test.ts",
+          "src/tests/memory-tool.test.ts",
+          "src/tests/memory-telemetry.test.ts",
+          "src/tests/trusted-event-admission.test.ts",
+          "src/tests/flue-telemetry.test.ts",
+          "src/tests/http-endpoints.test.ts"
         ],
         "write": [
           ".tmp/tsc/"
@@ -1582,12 +1618,21 @@
           "kind": "test",
           "criterion": "Every configured Rust project test passes under the pinned toolchain.",
           "evidence": "runtime:evidence/verify-rust-tests/result.json"
+        },
+        {
+          "id": "ratatui-progress-rendering-passed",
+          "kind": "test",
+          "criterion": "The Rust report proves the Ratatui event reducer, application state, and rendered terminal surface display thinking, tool, and delegated-task progress and preserve stream state; approval UI is not claimed without separate evidence.",
+          "evidence": "runtime:evidence/verify-rust-tests/ratatui-progress-rendering.json"
         }
       ],
       "permissions": {
         "read": [
           "authorized project tree",
-          "node_modules/"
+          "node_modules/",
+          "tui/ratatui/tests/event_reducer.rs",
+          "tui/ratatui/tests/ui_render.rs",
+          "tui/ratatui/tests/app_state.rs"
         ],
         "write": [
           "target/"
@@ -1989,6 +2034,12 @@
           "kind": "test",
           "criterion": "The configured built-HTTP integration suite passes and proves response behavior, not only that a process or port exists.",
           "evidence": "runtime:evidence/verify-http-integration/result.json"
+        },
+        {
+          "id": "session-resume-boundary-passed",
+          "kind": "test",
+          "criterion": "The built HTTP suite rejects an explicit session resume from a different actor/conversation and returns the expected authorization failure.",
+          "evidence": "runtime:evidence/verify-http-integration/session-resume-boundary.json"
         }
       ],
       "permissions": {
@@ -2083,7 +2134,9 @@
           ".gorombo test runtime configuration",
           "/tmp Ratatui product runtime root"
         ],
-        "external": [],
+        "external": [
+          "configured model-provider HTTPS endpoint declared by project model cards"
+        ],
         "destructive": false
       },
       "execution": {
@@ -2129,7 +2182,7 @@
       "id": "verify-tui-e2e",
       "type": "verification",
       "title": "Verify TUI End To End",
-      "goal": "Exercise the built gateway and terminal client across chat, events, approvals, tool progress, and subagent visibility.",
+      "goal": "Exercise the built gateway request path used by the terminal client and verify the built CLI command surface, without treating this smoke as proof of approval, tool-progress, or subagent rendering.",
       "state": "planned",
       "executor": {
         "kind": "deterministic",
@@ -2162,10 +2215,22 @@
       ],
       "acceptance": [
         {
-          "id": "verification-passed",
+          "id": "gateway-prompt-passed",
           "kind": "test",
-          "criterion": "The configured TUI end-to-end suite passes with expected user-visible conversation and progress behavior.",
-          "evidence": "runtime:evidence/verify-tui-e2e/result.json"
+          "criterion": "The configured smoke posts through the built gateway agent route and receives a nonempty, non-error assistant response.",
+          "evidence": "runtime:evidence/verify-tui-e2e/gateway-prompt.json"
+        },
+        {
+          "id": "cli-smoke-passed",
+          "kind": "test",
+          "criterion": "The built CLI --help command exits zero and returns a nonempty command surface.",
+          "evidence": "runtime:evidence/verify-tui-e2e/cli-smoke.json"
+        },
+        {
+          "id": "evidence-scope-honest",
+          "kind": "policy",
+          "criterion": "This node reports only gateway prompt and CLI-smoke behavior. Approval routing and typed progress are mapped to unit evidence, Ratatui tool/task rendering is mapped to Rust evidence, and missing user-visible approval or subagent end-to-end proof remains an architecture-review blocker.",
+          "evidence": "runtime:evidence/verify-tui-e2e/evidence-scope.json"
         }
       ],
       "permissions": {
@@ -2177,7 +2242,9 @@
           ".gorombo test runtime state",
           "/tmp SIM-ONE TUI test runtime root"
         ],
-        "external": [],
+        "external": [
+          "configured model-provider HTTPS endpoint declared by project model cards"
+        ],
         "destructive": false
       },
       "execution": {
@@ -2471,6 +2538,12 @@
           "kind": "review",
           "criterion": "The final diff matches the plan's one-producer-per-file matrix; any shared file was serialized or reconciled by integration with no hidden parallel overwrite.",
           "evidence": "runtime:evidence/review-architecture-security/file-ownership.json"
+        },
+        {
+          "id": "verification-claims-match-probes",
+          "kind": "review",
+          "criterion": "Every release claim is mapped to a probe that actually exercises it. The gateway/CLI smoke, TypeScript approval/progress tests, Rust Ratatui progress-rendering tests, and any user-visible approval/subagent end-to-end evidence remain distinct; missing applicable evidence blocks approval.",
+          "evidence": "runtime:evidence/review-architecture-security/probe-claim-map.json"
         }
       ],
       "permissions": {
@@ -4449,7 +4522,10 @@
     "The project owner supplies target-specific authority for GitHub, canary, and production mutations at the declared gates.",
     "Canary and production deployment commands remain adapter bindings until the project documents an approved deployment mechanism.",
     "Full live-model TUI probes require valid provider credentials supplied through the runtime environment, never stored in this graph.",
-    "Every changed source, documentation, generated-definition, and focused-test file is assigned to exactly one implementation workstream; overlapping files are serialized or reconciled by integration."
+    "Every changed source, documentation, generated-definition, and focused-test file is assigned to exactly one implementation workstream; overlapping files are serialized or reconciled by integration.",
+    "The checked-in definition is deliberately bound to the canonical host checkout /opt/ai/sim-one-alpha under the project-local graph contract; review worktrees and CI clones may validate or render it, but executable claims require an explicit canonical-root authorization or a separately reviewed rebind.",
+    "The configured pnpm run test:tui smoke proves the built gateway prompt path and CLI command surface only; TypeScript and Rust verification nodes own approval/progress routing and Ratatui rendering evidence.",
+    "Company-owned src/AGENTS.md is an immutable input to ordinary implementation workstreams; changing it requires a separately scoped lifecycle and explicit owner human gate."
   ],
   "risks": [
     "Architecture documents or Flue behavior may drift from the context commit; a changed instruction or dependency invalidates downstream evidence.",
@@ -4457,6 +4533,8 @@
     "External GitHub or deployment actions can have uncertain outcomes; adapters must use idempotency fencing and verify resulting state.",
     "The full verification matrix is intentionally expensive; omitting a required check requires explicit evidence and human review.",
     "The graph coordinator is not an operating-system sandbox or distributed scheduler; untrusted commands require an approved isolation layer.",
-    "The path src/workspace/ is both the main-agent persona workspace and, by default, the Coding Worker runtime access root; lifecycle evidence must distinguish instruction ownership from sandbox/project scope and from worker-local persona workspaces."
+    "The path src/workspace/ is both the main-agent persona workspace and, by default, the Coding Worker runtime access root; lifecycle evidence must distinguish instruction ownership from sandbox/project scope and from worker-local persona workspaces.",
+    "Executing deterministic nodes from a review worktree while project.root names the canonical main checkout could operate on the wrong tree; baseline evidence must reject any unapproved root mismatch before claims.",
+    "Current gateway and product smoke commands do not by themselves prove user-visible approval or subagent progress; release review must require separate applicable evidence and reject overclaims."
   ]
 }
