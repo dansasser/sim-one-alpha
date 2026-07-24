@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "graph_id": "sim-one-alpha-lifecycle",
-  "graph_version": 6,
+  "graph_version": 7,
   "title": "SIM-ONE Alpha Development Lifecycle",
   "purpose": "Govern future SIM-ONE Alpha changes from an authorized request through grounded design, parallel domain implementation, full project verification, approval-gated release, output-level canary and production observation, and bounded repair.",
   "project": {
@@ -19,7 +19,7 @@
       "/opt/ai/sim-one-alpha/docs/architecture/memory-system.md",
       "/opt/ai/sim-one-alpha/.github/workflows/ci.yml"
     ],
-    "context_version": "commit:cc7ef3f42fa2a8969868c02b70873be5dabdb16f"
+    "context_version": "commit:302e7ed8066daf43d66e709fb0138a1df982c08e"
   },
   "status": "validated",
   "templates": [
@@ -1551,7 +1551,9 @@
           "src/tests/http-endpoints.test.ts"
         ],
         "write": [
-          ".tmp/tsc/"
+          ".tmp/tsc/",
+          ".gorombo test runtime state",
+          "/tmp SIM-ONE unit-test runtime roots"
         ],
         "external": [],
         "destructive": false
@@ -1725,7 +1727,9 @@
         "write": [
           ".gorombo/sim-one-alpha/",
           ".tmp/",
-          "dist-flue/"
+          "dist-flue/",
+          "crates/gorombo-memory/pkg/",
+          "target/"
         ],
         "external": [],
         "destructive": false
