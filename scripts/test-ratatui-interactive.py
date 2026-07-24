@@ -306,7 +306,7 @@ def read_osc52(master_fd, timeout):
 def find_copied_transcript_row(master_fd, marker):
     for row in range(2, 19):
         drag_mouse(master_fd, 4, row, 90, row)
-        copied = read_osc52(master_fd, 2)
+        copied = read_osc52(master_fd, 1)
         if marker in copied:
             return row, copied
     raise AssertionError(f"visible transcript did not contain copied marker {marker!r}")

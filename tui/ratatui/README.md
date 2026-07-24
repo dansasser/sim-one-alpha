@@ -32,7 +32,7 @@ The `build:tui:ratatui` script writes the standalone terminal binary to:
 
 The Ratatui binary owns the gateway startup contract: it checks the gateway health endpoint, starts `.gorombo/sim-one-alpha/server.mjs` if needed, runs the child from the owner of the `.gorombo` runtime tree, and cleans up only a server child it started itself.
 
-Explicit resume resolves an id or exact name to a canonical session id, loads the gateway's semantic transcript snapshot, installs its user prompts/public activity/root finals, and starts the live stream after the returned `nextOffset`. The internal startup prompt, raw tool results, nested worker responses, and local command output are not restored. Older pages prepend at scrollback without moving the current visible source row. Ratatui remains a connector client and never reads the runtime SQLite databases directly.
+Explicit resume resolves an id or exact name to a canonical session id, loads the gateway's semantic transcript snapshot, installs its user prompts/public activity/root finals, and starts the live stream after the returned `nextOffset`. The internal startup prompt, raw tool results, nested worker responses, and local command output are not restored. Older pages are prepended at scrollback without moving the current visible source row. Ratatui remains a connector client and never reads the runtime SQLite databases directly.
 
 ## Developer Checks
 

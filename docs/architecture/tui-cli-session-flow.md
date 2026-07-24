@@ -4,7 +4,7 @@ This document is the repository-level map for the SIM-ONE Alpha terminal surface
 
 User-facing command reference lives in `docs/tui/ratatui.md` and `docs/tui/session-management.md`. Operator runbook details live in `docs/operations/product-tui.md`.
 
-The local implementation and milestone plan is `/opt/ai/plans/sim-one-ratatui-tui/plan.md`; that plan points back to these repository docs.
+Implementation decisions and the supported product behavior are maintained in this document and the linked user and operator guides.
 
 ## Ownership
 
@@ -255,6 +255,8 @@ The TUI accepts response text only from root-orchestrator events, identified by 
 `transcript_rendered_lines()` appends one virtual blank tail-margin row after wrapping. This sentinel gives the live-tail calculation a deterministic final row and leaves visual space below the newest response. It never enters `transcript_lines`, durable session history, copied context, or Flue persistence.
 
 The stable `local-tui` actor/conversation/thread scope is intentional. The gateway uses it to prove ownership for resume and to scope `/sessions`; it is not an active-session pointer. The current session id selects the durable conversation, while the stable identity lets `/new`, `/clear`, `/resume`, `/rename`, and `/compact` operate across explicit session switches without exposing another actor's or connector's sessions.
+
+When `/new` or `/clear` changes the active session, Ratatui replaces the previous transcript document before attaching the new stream. When `/resume` changes the session, it locks input, replaces the document with the resumed session's durable transcript page, then attaches from that page's `nextOffset`. A command-driven switch therefore cannot retain or rewrite rows from the prior session.
 
 ## Transcript Diagnostics
 

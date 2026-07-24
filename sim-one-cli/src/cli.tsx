@@ -83,7 +83,9 @@ async function launchRatatuiTui(opts: ProductTuiOptions): Promise<void> {
     process.exit(1);
   }
 
-  const child = spawn(tuiPath, ratatuiArgs(opts), {
+  const args = ratatuiArgs(opts);
+  const command = windowsCommandFileInvocation(tuiPath, args);
+  const child = spawn(command.file, command.args, {
     cwd: process.cwd(),
     env: process.env,
     stdio: 'inherit',
@@ -91,6 +93,24 @@ async function launchRatatuiTui(opts: ProductTuiOptions): Promise<void> {
 
   const exitCode = await waitForChild(child);
   process.exitCode = exitCode;
+}
+
+function windowsCommandFileInvocation(
+  executable: string,
+  args: string[],
+): { file: string; args: string[] } {
+  if (process.platform !== 'win32' || !/\.(?:cmd|bat)$/i.test(executable)) {
+    return { file: executable, args };
+  }
+  const commandLine = [executable, ...args].map(quoteWindowsCommandToken).join(' ');
+  return {
+    file: process.env.ComSpec || process.env.COMSPEC || 'cmd.exe',
+    args: ['/d', '/s', '/c', commandLine],
+  };
+}
+
+function quoteWindowsCommandToken(value: string): string {
+  return `"${value.replace(/%/g, '%%').replace(/"/g, '""')}"`;
 }
 
 function ratatuiArgs(opts: ProductTuiOptions): string[] {
@@ -143,15 +163,17 @@ async function launchInkTui(opts: ProductTuiOptions): Promise<void> {
   const baseUrl = result.baseUrl;
   const { started } = result;
 
-  const instance = render(<App baseUrl={baseUrl} session={session} />, {
-    exitOnCtrlC: true,
-  });
-
-  await instance.waitUntilExit();
-  if (started) {
-    try {
-      await cleanupServer();
-    } catch {
+  try {
+    const instance = render(<App baseUrl={baseUrl} session={session} />, {
+      exitOnCtrlC: true,
+    });
+    await instance.waitUntilExit();
+  } finally {
+    if (started) {
+      try {
+        await cleanupServer();
+      } catch {
+      }
     }
   }
 }

@@ -51,6 +51,7 @@ CATCH_UP_OFFSETS = []
 LIVE_OFFSETS = []
 LIVE_CONNECTION_COUNT = 0
 STATE_LOCK = threading.Lock()
+PTY_OUTPUT = bytearray()
 
 
 class GatewayHandler(BaseHTTPRequestHandler):
@@ -299,21 +300,20 @@ def live_in_flight_events():
 
 
 def read_until(master_fd, marker, timeout):
-    output = bytearray()
     deadline = time.monotonic() + timeout
-    while marker not in output and time.monotonic() < deadline:
+    while marker not in PTY_OUTPUT and time.monotonic() < deadline:
         ready, _, _ = select.select([master_fd], [], [], 0.1)
         if not ready:
             continue
         try:
-            output.extend(os.read(master_fd, 65536))
+            PTY_OUTPUT.extend(os.read(master_fd, 65536))
         except OSError:
             break
-    if marker not in output:
+    if marker not in PTY_OUTPUT:
         raise AssertionError(
-            f"packaged TUI did not render {marker!r}; output tail={bytes(output[-2000:])!r}"
+            f"packaged TUI did not render {marker!r}; output tail={bytes(PTY_OUTPUT[-2000:])!r}"
         )
-    return output
+    return bytes(PTY_OUTPUT)
 
 
 def read_for(master_fd, duration):

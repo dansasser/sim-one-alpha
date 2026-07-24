@@ -26,8 +26,8 @@ export async function load(url, context, nextLoad) {
   };
 }
 
-function parseFrontmatter(content, path) {
-  const match = /^---\n([\s\S]*?)\n---/.exec(content);
+export function parseFrontmatter(content, path) {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(content);
   if (!match) {
     throw new Error(`SKILL.md is missing YAML frontmatter: ${path}`);
   }

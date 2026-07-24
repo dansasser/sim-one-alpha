@@ -499,11 +499,14 @@ The port is read from `gorombo.config.json` (`gateway.port`, default 3940). Over
 ./.gorombo/sim-one-cli/sim-one --port 3960
 ```
 
-To connect to an already-running remote server (skip server lifecycle):
+The current TUI authenticates only through the gateway's loopback trust boundary; it does not send `x-api-secret`. For a remote gateway, expose its loopback endpoint through an SSH tunnel and point the TUI at the local end:
 
 ```sh
-./.gorombo/sim-one-cli/sim-one --base-url http://192.168.0.131:3940
+ssh -L 3940:127.0.0.1:3940 user@remote-host
+./.gorombo/sim-one-cli/sim-one --base-url http://127.0.0.1:3940
 ```
+
+Direct `--base-url http://<remote-lan-ip>:3940` access is unsupported until the TUI has explicit API-token support.
 
 ### Start the server alone
 

@@ -11,6 +11,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { acquireProductArtifactLock } from './product-artifact-lock.mjs';
 
 const serverDir = '.gorombo/sim-one-alpha';
 const serverPath = join(serverDir, 'server.mjs');
@@ -57,6 +58,7 @@ if (!ollamaKey) {
 const codingWorkspaceRoot = mkdtempSync(join(tmpdir(), 'ratatui-product-workspace-'));
 const tuiDiagnosticsPath = join(codingWorkspaceRoot, 'logs', 'sim-one-ratatui.jsonl');
 const configPath = join(serverDir, 'gorombo.config.json');
+const releaseArtifactLock = await acquireProductArtifactLock();
 const originalConfig = readFileSync(configPath, 'utf8');
 
 let stdout = '';
@@ -117,15 +119,9 @@ try {
     {
       ...childEnv,
       SIM_ONE_TUI_TEST_PROMPTS: [
-        '/session',
         '/new Smoke Session',
         '/session',
         '/compact',
-        '/clear Smoke Cleared',
-        '/session',
-        '/sessions',
-        `/resume ${firstSessionId}`,
-        '/rename Smoke Session Renamed',
         '/exit',
       ].join('\n'),
     },
@@ -140,6 +136,23 @@ try {
   const sessionId = sessionMatch[1];
   assertOutputIncludes(stdout, `system: current session ${sessionId}`, 'session command did not show the active session');
   assertOutputIncludes(stdout, `assistant: Compacted session ${sessionId}.`, 'compact command did not compact the active session');
+  assertOutputIncludes(stdout, `Exited SIM-ONE Alpha TUI. Session: ${sessionId}`, 'exit command did not print the new session id');
+
+  const clearSessionSmoke = await runProductCommand(
+    ['--port', String(port), '--session', sessionId],
+    {
+      ...childEnv,
+      SIM_ONE_TUI_TEST_PROMPTS: [
+        '/clear Smoke Cleared',
+        '/session',
+        '/sessions',
+        '/exit',
+      ].join('\n'),
+    },
+    240_000,
+  );
+  stdout = clearSessionSmoke.stdout;
+  stderr = clearSessionSmoke.stderr;
   const clearMatch = /Cleared conversation\. Started new session (tui-[^.]+)\./.exec(stdout);
   if (!clearMatch?.[1]) {
     throw new Error(`Ratatui product session smoke did not clear into a new TUI session.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
@@ -150,7 +163,22 @@ try {
   }
   assertOutputIncludes(stdout, `system: current session ${clearedSessionId}`, 'session command did not show the cleared active session');
   assertOutputIncludes(stdout, 'system: recent sessions', 'sessions command did not list scoped TUI sessions');
-  assertOutputIncludes(stdout, `assistant: Resumed session ${firstSessionId}.`, 'resume command did not resume the first fresh session');
+
+  const resumeSessionSmoke = await runProductCommand(
+    ['--port', String(port), '--session', clearedSessionId],
+    {
+      ...childEnv,
+      SIM_ONE_TUI_TEST_PROMPTS: [
+        `/resume ${firstSessionId}`,
+        '/rename Smoke Session Renamed',
+        '/exit',
+      ].join('\n'),
+    },
+    240_000,
+  );
+  stdout = resumeSessionSmoke.stdout;
+  stderr = resumeSessionSmoke.stderr;
+  assertOutputIncludes(stdout, `system: Resumed session ${firstSessionId}.`, 'resume command did not resume the first fresh session');
   assertOutputIncludes(stdout, `assistant: Renamed session ${firstSessionId} to "Smoke Session Renamed".`, 'rename command did not rename the resumed session');
   assertOutputIncludes(stdout, '\nSIM-ONE Alpha - Smoke Session Renamed\n', 'rename command did not update the product header with the explicit name');
   assertOutputIncludes(stdout, 'session: Smoke Session Renamed', 'rename command did not replace the status-bar session id with the explicit title');
@@ -233,11 +261,15 @@ try {
   console.log(`[ratatui-product] missing --session selector created fresh session ${fallbackStartup.sessionId}.`);
   console.log('[ratatui-product] session commands and existing interactive controls passed.');
 } finally {
-  if (child && child.exitCode === null && child.signalCode === null) {
-    child.kill('SIGKILL');
+  try {
+    if (child && child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL');
+    }
+  } finally {
+    writeFileSync(configPath, originalConfig);
+    rmSync(codingWorkspaceRoot, { recursive: true, force: true });
+    releaseArtifactLock();
   }
-  writeFileSync(configPath, originalConfig);
-  rmSync(codingWorkspaceRoot, { recursive: true, force: true });
 }
 
 function parseEnvFile(path) {
@@ -753,12 +785,12 @@ async function assertDefaultProductCommandStartsCleanStartup(env) {
   }
 
   const explicitLaunch = await runProductCommand(
-    ['--port', String(port), '--session', 'tui-explicit-session'],
+    ['--port', String(port), '--session', 'Named Session With Spaces'],
     { ...env, SIM_ONE_TUI_PATH: fakeTuiPath },
     30_000,
   );
   const explicitArgs = parseForwardedArgs(explicitLaunch.stdout);
-  if (!explicitArgs.includes('--session') || !explicitArgs.includes('tui-explicit-session')) {
+  if (!explicitArgs.includes('--session') || !explicitArgs.includes('Named Session With Spaces')) {
     throw new Error(`explicit sim-one --session was not forwarded to Ratatui.\nstdout:\n${explicitLaunch.stdout}\nstderr:\n${explicitLaunch.stderr}`);
   }
 }
@@ -862,10 +894,14 @@ async function assertProductCommandRouting(env) {
 }
 
 function spawnProductCommand(args, env) {
-  return spawn(simOnePath, args, {
+  const command = process.platform === 'win32' ? process.execPath : simOnePath;
+  const commandArgs = process.platform === 'win32'
+    ? [join('.gorombo', 'sim-one-cli', 'cli.js'), ...args]
+    : args;
+  return spawn(command, commandArgs, {
     cwd: process.cwd(),
     env,
-    shell: process.platform === 'win32',
+    shell: false,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 }

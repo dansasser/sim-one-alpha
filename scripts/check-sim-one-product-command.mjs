@@ -17,7 +17,12 @@ if (!result.stdout.includes('SIM-ONE Alpha') || !result.stdout.includes('skill')
   throw new Error(`sim-one --help did not look like the product CLI help.\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
 }
 
-console.log(`[sim-one-product] ${simOnePath} is runnable.`);
+const startup = await runCommand(simOnePath, ['--smoke-startup']);
+if (startup.exitCode !== 0) {
+  throw new Error(`sim-one --smoke-startup failed with exit ${startup.exitCode}\nstdout:\n${startup.stdout}\nstderr:\n${startup.stderr}`);
+}
+
+console.log(`[sim-one-product] ${simOnePath} help and startup smoke are runnable.`);
 
 function runCommand(command, args) {
   return new Promise((resolve, reject) => {

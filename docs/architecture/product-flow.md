@@ -83,11 +83,11 @@ sim-one
 ```
 Launches the interactive TUI connected to the running gateway. This is the primary day-to-day interface for terminal users.
 
-### Install / first run
+### Planned install / first run
 ```sh
 sim-one install
 ```
-Launches the wizard TUI for initial setup. This is also what `sim-one.sh` triggers on first install.
+This is the target first-run wizard command and is not present in the current built CLI. The planned `sim-one.sh` installer will invoke it once that product-install phase ships.
 
 ### Capability management
 ```sh
@@ -115,7 +115,7 @@ sim-one skill remove <id>
 sim-one tool remove <id>
 ```
 
-### Configuration and diagnostics
+### Planned configuration, diagnostics, and service management
 ```sh
 sim-one doctor          # Check install health, connectivity, model config
 sim-one config set <key> <value>  # Set runtime config values
@@ -125,6 +125,8 @@ sim-one restart        # Restart the gateway service
 sim-one stop           # Stop the gateway service
 ```
 
+These commands describe the target installed product. The current built CLI does not register them yet.
+
 ### NOT the product interface (developer-only)
 - `pnpm capabilities:add skill ...` — developer pnpm script, not the product CLI
 - `pnpm run build:all` — developer build workflow (builds runtime + Ratatui TUI + CLI and checks the product command), not the product install
@@ -133,7 +135,7 @@ sim-one stop           # Stop the gateway service
 
 ## Package structure (target)
 
-```
+```text
 sim-one-alpha/                    # repository (development)
   src/                            # runtime source (compiled to .gorombo/sim-one-alpha/)
   sim-one-cli/                    # product command wrapper and capability subcommands
@@ -153,7 +155,7 @@ The built development product command currently contains:
 - Capability subcommands (`skill`, `tool`, `worker`, `mcp`)
 - Legacy Ink fallback behind `--ink`
 
-The first-run wizard, service manager commands, `doctor`, and config commands remain planned product-install work.
+The first-run wizard, `sim-one.sh`, service manager commands, `doctor`, and config commands remain planned product-install work and are not accepted by the current CLI.
 
 ## Current state vs target
 

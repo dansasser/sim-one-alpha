@@ -4,6 +4,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { acquireProductArtifactLock } from './product-artifact-lock.mjs';
 
 if (!existsSync('.gorombo/sim-one-alpha/server.mjs')) {
   throw new Error('.gorombo/sim-one-alpha/server.mjs does not exist. Run pnpm run build before the built HTTP test.');
@@ -16,6 +17,7 @@ const requestSecret = process.env.GOROMBO_HTTP_TEST_API_SECRET || envFileValues.
 const nodeArgs = existsSync('.env') ? ['--env-file=.env', '.gorombo/sim-one-alpha/server.mjs'] : ['.gorombo/sim-one-alpha/server.mjs'];
 const codingWorkspaceRoot = mkdtempSync(join(tmpdir(), 'built-http-coding-workspace-'));
 const configPath = '.gorombo/sim-one-alpha/gorombo.config.json';
+const releaseArtifactLock = await acquireProductArtifactLock();
 const originalConfig = readFileSync(configPath, 'utf8');
 const sessionDatabasePath = join(codingWorkspaceRoot, 'sessions.sqlite');
 const modelEnv = {
@@ -472,11 +474,15 @@ try {
 
   console.log('Built HTTP integration test passed, including isolated fresh-session lifecycle checks.');
 } finally {
-  if (child) {
-    await stopChild(child);
+  try {
+    if (child) {
+      await stopChild(child);
+    }
+  } finally {
+    writeFileSync(configPath, originalConfig);
+    rmSync(codingWorkspaceRoot, { recursive: true, force: true });
+    releaseArtifactLock();
   }
-  writeFileSync(configPath, originalConfig);
-  rmSync(codingWorkspaceRoot, { recursive: true, force: true });
 }
 
 function parseEnvFile(path) {

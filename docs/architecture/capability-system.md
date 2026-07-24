@@ -6,7 +6,7 @@ The capability system lets users and agents add skills, tools, workers (subagent
 
 Built-in Flue runtime capabilities are source-time application code. Built-in Agent Skills live under `src/skills/<name>/SKILL.md`, are imported with `with { type: 'skill' }`, and are registered directly on the owning agent or workflow. Example: `src/skills/greeting-preflight/SKILL.md` is registered on `src/agents/orchestrator.ts`.
 
-The capability registry is the post-build extension lane. Registry capabilities are stored in SQLite (`~/.gorombo/db/capabilities.sqlite` by default). The orchestrator reads the store at agent init (`createAgent(...)`) and merges user-defined capabilities into the same `tools`, `skills`, and `subagents` arrays that hold built-in capabilities. A service restart picks up changes — no rebuild needed.
+The capability registry is the post-build extension lane. Its default paths are `.gorombo/db/capabilities.sqlite` and `.gorombo/capabilities/`, resolved from the runtime working directory. Repository builds therefore use the project-local `.gorombo/` tree. An installed launcher runs the gateway from the owner of the packaged `.gorombo` tree, so a normal home installation resolves those same defaults under `~/.gorombo/`. `GOROMBO_CAPABILITY_DB_PATH` and `GOROMBO_CAPABILITIES_DIR` can override them. The orchestrator reads the store at agent init (`createAgent(...)`) and merges user-defined capabilities into the same `tools`, `skills`, and `subagents` arrays that hold built-in capabilities. A service restart picks up changes — no rebuild needed.
 
 Four capability kinds:
 
