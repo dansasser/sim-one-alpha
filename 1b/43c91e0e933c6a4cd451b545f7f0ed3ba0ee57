@@ -1,0 +1,22 @@
+development-graph.md
+  s_8b168fcfd81ded::t_7a3ddf940a12cf 1,12,21,206,529,545
+development-graph.json
+  s_8b168fcfd81ded::t_fd0377bc3cb2eb 4,1097,1182,2171
+  s_8b168fcfd81ded::t_9c19e2b964e0ec 2039-2040
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "1b43c91e0e933c6a4cd451b545f7f0ed3ba0ee57",
+  "prompts": {},
+  "sessions": {
+    "s_8b168fcfd81ded": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f9241-c892-7201-a033-225bccb61fac",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
