@@ -22,3 +22,6 @@ assets/models/embeddings/
 crates/gorombo-memory/pkg/
 crates/gorombo-memory/target/
 target/
+
+# Project-local development graph run state and evidence.
+.development-graph/

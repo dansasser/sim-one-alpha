@@ -1,7 +1,12 @@
 import type { NormalizedMessageEvent } from '../../core/types/index.js';
 
-export function createChatPrompt(event: NormalizedMessageEvent): string {
+export interface ChatPromptOptions {
+  githubAuthRequiresPrivateChat?: boolean;
+}
+
+export function createChatPrompt(event: NormalizedMessageEvent, options: ChatPromptOptions = {}): string {
   const safeEvent = {
+    eventId: event.id,
     connector: event.connector,
     messageKind: event.kind,
     receivedAt: event.receivedAt,
@@ -22,6 +27,9 @@ Before you answer:
 5. If research metadata reports providerFailures, say that plainly when it affects confidence and continue with the best available context.
 6. If a specific provider is still a placeholder, say that plainly and continue with the best available answer.
 7. If this event came from Telegram, the channel will send your final text response back to the chat automatically.
+${options.githubAuthRequiresPrivateChat
+  ? '8. GitHub authorization cannot be started from this Telegram group. If GitHub authorization is needed, tell the user to message the bot in a private chat; do not attempt GitHub auth from this event.'
+  : ''}
 
 Safe event:
 ${JSON.stringify(safeEvent, null, 2)}

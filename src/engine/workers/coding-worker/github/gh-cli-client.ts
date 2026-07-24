@@ -545,14 +545,14 @@ async function runGh(
 
 function createGhEnv(env: Record<string, string | undefined> | undefined): NodeJS.ProcessEnv {
   const merged: NodeJS.ProcessEnv = {};
-  for (const key of ['PATH', 'HOME', 'SystemRoot', 'ComSpec'] as const) {
+  for (const key of ['PATH', 'SystemRoot', 'ComSpec'] as const) {
     const value = process.env[key];
     if (typeof value === 'string' && value.length > 0) {
       merged[key] = value;
     }
   }
-  for (const key of ['GH_TOKEN', 'GITHUB_TOKEN'] as const) {
-    const value = env?.[key] ?? process.env[key];
+  for (const key of ['GH_CONFIG_DIR', 'GH_TOKEN', 'GITHUB_TOKEN'] as const) {
+    const value = env?.[key];
     if (typeof value === 'string' && value.length > 0) {
       merged[key] = value;
     }
