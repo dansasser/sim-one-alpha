@@ -613,7 +613,10 @@ fn startup_preflight_creates_fresh_session_before_sending_one_greeting_prompt() 
     assert_eq!(prompts[0].0, "tui-startup-1");
     assert!(prompts[0].1.contains("greeting-preflight"));
     assert_eq!(prompts[0].2, AgentPromptOrigin::StartupPreflight);
-    assert!(prompts[0].1.contains("Daniel T Sasser II"));
+    assert!(!prompts[0].1.contains("Daniel T Sasser II"));
+    assert!(prompts[0]
+        .1
+        .contains("Greet the primary user by name using that workspace context"));
     assert!(prompts[0].1.contains("all systems go"));
     assert!(prompts[0].1.contains("status = \"all systems go\""));
     assert!(prompts[0].1.contains("sessionId = \"tui-startup-1\""));

@@ -2523,10 +2523,9 @@ Preflight report:\n\
 - status: all systems go\n\n\
 Skill input variables:\n\
 - status = \"all systems go\"\n\
-- userName = \"Daniel T Sasser II\"\n\
 - connector = \"Ratatui TUI\"\n\
 - sessionId = \"{session}\"\n\n\
-Use the workspace identity and user context already loaded for this agent. Greet Daniel T Sasser II by name, introduce yourself by your workspace identity, briefly say that startup preflight completed and all systems go, then stop. Keep it concise.",
+Use the workspace identity and user context already loaded for this agent. Greet the primary user by name using that workspace context, introduce yourself by your workspace identity, briefly say that startup preflight completed and all systems go, then stop. Keep it concise.",
             gateway = self.gateway_status,
             session = self.session_id,
             stream = self.stream_status(),
