@@ -443,6 +443,55 @@ test('correlates legacy offsets, deduplicates replay, and leaves ambiguous promp
   );
 });
 
+test('correlates durable stream events that omit submission ids', () => {
+  const page = projectSessionTranscript({
+    session: { id: 'tui-missing-submission' },
+    prompts: [
+      prompt({
+        eventId: 'prompt-missing-submission',
+        text: 'Restore this response',
+        receivedAt: '2026-07-20T22:05:00.000Z',
+        offset: '0000000000000000_0000000000000001',
+      }),
+    ],
+    events: [
+      streamEvent('0000000000000000_0000000000000002', {
+        type: 'turn_start',
+        eventIndex: 0,
+        timestamp: '2026-07-20T22:05:00.100Z',
+      }),
+      streamEvent('0000000000000000_0000000000000003', {
+        type: 'operation_start',
+        operationId: 'operation-missing-submission',
+        eventIndex: 1,
+        timestamp: '2026-07-20T22:05:00.200Z',
+      }),
+      streamEvent('0000000000000000_0000000000000004', {
+        type: 'message_end',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Restored assistant response' }],
+        },
+        eventIndex: 2,
+        timestamp: '2026-07-20T22:05:00.300Z',
+      }),
+      streamEvent('0000000000000000_0000000000000005', {
+        type: 'operation',
+        operationId: 'operation-missing-submission',
+        eventIndex: 3,
+        timestamp: '2026-07-20T22:05:00.400Z',
+      }),
+    ],
+    stream: { nextOffset: '0000000000000000_0000000000000005', upToDate: true },
+    page: { limit: 50, hasOlder: false },
+  });
+
+  assert.equal(page.exchanges.length, 1);
+  assert.equal(page.exchanges[0]?.prompt?.text, 'Restore this response');
+  assert.equal(page.exchanges[0]?.assistant?.text, 'Restored assistant response');
+  assert.equal(page.exchanges[0]?.status, 'completed');
+});
+
 test('omits undelivered pre-LLM commands while preserving unmatched user prompts', () => {
   const page = projectSessionTranscript({
     session: { id: 'tui-command-history' },
@@ -674,6 +723,7 @@ function prompt(input: {
   text: string;
   receivedAt: string;
   submissionId?: string;
+  offset?: string;
   workflow?: string;
   legacyDeliveryId?: string;
 }): SessionNormalizedMessageRecord {
@@ -691,6 +741,7 @@ function prompt(input: {
     },
     delivery: {
       ...(input.submissionId ? { submissionId: input.submissionId } : {}),
+      ...(input.offset ? { offset: input.offset } : {}),
     },
     ...(input.legacyDeliveryId ? { legacyDeliveryId: input.legacyDeliveryId } : {}),
   };

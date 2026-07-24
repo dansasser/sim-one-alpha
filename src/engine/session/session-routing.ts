@@ -108,6 +108,9 @@ export function resumeOwnedChatSession(input: {
   }
 
   const sessionId = session.sessionId;
+  goromboPersistenceRuntime.sessionDatabase.touchChatSession(sessionId);
+  const resumedSession = goromboPersistenceRuntime.sessionDatabase.getChatSession(sessionId)
+    ?? session;
 
   if (connectorUsesPersistentSession(input.identity.connector)) {
     goromboPersistenceRuntime.sessionDatabase.setActiveSession({
@@ -119,7 +122,7 @@ export function resumeOwnedChatSession(input: {
   return {
     sessionId,
     surface,
-    session,
+    session: resumedSession,
     created: false,
   };
 }

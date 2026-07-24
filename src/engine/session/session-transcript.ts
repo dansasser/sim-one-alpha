@@ -182,6 +182,7 @@ export async function loadSessionTranscriptPage(input: {
 
   const events: SanitizedEvent[] = [];
   const seen = new Set<string>();
+  const sanitizationState: SanitizationState = {};
   let offset = earliestPromptOffset(prompts);
   let upToDate = false;
   const endOffset = cursorPrompt ? promptOffset(cursorPrompt) : undefined;
@@ -194,7 +195,7 @@ export async function loadSessionTranscriptPage(input: {
     const pageEvents = endOffset
       ? result.events.filter((event) => compareOffsets(event.offset, endOffset) <= 0)
       : result.events;
-    sanitizeEventsInto(pageEvents, events, seen);
+    sanitizeEventsInto(pageEvents, events, seen, sanitizationState);
     if (endOffset && (pageEvents.length < result.events.length
       || compareOffsets(result.nextOffset, endOffset) >= 0)) {
       offset = endOffset;
@@ -347,17 +348,22 @@ interface SanitizedEvent {
 function sanitizeEvents(events: TranscriptSourceEvent[]): SanitizedEvent[] {
   const sanitized: SanitizedEvent[] = [];
   const seen = new Set<string>();
-  sanitizeEventsInto(events, sanitized, seen);
+  sanitizeEventsInto(events, sanitized, seen, {});
   return sanitized;
+}
+
+interface SanitizationState {
+  currentSubmissionId?: string;
 }
 
 function sanitizeEventsInto(
   events: TranscriptSourceEvent[],
   sanitized: SanitizedEvent[],
   seen: Set<string>,
+  state: SanitizationState,
 ): void {
   for (const source of events) {
-    const event = sanitizeEvent(source);
+    const event = sanitizeEvent(source, state);
     if (!event) {
       continue;
     }
@@ -375,13 +381,15 @@ function sanitizeEventsInto(
   }
 }
 
-function sanitizeEvent(source: TranscriptSourceEvent): SanitizedEvent | null {
+function sanitizeEvent(
+  source: TranscriptSourceEvent,
+  state: SanitizationState,
+): SanitizedEvent | null {
   if (!isRecord(source.data)) {
     return null;
   }
   const type = readString(source.data.type);
-  const submissionId = readString(source.data.submissionId);
-  if (!type || !submissionId) {
+  if (!type) {
     return null;
   }
 
@@ -389,6 +397,13 @@ function sanitizeEvent(source: TranscriptSourceEvent): SanitizedEvent | null {
   if (nested) {
     return null;
   }
+  const explicitSubmissionId = readString(source.data.submissionId);
+  if (explicitSubmissionId) {
+    state.currentSubmissionId = explicitSubmissionId;
+  } else if (type === 'turn_start' || !state.currentSubmissionId) {
+    state.currentSubmissionId = `legacy:${source.offset}`;
+  }
+  const submissionId = state.currentSubmissionId;
   const base: SanitizedEvent = {
     offset: source.offset,
     type,

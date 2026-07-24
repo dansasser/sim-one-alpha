@@ -158,6 +158,26 @@ test('owned lifecycle resume returns the requested session without recreating it
   }
 });
 
+test('owned lifecycle resume moves the session to the front of recent sessions', () => {
+  const identity = uniqueIdentity('tui', 'lifecycle-resume-recency');
+  const first = createFreshChatSession({ identity, displayName: 'Older session' });
+  sleepForTimestampChange();
+  const second = createFreshChatSession({ identity, displayName: 'Newer session' });
+
+  try {
+    assert.equal(listOwnedChatSessions({ identity, limit: 10 })[0]?.sessionId, second.sessionId);
+    sleepForTimestampChange();
+
+    const resumed = resumeOwnedChatSession({ identity, sessionId: first.sessionId });
+    const listed = listOwnedChatSessions({ identity, limit: 10 });
+
+    assert.equal(resumed.session.updatedAt, listed[0]?.updatedAt);
+    assert.equal(listed[0]?.sessionId, first.sessionId);
+  } finally {
+    deleteSessions([first.sessionId, second.sessionId]);
+  }
+});
+
 test('owned lifecycle resume resolves an explicit session name to its canonical id', () => {
   const identity = uniqueIdentity('tui', 'lifecycle-name-resume');
   const created = createFreshChatSession({
@@ -344,4 +364,8 @@ function deleteSessions(sessionIds: string[]): void {
   for (const sessionId of new Set(sessionIds)) {
     goromboPersistenceRuntime.sessionDatabase.deleteChatSession(sessionId);
   }
+}
+
+function sleepForTimestampChange(): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2);
 }
