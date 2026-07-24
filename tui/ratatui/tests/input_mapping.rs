@@ -1,4 +1,6 @@
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent, MouseEventKind,
+};
 use sim_one_ratatui_tui::app::AppEvent;
 use sim_one_ratatui_tui::input::{map_key_event, map_terminal_event};
 
@@ -37,6 +39,10 @@ fn maps_prompt_editing_and_submit_keys() {
         Some(AppEvent::DeletePromptWordLeft)
     );
     assert_eq!(
+        map_key_event(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL)),
+        Some(AppEvent::CutPromptSelection)
+    );
+    assert_eq!(
         map_key_event(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL)),
         Some(AppEvent::MovePromptStart)
     );
@@ -60,6 +66,14 @@ fn maps_prompt_editing_and_submit_keys() {
         map_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
         Some(AppEvent::Submit)
     );
+    assert_eq!(
+        map_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT)),
+        Some(AppEvent::Text("\n".to_string()))
+    );
+    assert_eq!(
+        map_key_event(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)),
+        Some(AppEvent::SelectCommand)
+    );
 }
 
 #[test]
@@ -78,15 +92,15 @@ fn maps_transcript_scroll_and_exit_keys() {
     );
     assert_eq!(
         map_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)),
-        Some(AppEvent::ScrollLineUp)
+        Some(AppEvent::NavigateUp)
     );
     assert_eq!(
         map_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)),
-        Some(AppEvent::ScrollLineDown)
+        Some(AppEvent::NavigateDown)
     );
     assert_eq!(
         map_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
-        Some(AppEvent::Quit)
+        Some(AppEvent::Cancel)
     );
     assert_eq!(
         map_key_event(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)),
@@ -95,7 +109,7 @@ fn maps_transcript_scroll_and_exit_keys() {
 }
 
 #[test]
-fn terminal_mapper_ignores_release_events_and_accepts_repeats() {
+fn terminal_mapper_ignores_release_events_and_enter_repeats() {
     assert_eq!(
         map_terminal_event(Event::Key(KeyEvent::new_with_kind(
             KeyCode::Char('a'),
@@ -116,9 +130,58 @@ fn terminal_mapper_ignores_release_events_and_accepts_repeats() {
         map_terminal_event(Event::Key(KeyEvent::new_with_kind(
             KeyCode::Enter,
             KeyModifiers::NONE,
+            KeyEventKind::Repeat,
+        ))),
+        None
+    );
+    assert_eq!(
+        map_terminal_event(Event::Key(KeyEvent::new_with_kind(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
             KeyEventKind::Release,
         ))),
         None
     );
     assert_eq!(map_terminal_event(Event::Resize(80, 24)), None);
+}
+
+#[test]
+fn terminal_mapper_preserves_mouse_kind_coordinates_and_modifiers() {
+    for mouse in [
+        MouseEvent {
+            kind: MouseEventKind::ScrollUp,
+            column: 10,
+            row: 5,
+            modifiers: KeyModifiers::NONE,
+        },
+        MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: 11,
+            row: 6,
+            modifiers: KeyModifiers::CONTROL,
+        },
+        MouseEvent {
+            kind: MouseEventKind::Down(crossterm::event::MouseButton::Left),
+            column: 12,
+            row: 7,
+            modifiers: KeyModifiers::SHIFT,
+        },
+        MouseEvent {
+            kind: MouseEventKind::Drag(crossterm::event::MouseButton::Left),
+            column: 13,
+            row: 8,
+            modifiers: KeyModifiers::NONE,
+        },
+        MouseEvent {
+            kind: MouseEventKind::Up(crossterm::event::MouseButton::Left),
+            column: 14,
+            row: 9,
+            modifiers: KeyModifiers::NONE,
+        },
+    ] {
+        assert_eq!(
+            map_terminal_event(Event::Mouse(mouse)),
+            Some(AppEvent::Mouse(mouse))
+        );
+    }
 }

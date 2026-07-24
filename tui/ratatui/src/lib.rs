@@ -1,8 +1,14 @@
 pub mod agent;
 pub mod app;
+pub mod diagnostics;
 pub mod flue;
 pub mod gateway;
+pub mod history;
 pub mod http;
 pub mod input;
+mod markdown;
 pub mod terminal;
+mod text_wrap;
+pub mod theme;
+pub mod transcript;
 pub mod ui;

@@ -21,12 +21,14 @@ import {
   type SessionBudgetReport,
 } from '../../engine/session/session-budget.js';
 import {
+  ChatSessionAmbiguousError,
+  ChatSessionNotFoundError,
   isGuiSessionManagedConnector,
-  listChatSessions,
   resolveChatSession,
   SessionAccessDeniedError,
   type ChatSessionResolution,
 } from '../../engine/session/session-routing.js';
+import type { AgentDeliveryReference } from '../../engine/session/session-database.js';
 import { createChatPrompt } from '../../api/routes/chat-prompt.js';
 import { getGithubAuthChallengeRelay, githubAuthAudienceFromEvent } from '../../api/ingress/github-auth-challenge-relay.js';
 import { runWithTrustedMessageEvent } from '../../api/ingress/trusted-event-context.js';
@@ -37,16 +39,6 @@ export interface ChatEventRouteOptions {
 
 export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOptions = {}): void {
   const openDurableSession = options.openDurableSession ?? openDurableOrchestratorSession;
-
-  app.get('/api/chat/sessions', requireApiSecret, (c) => {
-    const parsedLimit = Number.parseInt(c.req.query('limit') ?? '', 10);
-    const limit = Number.isInteger(parsedLimit)
-      ? Math.min(100, Math.max(1, parsedLimit))
-      : 50;
-    return c.json({
-      sessions: listChatSessions(limit),
-    });
-  });
 
   app.post('/api/chat/events', requireApiSecret, async (c) => {
     const headers = new Headers(c.req.raw.headers);
@@ -67,7 +59,7 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
       return c.json(createCommandResponse({
         eventId: event.id,
         command: slashCommand,
-        text: `Unknown command "${slashCommand.raw}". Supported commands are /new and /compact.`,
+        text: `Unknown command "${slashCommand.raw}". Supported commands are /new, /clear, /resume, /rename, /compact, and /session.`,
       }));
     }
 
@@ -76,24 +68,57 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
       return c.json(createCommandResponse({
         eventId: event.id,
         command: slashCommand,
-        text: '/new is handled by the web client session controls. Use the new chat action instead.',
+        text: `${slashCommand.raw} is handled by the web client session controls. Use the new chat action instead.`,
       }));
     }
+
+    if (slashCommand?.name === 'resume' && !slashCommand.args) {
+      goromboPersistenceRuntime.sessionDatabase.recordNormalizedMessageEvent({ event });
+      return c.json(createCommandResponse({
+        eventId: event.id,
+        command: slashCommand,
+        text: 'Usage: /resume <session-id-or-name>',
+      }), 400);
+    }
+
+    if (slashCommand?.name === 'rename' && !slashCommand.args) {
+      goromboPersistenceRuntime.sessionDatabase.recordNormalizedMessageEvent({ event });
+      return c.json(createCommandResponse({
+        eventId: event.id,
+        command: slashCommand,
+        text: 'Usage: /rename <title>',
+      }), 400);
+    }
+
+    const requestedSessionId = slashCommand?.name === 'resume'
+      ? slashCommand.args
+      : typeof (payload as { session?: unknown }).session === 'string'
+        ? (payload as { session: string }).session
+        : undefined;
 
     let sessionResolution: ChatSessionResolution;
     try {
       sessionResolution = resolveChatSession({
         event,
-        requestedSessionId: typeof (payload as { session?: unknown }).session === 'string'
-          ? (payload as { session: string }).session
+        requestedSessionId,
+        forceNew: slashCommand ? isSessionCreationSlashCommand(slashCommand) : false,
+        title: slashCommand && isSessionCreationSlashCommand(slashCommand) && slashCommand.args
+          ? slashCommand.args
           : undefined,
-        forceNew: slashCommand?.name === 'new',
-        title: slashCommand?.name === 'new' && slashCommand.args ? slashCommand.args : undefined,
+        displayName: slashCommand && isSessionCreationSlashCommand(slashCommand) && slashCommand.args
+          ? slashCommand.args
+          : undefined,
       });
     } catch (error) {
       goromboPersistenceRuntime.sessionDatabase.recordNormalizedMessageEvent({ event });
       if (error instanceof SessionAccessDeniedError) {
         return c.json({ error: error.message, eventId: event.id }, 403);
+      }
+      if (error instanceof ChatSessionNotFoundError) {
+        return c.json({ error: error.message, eventId: event.id }, 404);
+      }
+      if (error instanceof ChatSessionAmbiguousError) {
+        return c.json({ error: error.message, eventId: event.id }, 409);
       }
       throw error;
     }
@@ -101,7 +126,7 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
     goromboPersistenceRuntime.sessionDatabase.recordNormalizedMessageEvent({
       event,
       sessionId: sessionResolution.sessionId,
-      deliveryKind: 'direct-agent',
+      deliveryKind: slashCommand ? 'session-command' : 'direct-agent',
     });
 
     if (slashCommand?.name === 'new') {
@@ -110,6 +135,50 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
         sessionResolution,
         command: slashCommand,
         text: `Started new session ${sessionResolution.sessionId}.`,
+        ...(slashCommand.args ? { sessionTitle: slashCommand.args } : {}),
+      }));
+    }
+
+    if (slashCommand?.name === 'clear') {
+      return c.json(createCommandResponse({
+        eventId: event.id,
+        sessionResolution,
+        command: slashCommand,
+        text: `Cleared conversation. Started new session ${sessionResolution.sessionId}.`,
+        ...(slashCommand.args ? { sessionTitle: slashCommand.args } : {}),
+      }));
+    }
+
+    if (slashCommand?.name === 'resume') {
+      return c.json(createCommandResponse({
+        eventId: event.id,
+        sessionResolution,
+        command: slashCommand,
+        text: `Resumed session ${sessionResolution.sessionId}.`,
+      }));
+    }
+
+    if (slashCommand?.name === 'session') {
+      return c.json(createCommandResponse({
+        eventId: event.id,
+        sessionResolution,
+        command: slashCommand,
+        text: `Current session ${sessionResolution.sessionId}.`,
+      }));
+    }
+
+    if (slashCommand?.name === 'rename') {
+      goromboPersistenceRuntime.sessionDatabase.renameChatSession(
+        sessionResolution.sessionId,
+        slashCommand.args,
+      );
+
+      return c.json(createCommandResponse({
+        eventId: event.id,
+        sessionResolution,
+        command: slashCommand,
+        text: `Renamed session ${sessionResolution.sessionId} to "${slashCommand.args}".`,
+        sessionTitle: slashCommand.args,
       }));
     }
 
@@ -144,13 +213,15 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
     const body = await readJsonResponse(agentResponse.clone());
     if (isRecord(body)) {
       const githubAuthChallenge = getGithubAuthChallengeRelay().consume(githubAuthAudienceFromEvent(event));
-      const deliveryId = readDeliveryId(body);
-      if (deliveryId) {
+      const delivery = readDeliveryReference(body);
+      const deliveryId = legacyDeliveryId(delivery);
+      if (deliveryId || Object.keys(delivery).length > 0) {
         goromboPersistenceRuntime.sessionDatabase.recordNormalizedMessageEvent({
           event,
           sessionId: sessionResolution.sessionId,
           deliveryKind: 'direct-agent',
           deliveryId,
+          delivery,
         });
       }
 
@@ -183,6 +254,7 @@ function createCommandResponse(input: {
   command: ParsedSlashCommand;
   text: string;
   sessionResolution?: ChatSessionResolution;
+  sessionTitle?: string;
   contextBudget?: DurableChatContextBudget;
 }): {
   result: {
@@ -200,8 +272,10 @@ function createCommandResponse(input: {
     id: string;
     surface: ChatSessionResolution['surface'];
     created: boolean;
+    title?: string;
   };
 } {
+  const sessionTitle = input.sessionTitle ?? input.sessionResolution?.session.displayName;
   return {
     result: {
       text: input.text,
@@ -220,6 +294,7 @@ function createCommandResponse(input: {
             id: input.sessionResolution.sessionId,
             surface: input.sessionResolution.surface,
             created: input.sessionResolution.created,
+            ...(sessionTitle ? { title: sessionTitle } : {}),
           },
         }
       : {}),
@@ -297,19 +372,30 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
-function readDeliveryId(body: Record<string, unknown>): string | undefined {
+function readDeliveryReference(body: Record<string, unknown>): AgentDeliveryReference {
   const submission = isRecord(body.submission) ? body.submission : undefined;
-  const submissionId = typeof submission?.id === 'string' && submission.id.trim()
-    ? submission.id.trim()
-    : undefined;
-  if (submissionId) {
-    return submissionId;
-  }
+  const submissionId = readNonEmptyString(body.submissionId)
+    ?? readNonEmptyString(submission?.id);
+  const streamUrl = readNonEmptyString(body.streamUrl);
+  const offset = readNonEmptyString(body.offset);
 
-  const offset = typeof body.offset === 'string' ? body.offset : undefined;
-  const streamUrl = typeof body.streamUrl === 'string' ? body.streamUrl : undefined;
-  if (!offset && !streamUrl) {
+  return {
+    ...(submissionId ? { submissionId } : {}),
+    ...(streamUrl ? { streamUrl } : {}),
+    ...(offset ? { offset } : {}),
+  };
+}
+
+function legacyDeliveryId(delivery: AgentDeliveryReference): string | undefined {
+  if (delivery.submissionId) {
+    return delivery.submissionId;
+  }
+  if (!delivery.streamUrl && !delivery.offset) {
     return undefined;
   }
-  return [streamUrl ?? '', offset ?? ''].join('#');
+  return [delivery.streamUrl ?? '', delivery.offset ?? ''].join('#');
+}
+
+function readNonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }

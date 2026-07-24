@@ -157,6 +157,12 @@ The `researcher` subagent uses these controls through `web_research`. This keeps
 Slash commands are parsed before the LLM receives the prompt:
 
 - `/new` creates a new session for trusted connector-style and TUI entrypoints. It is disabled for GUI-managed web chat prompts because the web UI should switch visual session state through a client-side new-chat action. Generic Web API payloads must not be able to opt into connector-only behavior by spoofing a connector name.
+- `/resume <session-id-or-name>` resolves an exact id or explicit name, validates that the durable session belongs to the trusted actor/conversation scope, switches to its canonical id, and returns command telemetry without prompting the model.
+- `/rename <title>` updates the active durable product session title and returns command telemetry without prompting the model.
 - `/compact` calls `session.compact()` for the resolved durable direct-agent Flue session and returns command telemetry without sending `/compact` to the model.
 
+The Ratatui TUI also owns local commands that do not require backend slash-command handling: `/session`, `/sessions [limit]`, `/help`, and `/exit`. `/sessions` reads the scope-filtered lifecycle list endpoint; the others are purely local UI behavior. Backend slash commands include `/new`, `/clear`, `/resume`, `/rename`, and `/compact`; `/clear` creates a replacement durable TUI session while preserving the old session for explicit resume. Default TUI startup uses `POST /api/chat/sessions`, while Telegram alone currently retains connector-conversation active-session persistence.
+
 Future commands can accept trailing instruction text through the same parser. Unsupported slash commands are handled by application code and are not sent to the LLM.
+
+See `docs/architecture/tui-cli-session-flow.md` and `docs/tui/session-management.md` for the product TUI command flow.

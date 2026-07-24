@@ -20,6 +20,7 @@ export interface ChatSessionRecord {
   conversationId?: string;
   threadId?: string;
   title?: string;
+  displayName?: string;
   archivedAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -32,6 +33,7 @@ export interface EnsureChatSessionInput {
   conversationId?: string;
   threadId?: string;
   title?: string;
+  displayName?: string;
 }
 
 export interface CreateChatSessionInput extends Omit<EnsureChatSessionInput, 'sessionId'> {
@@ -79,7 +81,21 @@ export interface RecordNormalizedMessageEventInput {
   sessionId?: string;
   deliveryKind?: string;
   deliveryId?: string;
+  delivery?: AgentDeliveryReference;
   acceptedAt?: string;
+}
+
+export interface AgentDeliveryReference {
+  submissionId?: string;
+  streamUrl?: string;
+  offset?: string;
+}
+
+export interface SessionNormalizedMessageRecord {
+  sessionId: string;
+  event: NormalizedMessageEvent;
+  delivery: AgentDeliveryReference;
+  legacyDeliveryId?: string;
 }
 
 export interface TrustedEventAdmission {
@@ -298,13 +314,14 @@ export class GoromboSessionDatabase {
     this.database
       .prepare(
         `INSERT INTO chat_sessions
-         (session_id, origin, actor_id, conversation_id, thread_id, title, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         (session_id, origin, actor_id, conversation_id, thread_id, title, explicit_name, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(session_id) DO UPDATE SET
            actor_id = COALESCE(excluded.actor_id, chat_sessions.actor_id),
            conversation_id = COALESCE(excluded.conversation_id, chat_sessions.conversation_id),
            thread_id = COALESCE(excluded.thread_id, chat_sessions.thread_id),
            title = COALESCE(excluded.title, chat_sessions.title),
+           explicit_name = COALESCE(excluded.explicit_name, chat_sessions.explicit_name),
            updated_at = excluded.updated_at`,
       )
       .run(
@@ -314,6 +331,7 @@ export class GoromboSessionDatabase {
         input.conversationId ?? null,
         input.threadId ?? null,
         input.title ?? null,
+        input.displayName ?? null,
         now,
         now,
       );
@@ -328,13 +346,48 @@ export class GoromboSessionDatabase {
   getChatSession(sessionId: string): ChatSessionRecord | null {
     const row = this.database
       .prepare(
-        `SELECT session_id, origin, actor_id, conversation_id, thread_id, title, archived_at, created_at, updated_at
+        `SELECT session_id, origin, actor_id, conversation_id, thread_id, title, explicit_name, archived_at, created_at, updated_at
          FROM chat_sessions
          WHERE session_id = ?`,
       )
       .get(sessionId) as ChatSessionRow | undefined;
 
     return row ? toChatSessionRecord(row) : null;
+  }
+
+  listChatSessionsByExplicitNameForScope(input: {
+    explicitName: string;
+    origin: string;
+    actorId: string;
+    conversationId: string;
+    threadId?: string;
+    limit?: number;
+  }): ChatSessionRecord[] {
+    const threadId = cleanScopeValue(input.threadId) ?? null;
+    const rows = this.database
+      .prepare(
+        `SELECT session_id, origin, actor_id, conversation_id, thread_id, title, explicit_name, archived_at, created_at, updated_at
+         FROM chat_sessions
+         WHERE explicit_name = ?
+           AND origin = ?
+           AND actor_id = ?
+           AND conversation_id = ?
+           AND ((thread_id IS NULL AND ? IS NULL) OR thread_id = ?)
+           AND archived_at IS NULL
+         ORDER BY updated_at DESC
+         LIMIT ?`,
+      )
+      .all(
+        input.explicitName,
+        input.origin,
+        input.actorId,
+        input.conversationId,
+        threadId,
+        threadId,
+        Math.max(1, Math.min(100, Math.floor(input.limit ?? 2))),
+      ) as unknown as ChatSessionRow[];
+
+    return rows.map(toChatSessionRecord);
   }
 
   deleteChatSession(sessionId: string): void {
@@ -345,13 +398,45 @@ export class GoromboSessionDatabase {
   listChatSessions(limit = 50): ChatSessionRecord[] {
     const rows = this.database
       .prepare(
-        `SELECT session_id, origin, actor_id, conversation_id, thread_id, title, archived_at, created_at, updated_at
+        `SELECT session_id, origin, actor_id, conversation_id, thread_id, title, explicit_name, archived_at, created_at, updated_at
          FROM chat_sessions
          WHERE archived_at IS NULL
          ORDER BY updated_at DESC
          LIMIT ?`,
       )
       .all(Math.max(1, Math.min(200, Math.floor(limit)))) as unknown as ChatSessionRow[];
+
+    return rows.map(toChatSessionRecord);
+  }
+
+  listChatSessionsForScope(input: {
+    origin: string;
+    actorId: string;
+    conversationId: string;
+    threadId?: string;
+    limit: number;
+  }): ChatSessionRecord[] {
+    const threadId = cleanScopeValue(input.threadId) ?? null;
+    const rows = this.database
+      .prepare(
+        `SELECT session_id, origin, actor_id, conversation_id, thread_id, title, explicit_name, archived_at, created_at, updated_at
+         FROM chat_sessions
+         WHERE origin = ?
+           AND actor_id = ?
+           AND conversation_id = ?
+           AND ((thread_id IS NULL AND ? IS NULL) OR thread_id = ?)
+           AND archived_at IS NULL
+         ORDER BY updated_at DESC
+         LIMIT ?`,
+      )
+      .all(
+        input.origin,
+        input.actorId,
+        input.conversationId,
+        threadId,
+        threadId,
+        Math.max(1, Math.min(100, Math.floor(input.limit))),
+      ) as unknown as ChatSessionRow[];
 
     return rows.map(toChatSessionRecord);
   }
@@ -366,6 +451,16 @@ export class GoromboSessionDatabase {
       .run(new Date().toISOString(), title ?? null, sessionId);
   }
 
+  renameChatSession(sessionId: string, displayName: string): void {
+    this.database
+      .prepare(
+        `UPDATE chat_sessions
+         SET updated_at = ?, title = ?, explicit_name = ?
+         WHERE session_id = ?`,
+      )
+      .run(new Date().toISOString(), displayName, displayName, sessionId);
+  }
+
   recordNormalizedMessageEvent(input: RecordNormalizedMessageEventInput): void {
     const now = new Date().toISOString();
     const event = input.event;
@@ -373,8 +468,8 @@ export class GoromboSessionDatabase {
     this.database
       .prepare(
         `INSERT INTO normalized_message_events
-         (event_id, session_id, connector, message_kind, text, received_at, actor_id, actor_display_name, conversation_id, thread_id, client_id, project_id, workflow, task, delivery_kind, delivery_id, accepted_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (event_id, session_id, connector, message_kind, text, received_at, actor_id, actor_display_name, conversation_id, thread_id, client_id, project_id, workflow, task, delivery_kind, delivery_id, delivery_submission_id, delivery_stream_url, delivery_offset, accepted_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(event_id) DO UPDATE SET
            session_id = COALESCE(excluded.session_id, normalized_message_events.session_id),
            connector = excluded.connector,
@@ -391,6 +486,9 @@ export class GoromboSessionDatabase {
            task = excluded.task,
            delivery_kind = COALESCE(excluded.delivery_kind, normalized_message_events.delivery_kind),
            delivery_id = COALESCE(excluded.delivery_id, normalized_message_events.delivery_id),
+           delivery_submission_id = COALESCE(excluded.delivery_submission_id, normalized_message_events.delivery_submission_id),
+           delivery_stream_url = COALESCE(excluded.delivery_stream_url, normalized_message_events.delivery_stream_url),
+           delivery_offset = COALESCE(excluded.delivery_offset, normalized_message_events.delivery_offset),
            accepted_at = COALESCE(excluded.accepted_at, normalized_message_events.accepted_at),
            updated_at = excluded.updated_at`,
       )
@@ -411,6 +509,9 @@ export class GoromboSessionDatabase {
         event.context?.task ?? null,
         input.deliveryKind ?? null,
         input.deliveryId ?? null,
+        input.delivery?.submissionId ?? null,
+        input.delivery?.streamUrl ?? null,
+        input.delivery?.offset ?? null,
         input.acceptedAt ?? null,
         now,
         now,
@@ -427,6 +528,56 @@ export class GoromboSessionDatabase {
       .get(eventId) as NormalizedMessageEventRow | undefined;
 
     return row ? toNormalizedMessageEvent(row) : null;
+  }
+
+  getSessionNormalizedMessageEvent(input: {
+    sessionId: string;
+    eventId: string;
+  }): SessionNormalizedMessageRecord | null {
+    const row = this.database
+      .prepare(
+        `SELECT event_id, session_id, connector, message_kind, text, received_at, actor_id,
+                actor_display_name, conversation_id, thread_id, client_id, project_id,
+                workflow, task, delivery_kind, delivery_id, delivery_submission_id,
+                delivery_stream_url, delivery_offset, accepted_at
+         FROM normalized_message_events
+         WHERE event_id = ? AND session_id = ? AND delivery_kind = 'direct-agent'`,
+      )
+      .get(input.eventId, input.sessionId) as NormalizedMessageEventRow | undefined;
+
+    return row ? toSessionNormalizedMessageRecord(row) : null;
+  }
+
+  listNormalizedMessageEventsForSession(input: {
+    sessionId: string;
+    limit?: number;
+    before?: string;
+  }): SessionNormalizedMessageRecord[] {
+    const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)));
+    const before = cleanScopeValue(input.before) ?? null;
+    const rows = this.database
+      .prepare(
+        `SELECT event_id, session_id, connector, message_kind, text, received_at, actor_id,
+                actor_display_name, conversation_id, thread_id, client_id, project_id,
+                workflow, task, delivery_kind, delivery_id, delivery_submission_id,
+                delivery_stream_url, delivery_offset, accepted_at
+         FROM normalized_message_events
+         WHERE session_id = ?
+           AND delivery_kind = 'direct-agent'
+           AND (
+             ? IS NULL
+             OR (received_at, event_id) < (
+               SELECT received_at, event_id
+               FROM normalized_message_events
+               WHERE event_id = ? AND session_id = ?
+             )
+           )
+         ORDER BY received_at DESC, event_id DESC
+         LIMIT ?`,
+      )
+      .all(input.sessionId, before, before, input.sessionId, limit) as unknown as NormalizedMessageEventRow[];
+
+    return rows.reverse().map(toSessionNormalizedMessageRecord);
   }
 
   createTrustedEventAdmission(input: CreateTrustedEventAdmissionInput): TrustedEventAdmission {
@@ -914,6 +1065,7 @@ export class GoromboSessionDatabase {
         conversation_id TEXT,
         thread_id TEXT,
         title TEXT,
+        explicit_name TEXT,
         archived_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -950,6 +1102,9 @@ export class GoromboSessionDatabase {
         task TEXT,
         delivery_kind TEXT,
         delivery_id TEXT,
+        delivery_submission_id TEXT,
+        delivery_stream_url TEXT,
+        delivery_offset TEXT,
         accepted_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -1057,8 +1212,11 @@ export class GoromboSessionDatabase {
       );
     `);
 
+    this.ensureChatSessionExplicitNameColumn();
+    this.ensureNormalizedMessageDeliveryColumns();
     this.ensureTrustedEventAdmissionAgentInstanceColumn();
     this.ensureSessionMemoryScopeColumns();
+    this.database.prepare(`DELETE FROM active_sessions WHERE surface = 'tui'`).run();
     this.database.exec(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_trusted_event_admissions_agent_event
         ON trusted_event_admissions(agent_instance_id, event_id, purpose);
@@ -1066,6 +1224,43 @@ export class GoromboSessionDatabase {
       CREATE INDEX IF NOT EXISTS idx_session_memory_scope
         ON session_memory_chunks(actor_id, conversation_id, session_name);
     `);
+  }
+
+  private ensureChatSessionExplicitNameColumn(): void {
+    const existingColumns = new Set(
+      (this.database.prepare(`PRAGMA table_info(chat_sessions)`).all() as unknown as Array<{ name: string }>)
+        .map((column) => column.name),
+    );
+
+    if (!existingColumns.has('explicit_name')) {
+      try {
+        this.database.exec('ALTER TABLE chat_sessions ADD COLUMN explicit_name TEXT');
+      } catch (error) {
+        if (!String(error).includes('duplicate column name')) {
+          throw error;
+        }
+      }
+    }
+  }
+
+  private ensureNormalizedMessageDeliveryColumns(): void {
+    const existingColumns = new Set(
+      (this.database.prepare(`PRAGMA table_info(normalized_message_events)`).all() as unknown as Array<{ name: string }>)
+        .map((column) => column.name),
+    );
+
+    for (const column of ['delivery_submission_id', 'delivery_stream_url', 'delivery_offset']) {
+      if (existingColumns.has(column)) {
+        continue;
+      }
+      try {
+        this.database.exec(`ALTER TABLE normalized_message_events ADD COLUMN ${column} TEXT`);
+      } catch (error) {
+        if (!String(error).includes('duplicate column name')) {
+          throw error;
+        }
+      }
+    }
   }
 
   private ensureTrustedEventAdmissionAgentInstanceColumn(): void {
@@ -1550,18 +1745,13 @@ function createMemoryScope(input: SessionMemorySearchInput): {
     params.push(sessionId);
   }
 
-  const accessWhere: string[] = [];
   if (actorId) {
-    accessWhere.push('c.actor_id = ?');
+    where.push('c.actor_id = ?');
     params.push(actorId);
   }
   if (conversationId) {
-    accessWhere.push('c.conversation_id = ?');
+    where.push('c.conversation_id = ?');
     params.push(conversationId);
-  }
-
-  if (accessWhere.length) {
-    where.push(`(${accessWhere.join(' OR ')})`);
   }
 
   return where.length ? { where: where.join(' AND '), params } : undefined;
@@ -1590,6 +1780,7 @@ function toChatSessionRecord(row: ChatSessionRow): ChatSessionRecord {
     ...(typeof row.conversation_id === 'string' ? { conversationId: row.conversation_id } : {}),
     ...(typeof row.thread_id === 'string' ? { threadId: row.thread_id } : {}),
     ...(typeof row.title === 'string' ? { title: row.title } : {}),
+    ...(typeof row.explicit_name === 'string' ? { displayName: row.explicit_name } : {}),
     ...(typeof row.archived_at === 'string' ? { archivedAt: row.archived_at } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -1622,6 +1813,25 @@ function toNormalizedMessageEvent(row: NormalizedMessageEventRow): NormalizedMes
     ...(typeof row.delivery_kind === 'string' ? { deliveryKind: row.delivery_kind } : {}),
     ...(typeof row.delivery_id === 'string' ? { deliveryId: row.delivery_id } : {}),
     ...(typeof row.accepted_at === 'string' ? { acceptedAt: row.accepted_at } : {}),
+  };
+}
+
+function toSessionNormalizedMessageRecord(row: NormalizedMessageEventRow): SessionNormalizedMessageRecord {
+  const delivery = {
+    ...(typeof row.delivery_submission_id === 'string'
+      ? { submissionId: row.delivery_submission_id }
+      : {}),
+    ...(typeof row.delivery_stream_url === 'string'
+      ? { streamUrl: row.delivery_stream_url }
+      : {}),
+    ...(typeof row.delivery_offset === 'string' ? { offset: row.delivery_offset } : {}),
+  };
+
+  return {
+    sessionId: row.session_id ?? '',
+    event: toNormalizedMessageEvent(row),
+    delivery,
+    ...(typeof row.delivery_id === 'string' ? { legacyDeliveryId: row.delivery_id } : {}),
   };
 }
 
@@ -1675,6 +1885,7 @@ interface ChatSessionRow {
   conversation_id: string | null;
   thread_id: string | null;
   title: string | null;
+  explicit_name: string | null;
   archived_at: string | null;
   created_at: string;
   updated_at: string;
@@ -1707,6 +1918,7 @@ interface ImageArtifactRow {
 
 interface NormalizedMessageEventRow {
   event_id: string;
+  session_id: string | null;
   connector: string;
   message_kind: string;
   text: string;
@@ -1721,6 +1933,9 @@ interface NormalizedMessageEventRow {
   task: string | null;
   delivery_kind: string | null;
   delivery_id: string | null;
+  delivery_submission_id: string | null;
+  delivery_stream_url: string | null;
+  delivery_offset: string | null;
   accepted_at: string | null;
 }
 
@@ -1779,6 +1994,3 @@ function parseJsonStringArray(value: string | null | undefined): string[] {
   }
   return [];
 }
-
-
-

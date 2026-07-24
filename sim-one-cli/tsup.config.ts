@@ -1,5 +1,5 @@
 import { defineConfig, type Options } from 'tsup';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const emptyShim = {
@@ -42,10 +42,44 @@ export default defineConfig({
     };
   },
   async onSuccess() {
-    const outPath = resolve(__dirname, '..', '.gorombo', 'sim-one-cli', 'cli.js');
+    const outDir = resolve(__dirname, '..', '.gorombo', 'sim-one-cli');
+    const outPath = resolve(outDir, 'cli.js');
     let content = readFileSync(outPath, 'utf8');
     content = content.replace(/from\s+["']sqlite["']/g, 'from "node:sqlite"');
     writeFileSync(outPath, content);
+    writeProductLaunchers(outDir);
   },
   loader: { '.tsx': 'tsx' },
 } as Options);
+
+function writeProductLaunchers(outDir: string): void {
+  const posixPath = resolve(outDir, 'sim-one');
+  writeFileSync(
+    posixPath,
+    [
+      '#!/usr/bin/env sh',
+      'set -e',
+      'DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"',
+      'if [ -n "$SIM_ONE_NODE" ]; then',
+      '  exec "$SIM_ONE_NODE" "$DIR/cli.js" "$@"',
+      'fi',
+      'exec node "$DIR/cli.js" "$@"',
+      '',
+    ].join('\n'),
+  );
+  chmodSync(posixPath, 0o755);
+
+  writeFileSync(
+    resolve(outDir, 'sim-one.cmd'),
+    [
+      '@echo off',
+      'setlocal',
+      'if defined SIM_ONE_NODE (',
+      '  "%SIM_ONE_NODE%" "%~dp0\\cli.js" %*',
+      ') else (',
+      '  node "%~dp0\\cli.js" %*',
+      ')',
+      '',
+    ].join('\r\n'),
+  );
+}

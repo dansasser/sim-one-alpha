@@ -139,8 +139,11 @@ function extractImportedSkills(content) {
     const importPath = match[1];
     const segments = importPath.split('/').filter(Boolean);
     const last = segments[segments.length - 1];
-    if (last) {
-      skills.push(last);
+    const skillName = last === 'SKILL.md' && segments.length > 1
+      ? segments[segments.length - 2]
+      : last;
+    if (skillName) {
+      skills.push(skillName);
     }
   }
   return skills;

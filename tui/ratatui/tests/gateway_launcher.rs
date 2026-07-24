@@ -105,12 +105,14 @@ fn resolves_node_executable_that_supports_runtime_server() {
 
 #[test]
 fn built_binary_accepts_smoke_startup_flag() {
+    let root = TestTempDir::new("missing-server-log");
     let output = Command::new(env!("CARGO_BIN_EXE_sim-one-ratatui-tui"))
         .arg("--smoke-startup")
         .arg("--server-path")
         .arg("/tmp/sim-one-ratatui-missing-server.mjs")
         .arg("--port")
         .arg("9")
+        .env("SIM_ONE_TUI_LOG_PATH", root.path().join("tui.jsonl"))
         .output()
         .expect("built binary should run");
 
@@ -139,6 +141,31 @@ fn built_binary_rejects_port_zero_at_parse_time() {
     assert!(
         stderr.contains("--port must be between 1 and 65535"),
         "stderr should explain invalid port, got: {stderr}"
+    );
+}
+
+#[test]
+fn built_binary_accepts_base_url_smoke_without_server_artifact() {
+    let root = TestTempDir::new("base-url-log");
+    let output = Command::new(env!("CARGO_BIN_EXE_sim-one-ratatui-tui"))
+        .arg("--smoke-startup")
+        .arg("--base-url")
+        .arg("http://127.0.0.1:3999")
+        .arg("--session")
+        .arg("custom-session")
+        .env("SIM_ONE_TUI_LOG_PATH", root.path().join("tui.jsonl"))
+        .output()
+        .expect("built binary should run");
+
+    assert!(
+        output.status.success(),
+        "base-url smoke should not require a packaged server, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("gateway ready at http://127.0.0.1:3999 (started: false)"),
+        "stdout should report provided base URL, got: {stdout}"
     );
 }
 
@@ -196,6 +223,10 @@ if (listenFd) {
         .arg(reserved_port.port().to_string())
         .env("SIM_ONE_TEST_LISTEN_FD", reserved_port.raw_fd().to_string())
         .env("SIM_ONE_TEST_CWD_MARKER", &cwd_marker)
+        .env(
+            "SIM_ONE_TUI_LOG_PATH",
+            runtime_root.path().join("tui.jsonl"),
+        )
         .output()
         .expect("built binary should run");
 
@@ -262,6 +293,7 @@ process.on('SIGTERM', () => {
         .arg("--port")
         .arg(reserved_port.port().to_string())
         .env("SIM_ONE_TEST_LISTEN_FD", reserved_port.raw_fd().to_string())
+        .env("SIM_ONE_TUI_LOG_PATH", root.path().join("tui.jsonl"))
         .output()
         .expect("built binary should run");
 

@@ -1,8 +1,12 @@
-import { Command } from 'commander';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { Command, Option } from 'commander';
 import { render } from 'ink';
 import React from 'react';
 import { App } from './App.js';
-import { ensureServerRunning, setServerChild, cleanupServer } from './launcher/server-manager.js';
+import { ensureServerRunning, cleanupServer } from './launcher/server-manager.js';
 import {
   addSkill,
   listSkills,
@@ -32,47 +36,147 @@ import {
 
 const program = new Command();
 
+interface ProductTuiOptions {
+  port?: string;
+  baseUrl?: string;
+  session?: string;
+  serverPath?: string;
+  envPath?: string;
+  smokeStartup?: boolean;
+  ink?: boolean;
+}
+
 program
   .name('sim-one')
   .description('SIM-ONE Alpha — interactive TUI coding interface + capability management.')
   .option('--port <number>', 'server port (when launching TUI)')
   .option('--base-url <url>', 'full base url (overrides --port, when launching TUI)')
-  .option('--session <id>', 'agent instance id (when launching TUI)', 'primary')
-  .action(async (opts) => {
-    const session = opts.session;
-
-    if (opts.baseUrl) {
-      const instance = render(<App baseUrl={opts.baseUrl} session={session} />, {
-        exitOnCtrlC: true,
-      });
-      instance.waitUntilExit().then(() => process.exit(0));
+  .option('--session <id>', 'agent instance id (when launching TUI)')
+  .addOption(new Option('--server-path <path>', 'built SIM-ONE Alpha server.mjs path').hideHelp())
+  .addOption(new Option('--env-path <path>', 'env file path').hideHelp())
+  .addOption(new Option('--smoke-startup', 'start/connect gateway then exit').hideHelp())
+  .addOption(new Option('--ink', 'launch the legacy Ink TUI fallback').hideHelp())
+  .action(async (opts: ProductTuiOptions) => {
+    validateTuiOptions(opts);
+    if (opts.ink) {
+      await launchInkTui(opts);
       return;
     }
+    await launchRatatuiTui(opts);
+  });
 
-    const port = opts.port ? parseInt(opts.port, 10) : undefined;
-    if (opts.port && (!port || port < 1 || port > 65535 || !/^\d+$/.test(opts.port))) {
-      console.error(`Invalid port: ${opts.port}. Must be a number 1-65535.`);
-      process.exit(1);
-    }
-    const result = await ensureServerRunning({ port });
+function validateTuiOptions(opts: ProductTuiOptions): void {
+  if (!opts.port) {
+    return;
+  }
+  const port = parseInt(opts.port, 10);
+  if (!port || port < 1 || port > 65535 || !/^\d+$/.test(opts.port)) {
+    console.error(`Invalid port: ${opts.port}. Must be a number 1-65535.`);
+    process.exit(1);
+  }
+}
 
-    const baseUrl = result.baseUrl;
-    const { started } = result;
+async function launchRatatuiTui(opts: ProductTuiOptions): Promise<void> {
+  const tuiPath = resolveRatatuiBinary();
+  if (!existsSync(tuiPath)) {
+    console.error(`Ratatui TUI not found at ${tuiPath}. Run 'pnpm run build:tui:ratatui' first.`);
+    process.exit(1);
+  }
 
+  const args = ratatuiArgs(opts);
+  const command = windowsCommandFileInvocation(tuiPath, args);
+  const child = spawn(command.file, command.args, {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: 'inherit',
+  });
+
+  const exitCode = await waitForChild(child);
+  process.exitCode = exitCode;
+}
+
+function windowsCommandFileInvocation(
+  executable: string,
+  args: string[],
+): { file: string; args: string[] } {
+  if (process.platform !== 'win32' || !/\.(?:cmd|bat)$/i.test(executable)) {
+    return { file: executable, args };
+  }
+  const commandLine = [executable, ...args].map(quoteWindowsCommandToken).join(' ');
+  return {
+    file: process.env.ComSpec || process.env.COMSPEC || 'cmd.exe',
+    args: ['/d', '/s', '/c', commandLine],
+  };
+}
+
+function quoteWindowsCommandToken(value: string): string {
+  return `"${value.replace(/%/g, '%%').replace(/"/g, '""')}"`;
+}
+
+function ratatuiArgs(opts: ProductTuiOptions): string[] {
+  const args: string[] = [];
+  if (opts.port && !opts.baseUrl) args.push('--port', opts.port);
+  if (opts.baseUrl) args.push('--base-url', opts.baseUrl);
+  if (opts.session) args.push('--session', opts.session);
+  if (opts.serverPath) args.push('--server-path', opts.serverPath);
+  if (opts.envPath) args.push('--env-path', opts.envPath);
+  if (opts.smokeStartup) args.push('--smoke-startup');
+  return args;
+}
+
+function resolveRatatuiBinary(): string {
+  if (process.env.SIM_ONE_TUI_PATH) {
+    return resolve(process.env.SIM_ONE_TUI_PATH);
+  }
+
+  const binaryName = process.platform === 'win32' ? 'sim-one-ratatui-tui.exe' : 'sim-one-ratatui-tui';
+  const moduleDir = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    resolve(moduleDir, '..', 'sim-one-ratatui', binaryName),
+    resolve(process.cwd(), '.gorombo', 'sim-one-ratatui', binaryName),
+  ];
+
+  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0];
+}
+
+function waitForChild(child: ChildProcess): Promise<number> {
+  return new Promise((resolveExitCode, reject) => {
+    child.once('error', reject);
+    child.once('close', (code) => resolveExitCode(code ?? 1));
+  });
+}
+
+async function launchInkTui(opts: ProductTuiOptions): Promise<void> {
+  const session = opts.session ?? 'legacy-ink';
+
+  if (opts.baseUrl) {
+    const instance = render(<App baseUrl={opts.baseUrl} session={session} />, {
+      exitOnCtrlC: true,
+    });
+    await instance.waitUntilExit();
+    return;
+  }
+
+  const port = opts.port ? parseInt(opts.port, 10) : undefined;
+  const result = await ensureServerRunning({ port });
+
+  const baseUrl = result.baseUrl;
+  const { started } = result;
+
+  try {
     const instance = render(<App baseUrl={baseUrl} session={session} />, {
       exitOnCtrlC: true,
     });
-
-    instance.waitUntilExit().then(async () => {
-      if (started) {
-        try {
-          await cleanupServer();
-        } catch {
-        }
+    await instance.waitUntilExit();
+  } finally {
+    if (started) {
+      try {
+        await cleanupServer();
+      } catch {
       }
-      process.exit(0);
-    });
-  });
+    }
+  }
+}
 
 function addKindCommands(program: Command, kind: 'skill' | 'tool' | 'worker'): void {
   const fns = {
@@ -132,4 +236,7 @@ mcpCmd.command('disable <id>').description('Disable an MCP server capability').a
 mcpCmd.command('remove <id>').description('Remove an MCP server capability').action((id: string) => removeMcp(id));
 mcpCmd.command('update <id>').description('Update an MCP server configuration').action((id: string) => updateMcp(id));
 
-program.parse();
+program.parseAsync().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+});
