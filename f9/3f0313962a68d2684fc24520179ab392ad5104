@@ -1,0 +1,165 @@
+.github/workflows/ci.yml
+  s_a3b1aea6901a1b::t_e9f45e7a9d8df6 63-65
+AGENTS.md
+  s_a3b1aea6901a1b::t_c9efeb5106696f 99-100,523
+Cargo.lock
+  s_a3b1aea6901a1b::t_b1e0393bdfd57f 5-13,35-40,109,193-198,242-298,343-352,384-392,562-567,580-598,608-626,659,706,725-788,916,918-920,923-928,1020-1100,1119,1218-1232
+development-graph.json
+  s_a3b1aea6901a1b::t_2477128e9d0d3b 4,20-23,26,841,1044,1096-1097,1130,1182-1184,1497,1542-1553,1571-1575,1653-1658,1665,1667-1669,1712,1752,1787-1789,1898,1928,1957-1959,1976-1977,1984,1992-2001,2019,2028-2030,2039-2040,2042,2050-2052,2055-2057,2062-2063,2071,2104-2115,2166-2167,2171,2184-2188,2193,2204-2227,2246,2263,2286-2287,2291,2308,2329,2377-2380,2521,2550-2555,2650,3788-3811,3848-3859,4470-4509,4738,4749
+development-graph.md
+  s_a3b1aea6901a1b::t_5e4587d0d46a2b 1,12,17,21,27-62,98-99,103,155-158,195-196,199,201,203-207,260-261,265,317-320,477,525,529,541,545,589,593,603-604,612,620,624,634,652,662,666,668-670,672-673,676,680,692-693,695,697,699,702,708-711,713,715,727,757,776,920,932,936
+docs/architecture/capability-system.md
+  s_a3b1aea6901a1b::t_3f06448bf9a912 7-9,15,160
+docs/architecture/gorombo-flue-map.md
+  s_a3b1aea6901a1b::t_71c955ed7e3f80 7,18,55,73-74,76-80,122,125-195,234,248-252
+docs/architecture/orchestrator-flow.md
+  s_a3b1aea6901a1b::t_fc029f3f53f74f 20-21
+docs/architecture/product-flow.md
+  s_a3b1aea6901a1b::t_08ccc90e8e3f53 71-74,86-87,91-92,120-121,131-132,135,137,141,144-145,155-161,170-171,174-175,181,183,185-187
+docs/architecture/session-context-budget.md
+  s_a3b1aea6901a1b::t_e66fc53c646dc1 160-161,164-165,167-168
+docs/architecture/tui-cli-session-flow.md
+  s_a3b1aea6901a1b::t_5eb4dd14f6b386 1-425
+docs/operations/product-tui.md
+  s_a3b1aea6901a1b::t_079e6d1754e34c 1-219
+docs/tui/ratatui.md
+  s_a3b1aea6901a1b::t_cb8069ace6e39c 1-170
+docs/tui/session-management.md
+  s_a3b1aea6901a1b::t_6208a41b63f214 1-217
+package.json
+  s_a3b1aea6901a1b::t_f58bbeabc39345 9-10,20,23
+scripts/check-sim-one-product-command.mjs
+  s_a3b1aea6901a1b::t_b95cefad6cd022 1-49
+scripts/copy-runtime-config.mjs
+  s_a3b1aea6901a1b::t_2b9d4526bf9d83 20,34-37
+scripts/generate-builtin-registry.mjs
+  s_a3b1aea6901a1b::t_cc11dd4809d4c0 142-146,260
+scripts/product-artifact-lock.mjs
+  s_a3b1aea6901a1b::t_754674e894aee6 1-34
+scripts/product-artifact-lock.test.mjs
+  s_a3b1aea6901a1b::t_5e2897f30e08c4 1-71
+scripts/run-unit-tests.mjs
+  s_a3b1aea6901a1b::t_0f6c0b179c3f13 25-26
+scripts/skill-md-loader.mjs
+  s_a3b1aea6901a1b::t_ea10380df06c51 1-57
+scripts/test-built-http.mjs
+  s_a3b1aea6901a1b::t_b50102368b433f 2,6-7,19-22,33,36-66,103-152,154-194,200,202-224,269-270,283-284,301-357,405,476,478-488,593-605
+scripts/test-ratatui-interactive.py
+  s_a3b1aea6901a1b::t_6381283bf7077d 1-562
+scripts/test-ratatui-product.mjs
+  s_a3b1aea6901a1b::t_91cd95a531f821 3,13-14,20-34,44-47,59,61-62,69,72-77,89-90,92,98-101,103-116,118-135,137-163,165-244,246-263,265-274,297-934
+scripts/test-ratatui-visible-final.py
+  s_a3b1aea6901a1b::t_d7d91553bbccc5 1-515
+sim-one-cli/src/cli.tsx
+  s_a3b1aea6901a1b::t_bee89480e8afd2 1-5,9,39-48,54-62,65-66,68-77,79-92,94-153,156-158,160-168,170-179,239-242
+sim-one-cli/tsup.config.ts
+  s_a3b1aea6901a1b::t_55d3cd88192721 2,45-46,50,53-85
+src/agents/orchestrator.ts
+  s_a3b1aea6901a1b::t_e7b04dc349b099 58,132
+src/api/routes/chat-events.ts
+  s_a3b1aea6901a1b::t_dab965c3d54903 24-25,31,62,71,75-98,103-109,117-122,129,138-181,216-218,224,257,275,278,297,375,377-380,382-393,396-400
+src/api/routes/chat-sessions.ts
+  s_a3b1aea6901a1b::t_0834feb2326766 1-224
+src/app.ts
+  s_a3b1aea6901a1b::t_23ded82d0d5c46 7,26
+src/engine/commands/slash-commands.ts
+  s_a3b1aea6901a1b::t_75f46144e0371f 1,9,36-44
+src/engine/session/session-database.ts
+  s_a3b1aea6901a1b::t_0ef0b2e24dcf40 23,36,84,88-100,317-318,324,334,349,358-392,401,412-443,454-463,471-472,489-491,512-514,533-582,1068,1105-1107,1215-1216,1219,1229-1265,1749,1753,1783,1819-1837,1888,1921,1936-1938
+src/engine/session/session-persistence.ts
+  s_a3b1aea6901a1b::t_30807e5ce77dd4 4,31,93-97,103
+src/engine/session/session-routing.ts
+  s_a3b1aea6901a1b::t_13b19f793a54ff 14-34,40,50-56,58,60-64,67,69,82-182,191-196,199,210-233,236-239,245-253,257
+src/engine/session/session-transcript.ts
+  s_a3b1aea6901a1b::t_5d1ca5843dafbd 1-958
+src/skills/greeting-preflight/SKILL.md
+  s_a3b1aea6901a1b::t_b418c01b4f975b 1-26
+src/tests/architecture-contract.test.ts
+  s_a3b1aea6901a1b::t_1e69299b87ed8b 87
+src/tests/build-script-regressions.test.ts
+  s_a3b1aea6901a1b::t_4fb8bd9a3fe832 1-54
+src/tests/flue-session-store.test.ts
+  s_a3b1aea6901a1b::t_04fc97c63354e5 6,13,46-60,240-244,250-254,258-260,281-288,295-375,390,393-398,408-411,422
+src/tests/http-endpoints.test.ts
+  s_a3b1aea6901a1b::t_bb3bb04231108d 5-6,11,14-49,93,95-107,112,114-178,180-235,257,259,281,287,295-302,315-325,349-415,423-425,428-441,443-458,460,462-467,469-530,532-555,557-849,978-1028
+src/tests/session-routing.test.ts
+  s_a3b1aea6901a1b::t_8f0f66aad3895d 1-377
+src/tests/session-transcript.test.ts
+  s_a3b1aea6901a1b::t_e62fb9a7b1ff48 1-1025
+src/tests/workspace-loader.test.ts
+  s_a3b1aea6901a1b::t_864c41256a9472 86-122
+src/workspace-loader.ts
+  s_a3b1aea6901a1b::t_dcc5c42e7daf78 69,72
+tui/ratatui/Cargo.toml
+  s_a3b1aea6901a1b::t_97fdcc6ccf63aa 11,13,15-17
+tui/ratatui/README.md
+  s_a3b1aea6901a1b::t_9e0389254f353f 3,5,7-18,30,33-35,58,61-90
+tui/ratatui/src/agent.rs
+  s_a3b1aea6901a1b::t_3143b237fd8914 4,10-61,64-73,75-90,114-115,117-144,147-239,253,261-262,267-315,318-377
+tui/ratatui/src/app.rs
+  s_a3b1aea6901a1b::t_93fe012074b867 7-16,18-29,33-34,37-55,58-147,158-159,163,165-166,172,176-302,306-314,316-319,323,325,329-333,336-341,343,346-347,349-356,362-363,371-401,414-424,427,432,435,444,448-449,454-471,477-556,563,573-620,622-624,626-629,633-649,653,655,660-663,666-671,673,676-677,679-686,688,703-716,718,722-729,731,737-738,757,761-837,859-888,909-1097,1099-1100,1104-1105,1107,1109,1113-1144,1146-1156,1159-1160,1169-1170,1188-1268,1283-1286,1291-1316,1340,1371-1380,1384,1389-1392,1394-1395,1400-1403,1411-1479,1502,1505-1507,1511-1515,1521-1523,1527-1531,1536-1538,1542-1551,1554-1555,1560-1569,1572-1573,1578,1580-1581,1585,1587-1588,1592-1596,1600-1639,1643,1645-1661,1672-1971,1973-2003,2014-2018,2022-2024,2027-2031,2033-2057,2059-2069,2077-2082,2087-2088,2093-2096,2098-2099,2102-2126,2129-2131,2134-2156,2160-2195,2197-2289,2291-2306,2310-2362,2364,2367-2422,2424-2456,2458,2460-2463,2466-2480,2482-2564,2566,2568-2601,2603-2604,2606-2628,2631-2658,2701-2721,2723-2825,2828,2831-2879,2881,2883,2885-2897,2899,2901-2931,2959-2977,2979-2982,2986,3033-3179
+tui/ratatui/src/diagnostics.rs
+  s_a3b1aea6901a1b::t_8c38cb24ebec2a 1-409
+tui/ratatui/src/flue/events.rs
+  s_a3b1aea6901a1b::t_34760e81b8d1c5 29-35
+tui/ratatui/src/flue/reducer.rs
+  s_a3b1aea6901a1b::t_121a91f9b39cd6 33-35,251-256,461,483
+tui/ratatui/src/flue/stream.rs
+  s_a3b1aea6901a1b::t_acc61f73efeae0 114-118,124,133,137
+tui/ratatui/src/history.rs
+  s_a3b1aea6901a1b::t_b7d8f2b150c936 1-185
+tui/ratatui/src/http.rs
+  s_a3b1aea6901a1b::t_60bf157e3d7e20 109-176,327-376
+tui/ratatui/src/input.rs
+  s_a3b1aea6901a1b::t_f5aa2000fa256e 7,11,17-20,28,41,48-50
+tui/ratatui/src/lib.rs
+  s_a3b1aea6901a1b::t_c810f54ac5591c 3,6,9,11-13
+tui/ratatui/src/main.rs
+  s_a3b1aea6901a1b::t_6c67586c657324 3-4,9,12-14,20-21,23-31,33-69,74-76,80-104,106-115,122-125,128-138,141-149,158-208,212-279,294-296,318-332,355,358-379
+tui/ratatui/src/markdown.rs
+  s_a3b1aea6901a1b::t_7a986fc037a42e 1-234
+tui/ratatui/src/terminal.rs
+  s_a3b1aea6901a1b::t_fd433068a487f1 1,4-6,12,19-21,25,28-48
+tui/ratatui/src/text_wrap.rs
+  s_a3b1aea6901a1b::t_878c0ef24f1ebf 1-271
+tui/ratatui/src/theme.rs
+  s_a3b1aea6901a1b::t_96e6d7ac9592ed 1-109
+tui/ratatui/src/transcript.rs
+  s_a3b1aea6901a1b::t_5cdc3ea34aab5d 1-1054
+tui/ratatui/src/ui.rs
+  s_a3b1aea6901a1b::t_e13d0ffe521f9e 1,3,5,9-32,35,38,40-43,45-68,70,73-85,87-88,92-95,103-119,121-224,233-236,238-254,256-324,327-372,393-514
+tui/ratatui/tests/agent_client.rs
+  s_a3b1aea6901a1b::t_a68073df9e91e2 5,7-10,13,45-425,466,505,515-522
+tui/ratatui/tests/app_state.rs
+  s_a3b1aea6901a1b::t_051384cbbf5577 6-11,14-18,34-71,75,78-80,96,104-114,116,119-130,134,137-138,140,144-145,152,160-161,165-169,176-178,180,182,191,194,198-202,204-206,208-213,215-220,224-226,230-243,247-249,251-253,256-258,262-305,309-310,314,316,325,329,333-335,338-340,343-346,349-351,353-1734,1736-2088,2091-2093,2095,2097-2123,2128-2139,2141-2143,2145-2146,2149-2150,2152-2153,2155-2165,2169,2171,2173-2175,2177-2179,2181-2193,2195-2196,2198-2231,2271-2414,2425-2543,2552-2559,2567,2577,2579
+tui/ratatui/tests/event_reducer.rs
+  s_a3b1aea6901a1b::t_46bd0b65206634 3-461,499-528,810-817
+tui/ratatui/tests/gateway_launcher.rs
+  s_a3b1aea6901a1b::t_8621590cdeae42 108,115,147-171,226-229,296
+tui/ratatui/tests/history_client.rs
+  s_a3b1aea6901a1b::t_ae3e7baece0322 1-208
+tui/ratatui/tests/input_mapping.rs
+  s_a3b1aea6901a1b::t_d931291b10c508 1-3,41-44,69-76,95,99,103,112,129-136,147-187
+tui/ratatui/tests/stream_parser.rs
+  s_a3b1aea6901a1b::t_2fb91920cc3918 1-6,8,11-55
+tui/ratatui/tests/terminal_interaction.rs
+  s_a3b1aea6901a1b::t_5c0a4a76ba56f5 1-64
+tui/ratatui/tests/ui_render.rs
+  s_a3b1aea6901a1b::t_efeeba297b80ba 1-3,5,8-9,11,34-39,41-192,199-1428,1432,1434-1465,1469-1470,1472-1488,1490,1494-1696,1705,1709-1710,1712-1729,1733,1742,1746-1747,1750-1759,1763,1772-1781,1786-2098,2101,2104-2114,2117-2301
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "f93f0313962a68d2684fc24520179ab392ad5104",
+  "prompts": {},
+  "sessions": {
+    "s_a3b1aea6901a1b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f38cb-e8a0-7922-b7a7-82ff95d4c704",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
