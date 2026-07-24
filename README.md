@@ -224,7 +224,141 @@ Both source-build paths fetch the bundled embedding model, compile the Rust/WASM
 
 ## Usage
 
-<!-- TUI, server, HTTP API, research workflow, capability commands. -->
+`sim-one` is the unified command for onboarding, terminal access, configuration, diagnostics, gateway service control, and runtime capability management. Commands entered in the shell are separate from slash commands entered inside the TUI.
+
+### Product Commands
+
+| Command | Purpose |
+| --- | --- |
+| `sim-one install` | Open the onboarding TUI for first-run setup. |
+| `sim-one doctor` | Check installation health, gateway connectivity, and model configuration. |
+| `sim-one config get <key>` | Read a runtime configuration value. |
+| `sim-one config set <key> <value>` | Set a runtime configuration value. |
+| `sim-one status` | Show the installed gateway service status. |
+| `sim-one start` | Start the installed gateway service. |
+| `sim-one restart` | Restart the installed gateway service. |
+| `sim-one stop` | Stop the installed gateway service. |
+| `sim-one --help` | Show the complete CLI command reference. |
+
+### Launch The Terminal Interface
+
+Run `sim-one` without a subcommand to open the TUI in a fresh durable session. The client connects to the configured gateway or starts the local gateway when needed.
+
+```bash
+sim-one
+```
+
+| Command | Purpose |
+| --- | --- |
+| `sim-one --session <selector>` | Resume an owned session by exact id or explicit name. |
+| `sim-one --port <number>` | Use a local gateway port from 1 to 65535. |
+| `sim-one --base-url <url>` | Connect to an existing gateway URL; overrides `--port`. |
+| `sim-one -h` or `sim-one --help` | Show CLI help. |
+
+Examples:
+
+```bash
+sim-one --session "Release testing"
+sim-one --port 3000
+sim-one --base-url http://127.0.0.1:3000
+```
+
+### Manage Skills
+
+Add skills from a Git repository URL or local directory. Skills are enabled when added.
+
+```bash
+sim-one skill add <source> <id> "<name>" \
+  [--description "<text>"] [--version <version-or-git-ref>] [--enable]
+sim-one skill list
+sim-one skill enable <id>
+sim-one skill disable <id>
+sim-one skill update <id>
+sim-one skill remove <id>
+sim-one skill --help
+```
+
+`skill update` re-fetches the recorded source. `skill remove` deletes the registry record and its managed skill files.
+
+### Manage Tools
+
+Add tools from a Git repository URL or local directory. Tools are disabled when added unless `--enable` is supplied.
+
+```bash
+sim-one tool add <source> <id> "<name>" \
+  [--description "<text>"] [--version <version-or-git-ref>] [--enable]
+sim-one tool list
+sim-one tool enable <id>
+sim-one tool disable <id>
+sim-one tool update <id>
+sim-one tool remove <id>
+sim-one tool --help
+```
+
+`tool update` re-fetches the recorded source. `tool remove` deletes the registry record and its managed tool files.
+
+### Manage Workers
+
+Add specialized workers from a Git repository URL or local directory. Workers are disabled when added unless `--enable` is supplied.
+
+```bash
+sim-one worker add <source> <id> "<name>" \
+  [--description "<text>"] [--version <version-or-git-ref>] [--enable]
+sim-one worker list
+sim-one worker enable <id>
+sim-one worker disable <id>
+sim-one worker update <id>
+sim-one worker remove <id>
+sim-one worker --help
+```
+
+`worker update` re-fetches the recorded source. `worker remove` deletes the registry record and its managed worker files.
+
+For skills, tools, and workers, `--version` pins a remote version or Git ref. Local directory sources ignore version pins. Capability ids must be safe slugs rather than filesystem paths, and names cannot collide with built-in capabilities.
+
+### Manage MCP Servers
+
+Register an HTTP or HTTPS MCP endpoint. MCP servers are disabled when added unless `--enable` is supplied.
+
+```bash
+sim-one mcp add <id> "<name>" --url <url> \
+  [--transport <streamable-http|sse>] [--token-env <ENV_NAME>] \
+  [--description "<text>"] [--enable]
+sim-one mcp list
+sim-one mcp enable <id>
+sim-one mcp disable <id>
+sim-one mcp update <id>
+sim-one mcp remove <id>
+sim-one mcp --help
+```
+
+`--url` is required. The default transport is `streamable-http`; `sse` is also supported. `--token-env` records the name of an environment variable containing the authentication token, not the token itself. Removing an MCP server deletes its connection record.
+
+After adding, enabling, disabling, updating, or removing a capability, run:
+
+```bash
+sim-one restart
+```
+
+This reloads the runtime capability registry.
+
+### Use TUI Slash Commands
+
+Type `/` at the beginning of the TUI prompt to open the command palette. Use `Up` and `Down` to select a command, then `Enter` or `Tab` to insert it.
+
+| Command | Purpose |
+| --- | --- |
+| `/new [title]` | Create a new durable session and switch to it. |
+| `/clear [title]` | Replace the active conversation with a new durable session while preserving the previous session for resume. |
+| `/resume <session-id-or-name>` | Resume an owned session by exact id or explicit name. |
+| `/sessions [limit]` | List recent owned sessions; the default is 10 and the accepted range is 1 to 50. |
+| `/session` | Show the active session id. |
+| `/rename <title>` | Rename the active session. |
+| `/compact` | Compact the active durable session without sending the command to the model. |
+| `/help` | Show the in-TUI command reference. |
+| `/exit` | Exit cleanly and print the active session id for later resume. |
+
+Slash commands are parsed as application controls before prompt text reaches the model. Use the id printed by `/exit` with `sim-one --session <selector>` to resume that session later.
 
 ## Architecture
 
