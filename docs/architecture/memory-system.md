@@ -2,7 +2,7 @@
 
 The Memory Helper is SIM-ONE Alpha's durable memory: **checklists, todos, and session notes** that survive across long-running tasks and process restarts. It is a Rust crate compiled to WebAssembly, backed by SQLite, with a TypeScript shim that the agent tools call.
 
-This doc is the architecture reference. For the quick-start (build + smoke + config), see the [Memory Helper](../../README.md#memory-helper-structured-memory) section of the README.
+This doc is the architecture reference. For the product-level overview, see [Persistence And State](../../README.md#persistence-and-state) in the README.
 
 ## Layers
 

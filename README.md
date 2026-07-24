@@ -341,6 +341,125 @@ sim-one --port 3000
 sim-one --base-url http://127.0.0.1:3000
 ```
 
+### Extend SIM-ONE
+
+Use the `sim-one skill`, `sim-one tool`, `sim-one worker`, and `sim-one mcp` command families to manage runtime capabilities. See [Extensibility](#extensibility) for the capability model, trust and approval rules, lifecycle, and complete command reference.
+
+### Use TUI Slash Commands
+
+Type `/` at the beginning of the TUI prompt to open the command palette. Use `Up` and `Down` to select a command, then `Enter` or `Tab` to insert it.
+
+| Command | Purpose |
+| --- | --- |
+| `/new [title]` | Create a new durable session and switch to it. |
+| `/clear [title]` | Replace the active conversation with a new durable session while preserving the previous session for resume. |
+| `/resume <session-id-or-name>` | Resume an owned session by exact id or explicit name. |
+| `/sessions [limit]` | List recent owned sessions; the default is 10 and the accepted range is 1 to 50. |
+| `/session` | Show the active session id. |
+| `/rename <title>` | Rename the active session. |
+| `/compact` | Compact the active durable session without sending the command to the model. |
+| `/help` | Show the in-TUI command reference. |
+| `/exit` | Exit cleanly and print the active session id for later resume. |
+
+Slash commands are parsed as application controls before prompt text reaches the model. Use the id printed by `/exit` with `sim-one --session <selector>` to resume that session later.
+
+## Architecture
+
+SIM-ONE Alpha combines [Flue](https://flueframework.com/) runtime primitives with [SIM-ONE Framework](https://simoneframework.org) governance. Flue supplies the durable agent harness; SIM-ONE defines how that harness admits, routes, executes, evaluates, and remembers work. SIM-ONE Alpha is the product implementation of those two layers.
+
+### Flue Runtime Foundation
+
+Flue is the TypeScript foundation for durable agents and sessions, workflows, skills, tools, workers/subagents, MCP connections, persistence, compaction, sandboxing, routing, and observability. The SIM-ONE gateway mounts the Flue runtime, and each conversation enters a durable orchestrator session. Flue remains the execution foundation while product governance and business data remain owned by SIM-ONE Alpha.
+
+### SIM-ONE Governance Layer
+
+SIM-ONE Alpha applies the SIM-ONE Framework through a governing orchestrator/critic that retains final authority over every turn. It loads the applicable protocol bundle from SQLite before reasoning or execution, evaluates the incoming prompt and intended flow, selects permitted capabilities, delegates substantive work, and evaluates tool results, worker reports, and the draft response before anything is returned.
+
+The critic scores each stage against the active protocols and SIM-ONE validation criteria. It can allow the flow to continue, require revision or redelegation, route a risky action through approval, or reject work that falls outside policy. Protocols define the rules that must be followed; memory and RAG provide the context needed to perform the work. Skills, tools, workers, and MCP servers do not override those rules.
+
+### Governed Execution Flow
+
+```text
+TUI / Web UI / connector / API / schedule
+-> Secure gateway and normalized event
+-> Durable Flue orchestrator session
+-> SQLite protocol bundle
+-> Orchestrator/critic admission and validation
+-> Memory, RAG, and capability registries
+-> Governed tool, worker, workflow, or MCP execution
+-> Structured result returned to the orchestrator/critic
+-> SIM-ONE protocol scoring and response validation
+-> Approval, revision, rejection, or final response
+```
+
+Workers are controlled executors, not independent authorities. They perform specialized work in child sessions, report structured results to the orchestrator, and remain inside the same protocol, validation, and approval path.
+
+### Built-In And Runtime Capabilities
+
+SIM-ONE Alpha exposes capabilities through two layers:
+
+| Layer | What it contains | How it enters the runtime |
+| --- | --- | --- |
+| Flue / built-in | Product-shipped skills, tools, worker profiles, and MCP servers | Defined with the application and attached through Flue |
+| SIM-ONE runtime registry | User- or agent-added skills, tools, workers, and MCP servers | Stored in SQLite; file-backed capabilities are materialized under `~/.gorombo/capabilities/` and enabled capabilities load after restart without rebuilding |
+
+Enabled runtime tools and MCP tools join the built-in Flue tool surface, worker profiles join the available subagents, and skills join Flue skill discovery. Registration does not grant unrestricted authority: enablement, identity and scope, collision checks, protocols, and approval requirements still apply.
+
+### Persistence And State
+
+Flue SQLite stores canonical agent-runtime state such as durable sessions, accepted submissions, agent and workflow runs, and event streams. SIM-ONE application stores hold product and governance state such as logical session and connector metadata, protocols, structured memory, schedules, capability records, retrieval data, and approvals. Structured checklists, todos, and session notes are managed by the Rust/WebAssembly memory helper and persisted to SQLite.
+
+Keeping those layers distinct lets Flue resume and observe execution while SIM-ONE controls the rules, context, capabilities, and durable business state applied to that execution.
+
+Detailed references:
+
+- [Flue architecture contract](docs/architecture/flue-architecture.md)
+- [SIM-ONE Alpha Flue map](docs/architecture/gorombo-flue-map.md)
+- [Orchestrator flow](docs/architecture/orchestrator-flow.md)
+- [Capability system](docs/architecture/capability-system.md)
+- [Registry system](docs/architecture/registry-system.md)
+- [Memory system](docs/architecture/memory-system.md)
+
+## Extensibility
+
+SIM-ONE Alpha supports the built-in and runtime capability layers described in [Architecture](#built-in-and-runtime-capabilities). Built-in capabilities ship with the product. Runtime capabilities can be added by users or agents without changing or rebuilding the product artifact, then enter the same governed Flue surfaces as built-ins.
+
+### Capability Types
+
+| Type | Purpose | Default when added |
+| --- | --- | --- |
+| Skill | Reusable instructions, procedures, and supporting resources loaded through Flue skill discovery | Enabled |
+| Tool | Typed executable action exposed to an owning agent | Disabled unless `--enable` is supplied |
+| Worker | Specialized executor loaded as a Flue subagent profile | Disabled unless `--enable` is supplied |
+| MCP server | HTTP or HTTPS connection that contributes remote tools | Disabled unless `--enable` is supplied |
+
+Protocols are not skills or capabilities. They are mandatory SQLite-backed runtime rules loaded separately through the Protocol Tool and cannot be overridden by an installed capability.
+
+### Runtime Capability Lifecycle
+
+The SQLite registry at `~/.gorombo/db/capabilities.sqlite` is authoritative. Each record tracks its kind, id, name, description, source, source reference, version, enabled state, configuration, timestamps, and whether it was installed by the CLI, an agent, or product configuration.
+
+```text
+User or agent requests a capability
+-> Validate id, source, and built-in/runtime collisions
+-> Write the capability record to SQLite
+-> Materialize file-backed skill, tool, or worker files
+-> Enable immediately or wait for approval
+-> Restart the gateway
+-> Load enabled records during orchestrator initialization
+-> Merge skills, tools, workers, and MCP tools into Flue
+```
+
+File-backed skills, tools, and workers are materialized under `~/.gorombo/capabilities/`. MCP server URLs, transports, and token environment-variable names remain in SQLite; authentication tokens remain in the environment. Capabilities survive product upgrades because their records and managed files live outside the built artifact.
+
+Skill, tool, and worker sources can be Git repository URLs or local directories. Capability ids must be safe slugs rather than filesystem paths, and ids cannot collide with built-in or existing runtime capabilities. `--version` pins a remote version or Git ref; local directory sources ignore version pins. Updating re-fetches file-backed sources, while removal deletes the registry record and any managed files. A gateway restart reloads capability changes without rebuilding SIM-ONE Alpha.
+
+### Trust And Governance
+
+CLI changes are explicit user actions. Agent-added skills can be enabled immediately because skills contain instructions rather than executable code. Agent-added tools, workers, and MCP servers remain disabled until the user approves them.
+
+Registration and enablement do not grant unrestricted authority. Loaded capabilities remain subject to the active protocol bundle, trusted identity and scope, typed tool boundaries, worker ownership, orchestrator/critic validation, and approval-gated mutation paths.
+
 ### Manage Skills
 
 Add skills from a Git repository URL or local directory. Skills are enabled when added.
@@ -392,8 +511,6 @@ sim-one worker --help
 
 `worker update` re-fetches the recorded source. `worker remove` deletes the registry record and its managed worker files.
 
-For skills, tools, and workers, `--version` pins a remote version or Git ref. Local directory sources ignore version pins. Capability ids must be safe slugs rather than filesystem paths, and names cannot collide with built-in capabilities.
-
 ### Manage MCP Servers
 
 Register an HTTP or HTTPS MCP endpoint. MCP servers are disabled when added unless `--enable` is supplied.
@@ -410,7 +527,7 @@ sim-one mcp remove <id>
 sim-one mcp --help
 ```
 
-`--url` is required. The default transport is `streamable-http`; `sse` is also supported. `--token-env` records the name of an environment variable containing the authentication token, not the token itself. Removing an MCP server deletes its connection record.
+`--url` is required. The default transport is `streamable-http`; `sse` is also supported. `--token-env` records the name of an environment variable containing the authentication token, not the token itself; names must start with a letter or underscore and contain only letters, numbers, and underscores. `mcp update` refreshes the stored connection metadata. Removing an MCP server deletes its connection record.
 
 After adding, enabling, disabling, updating, or removing a capability, run:
 
@@ -418,37 +535,25 @@ After adding, enabling, disabling, updating, or removing a capability, run:
 sim-one restart
 ```
 
-This reloads the runtime capability registry.
+This reloads the runtime capability registry. A product rebuild is not required.
 
-### Use TUI Slash Commands
-
-Type `/` at the beginning of the TUI prompt to open the command palette. Use `Up` and `Down` to select a command, then `Enter` or `Tab` to insert it.
-
-| Command | Purpose |
-| --- | --- |
-| `/new [title]` | Create a new durable session and switch to it. |
-| `/clear [title]` | Replace the active conversation with a new durable session while preserving the previous session for resume. |
-| `/resume <session-id-or-name>` | Resume an owned session by exact id or explicit name. |
-| `/sessions [limit]` | List recent owned sessions; the default is 10 and the accepted range is 1 to 50. |
-| `/session` | Show the active session id. |
-| `/rename <title>` | Rename the active session. |
-| `/compact` | Compact the active durable session without sending the command to the model. |
-| `/help` | Show the in-TUI command reference. |
-| `/exit` | Exit cleanly and print the active session id for later resume. |
-
-Slash commands are parsed as application controls before prompt text reaches the model. Use the id printed by `/exit` with `sim-one --session <selector>` to resume that session later.
-
-## Architecture
-
-<!-- Short overview only; link to deeper docs instead of duplicating them. -->
-
-## Extensibility
-
-<!-- Skills, tools, workers, MCP servers, and runtime capability registry. -->
+See the [Capability system](docs/architecture/capability-system.md) and [Registry system](docs/architecture/registry-system.md) for implementation details.
 
 ## Documentation
 
-<!-- Canonical docs index and links to architecture, operations, and agent docs. -->
+The complete documentation set is organized in the [documentation hub](docs/README.md).
+
+- [Installation](docs/getting-started/installation.md) and [onboarding](docs/getting-started/onboarding.md)
+- [Terminal and session guide](docs/guides/terminal-and-sessions.md)
+- [Configuration reference](docs/reference/configuration.md)
+- [Connectors and secure pairing](docs/guides/connectors.md)
+- [Skills, tools, workers, and MCP extensibility](docs/guides/extending-sim-one.md)
+- [CLI reference](docs/reference/cli.md)
+- [HTTP API reference](docs/reference/http-api.md)
+- [Architecture overview](docs/architecture/overview.md)
+- [Operations and troubleshooting](docs/operations/troubleshooting.md)
+
+SIM-ONE Alpha applies the [SIM-ONE Framework](https://simoneframework.org/) on the [Flue](https://flueframework.com/) agent runtime.
 
 ## Development
 
