@@ -2,6 +2,10 @@ import {
   parseOffset,
   type EventStreamStore,
 } from '@flue/runtime/adapter';
+import {
+  isSupportedSlashCommand,
+  parseSlashCommand,
+} from '../commands/slash-commands.js';
 import type {
   GoromboSessionDatabase,
   SessionNormalizedMessageRecord,
@@ -202,14 +206,15 @@ function projectSanitizedSessionTranscript(
   input: ProjectSessionTranscriptInput,
   events: SanitizedEvent[],
 ): ChatTranscriptPage {
+  const prompts = input.prompts.filter(isReplayablePrompt);
   const builders = buildExchanges(events);
-  const promptMatches = correlatePrompts(input.prompts, builders, events);
+  const promptMatches = correlatePrompts(prompts, builders, events);
   const matchedSubmissionIds = new Set(
     [...promptMatches.values()].filter((value): value is string => Boolean(value)),
   );
   const entries: Array<{ sortKey: string; exchange: ChatTranscriptExchange }> = [];
 
-  for (const prompt of input.prompts) {
+  for (const prompt of prompts) {
     const submissionId = promptMatches.get(prompt.event.id);
     const builder = submissionId ? builders.get(submissionId) : undefined;
     if (builder) {
@@ -233,9 +238,9 @@ function projectSanitizedSessionTranscript(
     });
   }
 
-  const hasUnmatchedPrompt = promptMatches.size < input.prompts.length
+  const hasUnmatchedPrompt = promptMatches.size < prompts.length
     || [...promptMatches.values()].some((value) => value === undefined);
-  if (input.prompts.length === 0 || hasUnmatchedPrompt) {
+  if (prompts.length === 0 || hasUnmatchedPrompt) {
     for (const builder of builders.values()) {
       if (matchedSubmissionIds.has(builder.submissionId)) {
         continue;
@@ -257,6 +262,21 @@ function projectSanitizedSessionTranscript(
     stream: input.stream,
     page: input.page,
   };
+}
+
+function isReplayablePrompt(prompt: SessionNormalizedMessageRecord): boolean {
+  const hasDelivery = Boolean(
+    prompt.delivery.submissionId
+      || prompt.delivery.streamUrl
+      || prompt.delivery.offset
+      || prompt.legacyDeliveryId,
+  );
+  if (hasDelivery) {
+    return true;
+  }
+
+  const command = parseSlashCommand(prompt.event.text);
+  return !command || !isSupportedSlashCommand(command);
 }
 
 class TranscriptCursorError extends Error {

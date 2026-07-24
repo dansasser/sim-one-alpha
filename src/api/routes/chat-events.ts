@@ -126,7 +126,7 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
     goromboPersistenceRuntime.sessionDatabase.recordNormalizedMessageEvent({
       event,
       sessionId: sessionResolution.sessionId,
-      deliveryKind: 'direct-agent',
+      deliveryKind: slashCommand ? 'session-command' : 'direct-agent',
     });
 
     if (slashCommand?.name === 'new') {

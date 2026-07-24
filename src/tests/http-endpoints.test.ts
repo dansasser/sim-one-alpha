@@ -502,6 +502,14 @@ test('chat event TUI session commands create resume and rename without prompting
       const storedSession = goromboPersistenceRuntime.sessionDatabase.getChatSession(sessionId ?? '');
       assert.equal(storedSession?.title, 'Demo Session');
       assert.equal(storedSession?.displayName, 'Demo Session');
+      assert.deepEqual(
+        goromboPersistenceRuntime.sessionDatabase.listNormalizedMessageEventsForSession({
+          sessionId: sessionId ?? '',
+          limit: 20,
+        }),
+        [],
+        'pre-LLM session commands must not enter direct-agent transcript history',
+      );
     });
   } finally {
     for (const eventId of eventIds) {

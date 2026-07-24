@@ -412,6 +412,45 @@ test('correlates legacy offsets, deduplicates replay, and leaves ambiguous promp
   );
 });
 
+test('omits undelivered pre-LLM commands while preserving unmatched user prompts', () => {
+  const page = projectSessionTranscript({
+    session: { id: 'tui-command-history' },
+    prompts: [
+      prompt({
+        eventId: 'prompt-user-unmatched',
+        text: 'Keep this unmatched prompt',
+        receivedAt: '2026-07-20T22:10:00.000Z',
+      }),
+      prompt({
+        eventId: 'prompt-delivered-slash-text',
+        text: '/rename this text reached Flue',
+        receivedAt: '2026-07-20T22:10:30.000Z',
+        submissionId: 'submission-delivered-slash-text',
+      }),
+      ...[
+        '/new Transcript Test',
+        '/clear Transcript Test',
+        '/resume Transcript Test',
+        '/rename Transcript Test',
+        '/compact',
+        '/session',
+      ].map((text, index) => prompt({
+        eventId: `prompt-command-${index}`,
+        text,
+        receivedAt: `2026-07-20T22:${String(index + 11).padStart(2, '0')}:00.000Z`,
+      })),
+    ],
+    events: [],
+    stream: { nextOffset: '-1', upToDate: true },
+    page: { limit: 50, hasOlder: false },
+  });
+
+  assert.deepEqual(
+    page.exchanges.map((exchange) => exchange.prompt?.text),
+    ['Keep this unmatched prompt', '/rename this text reached Flue'],
+  );
+});
+
 test('round-trips opaque transcript cursors and rejects malformed values', () => {
   const cursor = encodeTranscriptCursor({
     v: 1,

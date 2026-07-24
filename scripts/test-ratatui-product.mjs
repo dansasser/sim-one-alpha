@@ -29,6 +29,7 @@ const transcriptFixture = {
   hiddenNested: 'PACKAGED_NESTED_WORKER_OUTPUT',
   hiddenToolResult: 'PACKAGED_RAW_TOOL_RESULT',
   hiddenEmptyAssistant: 'PACKAGED_EMPTY_ASSISTANT',
+  hiddenSessionCommand: '/rename PACKAGED_PRE_LLM_COMMAND',
 };
 
 if (!existsSync(serverPath)) {
@@ -154,6 +155,10 @@ try {
   assertOutputIncludes(stdout, '\nSIM-ONE Alpha - Smoke Session Renamed\n', 'rename command did not update the product header with the explicit name');
   assertOutputIncludes(stdout, 'session: Smoke Session Renamed', 'rename command did not replace the status-bar session id with the explicit title');
   assertOutputIncludes(stdout, `Exited SIM-ONE Alpha TUI. Session: ${firstSessionId}`, 'exit command did not print the resumed session id');
+  assertSessionCommandStorage(
+    join(codingWorkspaceRoot, 'sessions.sqlite'),
+    [firstSessionId, sessionId, clearedSessionId],
+  );
 
   seedTranscriptFixture(
     join(codingWorkspaceRoot, 'sessions.sqlite'),
@@ -337,6 +342,31 @@ function assertFreshStartupDatabase(databasePath, sessionIds) {
     const lifecycleSlash = rows.find((row) => /^\/(?:session|new|clear)(?:\s|$)/.test(String(row.text).trim()));
     if (lifecycleSlash) {
       throw new Error(`startup recorded lifecycle slash command ${lifecycleSlash.text} in ${lifecycleSlash.sessionId}`);
+    }
+  } finally {
+    database.close();
+  }
+}
+
+function assertSessionCommandStorage(databasePath, sessionIds) {
+  const database = new DatabaseSync(databasePath, { readOnly: true });
+  try {
+    const placeholders = sessionIds.map(() => '?').join(', ');
+    const rows = database
+      .prepare(
+        `SELECT text, delivery_kind AS deliveryKind
+         FROM normalized_message_events
+         WHERE session_id IN (${placeholders})
+         ORDER BY received_at, event_id`,
+      )
+      .all(...sessionIds)
+      .filter((row) => /^\/(?:new|clear|resume|rename|compact|session)(?:\s|$)/i.test(String(row.text).trim()));
+    if (rows.length === 0) {
+      throw new Error('Ratatui product session smoke did not persist any pre-LLM command records.');
+    }
+    const misclassified = rows.find((row) => row.deliveryKind !== 'session-command');
+    if (misclassified) {
+      throw new Error(`pre-LLM command was stored as ${misclassified.deliveryKind}: ${misclassified.text}`);
     }
   } finally {
     database.close();
@@ -572,6 +602,20 @@ function seedTranscriptFixture(sessionDatabasePath, flueDatabasePath, sessionId)
       now,
       now,
     );
+    insertPrompt.run(
+      'packaged-legacy-command-event',
+      sessionId,
+      transcriptFixture.hiddenSessionCommand,
+      '2026-07-23T15:02:00.000Z',
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      now,
+      now,
+    );
     sessionDatabase.exec('COMMIT');
 
     flueDatabase.exec('BEGIN IMMEDIATE');
@@ -626,6 +670,7 @@ function assertPackagedTranscriptResume(output) {
     transcriptFixture.hiddenNested,
     transcriptFixture.hiddenToolResult,
     transcriptFixture.hiddenEmptyAssistant,
+    transcriptFixture.hiddenSessionCommand,
   ]) {
     assertOccurrenceCount(output, hidden, 0, `restored transcript exposed hidden content ${hidden}`);
   }
