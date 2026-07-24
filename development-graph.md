@@ -1,4 +1,4 @@
-<!-- development-graph-sha256: 057dc653039f101940a4bc2cf47dd40954cc22e28be630cad8fd81e5711f798a -->
+<!-- development-graph-sha256: e03185f39b25d8f40d3632fc7d0e3178790698c2ad2901325df5736ca3f9f103 -->
 <!-- Generated from canonical JSON. Do not edit by hand. -->
 # SIM-ONE Alpha Development Lifecycle
 
@@ -9,16 +9,16 @@ Govern future SIM-ONE Alpha changes from an authorized request through grounded 
 | Field | Value |
 |---|---|
 | Graph ID | `sim-one-alpha-lifecycle` |
-| Graph version | `5` |
+| Graph version | `6` |
 | Schema version | `1` |
 | Status | `validated` |
 | Project | sim-one-alpha |
 | Project root | `/opt/ai/sim-one-alpha` |
-| Context version | `commit:cd212f1a72a2f09148242c42d4ace80a9d94992d` |
+| Context version | `commit:cc7ef3f42fa2a8969868c02b70873be5dabdb16f` |
 | Templates | discovery-to-delivery, parallel-fanout-fanin, human-gate, bounded-feedback, rollback-observation |
 | Entry nodes | baseline-context |
 | Terminal nodes | closeout-release |
-| Canonical checksum | `057dc653039f101940a4bc2cf47dd40954cc22e28be630cad8fd81e5711f798a` |
+| Canonical checksum | `e03185f39b25d8f40d3632fc7d0e3178790698c2ad2901325df5736ca3f9f103` |
 
 ## Flow
 
@@ -100,7 +100,6 @@ flowchart TD
     n_build_ratatui -- "consumes" --> n_verify_ratatui_product
     n_build_runtime -- "consumes" --> n_verify_tui_e2e
     n_build_cli -- "consumes" --> n_verify_tui_e2e
-    n_build_ratatui -- "consumes" --> n_verify_tui_e2e
     n_build_runtime -- "consumes" --> n_verify_memory_smoke
     n_build_wasm_memory -- "consumes" --> n_verify_memory_smoke
     n_fetch_embedding_model -- "consumes" --> n_verify_memory_smoke
@@ -167,6 +166,8 @@ flowchart TD
     n_integrate_and_repair -. "invalidates" .-> n_verify_typecheck
     n_integrate_and_repair -. "invalidates" .-> n_verify_unit_tests
     n_integrate_and_repair -. "invalidates" .-> n_verify_rust_tests
+    n_approve_production_release -- "approves" --> n_observe_production
+    n_approve_production_release -- "consumes" --> n_observe_production
 ```
 
 ## Nodes
@@ -254,7 +255,6 @@ flowchart TD
 | `ratatui-build-to-product-test` | `build-ratatui` | `consumes` | `verify-ratatui-product` | Upstream artifacts are current, accepted, and bound to this run. | artifact:ratatui-build | — |
 | `runtime-to-tui-e2e` | `build-runtime` | `consumes` | `verify-tui-e2e` | Upstream artifacts are current, accepted, and bound to this run. | artifact:runtime-build | — |
 | `cli-build-to-tui-e2e` | `build-cli` | `consumes` | `verify-tui-e2e` | Upstream artifacts are current, accepted, and bound to this run. | artifact:cli-build | — |
-| `ratatui-build-to-tui-e2e` | `build-ratatui` | `consumes` | `verify-tui-e2e` | Upstream artifacts are current, accepted, and bound to this run. | artifact:ratatui-build | — |
 | `runtime-to-memory-smoke` | `build-runtime` | `consumes` | `verify-memory-smoke` | Upstream artifacts are current, accepted, and bound to this run. | artifact:runtime-build | — |
 | `wasm-to-memory-smoke` | `build-wasm-memory` | `consumes` | `verify-memory-smoke` | Upstream artifacts are current, accepted, and bound to this run. | artifact:memory-wasm | — |
 | `embedding-model-to-memory-smoke` | `fetch-embedding-model` | `consumes` | `verify-memory-smoke` | Upstream artifacts are current, accepted, and bound to this run. | artifact:embedding-model-assets | — |
@@ -321,6 +321,8 @@ flowchart TD
 | `integration-invalidates-verify-typecheck` | `integrate-and-repair` | `invalidates` | `verify-typecheck` | A changed integrated diff invalidates prior verification evidence. | artifact:typecheck-report | — |
 | `integration-invalidates-verify-unit-tests` | `integrate-and-repair` | `invalidates` | `verify-unit-tests` | A changed integrated diff invalidates prior verification evidence. | artifact:unit-test-report | — |
 | `integration-invalidates-verify-rust-tests` | `integrate-and-repair` | `invalidates` | `verify-rust-tests` | A changed integrated diff invalidates prior verification evidence. | artifact:rust-test-report | — |
+| `production-approval-to-observation` | `approve-production-release` | `approves` | `observe-production` | The owner approved the exact production target, candidate, observation plan, and recorded rollback authority. | artifact:production-release-approval | — |
+| `production-approval-artifact-to-observation` | `approve-production-release` | `consumes` | `observe-production` | The rollback authority is current, accepted, and bound to the exact production release and this run. | artifact:production-release-approval | — |
 
 ## Node contracts
 
@@ -376,7 +378,7 @@ flowchart TD
 - Executor instructions: Run the repository WASM build under the pinned Rust toolchain and retain the generated artifact digest.
 - Inputs: artifact:dependency-environment
 - Resources: project:memory-wasm-output
-- Permissions: read [crates/gorombo-memory/, rust-toolchain.toml, Cargo.toml, scripts/wasm-build.mjs]; write [crates/gorombo-memory/pkg/, crates/gorombo-memory/target/]; external [—]; destructive `false`
+- Permissions: read [crates/gorombo-memory/, rust-toolchain.toml, Cargo.toml, scripts/wasm-build.mjs]; write [crates/gorombo-memory/pkg/, target/]; external [—]; destructive `false`
 - Execution: max `2` attempt(s), `20` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Writes gitignored Rust target and WASM package artifacts.
 - Rollback: Rebuild the WASM package from the prior reviewed Rust source and toolchain.
@@ -583,7 +585,7 @@ flowchart TD
   - `verification-passed` (test): All required unit tests pass; any skips are recorded and do not hide a missing required model or WASM artifact. Evidence: `runtime:evidence/verify-unit-tests/result.json`
   - `workspace-boundary-tests-passed` (test): The unit report proves architecture-contract.test.ts, workspace-loader.test.ts, coding-worker.test.ts, coding-worker-internal-subagents.test.ts, and research-agent.test.ts passed, including main/worker/internal workspace composition, runtime-root scoping, and lead-only delegation. Evidence: `runtime:evidence/verify-unit-tests/workspace-boundary-tests.json`
   - `approval-progress-routing-passed` (test): The unit report proves approval-ingress.test.ts and coding-worker.test.ts passed, covering typed approval/progress events, durable routing, tool execution progress, and worker handoffs without claiming Ratatui rendering that these TypeScript tests do not exercise. Evidence: `runtime:evidence/verify-unit-tests/approval-progress-tests.json`
-  - `session-memory-privacy-passed` (test): The unit report proves flue-session-store.test.ts, memory-tool.test.ts, memory-telemetry.test.ts, trusted-event-admission.test.ts, flue-telemetry.test.ts, and http-endpoints.test.ts passed, including actor/conversation scoping, trusted-event admission, raw-payload omission, telemetry redaction, and safe session-resume behavior. Evidence: `runtime:evidence/verify-unit-tests/session-memory-privacy-tests.json`
+  - `session-memory-privacy-passed` (test): The unit report proves flue-session-store.test.ts, memory-tool.test.ts, memory-telemetry.test.ts, trusted-event-admission.test.ts, flue-telemetry.test.ts, and http-endpoints.test.ts passed, including actor/conversation scoping, trusted-event admission, raw-payload omission, and telemetry redaction. Evidence: `runtime:evidence/verify-unit-tests/session-memory-privacy-tests.json`
 
 ### `verify-rust-tests` — Verify Rust Project Tests
 
@@ -598,7 +600,7 @@ flowchart TD
 - Approval required: `false`
 - Acceptance:
   - `verification-passed` (test): Every configured Rust project test passes under the pinned toolchain. Evidence: `runtime:evidence/verify-rust-tests/result.json`
-  - `ratatui-progress-rendering-passed` (test): The Rust report proves the Ratatui event reducer, application state, and rendered terminal surface display thinking, tool, and delegated-task progress and preserve stream state; approval UI is not claimed without separate evidence. Evidence: `runtime:evidence/verify-rust-tests/ratatui-progress-rendering.json`
+  - `ratatui-progress-rendering-passed` (test): The Rust report proves the Ratatui event reducer and application state handle thinking, tool, and delegated-task progress, while the rendered terminal surface proves thinking and tool rows and preserves stream state; delegated-task rendering and approval UI require separate evidence. Evidence: `runtime:evidence/verify-rust-tests/ratatui-progress-rendering.json`
 
 ### `build-runtime` — Build Flue Runtime
 
@@ -689,7 +691,7 @@ flowchart TD
 
 - Goal: Exercise the built gateway request path used by the terminal client and verify the built CLI command surface, without treating this smoke as proof of approval, tool-progress, or subagent rendering.
 - Executor instructions: Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests.
-- Inputs: artifact:runtime-build, artifact:cli-build, artifact:ratatui-build
+- Inputs: artifact:runtime-build, artifact:cli-build
 - Resources: local-runtime-probe
 - Permissions: read [authorized project tree, node_modules/]; write [.gorombo test runtime state, /tmp SIM-ONE TUI test runtime root]; external [configured model-provider HTTPS endpoint declared by project model cards]; destructive `false`
 - Execution: max `2` attempt(s), `15` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
@@ -699,7 +701,7 @@ flowchart TD
 - Acceptance:
   - `gateway-prompt-passed` (test): The configured smoke posts through the built gateway agent route and receives a nonempty, non-error assistant response. Evidence: `runtime:evidence/verify-tui-e2e/gateway-prompt.json`
   - `cli-smoke-passed` (test): The built CLI --help command exits zero and returns a nonempty command surface. Evidence: `runtime:evidence/verify-tui-e2e/cli-smoke.json`
-  - `evidence-scope-honest` (policy): This node reports only gateway prompt and CLI-smoke behavior. Approval routing and typed progress are mapped to unit evidence, Ratatui tool/task rendering is mapped to Rust evidence, and missing user-visible approval or subagent end-to-end proof remains an architecture-review blocker. Evidence: `runtime:evidence/verify-tui-e2e/evidence-scope.json`
+  - `evidence-scope-honest` (policy): This node reports only gateway prompt and CLI-smoke behavior. Approval routing and typed progress are mapped to unit evidence, Ratatui thinking/tool rendering and delegated-task reducer/state handling are mapped to Rust evidence, and missing user-visible approval, delegated-task rendering, or subagent end-to-end proof remains an architecture-review blocker. Evidence: `runtime:evidence/verify-tui-e2e/evidence-scope.json`
 
 ### `verify-memory-smoke` — Verify Real Memory Runtime
 
@@ -707,7 +709,7 @@ flowchart TD
 - Executor instructions: Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests.
 - Inputs: artifact:runtime-build, artifact:memory-wasm, artifact:embedding-model-assets
 - Resources: local-runtime-probe
-- Permissions: read [authorized project tree, node_modules/]; write [.gorombo test memory state, /tmp SIM-ONE memory smoke runtime root]; external [—]; destructive `false`
+- Permissions: read [authorized project tree, node_modules/]; write [.tmp/tsc/, .gorombo test memory state, /tmp SIM-ONE memory smoke runtime root]; external [—]; destructive `false`
 - Execution: max `2` attempt(s), `20` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
 - Side effects: `reversible` — Writes only documented generated build or test artifacts.
 - Rollback: Regenerate the documented build or test artifacts from the prior reviewed commit.
@@ -854,17 +856,18 @@ flowchart TD
 ### `observe-production` — Observe Production Outcomes
 
 - Goal: Verify correct production behavior and durable target-system outcomes through the approved observation window.
-- Executor instructions: Inspect real response behavior, connector delivery, durable state, worker progress, error rates, and changed product surfaces. Escalate and invoke the recorded rollback on a release regression.
-- Inputs: artifact:production-release
-- Resources: —
-- Permissions: read [artifact:production-release, production probes, production telemetry]; write [—]; external [—]; destructive `false`
+- Executor instructions: Inspect real response behavior, connector delivery, durable state, worker progress, error rates, and changed product surfaces. On a verified release regression, invoke only the concrete rollback recorded in artifact:production-release under the owner authority recorded in artifact:production-release-approval; record the rollback deployment and output-level result, and move to needs_human if the rollback cannot be verified.
+- Inputs: artifact:production-release, artifact:production-release-approval
+- Resources: external:production-environment
+- Permissions: read [artifact:production-release, artifact:production-release-approval, production probes, production telemetry]; write [approved production environment when the recorded rollback condition is met]; external [production deployment API for the pre-approved recorded rollback]; destructive `false`
 - Execution: max `2` attempt(s), `1440` minute(s); Every acceptance criterion has durable, independently inspectable evidence.
-- Side effects: `none` — Produces evidence without mutating project or external state.
-- Rollback: none
-- Approval required: `false`
+- Side effects: `reversible` — Observes production and, only on a verified release regression, changes the approved production environment back to the recorded previous release.
+- Rollback: Invoke the recorded rollback idempotently with the previous-release identifier; if restoration cannot be verified, stop further mutation, preserve evidence, and move the run to needs_human.
+- Approval required: `true`
 - Acceptance:
   - `production-behavior-proved` (probe): Changed behavior and required side effects are correct in production; process, port, deployment-job, or submission status alone is rejected. Evidence: `runtime:evidence/observe-production/behavior.json`
   - `production-window-complete` (policy): The approved observation window completes without unresolved regression, durability, security, or telemetry evidence. Evidence: `runtime:evidence/observe-production/window.json`
+  - `production-rollback-accounted` (policy): The observation proves either that no rollback condition occurred or that the exact pre-approved recorded rollback was invoked, its deployment result was recorded, and the restored production behavior was verified before repair begins. Evidence: `runtime:evidence/observe-production/rollback.json`
 
 ### `closeout-release` — Close Out And Preserve Evidence
 
