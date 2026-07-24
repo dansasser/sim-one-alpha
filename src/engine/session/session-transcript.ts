@@ -876,13 +876,11 @@ function legacyOffset(value: string | undefined): string | undefined {
 }
 
 function earliestPromptOffset(prompts: SessionNormalizedMessageRecord[]): string {
-  for (const prompt of prompts) {
-    const offset = prompt.delivery.offset ?? legacyOffset(prompt.legacyDeliveryId);
-    if (offset) {
-      return offset;
-    }
+  const firstPrompt = prompts[0];
+  if (!firstPrompt) {
+    return '-1';
   }
-  return '-1';
+  return firstPrompt.delivery.offset ?? legacyOffset(firstPrompt.legacyDeliveryId) ?? '-1';
 }
 
 function compareOffsets(left: string, right: string): number {

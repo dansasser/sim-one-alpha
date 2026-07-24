@@ -40,7 +40,10 @@ STALE_REPLAY_OFFSET = "0000000000000000_0000000000000011"
 IN_FLIGHT_OFFSET = "0000000000000000_0000000000000013"
 FINAL_OFFSET = "0000000000000000_0000000000000016"
 HISTORY_REQUESTED = threading.Event()
+HISTORY_BEFORE_RESUME = threading.Event()
+RESUME_REQUESTED = threading.Event()
 RESUME_COMPLETED = threading.Event()
+RELEASE_RESUME = threading.Event()
 RELEASE_HISTORY = threading.Event()
 LIVE_CONNECTED = threading.Event()
 PROMPT_RECEIVED = threading.Event()
@@ -63,6 +66,8 @@ class GatewayHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
         if parsed.path == "/api/chat/sessions/tui-visible-final-smoke/transcript":
+            if not RESUME_COMPLETED.is_set():
+                HISTORY_BEFORE_RESUME.set()
             HISTORY_REQUESTED.set()
             if not RELEASE_HISTORY.wait(5):
                 return
@@ -215,6 +220,9 @@ class GatewayHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length)
         if self.path == "/api/chat/sessions/tui-visible-final-smoke/resume":
+            RESUME_REQUESTED.set()
+            if not RELEASE_RESUME.wait(5):
+                return
             response = json.dumps(
                 {
                     "session": {
@@ -375,13 +383,25 @@ def main():
 
     try:
         fcntl.ioctl(master_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 35, 133, 0, 0))
+        if not RESUME_REQUESTED.wait(5):
+            raise AssertionError(
+                "packaged TUI did not request explicit session resume; "
+                f"requests={REQUEST_PATHS!r}"
+            )
+        time.sleep(0.2)
+        if HISTORY_REQUESTED.is_set():
+            raise AssertionError(
+                "packaged TUI requested transcript history before resume returned; "
+                f"requests={REQUEST_PATHS!r}"
+            )
+        RELEASE_RESUME.set()
         startup_output = read_until(master_fd, b"Prompt", 10)
         if not HISTORY_REQUESTED.wait(5):
             raise AssertionError(
                 "packaged TUI did not request transcript history; "
                 f"requests={REQUEST_PATHS!r}; output tail={bytes(startup_output[-3000:])!r}"
             )
-        if not RESUME_COMPLETED.wait(5):
+        if HISTORY_BEFORE_RESUME.is_set() or not RESUME_COMPLETED.is_set():
             raise AssertionError(
                 "packaged TUI requested transcript history before session resume completed; "
                 f"requests={REQUEST_PATHS!r}"
@@ -392,6 +412,22 @@ def main():
         ) not in REQUEST_PATHS:
             raise AssertionError(
                 "packaged TUI did not POST the explicit session resume before history"
+            )
+        resume_index = REQUEST_PATHS.index(
+            ("POST", "/api/chat/sessions/tui-visible-final-smoke/resume")
+        )
+        history_index = next(
+            index
+            for index, request in enumerate(REQUEST_PATHS)
+            if request[0] == "GET"
+            and request[1].startswith(
+                "/api/chat/sessions/tui-visible-final-smoke/transcript"
+            )
+        )
+        if resume_index > history_index:
+            raise AssertionError(
+                "packaged TUI requested transcript history before explicit resume; "
+                f"requests={REQUEST_PATHS!r}"
             )
         os.write(master_fd, b"race prompt\r")
         time.sleep(0.3)
@@ -466,6 +502,7 @@ def main():
             "[ratatui-visible-final] packaged sim-one locked input through history, rejected stale replay settlement, reconnected from confirmed offsets, deduplicated the in-flight batch, hid nested output, rendered Markdown, and showed the final before HTTP settlement."
         )
     finally:
+        RELEASE_RESUME.set()
         RELEASE_HISTORY.set()
         RELEASE_HTTP.set()
         stop_child(pid, master_fd)

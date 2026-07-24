@@ -6,6 +6,7 @@ import {
   ChatSessionAmbiguousError,
   ChatSessionNotFoundError,
   createFreshChatSession,
+  listChatSessions,
   listOwnedChatSessions,
   resumeOwnedChatSession,
   SessionAccessDeniedError,
@@ -71,12 +72,20 @@ export function registerChatSessionRoutes(
   });
 
   app.get('/api/chat/sessions', requireApiSecret, (c) => {
-    const identityResult = v.safeParse(TuiSessionIdentitySchema, {
+    const identityInput = {
       connector: c.req.query('connector'),
       actorId: c.req.query('actorId'),
       conversationId: c.req.query('conversationId'),
       threadId: c.req.query('threadId'),
-    });
+    };
+    const hasIdentityInput = Object.values(identityInput).some((value) => value !== undefined);
+    if (!hasIdentityInput) {
+      return c.json({
+        sessions: listChatSessions(parseLegacyLimit(c.req.query('limit'))),
+      });
+    }
+
+    const identityResult = v.safeParse(TuiSessionIdentitySchema, identityInput);
     if (!identityResult.success) {
       return c.json({ error: 'connector, actorId, and conversationId are required for TUI sessions.' }, 400);
     }
@@ -181,6 +190,11 @@ function parseLimit(value: string | undefined): number | null {
   }
   const parsed = Number.parseInt(value, 10);
   return parsed >= 1 && parsed <= 100 ? parsed : null;
+}
+
+function parseLegacyLimit(value: string | undefined): number {
+  const parsed = Number.parseInt(value ?? '', 10);
+  return Number.isInteger(parsed) ? Math.min(100, Math.max(1, parsed)) : 50;
 }
 
 function errorName(error: unknown): string {

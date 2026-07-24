@@ -99,6 +99,22 @@ test('chat session lifecycle endpoint requires the configured API secret', async
   });
 });
 
+test('authenticated HTTP clients can list sessions without a TUI identity', async () => {
+  const testApp = new Hono();
+  registerChatSessionRoutes(testApp);
+
+  await withApiSecret('test-secret', async () => {
+    const response = await testApp.request('/api/chat/sessions?limit=1', {
+      headers: { 'x-api-secret': 'test-secret' },
+    });
+
+    assert.equal(response.status, 200);
+    const body = await response.json() as { sessions?: unknown[] };
+    assert.equal(Array.isArray(body.sessions), true);
+    assert.ok((body.sessions?.length ?? 0) <= 1);
+  });
+});
+
 test('chat transcript route validates canonical session ownership and pagination input', async () => {
   const testApp = new Hono();
   const actorId = `transcript-user-${Date.now()}-${Math.random().toString(36).slice(2)}`;

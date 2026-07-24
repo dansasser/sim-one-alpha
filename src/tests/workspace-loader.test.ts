@@ -100,6 +100,26 @@ test('workspace directory resolver falls back to packaged .gorombo runtime works
   }
 });
 
+test('workspace directory resolver prefers the packaged runtime over an unrelated cwd workspace', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'workspace-packaged-precedence-'));
+
+  try {
+    const unrelatedWorkspace = join(dir, 'workspace');
+    const packagedWorkspace = join(dir, '.gorombo', 'sim-one-alpha', 'workspace');
+    mkdirSync(unrelatedWorkspace, { recursive: true });
+    mkdirSync(packagedWorkspace, { recursive: true });
+    writeFileSync(join(unrelatedWorkspace, '.keep'), '');
+    writeFileSync(join(packagedWorkspace, '.keep'), '');
+
+    assert.equal(
+      resolveWorkspaceDirectory('workspace', dir),
+      packagedWorkspace,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('workspace directory resolver finds a workspace directly under cwd', () => {
   const dir = mkdtempSync(join(tmpdir(), 'workspace-runtime-root-'));
 

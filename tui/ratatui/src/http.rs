@@ -109,7 +109,9 @@ pub fn read_http_head(stream: &mut TcpStream, context: &str) -> Result<(String, 
 pub fn read_http_response(stream: &mut TcpStream, context: &str) -> Result<HttpResponse, String> {
     let (head, initial_body) = read_http_head(stream, context)?;
     let status = parse_status_code(&head, context)?;
-    let body = if has_chunked_encoding(&head) {
+    let body = if matches!(status, 100..=199 | 204 | 304) {
+        Vec::new()
+    } else if has_chunked_encoding(&head) {
         read_chunked_http_body(stream, initial_body, context)?
     } else if let Some(length) = header_value(&head, "content-length") {
         let expected = length.parse::<usize>().map_err(|error| {
@@ -321,4 +323,54 @@ fn find_header_end(response: &[u8]) -> Option<usize> {
 
 fn find_crlf(value: &[u8]) -> Option<usize> {
     value.windows(2).position(|window| window == b"\r\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::read_http_response;
+    use std::io::Write;
+    use std::net::{TcpListener, TcpStream};
+    use std::thread;
+    use std::time::Duration;
+
+    #[test]
+    fn body_forbidden_statuses_ignore_framing_and_an_open_socket() {
+        for status in ["103 Early Hints", "204 No Content", "304 Not Modified"] {
+            assert_body_forbidden_status(status);
+        }
+    }
+
+    fn assert_body_forbidden_status(status: &str) {
+        let listener =
+            TcpListener::bind(("127.0.0.1", 0)).expect("test server should bind locally");
+        let address = listener
+            .local_addr()
+            .expect("test server address should resolve");
+        let response_head =
+            format!("HTTP/1.1 {status}\r\nContent-Length: 12\r\nConnection: keep-alive\r\n\r\n");
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("test server should accept");
+            stream
+                .write_all(response_head.as_bytes())
+                .expect("test response should write");
+            thread::sleep(Duration::from_millis(200));
+        });
+
+        let mut stream = TcpStream::connect(address).expect("test client should connect");
+        stream
+            .set_read_timeout(Some(Duration::from_millis(100)))
+            .expect("test client timeout should configure");
+        let response = read_http_response(&mut stream, "bodyless test")
+            .expect("bodyless response should read");
+
+        assert_eq!(
+            response.status,
+            status
+                .split_once(' ')
+                .and_then(|(code, _)| code.parse::<u16>().ok())
+                .expect("test status should contain a numeric code")
+        );
+        assert!(response.body.is_empty());
+        server.join().expect("test server should finish");
+    }
 }

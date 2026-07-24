@@ -430,6 +430,34 @@ fn running_snapshot_exchange_accepts_later_live_completion() {
         document.exchanges()[0].status,
         TranscriptActivityStatus::Completed
     );
+
+    document.apply_events(&[
+        event_for(
+            "snapshot-running",
+            5,
+            serde_json::json!({"type":"text_delta","text":"STALE_DELTA"}),
+        ),
+        event_for(
+            "snapshot-running",
+            6,
+            serde_json::json!({
+                "type":"message_end",
+                "message":{"role":"assistant","content":"STALE_FINAL"}
+            }),
+        ),
+    ]);
+
+    assert_eq!(
+        document.exchanges()[0]
+            .assistant
+            .as_ref()
+            .map(|message| message.text.as_str()),
+        Some("completed after resume")
+    );
+    assert!(!document
+        .lines()
+        .iter()
+        .any(|line| line.text.contains("STALE_")));
 }
 
 #[test]

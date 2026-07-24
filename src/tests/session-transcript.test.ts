@@ -801,6 +801,69 @@ test('older transcript pages retain replies that complete after a newer prompt s
   }
 });
 
+test('transcript reads from the stream start when an older prompt has no delivery offset', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'gorombo-transcript-missing-offset-'));
+  const database = new GoromboSessionDatabase(join(directory, 'sessions.sqlite'));
+  const sessionId = 'tui-missing-prompt-offset';
+  const entries = [
+    streamEvent('0000000000000000_0000000000000000', {
+      type: 'message_end',
+      submissionId: 'submission-without-offset',
+      eventIndex: 0,
+      timestamp: '2026-07-21T00:30:00.100Z',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Response before persisted offsets' }],
+      },
+    }),
+    streamEvent('0000000000000000_0000000000000001', {
+      type: 'message_end',
+      submissionId: 'submission-with-offset',
+      eventIndex: 0,
+      timestamp: '2026-07-21T00:31:00.100Z',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Response after persisted offsets' }],
+      },
+    }),
+  ];
+
+  try {
+    recordTranscriptPrompt(database, sessionId, prompt({
+      eventId: 'prompt-without-offset',
+      text: 'Prompt before persisted offsets',
+      receivedAt: '2026-07-21T00:30:00.000Z',
+      submissionId: 'submission-without-offset',
+    }));
+    recordTranscriptPrompt(database, sessionId, prompt({
+      eventId: 'prompt-with-offset',
+      text: 'Prompt after persisted offsets',
+      receivedAt: '2026-07-21T00:31:00.000Z',
+      submissionId: 'submission-with-offset',
+      offset: '0000000000000000_0000000000000000',
+    }));
+
+    const page = await loadSessionTranscriptPage({
+      session: { id: sessionId },
+      sessionDatabase: database,
+      eventStreamStore: eventStoreFor(`agents/orchestrator/${sessionId}`, entries),
+      limit: 2,
+    });
+
+    assert.deepEqual(
+      page.exchanges.map((exchange) => exchange.assistant?.text),
+      ['Response before persisted offsets', 'Response after persisted offsets'],
+    );
+    assert.deepEqual(
+      page.exchanges.map((exchange) => exchange.status),
+      ['completed', 'completed'],
+    );
+  } finally {
+    database.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('transcript pagination fills pages past hidden internal prompt rows', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'gorombo-transcript-hidden-'));
   const database = new GoromboSessionDatabase(join(directory, 'sessions.sqlite'));

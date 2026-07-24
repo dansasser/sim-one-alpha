@@ -453,9 +453,13 @@ impl TranscriptDocument {
             }
             _ => {}
         }
-        if self.resumable_snapshot_submissions.contains(&submission_id)
-            && matches!(event_type, "operation" | "turn")
-        {
+        let exchange_is_terminal = self.exchange(&exchange_id).is_some_and(|exchange| {
+            matches!(
+                exchange.status,
+                TranscriptActivityStatus::Completed | TranscriptActivityStatus::Failed
+            )
+        });
+        if self.resumable_snapshot_submissions.contains(&submission_id) && exchange_is_terminal {
             self.resumable_snapshot_submissions.remove(&submission_id);
             self.snapshot_submissions.insert(submission_id);
         }
