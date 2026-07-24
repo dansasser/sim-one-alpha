@@ -32,6 +32,8 @@ The `build:tui:ratatui` script writes the standalone terminal binary to:
 
 The Ratatui binary owns the gateway startup contract: it checks the gateway health endpoint, starts `.gorombo/sim-one-alpha/server.mjs` if needed, runs the child from the owner of the `.gorombo` runtime tree, and cleans up only a server child it started itself.
 
+Explicit resume resolves an id or exact name to a canonical session id, loads the gateway's semantic transcript snapshot, installs its user prompts/public activity/root finals, and starts the live stream after the returned `nextOffset`. The internal startup prompt, raw tool results, nested worker responses, and local command output are not restored. Older pages prepend at scrollback without moving the current visible source row. Ratatui remains a connector client and never reads the runtime SQLite databases directly.
+
 ## Developer Checks
 
 ```sh
@@ -53,7 +55,7 @@ Ctrl+U               Clear the prompt
 PgUp/PgDown          Scroll the transcript by a page
 Up/Down              Scroll the transcript by one line
 Ctrl+End             Jump the transcript back to the live tail
-Ctrl+C               Exit cleanly
+Ctrl+C               Copy app-selected text, or exit when nothing is selected
 Esc                  Exit cleanly
 ```
 
@@ -63,7 +65,7 @@ Backend-owned commands go through `/api/chat/events`:
 
 ```text
 /new [title]
-/resume <session-id>
+/resume <session-id-or-name>
 /rename <title>
 /compact
 ```
@@ -83,4 +85,6 @@ TUI-local commands are handled in `src/app.rs`:
 Exited SIM-ONE Alpha TUI. Session: <active-session-id>
 ```
 
-Use that id with `/resume <session-id>` after relaunching.
+Use that id or the exact explicit session name with `/resume <session-id-or-name>` after relaunching. At launch, `sim-one --session <selector>` accepts the same id-or-name selector; a missing launch selector creates a fresh session and greeting.
+
+Best-effort TUI diagnostics are written to `.gorombo/logs/sim-one-ratatui.jsonl`, rotating at 1 MiB with three retained files. History events include `history.load.started`, `history.load.completed`, `history.load.failed`, `history.page.prepended`, and `stream.attach.started`. They contain typed lifecycle/input categories, counts, durations, and canonical ids, not prompt, response, selection, secret, session-name, or raw-error text.

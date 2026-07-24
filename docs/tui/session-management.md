@@ -8,11 +8,11 @@ Implementation details live in `docs/architecture/tui-cli-session-flow.md`.
 
 The TUI sends chat events with connector `tui` and a stable `local-tui` actor/conversation/thread scope. The gateway uses that scope for ownership checks and scoped session listing; it does not use it as an implicit last-session pointer. Only Telegram currently has connector-conversation persistence.
 
-A no-argument TUI launch calls `POST /api/chat/sessions` and always receives a newly created durable `tui-*` id. The TUI attaches the Flue event stream and sends the startup greeting as that session's first normal prompt. Existing TUI context is entered only through `sim-one --session <id>` or `/resume <session-id>`.
+A no-argument TUI launch calls `POST /api/chat/sessions` and always receives a newly created durable `tui-*` id. The TUI attaches the Flue event stream and sends the startup greeting as that session's first normal prompt. Existing TUI context is entered through an exact id or explicit name with `sim-one --session <selector>` or `/resume <session-id-or-name>`.
 
 When the active session changes, the TUI cancels the old stream handle, clears stream activity rows for the previous live session, and starts a new stream for the selected session.
 
-Normal no-argument launch does not use a default `primary` session and never reuses the previous launch. `--session <id>` validates ownership before stream attachment, restores an explicit name when present, and adds no startup greeting to the resumed context.
+Normal no-argument launch does not use a default `primary` session and never reuses the previous launch. `--session <selector>` validates ownership before stream attachment, resolves an exact explicit name to its canonical `tui-*` id, restores the name, and adds no startup greeting to the resumed context. If no owned session matches the selector, startup creates a fresh session and performs the normal greeting. Cross-scope ids remain forbidden, and duplicate names return a conflict instead of choosing one.
 
 Launch examples:
 
@@ -88,15 +88,16 @@ system: active session tui-...
 Use:
 
 ```text
-/resume <session-id>
+/resume <session-id-or-name>
 ```
 
-The gateway validates that the session belongs to the local TUI actor/conversation scope. If it is available, the TUI switches to it and restarts the stream.
+The gateway resolves an exact id or explicit name, validates that the session belongs to the local TUI actor/conversation scope, then switches the TUI to its canonical id and restarts the stream. A missing in-app selector returns an error and leaves the active session unchanged.
 
 Example:
 
 ```text
 /resume tui-abc123
+/resume Release testing
 ```
 
 Expected transcript shape:
@@ -105,6 +106,14 @@ Expected transcript shape:
 assistant: Resumed session tui-abc123.
 system: active session tui-abc123
 ```
+
+### What Resume Restores
+
+Resume installs the canonical id and exact explicit name returned by the lifecycle API, then loads the durable transcript before accepting a new prompt. The restored transcript contains prior visible user prompts, final root-assistant responses, and settled public operation, thinking, tool, and task activity. The original agent greeting remains visible, but resume sends no new greeting prompt.
+
+The restored view excludes the internal startup instruction, raw tool result bodies, nested worker assistant output, empty tool-call messages, and local command-only rows such as `/help`, `/sessions`, `/session`, and `/exit`. Older pages load when scrollback reaches the first loaded exchange and are prepended without moving the row currently under the viewport.
+
+After the initial snapshot is installed, the live Flue stream starts at the snapshot's returned offset. Replayed catch-up events and reconnect batches are matched by stable submission/activity ids, so they update the same exchange rather than duplicating prior prompts, activities, or final responses.
 
 ## List Sessions
 
@@ -167,6 +176,10 @@ Expected transcript shape:
 assistant: Compacted session <session-id>.
 ```
 
+## Copy And Exit
+
+`Ctrl+C` is selection-aware. When prompt or transcript text is selected, it copies that selection through OSC52 and keeps the TUI open. With no application selection, `Ctrl+C` exits. This lets terminal selection and process control share the conventional key without turning a transcript copy into an accidental shutdown.
+
 ## Exit And Recover The Session Id
 
 Use:
@@ -181,14 +194,14 @@ The TUI restores the terminal and prints the active session id after exit:
 Exited SIM-ONE Alpha TUI. Session: <active-session-id>
 ```
 
-Use that id with `sim-one --session <session-id>` the next time you launch the TUI. Use `/resume <session-id>` to switch from another session while the TUI is already running.
+Use that id or the session's exact explicit name with `sim-one --session <selector>` the next time you launch the TUI. Use `/resume <session-id-or-name>` to switch from another session while the TUI is already running.
 
 ## Command Reference
 
 ```text
 /new [title]           create a new durable TUI session and switch to it
 /clear [title]         clear the active TUI thread by creating a new active session
-/resume <session-id>   resume an available durable session and switch to it
+/resume <session-id-or-name> resume an available durable session and switch to it
 /sessions [limit]      list recent sessions, default 10, max 50
 /session               show the current active session id
 /rename <title>        rename the active durable session
@@ -196,3 +209,9 @@ Use that id with `sim-one --session <session-id>` the next time you launch the T
 /help                  print the TUI command list
 /exit                  close the TUI and print the active session id
 ```
+
+## Diagnostics Log
+
+The packaged TUI writes best-effort structured JSONL diagnostics to `.gorombo/logs/sim-one-ratatui.jsonl` in the installed runtime tree, even when launched from another working directory. `SIM_ONE_TUI_LOG_PATH` overrides the location for tests or support collection. The file rotates at 1 MiB and retains three older files.
+
+Diagnostics record launch mode, gateway start versus reuse, session lifecycle outcomes, canonical session ids, Ctrl+C copy versus exit, clipboard failures, and application exit. Transcript replay adds `history.load.started`, `history.load.completed`, `history.load.failed`, `history.page.prepended`, and `stream.attach.started`. They classify selectors as id or name and record only counts, elapsed time, modes, and failure categories; they never store selector text, prompt text, selected text, responses, secrets, or raw gateway errors.

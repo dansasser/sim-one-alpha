@@ -157,7 +157,7 @@ The `researcher` subagent uses these controls through `web_research`. This keeps
 Slash commands are parsed before the LLM receives the prompt:
 
 - `/new` creates a new session for trusted connector-style and TUI entrypoints. It is disabled for GUI-managed web chat prompts because the web UI should switch visual session state through a client-side new-chat action. Generic Web API payloads must not be able to opt into connector-only behavior by spoofing a connector name.
-- `/resume <session-id>` validates that the requested durable session belongs to the trusted actor/conversation scope, switches the current product session to it, and returns command telemetry without prompting the model.
+- `/resume <session-id-or-name>` resolves an exact id or explicit name, validates that the durable session belongs to the trusted actor/conversation scope, switches to its canonical id, and returns command telemetry without prompting the model.
 - `/rename <title>` updates the active durable product session title and returns command telemetry without prompting the model.
 - `/compact` calls `session.compact()` for the resolved durable direct-agent Flue session and returns command telemetry without sending `/compact` to the model.
 

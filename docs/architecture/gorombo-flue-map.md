@@ -52,7 +52,7 @@ Flue discovers these at the `src/` root. They cannot be moved into buckets.
 | `src/engine/rag/` | Shared retrieval subsystem | Retrieval provider interfaces and routing. This name is pending a user-selected rename, but the concept remains top-level because it is shared architecture. |
 | `src/engine/registries/` | Registry subsystem | Typed registries for tools, skills, agents, protocols, and future discoverable capabilities. |
 | `src/engine/schedules/` | Scheduled execution subsystem | Standalone scheduled/recurring/one-shot agent execution: schedule definitions + run history durable in SQLite (`node:sqlite`, `.gorombo/db/schedules.sqlite`), firing via Croner in-process, rehydrated on restart. Dispatch is admission-only (`dispatch(...)` to the orchestrator); terminal status observed in-process via `observe()`. Exposed via orchestrator `schedule_*` tools, coding-worker `coding_schedule_*` aliases (lead-only), and the `/api/schedules/*` admin route. See `docs/architecture/schedules-system.md`. |
-| `src/engine/session/` | Session/context subsystem | Flue session persistence, compaction policy, context budget, and usage tracking. |
+| `src/engine/session/` | Session/context subsystem | Flue session persistence, connector prompt delivery correlation, ownership-scoped lifecycle routing, semantic transcript projection, compaction policy, context budget, and usage tracking. |
 | `src/engine/tools/` | Model-callable tools | `defineTool(...)` capabilities attached only to owning agents. |
 | `src/engine/workers/` | Worker/subagent implementations | Specialized worker profiles plus worker-local support code and worker workspaces. |
 
@@ -74,7 +74,7 @@ Top-level non-`src/` directories:
 | --- | --- |
 | `crates/gorombo-memory/` | Rust engine compiled to WebAssembly via `wasm-pack`. Owns the structured-memory data model, validation (scope non-empty, slug uniqueness, checklist cycle/depth), the in-memory inverted index, and the query planner. Never exposed to the model or agents directly — only via `src/engine/memory/rust-memory-engine.ts`. The TypeScript shim generates ids/timestamps/audit fields (Rust owns no clock/RNG in the WASM target) and passes fully-formed records to the WASM exports. The WASM module keeps a `thread_local` store hydrated by `reconcile_index` from the durable SQLite store on cold start. |
 | `sim-one-cli/` | Product command wrapper. Owns `sim-one` command routing, capability subcommands, and the legacy `--ink` fallback. No-argument `sim-one` launches the packaged Ratatui binary instead of owning terminal UI state itself. |
-| `tui/ratatui/` | Production local terminal client. Owns root-only assistant stream consolidation, assistant Markdown-to-terminal rendering, semantic transcript-row formatting, the responsive two-column transcript margin, bold prefix-only color accents, the centralized terminal palette, Unicode display-width-aware word wrapping and vertical cursor movement for transcript/prompt rows, pane-aware mouse routing, logical transcript and prompt selection, OSC52 clipboard handoff, clickable/scrollable slash-command drop-up, draggable transcript scrollbar, multiline prompt editing (including local `\` then Enter newline insertion), the product/explicit-session-name transcript header, explicit session-label status synchronization, immediate display of root Flue `text_delta`/`message_end`, full-range HTTP-result reconciliation, frame-level transcript live-tail enforcement, the virtual blank tail margin, TUI-local slash commands, gateway launch/reuse, stream attach/restart, and the packaged `sim-one-ratatui-tui` binary. Nested worker response payloads remain internal to the orchestrator. It is a connector surface, not an agent runtime. |
+| `tui/ratatui/` | Production local terminal client. Owns typed gateway-history loading, one semantic replay/live transcript document, root-only assistant stream consolidation, paged prepend with stable viewport anchors, assistant Markdown-to-terminal rendering, semantic transcript-row formatting, the responsive two-column transcript margin, bold prefix-only color accents, the centralized terminal palette, Unicode display-width-aware word wrapping and vertical cursor movement for transcript/prompt rows, pane-aware mouse routing, logical transcript and prompt selection, OSC52 clipboard handoff, clickable/scrollable slash-command drop-up, draggable transcript scrollbar, multiline prompt editing (including local `\` then Enter newline insertion), the product/explicit-session-name transcript header, explicit session-label status synchronization, immediate display of root Flue `text_delta`/`message_end`, full-range HTTP-result reconciliation, frame-level transcript live-tail enforcement, the virtual blank tail margin, TUI-local slash commands, gateway launch/reuse, stream attach/restart, and the packaged `sim-one-ratatui-tui` binary. Nested worker response payloads remain internal to the orchestrator. It is a connector surface, not an agent runtime and never reads runtime databases directly. |
 | `scripts/` | Build, smoke, and admin scripts. TUI-relevant scripts include `build-ratatui-tui.mjs`, `check-sim-one-product-command.mjs`, `test-ratatui-product.mjs`, `test-ratatui-interactive.py`, `test-ratatui-visible-final.py`, `test-tui-e2e.mjs`, `test-built-http.mjs`, and `capability-admin.mjs`. |
 | `docs/tui/` | User-facing TUI guides. Keep command and behavior descriptions aligned with `docs/architecture/tui-cli-session-flow.md`. |
 | `docs/operations/` | Operator runbooks for packaged runtime and connectors. `product-tui.md` owns packaged launch, runtime paths, env files, and smoke commands. |
@@ -124,11 +124,15 @@ src/api/routes/chat-events.ts
 
 src/api/routes/chat-sessions.ts
   Product session lifecycle API.
-  Creates a fresh durable TUI session, validates exact owned-session resume, and lists sessions only for the supplied stable TUI scope. Lifecycle calls do not create normalized message events.
+  Creates a fresh durable TUI session, validates exact owned-session resume, lists sessions only for the supplied stable TUI scope, and exposes the ownership-validated canonical-id transcript projection. Lifecycle and transcript reads do not create normalized message events.
 
 src/engine/session/session-routing.ts
   Owns session creation/resume access checks and connector persistence policy.
-  Only Telegram currently reuses a connector-scoped active session; TUI and non-messaging surfaces create fresh sessions unless a session id is explicitly resumed.
+  Only Telegram currently reuses a connector-scoped active session; TUI and non-messaging surfaces create fresh sessions unless an exact owned session id or explicit name is resumed.
+
+src/engine/session/session-transcript.ts
+  Product-owned semantic transcript projection.
+  Correlates normalized connector prompts with Flue durable submissions, sanitizes root public activity/finals, pages by opaque prompt cursors, and returns the stream `nextOffset` used for replay-to-live handoff. It uses the connected Flue persistence interface and does not open SQLite directly.
 
 sim-one-cli/src/cli.tsx
   Product CLI wrapper.
@@ -138,7 +142,11 @@ sim-one-cli/src/cli.tsx
 
 tui/ratatui/src/main.rs
   Ratatui binary entrypoint.
-  Wires gateway startup/reuse, default fresh creation versus explicit `--session` resume, scripted product-smoke modes through the same lifecycle, terminal setup/restore, event loop, and final `/exit` session-id output.
+  Wires gateway startup/reuse, default fresh creation versus explicit `--session` id/name resolution, scripted product-smoke modes through the same lifecycle, terminal setup/restore, event loop, diagnostics initialization, clipboard delivery, and final `/exit` session-id output.
+
+tui/ratatui/src/diagnostics.rs
+  Privacy-safe local TUI diagnostics.
+  Resolves the packaged `.gorombo/logs` path, writes typed JSONL lifecycle/input events, rotates bounded files, and deliberately excludes prompt, response, selected-text, session-name, secret, and raw-error content.
 
 tui/ratatui/src/gateway.rs
   Packaged gateway launcher.
@@ -146,12 +154,20 @@ tui/ratatui/src/gateway.rs
 
 tui/ratatui/src/agent.rs
   TUI HTTP client.
-  Creates fresh sessions through `POST /api/chat/sessions`, validates explicit resume through `POST /api/chat/sessions/:id/resume`, and reads the scope-filtered lifecycle list for `/sessions`.
+  Creates fresh sessions through `POST /api/chat/sessions`, validates explicit id/name resume through `POST /api/chat/sessions/:selector/resume`, accepts canonical ids returned by the gateway, and reads the scope-filtered lifecycle list for `/sessions`.
   Sends normal prompts and backend-owned slash commands through `/api/chat/events` as connector `tui` with stable `local-tui` actor/conversation/thread scope and the current durable session id.
+
+tui/ratatui/src/history.rs
+  Typed transcript-history gateway client.
+  Loads canonical-id pages with stable TUI ownership fields, parses the display-neutral exchange contract, and returns the snapshot stream offset without exposing persistence details to the app.
+
+tui/ratatui/src/transcript.rs
+  Ordered semantic replay/live document.
+  Keeps completed snapshot exchanges immutable, applies root live updates through stable compound identities, orders terminal activity before the final assistant response, and exposes stable source-line ids for pagination anchors and selection.
 
 tui/ratatui/src/app.rs
   TUI state reducer.
-  Owns asynchronous fresh-create and explicit-resume startup phases, greeting-only-on-fresh ordering, fail-closed startup input, prompt editing and UTF-8-safe selection, slash-command metadata/filtering/keyboard/mouse selection state, pane hit regions, transcript scroll/scrollbar/logical-selection state, queued clipboard text, the product/explicit-session-name header, pending spinner/status, dimmed root-assistant live text, immediate final-message display from root Flue `message_end`, idempotent full-range HTTP reconciliation, final-response/activity ordering, the rendered-only blank tail margin, TUI-local commands (`/session`, `/sessions`, `/help`, `/exit`), backend command response handling for `/new`, `/clear`, `/resume`, `/rename`, `/compact`, active session switching, and stream restart.
+  Owns asynchronous fresh-create and explicit id/name resume/history startup phases, missing-selector fresh fallback, greeting-only-on-fresh ordering, snapshot-before-stream input locking, older-page requests and viewport-anchor restoration, fail-closed forbidden/ambiguous startup input, prompt editing and UTF-8-safe selection, selection-aware Ctrl+C copy-versus-exit, slash-command metadata/filtering/keyboard/mouse selection state, pane hit regions, transcript scroll/scrollbar/logical-selection state, queued clipboard text, the product/explicit-session-name header, pending spinner/status, dimmed root-assistant live text, immediate final-message display from root Flue `message_end`, idempotent full-range HTTP reconciliation, final-response/activity ordering, the rendered-only blank tail margin, TUI-local commands (`/session`, `/sessions`, `/help`, `/exit`), backend command response handling for `/new`, `/clear`, `/resume`, `/rename`, `/compact`, active session switching, and stream restart.
 
 tui/ratatui/src/input.rs
   Terminal event normalization.

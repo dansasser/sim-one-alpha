@@ -33,7 +33,7 @@ Useful launch flags:
 ./.gorombo/sim-one-cli/sim-one --base-url http://127.0.0.1:3940
 ```
 
-Use `--session <id>` only when you intentionally want to validate, attach to, and stream an existing TUI session. Explicit resume restores an existing name and history without adding another startup greeting.
+Use `--session <selector>` only when you intentionally want to validate, attach to, and stream an existing TUI session by canonical id or exact explicit name. A successful resume restores the canonical id, name, and history without adding another startup greeting. A missing selector creates a fresh session and greeting; denied or duplicate-name selectors fail closed.
 
 ## Layout
 
@@ -46,6 +46,16 @@ Assistant responses render Markdown while preserving the original Markdown in ca
 All transcript text uses a two-column left margin inside the pane border. The margin is deducted from the available wrap width so text wraps before the right edge; on extremely narrow terminals it contracts to preserve at least one content column. Word-wrapped and explicit multiline continuation rows keep the same margin and their semantic body style without repeating or extending the label accent. Submitted `you:` rows remain full-width gray bands, including the margin cells, instead of receiving a separate prefix color.
 
 The initial transcript should contain startup/preflight rows, the newly created TUI session id, and the agent greeting. It should not contain scaffold scroll-test rows, a default `primary` session, or history from a prior launch; specific old sessions are shown only after an explicit `--session` launch or `/resume`.
+
+## Durable History
+
+An explicit resume restores the canonical session id and explicit name, then loads the newest durable transcript page before unlocking prompt input. Restored content includes the original assistant greeting, visible user prompts, settled public operation/thinking/tool/task rows, and final root-assistant responses. It does not add a second greeting.
+
+Internal startup prompt text, raw tool results, nested worker response bodies, empty assistant tool-call messages, and TUI-local command output are not restored as conversation messages. The gateway applies those visibility rules before returning the display-neutral transcript snapshot; the Rust client does not read SQLite directly.
+
+The initial snapshot returns a Flue `nextOffset`. Ratatui installs the snapshot first and attaches the live stream strictly after that offset, so catch-up and reconnect replay cannot duplicate completed history or settle a different pending prompt. Completed exchanges are immutable; live activity updates are matched by submission, operation, turn, tool-call, and task identities.
+
+History is paged newest-first at the API boundary and rendered chronologically. Reaching the oldest loaded exchange requests the next older page. The TUI prepends it while preserving the exact visible source row, so the viewport does not jump to startup notices, the oldest row, or the live tail. Prompt editing, selection-aware copy, and transcript scrolling remain active during scrollback.
 
 The bottom pane contains gateway/session/model status and the editable prompt line. The entire visible prompt-editor interior uses a darker gray background so the active composer remains distinct from transcript content. Prompt editing remains active while the transcript is scrolled. Mouse events are routed by pane: an open command palette receives them first, followed by the prompt, transcript scrollbar, and transcript text.
 
@@ -116,7 +126,7 @@ Backend session commands:
 ```text
 /new [title]
 /clear [title]
-/resume <session-id>
+/resume <session-id-or-name>
 /rename <title>
 /compact
 ```
@@ -139,7 +149,7 @@ If the gateway fails to start, run the product smoke:
 pnpm run test:tui:ratatui
 ```
 
-On POSIX systems, this smoke launches the packaged `sim-one` command in a real PTY and verifies keyboard and mouse palette selection, backslash-Enter multiline input, prompt click placement, drag-copy/replacement, prompt-local wheel scrolling, and full-range scrollbar navigation against a local gateway stub. It also launches the packaged product twice against one isolated database, proves distinct default session ids, verifies one greeting event per fresh session with no lifecycle slash command, and resumes an explicitly named session without another greeting. The live-response fixture sends nested worker output, a root live assistant delta, and a multiline Markdown root `message_end` while holding the HTTP prompt response open. Cross-platform Rust integration tests exercise exact multiline consolidation, Markdown styles, pane routing, Unicode selection, input, app-state, ordering, terminal-size, and framebuffer behavior.
+On POSIX systems, this smoke launches the packaged `sim-one` command in a real PTY and verifies newest-page history at the true tail, asynchronous older-page prepend with viewport-anchor preservation, prompt submission during scrollback, transcript-selection `Ctrl+C` copy without exit, return to live tail, keyboard and mouse palette selection, backslash-Enter multiline input, prompt click placement, drag-copy/replacement, and prompt-local wheel scrolling. It also launches the packaged product twice against one isolated database, proves distinct default session ids, verifies one greeting event per fresh session with no lifecycle slash command, seeds and resumes an explicitly named session, and asserts that visible prompts, settled activity durations, and final Markdown are restored exactly once while internal startup text, raw tool results, nested worker output, and a second greeting stay absent. The reconnect fixture holds history loading, rejects stale replay settlement, disconnects after an in-flight batch, reconnects from the confirmed offset, deduplicates replay, and displays the authoritative root final before HTTP settlement.
 
 OSC52 clipboard delivery depends on terminal and multiplexer support. Selection and highlighting still work when the host refuses OSC52, but the host clipboard may not update until OSC52 passthrough is enabled.
 
@@ -152,7 +162,9 @@ Exited SIM-ONE Alpha TUI. Session: <session-id>
 Resume it directly on the next launch:
 
 ```sh
-./.gorombo/sim-one-cli/sim-one --session <session-id>
+./.gorombo/sim-one-cli/sim-one --session <session-id-or-name>
 ```
 
-`/resume <session-id>` remains available when switching sessions inside an already running TUI.
+`/resume <session-id-or-name>` remains available when switching sessions inside an already running TUI.
+
+Runtime diagnostics are written as bounded JSONL at `.gorombo/logs/sim-one-ratatui.jsonl`; three 1 MiB rotations are retained. `SIM_ONE_TUI_LOG_PATH` can override the path. Transcript startup and pagination emit `history.load.started`, `history.load.completed`, `history.load.failed`, `history.page.prepended`, and `stream.attach.started`. The log contains counts, elapsed time, categories, modes, and canonical ids, never prompt, response, selected-text, secret, session-name, or raw-error content.

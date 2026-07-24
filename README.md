@@ -588,14 +588,16 @@ pnpm --filter sim-one-cli exec tsx src/cli.tsx skill add /path/to/skill my-skill
 pnpm --filter sim-one-cli exec tsx src/cli.tsx mcp add my-mcp "My MCP" --url http://localhost:8080 --enable
 ```
 
-A no-argument launch creates a fresh durable TUI session through `POST /api/chat/sessions`, attaches its Flue stream, and sends the startup greeting as that session's first normal prompt. It never resumes the last TUI session implicitly. Existing TUI context loads only through `--session <id>` at launch or `/resume <session-id>` inside the app. Telegram retains its own connector-conversation persistence policy; that policy does not apply to the TUI.
+A no-argument launch creates a fresh durable TUI session through `POST /api/chat/sessions`, attaches its Flue stream, and sends the startup greeting as that session's first normal prompt. It never resumes the last TUI session implicitly. Existing TUI context loads through an exact id or explicit name with `--session <selector>` at launch or `/resume <session-id-or-name>` inside the app. A missing launch selector falls back to a new session and greeting; denied or ambiguous selectors still fail closed. Telegram retains its own connector-conversation persistence policy; that policy does not apply to the TUI.
+
+Explicit TUI resume restores prior visible prompts, settled public activity, and final root-assistant responses through the gateway's ownership-validated transcript projection before the live stream attaches. It does not send a second greeting or expose internal startup prompts, raw tool results, or nested worker response bodies. Ratatui consumes the returned snapshot and Flue `nextOffset`; it never reads runtime databases directly.
 
 Core TUI slash commands:
 
 ```text
 /new [title]           create a new durable TUI session and switch to it
 /clear [title]         clear the active TUI thread by creating a new active session
-/resume <session-id>   resume an available durable session and switch to it
+/resume <session-id-or-name> resume an available durable session and switch to it
 /sessions [limit]      list recent sessions, default 10, max 50
 /session               show the current active session id
 /rename <title>        rename the active durable session
@@ -1100,7 +1102,7 @@ Slash commands are parsed before the prompt reaches the LLM:
 
 - `/new` starts a new trusted connector/TUI session. GUI-managed web chat should use the client new-chat control instead, and generic Web API payloads cannot opt into connector-only behavior by spoofing a connector name.
 - `/clear` replaces the current TUI conversation with a fresh durable session while preserving the prior session for explicit resume.
-- `/resume <session-id>` resumes an available durable TUI session after access checks.
+- `/resume <session-id-or-name>` resumes an available durable TUI session after access checks. Exact duplicate names return a conflict instead of selecting one arbitrarily.
 - `/rename <title>` renames the active durable TUI session.
 - `/compact` calls Flue `session.compact()` for the resolved durable direct-agent session and returns command telemetry.
 

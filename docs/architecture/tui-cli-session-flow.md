@@ -134,6 +134,12 @@ When it starts the packaged server, the launcher sets the child process cwd to t
 
 The launcher only stops a server child that it started. It does not stop a gateway that was already running.
 
+## Local TUI Diagnostics
+
+`tui/ratatui/src/diagnostics.rs` owns a best-effort, process-local JSONL diagnostic stream. Packaged path resolution follows the executable back to its owning `.gorombo` tree, so an arbitrary caller working directory cannot redirect logs. `SIM_ONE_TUI_LOG_PATH` is the explicit override used by isolated product tests.
+
+Each entry has a timestamp, launch id, process id, elapsed time, event name, and bounded typed fields. Events cover launch mode, gateway readiness/failure category, session lifecycle start/result/failure, transcript history load/page outcomes, stream attachment, Ctrl+C copy-versus-exit behavior, clipboard failure category, and application exit. The logger records canonical session ids where useful but stores no prompt, response, selected text, session-name selector, secret, or raw error. Rotation occurs before a write would exceed 1 MiB, retaining `.1` through `.3`.
+
 ## Startup Preflight And Greeting
 
 A normal no-argument TUI launch does not attach to a default `primary` session or a previous TUI session. It starts with a clean local transcript and no agent session id, creates a fresh durable session through the lifecycle API, attaches the stream to the returned id, reports preflight status, then sends an automatic greeting as the first normal prompt through `/api/chat/events`.
@@ -154,9 +160,56 @@ TUI opens
 
 The TUI owns only connector checks and transcript/status rendering. The greeting words are not hardcoded in Rust. The startup prompt instructs the main orchestrator to use the built-in Flue skill `greeting-preflight`, which lives at `src/skills/greeting-preflight/SKILL.md` and is registered in `src/agents/orchestrator.ts` through the documented `with { type: 'skill' }` import flow.
 
-Passing `--session <id>` is an explicit resume launch. The TUI first calls `POST /api/chat/sessions/:id/resume` with the stable local identity. Only an owned session is accepted; its explicit title is restored, its stream/history is attached, and no startup greeting is appended. A denied or missing session fails startup and leaves prompt submission locked.
+Passing `--session <selector>` is an explicit resume launch. The TUI first calls `POST /api/chat/sessions/:selector/resume` with the stable local identity. The gateway checks canonical id first, then resolves an exact explicit name within the same TUI ownership scope. A successful resume returns the canonical id, restores the explicit title, attaches stream/history, and appends no startup greeting. A missing selector returns a newly created session so startup continues through the normal fresh greeting path. Cross-scope selectors return 403 and duplicate names return 409; both fail startup and leave prompt submission locked.
 
 Telegram has a separate connector policy: updates in one Telegram chat/thread reuse that connector-owned active session until a connector command changes it. TUI, Web API, scheduled-job, test, and unknown connectors do not inherit Telegram persistence.
+
+## Durable Transcript Projection And Replay
+
+The gateway owns transcript reconstruction. `GET /api/chat/sessions/:sessionId/transcript` accepts only a canonical id plus the stable TUI identity, applies the existing ownership check, and returns a display-neutral semantic page. Ratatui never opens `sessions.sqlite` or `flue.sqlite`.
+
+The projection combines two authoritative sources:
+
+```text
+normalized_message_events
+  visible connector prompt text and explicit startup-workflow visibility
+
+Flue EventStreamStore
+  root submission activity, authoritative duration/error state,
+  root assistant message_end, and durable stream offset
+```
+
+`src/engine/session/session-transcript.ts` reads the already-connected Flue `EventStreamStore` through the product persistence runtime. It correlates prompts to submissions with stored delivery metadata, sanitizes each event batch, and returns semantic exchanges. It does not execute an agent, duplicate Flue persistence, or create a second conversation source.
+
+The projection returns only visible user prompts, bounded root thinking previews, structured public operation/tool/task activity, and non-empty root-assistant finals. It excludes internal startup prompts, raw tool results, tool arguments, nested worker thinking/responses, empty assistant tool-call messages, and unknown event payloads. Events with `parentSession` cannot become assistant chat responses. TUI-local command output has no Flue submission and is not durable conversation history.
+
+Explicit resume ordering is:
+
+```text
+POST /api/chat/sessions/:selector/resume
+-> receive canonical id and explicit name
+-> GET /api/chat/sessions/:canonicalId/transcript
+-> install newest chronological exchange page
+-> read snapshot stream.nextOffset
+-> attach Flue catch-up/live stream strictly after nextOffset
+-> unlock prompt input
+```
+
+The current launch's preflight notices remain local rows around the restored snapshot. A successful resume restores the original greeting and prior conversation without sending a second greeting. Completed snapshot exchanges are immutable. Live updates share `TranscriptDocument` with replayed exchanges and use compound submission/operation/turn/tool/task identities, so reconnect replay updates the existing record instead of duplicating it or settling another pending prompt.
+
+The transcript endpoint reads newest prompt pages with an opaque `before` cursor and returns each page chronologically. When the user reaches the earliest loaded exchange, Ratatui requests the next page and prepends it. Stable source-row ids preserve the exact visible row and any logical selection across the prepend. Older-page responses never rewind the already attached live stream.
+
+The visible exchange sequence is:
+
+```text
+you: prompt
+operation/thinking/tool/task activity
+terminal operation with authoritative durationMs
+assistant: authoritative root Markdown response
+rendered-only blank tail margin
+```
+
+Root `text_delta` creates one dimmed live preview. Root `message_end` replaces that preview with one final Markdown block. Terminal operation events may arrive after `message_end`, but the semantic document orders settled activity before the final response. Repeated completed turn rows are omitted from the default transcript.
 
 ## Prompt Flow
 
@@ -203,6 +256,20 @@ The TUI accepts response text only from root-orchestrator events, identified by 
 
 The stable `local-tui` actor/conversation/thread scope is intentional. The gateway uses it to prove ownership for resume and to scope `/sessions`; it is not an active-session pointer. The current session id selects the durable conversation, while the stable identity lets `/new`, `/clear`, `/resume`, `/rename`, and `/compact` operate across explicit session switches without exposing another actor's or connector's sessions.
 
+## Transcript Diagnostics
+
+The local diagnostics distinguish persistence/projection failures from rendering failures without logging conversation content:
+
+| Event | Meaning |
+| --- | --- |
+| `history.load.started` | The explicit-resume snapshot request was launched. |
+| `history.load.completed` | The snapshot was parsed and installed; fields include exchange/activity counts, elapsed time, and `hasOlder`. |
+| `history.load.failed` | The request, status, parse, session-id validation, or projection path failed; only a bounded category and elapsed time are stored. |
+| `history.page.prepended` | An older page was installed; fields include added exchange count, elapsed time, and `hasOlder`. |
+| `stream.attach.started` | Live attachment began in `fresh_tail` or `snapshot_tail` mode. |
+
+If `history.load.completed` reports zero exchanges for a session expected to have messages, investigate normalized-message persistence, Flue event persistence, and gateway projection. If it reports exchanges but the TUI shows none, investigate `TranscriptDocument`, wrapping, and viewport rendering. If `history.load.started` is followed by `history.load.failed`, use its category with the gateway warning name to isolate transport/auth/projection failure. If `hasOlder` is true but no `history.page.prepended` appears after reaching the first exchange, investigate the page trigger/cursor path. A successful resume should show `history.load.completed` before `stream.attach.started` with mode `snapshot_tail`.
+
 ## Slash Commands
 
 Slash commands are parsed before prompt text reaches the LLM.
@@ -213,7 +280,7 @@ Backend-owned commands:
 | --- | --- | --- |
 | `/new [title]` | `src/api/routes/chat-events.ts` | Creates a new durable TUI session, returns its id, and the TUI switches to it. |
 | `/clear [title]` | `src/api/routes/chat-events.ts` | Replaces the current TUI conversation with a fresh durable session and preserves the old id for resume. |
-| `/resume <session-id>` | `src/api/routes/chat-events.ts` | Validates session access for the TUI actor/conversation scope, returns the session, and the TUI switches to it. |
+| `/resume <session-id-or-name>` | `src/api/routes/chat-events.ts` | Resolves an exact id or explicit name, validates TUI actor/conversation scope, returns the canonical session id, and switches the TUI. Missing selectors leave the current session unchanged. |
 | `/rename <title>` | `src/api/routes/chat-events.ts` | Renames the active durable session. |
 | `/compact` | `src/api/routes/chat-events.ts` | Opens the active durable Flue session and calls `session.compact()` without sending `/compact` to the model. |
 
@@ -268,6 +335,9 @@ startup preflight through the packaged Ratatui path
 two packaged default launches produce different session ids
 SQLite proves one greeting-first event per fresh session and no lifecycle slash command
 explicit --session restores the requested name/history without another greeting
+explicit --session by exact name resolves to the canonical id
+missing launch selector creates a fresh session and greeting
+diagnostics record lifecycle and Ctrl+C outcomes without private content
 clean transcript without scaffold scroll rows
 agent greeting through the built-in greeting-preflight skill path
 /new
@@ -333,6 +403,12 @@ Change TUI request payloads or response parsing:
 Change gateway launch/reuse behavior:
   tui/ratatui/src/gateway.rs
   tui/ratatui/tests/gateway_launcher.rs
+
+Change local TUI diagnostics:
+  tui/ratatui/src/diagnostics.rs
+  tui/ratatui/src/main.rs
+  tui/ratatui/src/app.rs
+  scripts/test-ratatui-product.mjs
 
 Change product CLI routing:
   sim-one-cli/src/cli.tsx
