@@ -658,7 +658,7 @@ fn transcript_wrap_width_excludes_the_left_margin() {
 }
 
 #[test]
-fn prompt_does_not_split_a_word_longer_than_the_input_width() {
+fn prompt_splits_a_token_that_is_longer_than_the_input_width() {
     let backend = TestBackend::new(24, 12);
     let mut terminal = Terminal::new(backend).expect("test backend should initialize");
     let mut app = App::new_for_test();
@@ -676,8 +676,8 @@ fn prompt_does_not_split_a_word_longer_than_the_input_width() {
         .map(|cell| cell.symbol())
         .collect::<String>();
     assert!(buffer.contains("abcdefghijklmnopqrst"), "{buffer}");
-    assert!(!buffer.contains("uvwxyz"), "{buffer}");
-    assert_eq!(terminal.backend().cursor_position(), Position::new(22, 9));
+    assert!(buffer.contains("uvwxyz"), "{buffer}");
+    assert_eq!(terminal.backend().cursor_position(), Position::new(9, 10));
 }
 
 #[test]
@@ -852,7 +852,9 @@ fn first_pending_response_is_visible_without_waiting_for_another_prompt() {
         .iter()
         .map(|cell| cell.symbol())
         .collect::<String>();
-    assert!(buffer.contains("final response"), "{buffer}");
+    assert!(app.is_agent_pending());
+    assert!(buffer.contains("thinking"), "{buffer}");
+    assert!(!buffer.contains("done: first prompt"), "{buffer}");
     assert_eq!(app.transcript_scroll(), app.max_scroll());
 }
 

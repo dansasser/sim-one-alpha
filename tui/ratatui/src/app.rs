@@ -312,6 +312,7 @@ pub struct App {
     transcript_line_ids: Vec<String>,
     transcript_line_kinds: Vec<TranscriptRowKind>,
     transcript_line_streaming: Vec<bool>,
+    transcript_render_cache: Vec<RenderedTranscriptRow>,
     transcript_scroll: usize,
     follow_tail: bool,
     should_quit: bool,
@@ -330,6 +331,8 @@ pub struct App {
     pending_response: Option<PendingResponse>,
     pending_session_lifecycle: Option<PendingSessionLifecycle>,
     pending_history: Option<PendingHistory>,
+    pending_session_switch_notice: Option<String>,
+    pending_session_switch_attach_stream: bool,
     history_before: Option<String>,
     history_has_older: bool,
     stream_handle: Option<AgentStreamHandle>,
@@ -391,6 +394,7 @@ struct HistoryResponse {
 enum HistoryRequestKind {
     Startup,
     Older,
+    SessionSwitch,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -638,6 +642,7 @@ impl App {
                 .map(|line| transcript_row_kind_from_document(line.kind))
                 .collect(),
             transcript_line_streaming: initial_lines.iter().map(|line| line.is_streaming).collect(),
+            transcript_render_cache: Vec::new(),
             transcript_scroll: 0,
             follow_tail: true,
             should_quit: false,
@@ -656,6 +661,8 @@ impl App {
             pending_response: None,
             pending_session_lifecycle: None,
             pending_history: None,
+            pending_session_switch_notice: None,
+            pending_session_switch_attach_stream: false,
             history_before: None,
             history_has_older: false,
             stream_handle: None,
@@ -674,6 +681,7 @@ impl App {
             startup_phase: StartupPhase::Idle,
             startup_attach_stream: false,
         };
+        app.rebuild_transcript_render_cache();
         app.jump_to_tail();
         app
     }
@@ -1042,6 +1050,25 @@ impl App {
                     self.history_has_older,
                 );
             }
+            HistoryRequestKind::SessionSwitch => {
+                diagnostics::history_load_completed(
+                    exchange_count,
+                    activity_count,
+                    elapsed_ms,
+                    self.history_has_older,
+                );
+                self.transcript_document.install_snapshot(page.exchanges);
+                self.rebuild_transcript_cache();
+                self.stream_start_offset = page.stream.next_offset;
+                if self.pending_session_switch_attach_stream {
+                    self.start_stream();
+                }
+                self.pending_session_switch_attach_stream = false;
+                if let Some(notice) = self.pending_session_switch_notice.take() {
+                    self.push_speaker_text("system", &notice);
+                }
+                self.agent_status = "ready".to_string();
+            }
         }
     }
 
@@ -1054,6 +1081,12 @@ impl App {
             }
             HistoryRequestKind::Older => {
                 self.push_speaker_text("error", "Could not load older session history.");
+            }
+            HistoryRequestKind::SessionSwitch => {
+                self.pending_session_switch_attach_stream = false;
+                self.pending_session_switch_notice = None;
+                self.agent_status = "error".to_string();
+                self.push_speaker_text("error", "Could not load resumed session history.");
             }
         }
     }
@@ -1073,6 +1106,11 @@ impl App {
                 self.agent_status = "ready".to_string();
                 match response.result {
                     Ok(reply) => {
+                        if self.handle_command_session_switch(&reply) {
+                            self.continue_startup_after_agent_reply(&reply);
+                            self.after_transcript_changed();
+                            return;
+                        }
                         let session_id = reply.session_id.clone();
                         let explicit_session_title = matches!(
                             reply.command_name.as_deref(),
@@ -1354,7 +1392,10 @@ impl App {
         }
 
         self.transcript_viewport_height = height;
-        self.transcript_viewport_width = width;
+        if self.transcript_viewport_width != width {
+            self.transcript_viewport_width = width;
+            self.rebuild_transcript_render_cache();
+        }
         if self.follow_tail {
             self.jump_to_tail();
         } else {
@@ -1374,13 +1415,7 @@ impl App {
     }
 
     pub fn transcript_rendered_rows(&self) -> Vec<RenderedTranscriptRow> {
-        let mut rows = wrap_transcript_rows(
-            &self.transcript_lines,
-            &self.transcript_line_ids,
-            &self.transcript_line_kinds,
-            &self.transcript_line_streaming,
-            self.transcript_viewport_width,
-        );
+        let mut rows = self.transcript_render_cache.clone();
         rows.extend(std::iter::repeat_n(
             RenderedTranscriptRow {
                 text: String::new(),
@@ -2266,6 +2301,63 @@ impl App {
         }
     }
 
+    fn handle_command_session_switch(&mut self, reply: &AgentReply) -> bool {
+        let Some(command) = reply.command_name.as_deref() else {
+            return false;
+        };
+        if !matches!(command, "new" | "clear" | "resume") {
+            return false;
+        }
+        let Some(session_id) = reply
+            .session_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|session_id| !session_id.is_empty())
+        else {
+            return false;
+        };
+        if session_id == self.session_id {
+            return false;
+        }
+
+        let had_stream = self.stream_handle.take().is_some_and(|handle| {
+            handle.cancel();
+            true
+        });
+        self.session_id = session_id.to_string();
+        self.session_title = clean_session_title(reply.session_title.clone());
+        self.history_before = None;
+        self.history_has_older = false;
+        self.stream_start_offset = if command == "resume" {
+            "-1".to_string()
+        } else {
+            "now".to_string()
+        };
+        self.last_stream_event = None;
+        self.legacy_submission_id = None;
+        self.stream_status = StreamStatus::NotAttached;
+        self.transcript_document = TranscriptDocument::default();
+        self.transcript_selection = None;
+        self.transcript_scroll = 0;
+        self.follow_tail = true;
+        self.rebuild_transcript_cache();
+
+        if command == "resume" {
+            self.pending_session_switch_notice = Some(reply.text.trim().to_string());
+            self.pending_session_switch_attach_stream = had_stream;
+            self.agent_status = "loading history".to_string();
+            diagnostics::history_load_started();
+            self.start_history_request(None, HistoryRequestKind::SessionSwitch);
+        } else {
+            if had_stream {
+                self.start_stream();
+            }
+            self.push_speaker_text("system", reply.text.trim());
+            self.agent_status = "ready".to_string();
+        }
+        true
+    }
+
     fn complete_session_lifecycle(
         &mut self,
         reply: SessionLifecycleReply,
@@ -2449,6 +2541,17 @@ Use the workspace identity and user context already loaded for this agent. Greet
             .map(|line| transcript_row_kind_from_document(line.kind))
             .collect();
         self.transcript_line_streaming = lines.iter().map(|line| line.is_streaming).collect();
+        self.rebuild_transcript_render_cache();
+    }
+
+    fn rebuild_transcript_render_cache(&mut self) {
+        self.transcript_render_cache = wrap_transcript_rows(
+            &self.transcript_lines,
+            &self.transcript_line_ids,
+            &self.transcript_line_kinds,
+            &self.transcript_line_streaming,
+            self.transcript_viewport_width,
+        );
     }
 
     fn after_transcript_changed(&mut self) {

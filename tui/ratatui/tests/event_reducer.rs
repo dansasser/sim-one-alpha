@@ -195,7 +195,7 @@ fn transcript_document_scopes_repeated_event_indexes_to_submission() {
 }
 
 #[test]
-fn transcript_document_rejects_nested_empty_and_tool_result_messages() {
+fn transcript_document_rejects_all_nested_activity_and_non_assistant_messages() {
     let mut document = TranscriptDocument::default();
     document.apply_events(&[
         event_for(
@@ -211,13 +211,49 @@ fn transcript_document_rejects_nested_empty_and_tool_result_messages() {
             "root",
             2,
             serde_json::json!({
+                "type":"operation_start",
+                "parentSession":"worker-1",
+                "operationKind":"NESTED_OPERATION_SENTINEL"
+            }),
+        ),
+        event_for(
+            "root",
+            3,
+            serde_json::json!({
+                "type":"thinking_end",
+                "parentSession":"worker-1",
+                "content":"NESTED_THINKING_SENTINEL"
+            }),
+        ),
+        event_for(
+            "root",
+            4,
+            serde_json::json!({
+                "type":"tool",
+                "parentSession":"worker-1",
+                "toolName":"NESTED_TOOL_SENTINEL"
+            }),
+        ),
+        event_for(
+            "root",
+            5,
+            serde_json::json!({
+                "type":"task",
+                "parentSession":"worker-1",
+                "taskName":"NESTED_TASK_SENTINEL"
+            }),
+        ),
+        event_for(
+            "root",
+            6,
+            serde_json::json!({
                 "type":"message_end",
                 "message":{"role":"assistant","content":"   "}
             }),
         ),
         event_for(
             "root",
-            3,
+            7,
             serde_json::json!({
                 "type":"message_end",
                 "message":{"role":"toolResult","content":"TOOL_RESULT_SENTINEL"}
@@ -225,7 +261,7 @@ fn transcript_document_rejects_nested_empty_and_tool_result_messages() {
         ),
         event_for(
             "root",
-            4,
+            8,
             serde_json::json!({
                 "type":"message_end",
                 "message":{"role":"assistant","content":"visible root final"}
@@ -240,6 +276,10 @@ fn transcript_document_rejects_nested_empty_and_tool_result_messages() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(!transcript.contains("NESTED_SENTINEL"));
+    assert!(!transcript.contains("NESTED_OPERATION_SENTINEL"));
+    assert!(!transcript.contains("NESTED_THINKING_SENTINEL"));
+    assert!(!transcript.contains("NESTED_TOOL_SENTINEL"));
+    assert!(!transcript.contains("NESTED_TASK_SENTINEL"));
     assert!(!transcript.contains("TOOL_RESULT_SENTINEL"));
     assert_eq!(
         transcript
@@ -249,6 +289,73 @@ fn transcript_document_rejects_nested_empty_and_tool_result_messages() {
         1
     );
     assert!(transcript.contains("assistant: visible root final"));
+}
+
+#[test]
+fn transcript_document_preserves_text_carried_by_thinking_boundaries() {
+    let mut document = TranscriptDocument::default();
+    document.apply_events(&[
+        event_for(
+            "thinking-boundary",
+            1,
+            serde_json::json!({
+                "type":"thinking_start",
+                "turnId":"turn-1",
+                "content":"planning from start"
+            }),
+        ),
+        event_for(
+            "thinking-boundary",
+            2,
+            serde_json::json!({
+                "type":"thinking_end",
+                "turnId":"turn-1",
+                "content":"final bounded thought",
+                "durationMs":900
+            }),
+        ),
+    ]);
+
+    let transcript = document
+        .lines()
+        .into_iter()
+        .map(|line| line.text)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        transcript.contains("thinking: final bounded thought"),
+        "{transcript}"
+    );
+}
+
+#[test]
+fn legacy_reducer_rejects_nested_events_before_updating_state_or_rows() {
+    let mut transcript = EventTranscript::default();
+    for (index, kind) in [
+        "turn_start",
+        "thinking_end",
+        "operation_start",
+        "tool",
+        "task",
+        "message_end",
+        "log",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        transcript.apply_event(&event(
+            index as u64,
+            serde_json::json!({
+                "type":kind,
+                "parentSession":"worker-1",
+                "text":"NESTED_REDUCER_SENTINEL",
+                "message":{"role":"assistant","content":"NESTED_REDUCER_SENTINEL"}
+            }),
+        ));
+    }
+
+    assert!(transcript.rows().is_empty());
+    assert_eq!(transcript.current_turn().state, TurnState::Ready);
 }
 
 #[test]

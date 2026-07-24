@@ -3,6 +3,7 @@ use ratatui::text::{Line, Span};
 use tui_markdown::{from_str_with_options, Options};
 use unicode_width::UnicodeWidthChar;
 
+use crate::text_wrap::wrap_ranges;
 use crate::theme::TranscriptMarkdownStyleSheet;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,72 +98,35 @@ fn wrap_styled_line(
         return;
     }
 
-    let mut row_start = 0;
-    let mut row_width_limit = first_width;
-    while row_start < chars.len() {
-        let mut cursor = row_start;
-        let mut row_width = 0;
-        let mut last_break = None;
-        let mut saw_non_whitespace = false;
-        let mut emitted = false;
-
-        while cursor < chars.len() {
-            let ch = chars[cursor].ch;
-            row_width += UnicodeWidthChar::width(ch).unwrap_or_default();
-            if row_width > row_width_limit {
-                if let Some(break_at) = last_break {
-                    push_row(chars, row_start, break_at, source_line, source_text, rows);
-                    row_start = consume_whitespace(chars, break_at);
-                } else if ch.is_whitespace() {
-                    push_row(chars, row_start, cursor, source_line, source_text, rows);
-                    row_start = consume_whitespace(chars, cursor);
-                } else {
-                    let word_end = consume_word(chars, cursor);
-                    push_row(chars, row_start, word_end, source_line, source_text, rows);
-                    row_start = consume_whitespace(chars, word_end);
-                }
-                row_width_limit = continuation_width;
-                emitted = true;
-                break;
-            }
-
-            if ch.is_whitespace() {
-                if saw_non_whitespace {
-                    last_break = Some(cursor + 1);
-                }
-            } else {
-                saw_non_whitespace = true;
-            }
-            cursor += 1;
-        }
-
-        if !emitted {
-            push_row(
-                chars,
-                row_start,
-                chars.len(),
-                source_line,
-                source_text,
-                rows,
-            );
-            break;
-        }
+    for range in wrap_ranges(
+        0,
+        chars.len(),
+        first_width,
+        continuation_width,
+        |index| UnicodeWidthChar::width(chars[index].ch).unwrap_or_default(),
+        |index| chars[index].ch.is_whitespace(),
+    ) {
+        push_row(
+            chars,
+            range.start,
+            range.visible_end,
+            range.source_end,
+            source_line,
+            source_text,
+            rows,
+        );
     }
 }
 
 fn push_row(
     chars: &[StyledChar],
     start: usize,
-    display_end: usize,
+    visible_end: usize,
+    source_end: usize,
     source_line: usize,
     source_text: &str,
     rows: &mut Vec<StyledMarkdownLine>,
 ) {
-    let mut visible_end = display_end;
-    while visible_end > start && chars[visible_end - 1].ch.is_whitespace() {
-        visible_end -= 1;
-    }
-
     let mut spans: Vec<Span<'static>> = Vec::new();
     for styled in &chars[start..visible_end] {
         if let Some(last) = spans.last_mut().filter(|last| last.style == styled.style) {
@@ -180,22 +144,8 @@ fn push_row(
         source_line,
         source_text: source_text.to_string(),
         start_char: start,
-        end_char: visible_end,
+        end_char: source_end,
     });
-}
-
-fn consume_word(chars: &[StyledChar], mut index: usize) -> usize {
-    while index < chars.len() && !chars[index].ch.is_whitespace() {
-        index += 1;
-    }
-    index
-}
-
-fn consume_whitespace(chars: &[StyledChar], mut index: usize) -> usize {
-    while index < chars.len() && chars[index].ch.is_whitespace() {
-        index += 1;
-    }
-    index
 }
 
 #[cfg(test)]
@@ -223,6 +173,15 @@ mod tests {
         assert_eq!(
             rows.iter().map(|row| row.text.as_str()).collect::<Vec<_>>(),
             ["test", "界界"]
+        );
+    }
+
+    #[test]
+    fn splits_an_oversized_markdown_token_at_terminal_width() {
+        let rows = render_markdown("**abcdefghijkl**", 8, 8);
+        assert_eq!(
+            rows.iter().map(|row| row.text.as_str()).collect::<Vec<_>>(),
+            ["abcdefgh", "ijkl"]
         );
     }
 }

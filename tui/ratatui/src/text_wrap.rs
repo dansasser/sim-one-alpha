@@ -7,6 +7,13 @@ pub(crate) struct WrappedLine {
     pub end_char: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct WrappedRange {
+    pub start: usize,
+    pub visible_end: usize,
+    pub source_end: usize,
+}
+
 pub(crate) fn wrap_words(text: &str, width: usize) -> Vec<WrappedLine> {
     let width = width.max(1);
     let chars = text.chars().collect::<Vec<_>>();
@@ -51,38 +58,66 @@ fn wrap_logical_line(
         return;
     }
 
+    for range in wrap_ranges(
+        start,
+        end,
+        width,
+        width,
+        |index| UnicodeWidthChar::width(chars[index]).unwrap_or_default(),
+        |index| chars[index].is_whitespace(),
+    ) {
+        rows.push(WrappedLine {
+            text: chars[range.start..range.visible_end].iter().collect(),
+            start_char: range.start,
+            end_char: range.source_end,
+        });
+    }
+}
+
+pub(crate) fn wrap_ranges(
+    start: usize,
+    end: usize,
+    first_width: usize,
+    continuation_width: usize,
+    char_width: impl Fn(usize) -> usize,
+    is_whitespace: impl Fn(usize) -> bool,
+) -> Vec<WrappedRange> {
+    let mut ranges = Vec::new();
     let mut row_start = start;
+    let mut row_width_limit = first_width.max(1);
+
     while row_start < end {
         let mut cursor = row_start;
-        let mut row_width = 0;
+        let mut row_width = 0usize;
         let mut last_break = None;
         let mut saw_non_whitespace = false;
-        let mut emitted = false;
 
         while cursor < end {
-            let ch = chars[cursor];
-            row_width += UnicodeWidthChar::width(ch).unwrap_or_default();
-            if row_width > width {
-                if let Some(break_at) = last_break {
-                    push_row(chars, row_start, break_at, break_at, rows);
-                    row_start = break_at;
-                } else if ch.is_whitespace() {
-                    let next_word = consume_whitespace(chars, cursor, end);
-                    push_row(chars, row_start, cursor, next_word, rows);
-                    row_start = next_word;
+            let next_width = row_width.saturating_add(char_width(cursor));
+            if next_width > row_width_limit {
+                let (display_end, source_end) = if let Some(break_at) = last_break {
+                    (break_at, consume_whitespace(break_at, end, &is_whitespace))
+                } else if is_whitespace(cursor) {
+                    (cursor, consume_whitespace(cursor, end, &is_whitespace))
+                } else if cursor > row_start {
+                    (cursor, cursor)
                 } else {
-                    let word_end = consume_word(chars, cursor, end);
-                    let next_word = consume_whitespace(chars, word_end, end);
-                    push_row(chars, row_start, word_end, next_word, rows);
-                    row_start = next_word;
-                }
-                emitted = true;
+                    (cursor + 1, cursor + 1)
+                };
+                ranges.push(WrappedRange {
+                    start: row_start,
+                    visible_end: trim_trailing_whitespace(row_start, display_end, &is_whitespace),
+                    source_end,
+                });
+                row_start = source_end;
+                row_width_limit = continuation_width.max(1);
                 break;
             }
 
-            if ch.is_whitespace() {
+            row_width = next_width;
+            if is_whitespace(cursor) {
                 if saw_non_whitespace {
-                    last_break = Some(cursor + 1);
+                    last_break = Some(cursor);
                 }
             } else {
                 saw_non_whitespace = true;
@@ -90,40 +125,36 @@ fn wrap_logical_line(
             cursor += 1;
         }
 
-        if !emitted {
-            push_row(chars, row_start, end, end, rows);
+        if cursor == end {
+            ranges.push(WrappedRange {
+                start: row_start,
+                visible_end: trim_trailing_whitespace(row_start, end, &is_whitespace),
+                source_end: end,
+            });
             break;
         }
     }
+
+    ranges
 }
 
-fn push_row(
-    chars: &[char],
+fn trim_trailing_whitespace(
     start: usize,
-    display_end: usize,
-    source_end: usize,
-    rows: &mut Vec<WrappedLine>,
-) {
-    let mut visible_end = display_end;
-    while visible_end > start && chars[visible_end - 1].is_whitespace() {
-        visible_end -= 1;
+    mut end: usize,
+    is_whitespace: &impl Fn(usize) -> bool,
+) -> usize {
+    while end > start && is_whitespace(end - 1) {
+        end -= 1;
     }
-    rows.push(WrappedLine {
-        text: chars[start..visible_end].iter().collect(),
-        start_char: start,
-        end_char: source_end,
-    });
+    end
 }
 
-fn consume_word(chars: &[char], mut index: usize, end: usize) -> usize {
-    while index < end && !chars[index].is_whitespace() {
-        index += 1;
-    }
-    index
-}
-
-fn consume_whitespace(chars: &[char], mut index: usize, end: usize) -> usize {
-    while index < end && chars[index].is_whitespace() {
+fn consume_whitespace(
+    mut index: usize,
+    end: usize,
+    is_whitespace: &impl Fn(usize) -> bool,
+) -> usize {
+    while index < end && is_whitespace(index) {
         index += 1;
     }
     index
@@ -157,6 +188,15 @@ mod tests {
         assert_eq!(
             rows.into_iter().map(|row| row.text).collect::<Vec<_>>(),
             ["cafe\u{301} test"]
+        );
+    }
+
+    #[test]
+    fn splits_only_tokens_that_are_wider_than_the_viewport() {
+        let rows = wrap_words("prefix abcdefghijkl suffix", 8);
+        assert_eq!(
+            rows.into_iter().map(|row| row.text).collect::<Vec<_>>(),
+            ["prefix", "abcdefgh", "ijkl", "suffix"]
         );
     }
 }

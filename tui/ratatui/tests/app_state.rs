@@ -422,11 +422,6 @@ fn root_assistant_stream_reuses_one_block_and_nested_worker_output_stays_interna
             "message":{"role":"assistant","content":[{"type":"text","text":"CHILD_FINAL_OUTPUT"}]}
         })),
     ]));
-    let nested_output_visible = app
-        .transcript_lines()
-        .iter()
-        .any(|line| line.contains("CHILD_RAW_OUTPUT") || line.contains("CHILD_FINAL_OUTPUT"));
-
     app.handle_stream_update(AgentStreamUpdate::Events(vec![
         FlueEvent::from_value(serde_json::json!({
             "type":"text_delta",
@@ -475,8 +470,11 @@ fn root_assistant_stream_reuses_one_block_and_nested_worker_output_stays_interna
     release_tx.send(()).expect("pending sender should release");
     wait_for_agent(&mut app);
     assert!(
-        !nested_output_visible,
-        "nested worker output reached the chat"
+        !app.transcript_lines()
+            .iter()
+            .any(|line| line.contains("CHILD_RAW_OUTPUT") || line.contains("CHILD_FINAL_OUTPUT")),
+        "nested worker output reached the final transcript: {:?}",
+        app.transcript_lines()
     );
     assert_eq!(live_root_count, 1, "{:?}", app.transcript_lines());
     assert_eq!(
@@ -1801,7 +1799,7 @@ fn max_scroll_counts_wrapped_rows_for_narrow_transcript_width() {
 }
 
 #[test]
-fn transcript_does_not_split_a_word_longer_than_the_viewport() {
+fn transcript_splits_a_token_that_is_longer_than_the_viewport() {
     let mut app = App::new_for_test();
     app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
         serde_json::json!({
@@ -1814,11 +1812,9 @@ fn transcript_does_not_split_a_word_longer_than_the_viewport() {
     app.set_transcript_viewport_size(4, 5);
     let rendered = app.transcript_rendered_lines();
 
-    assert!(
-        rendered.iter().any(|line| line == "abcdefghij12345"),
-        "{rendered:?}"
-    );
-    assert!(!rendered.iter().any(|line| line == "abcde"), "{rendered:?}");
+    assert!(rendered.iter().any(|line| line == "abcde"), "{rendered:?}");
+    assert!(rendered.iter().any(|line| line == "fghij"), "{rendered:?}");
+    assert!(rendered.iter().any(|line| line == "12345"), "{rendered:?}");
 }
 
 #[test]
@@ -2030,8 +2026,8 @@ fn fresh_and_unnamed_sessions_keep_the_product_only_header() {
 }
 
 #[test]
-fn resume_reply_restores_explicit_name_in_header_and_existing_status_field() {
-    let mut app = App::with_agent_sender(
+fn resume_reply_replaces_the_old_transcript_with_durable_history() {
+    let mut app = App::with_agent_sender_lifecycle_and_history(
         "tui-current-1",
         "test gateway",
         "http://127.0.0.1:3940",
@@ -2046,7 +2042,33 @@ fn resume_reply_restores_explicit_name_in_header_and_existing_status_field() {
                 session_created: Some(false),
             })
         }),
+        Arc::new(|_| panic!("command resume must not create through lifecycle API")),
+        Arc::new(|_, _| panic!("command resume is handled by the chat command endpoint")),
+        Arc::new(|_, session_id, limit, before| {
+            assert_eq!(session_id, "tui-named-1");
+            assert_eq!(limit, 50);
+            assert_eq!(before, None);
+            Ok(history_page(
+                "tui-named-1",
+                "0000000000000000_0000000000000042",
+                false,
+                None,
+                vec![transcript_exchange(
+                    "resumed-history",
+                    Some(("Historical prompt", TranscriptPromptVisibility::User)),
+                    Vec::new(),
+                    Some("Historical answer"),
+                )],
+            ))
+        }),
     );
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"log",
+            "eventIndex":1001,
+            "text":"OLD_SESSION_ONLY"
+        }),
+    )]));
     app.handle_event(AppEvent::Text("/resume tui-named-1".to_string()));
     app.handle_event(AppEvent::Submit);
     wait_for_agent(&mut app);
@@ -2061,6 +2083,25 @@ fn resume_reply_restores_explicit_name_in_header_and_existing_status_field() {
             .starts_with("SIM-ONE Alpha | session: Release Work |"),
         "{}",
         app.status_text()
+    );
+    let transcript = app.transcript_lines().join("\n");
+    assert!(!transcript.contains("OLD_SESSION_ONLY"), "{transcript}");
+    assert!(!transcript.contains("/resume tui-named-1"), "{transcript}");
+    assert!(
+        transcript.contains("you: Historical prompt"),
+        "{transcript}"
+    );
+    assert!(
+        transcript.contains("assistant: Historical answer"),
+        "{transcript}"
+    );
+    assert!(
+        transcript.contains("system: Resumed session tui-named-1."),
+        "{transcript}"
+    );
+    assert_eq!(
+        app.stream_start_offset(),
+        "0000000000000000_0000000000000042"
     );
 }
 
@@ -2316,7 +2357,7 @@ fn slash_sessions_lists_recent_sessions_without_calling_agent() {
 }
 
 #[test]
-fn command_response_switches_active_session_and_announces_it() {
+fn new_command_replaces_the_old_transcript_and_shows_the_command_result() {
     let mut app = App::with_agent_sender(
         "tui-existing-1",
         "test gateway",
@@ -2333,16 +2374,23 @@ fn command_response_switches_active_session_and_announces_it() {
             })
         }),
     );
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![FlueEvent::from_value(
+        serde_json::json!({
+            "type":"log",
+            "eventIndex":1002,
+            "text":"OLD_SESSION_ONLY"
+        }),
+    )]));
 
     app.handle_event(AppEvent::Text("/new Demo".to_string()));
     app.handle_event(AppEvent::Submit);
     wait_for_agent(&mut app);
 
     assert_eq!(app.session_id(), "tui-new-1");
-    assert!(app
-        .transcript_lines()
-        .iter()
-        .any(|line| line == "system: active session tui-new-1"));
+    assert_eq!(
+        app.transcript_lines(),
+        ["system: Started new session tui-new-1."]
+    );
 }
 
 fn wait_for_agent(app: &mut App) {

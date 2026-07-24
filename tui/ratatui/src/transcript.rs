@@ -243,6 +243,9 @@ impl TranscriptDocument {
     }
 
     pub fn apply_event(&mut self, event: &FlueEvent) {
+        if event.is_nested() {
+            return;
+        }
         let Some(submission_id) = event_submission_id(event) else {
             return;
         };
@@ -282,9 +285,6 @@ impl TranscriptDocument {
                 }
             }
             "thinking_start" | "thinking_delta" | "thinking_end" => {
-                if event.is_nested() {
-                    return;
-                }
                 let activity_id = format!(
                     "thinking:{submission_id}:{}",
                     event_turn_id(event).unwrap_or("current")
@@ -303,14 +303,16 @@ impl TranscriptDocument {
                         preview: None,
                         error: None,
                     });
-                let delta = extract_event_text(event).unwrap_or_default();
-                let preview = if event_type == "thinking_delta" {
-                    bounded_text(
-                        &format!("{}{}", current.preview.unwrap_or_default(), delta),
+                let event_text = extract_event_text(event).unwrap_or_default();
+                let preview = match event_type {
+                    "thinking_delta" => bounded_text(
+                        &format!("{}{}", current.preview.unwrap_or_default(), event_text),
                         MAX_THINKING_PREVIEW_CHARS,
-                    )
-                } else {
-                    current.preview.unwrap_or_default()
+                    ),
+                    _ if !event_text.is_empty() => {
+                        bounded_text(&event_text, MAX_THINKING_PREVIEW_CHARS)
+                    }
+                    _ => current.preview.unwrap_or_default(),
                 };
                 self.upsert_activity(
                     &exchange_id,
@@ -384,9 +386,6 @@ impl TranscriptDocument {
                 }
             }
             "log" => {
-                if event.is_nested() {
-                    return;
-                }
                 let Some(text) = extract_event_text(event)
                     .map(|text| bounded_text(&text, MAX_LOG_PREVIEW_CHARS))
                     .filter(|text| !text.trim().is_empty())
@@ -421,9 +420,6 @@ impl TranscriptDocument {
                 );
             }
             "text_delta" => {
-                if event.is_nested() {
-                    return;
-                }
                 if let Some(text) = extract_event_text(event) {
                     self.streaming_text
                         .entry(submission_id)
@@ -432,8 +428,7 @@ impl TranscriptDocument {
                 }
             }
             "message_end" => {
-                if event.is_nested()
-                    || extract_role(&event.value) != Some("assistant")
+                if extract_role(&event.value) != Some("assistant")
                     || message_text(&event.value)
                         .as_deref()
                         .is_none_or(|text| text.trim().is_empty())

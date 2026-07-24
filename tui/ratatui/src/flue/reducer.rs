@@ -30,6 +30,9 @@ impl EventTranscript {
     }
 
     pub fn apply_event(&mut self, event: &FlueEvent) {
+        if event.is_nested() {
+            return;
+        }
         if let Some(event_id) = stable_event_id(event) {
             if !self.seen_events.insert(event_id) {
                 return;
@@ -92,9 +95,6 @@ impl EventTranscript {
                 }
             }
             "text_delta" => {
-                if event.is_nested() {
-                    return;
-                }
                 self.current_turn.state = TurnState::ModelActive;
                 let text = extract_text(&event.value).unwrap_or_default();
                 self.current_turn.activity = Some("assistant text".to_string());
