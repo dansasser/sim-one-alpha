@@ -1,0 +1,38 @@
+src/engine/session/session-database.ts
+  s_a81fff26d52223::t_c2957e04f46727 533-550,1749,1753
+src/tests/flue-session-store.test.ts
+  s_a81fff26d52223::t_c237770c3224ad 375,390,393-398,408-411,422
+src/engine/session/session-transcript.ts
+  s_a81fff26d52223::t_9395a41d7ca6f7 132-135,141-149,187,194-203,242,246,251-253,260,308,389-391,738-740,743-745,750,788-789
+  s_a81fff26d52223::t_23bd52704fe445 790-791
+src/tests/session-routing.test.ts
+  s_a81fff26d52223::t_31c608855f8f58 86-122
+src/tests/session-transcript.test.ts
+  s_a81fff26d52223::t_db399caed433f9 161-190,274,285,634-664
+  s_a81fff26d52223::t_78fae4977796d4 665
+src/api/routes/chat-sessions.ts
+  s_a81fff26d52223::t_9fd17ecea8b3d9 18,154-155
+  s_a81fff26d52223::t_5ad70ca0ce57a1 156
+src/engine/session/session-routing.ts
+  s_a81fff26d52223::t_c2957e04f46727 52,58,148-161
+src/tests/http-endpoints.test.ts
+  s_a81fff26d52223::t_e08f691543bf8f 216-219
+  s_a81fff26d52223::t_6fc395eb27982d 165-166
+  s_a81fff26d52223::t_6aca0615fe8b5c 167-175,178-197,199-215
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "aa261a5cbd8d02c1c5d58007355e6b0d210f806c",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
