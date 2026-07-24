@@ -1,0 +1,53 @@
+docs/architecture/tui-cli-session-flow.md
+  s_a81fff26d52223::t_f3060fcd9b6116 7
+  s_a81fff26d52223::t_017d697ac2258d 259
+  s_a81fff26d52223::t_16fa0e29bf2317 260
+scripts/test-ratatui-visible-final.py
+  s_a81fff26d52223::t_f13246e9528000 54,304,309,312,314,316
+scripts/skill-md-loader.mjs
+  s_a81fff26d52223::t_72359ec70e2e52 29-30
+docs/operations/product-tui.md
+  s_a81fff26d52223::t_f3060fcd9b6116 85
+scripts/product-artifact-lock.mjs
+  s_a81fff26d52223::t_f13246e9528000 1-41
+scripts/check-sim-one-product-command.mjs
+  s_a81fff26d52223::t_72359ec70e2e52 20-25
+scripts/test-ratatui-interactive.py
+  s_a81fff26d52223::t_f13246e9528000 309
+src/tests/build-script-regressions.test.ts
+  s_a81fff26d52223::t_72359ec70e2e52 1-36
+scripts/test-built-http.mjs
+  s_a81fff26d52223::t_f13246e9528000 7,20,477-484
+docs/architecture/product-flow.md
+  s_a81fff26d52223::t_f3060fcd9b6116 86,90,118,128-129,138,158
+sim-one-cli/src/cli.tsx
+  s_a81fff26d52223::t_72359ec70e2e52 86-88,98-115,166-176
+docs/architecture/capability-system.md
+  s_a81fff26d52223::t_f3060fcd9b6116 9
+tui/ratatui/README.md
+  s_a81fff26d52223::t_f3060fcd9b6116 35
+scripts/test-ratatui-product.mjs
+  s_a81fff26d52223::t_76e0e315abf268 181
+  s_a81fff26d52223::t_f13246e9528000 14,61,264-271
+  s_a81fff26d52223::t_c78a083f586941 788,793,897-901,904
+  s_a81fff26d52223::t_e4f795a7c232a4 139-155,166-180
+README.md
+  s_a81fff26d52223::t_f3060fcd9b6116 502,505-506,509
+  s_a81fff26d52223::t_69c048f74d0753 510
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "d744d6f914a85223cfa6d15cffc54094114432cc",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
