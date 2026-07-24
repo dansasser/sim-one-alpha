@@ -1,0 +1,56 @@
+docs/architecture/overview.md
+  s_a3b1aea6901a1b::t_b7608e43585c91 1-223
+docs/reference/cli.md
+  s_a3b1aea6901a1b::t_7b14a9e2e292f5 1-149
+docs/reference/http-api.md
+  s_a3b1aea6901a1b::t_7b14a9e2e292f5 1-225
+README.md
+  s_a3b1aea6901a1b::t_6e2830e9868651 368-403,405-409,411-421
+  s_a3b1aea6901a1b::t_b7608e43585c91 544,547-554,556
+  s_a3b1aea6901a1b::t_4bdadfb86ad686 344-346,404,424-462,530,538,540
+  s_a3b1aea6901a1b::t_5b692b8adb4260 410
+  s_a3b1aea6901a1b::t_4bf8e6680d19ac 546
+  s_a3b1aea6901a1b::t_b33834eb1c88eb 347-349,365-367
+  s_a3b1aea6901a1b::t_5a27ee0c84d7ea 422-423
+  s_a3b1aea6901a1b::t_c1e889bccafa56 350-364,542
+docs/operations/troubleshooting.md
+  s_a3b1aea6901a1b::t_b7608e43585c91 1-215
+docs/guides/extending-sim-one.md
+  s_a3b1aea6901a1b::t_7b14a9e2e292f5 1-161
+docs/guides/terminal-and-sessions.md
+  s_a3b1aea6901a1b::t_f218aa9c06f58b 1-113
+docs/guides/connectors.md
+  s_a3b1aea6901a1b::t_f218aa9c06f58b 1-98
+docs/reference/configuration.md
+  s_a3b1aea6901a1b::t_7b14a9e2e292f5 1-255
+docs/getting-started/installation.md
+  s_a3b1aea6901a1b::t_e3ddac900c6f6a 74,85
+  s_a3b1aea6901a1b::t_f218aa9c06f58b 1-73,75-84,86-126
+docs/architecture/flue-architecture.md
+  s_a3b1aea6901a1b::t_b21a8adb8f1150 110
+docs/getting-started/onboarding.md
+  s_a3b1aea6901a1b::t_f218aa9c06f58b 1-105
+docs/README.md
+  s_a3b1aea6901a1b::t_e3ddac900c6f6a 59
+  s_a3b1aea6901a1b::t_b7608e43585c91 1-58,60-66
+docs/architecture/orchestrator-flow.md
+  s_a3b1aea6901a1b::t_b21a8adb8f1150 17,21
+docs/architecture/memory-system.md
+  s_a3b1aea6901a1b::t_6b9edff50c2ca1 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "3fdcbe23f01c9b10e04d4783bc22ac42107a52df",
+  "prompts": {},
+  "sessions": {
+    "s_a3b1aea6901a1b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f38cb-e8a0-7922-b7a7-82ff95d4c704",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
