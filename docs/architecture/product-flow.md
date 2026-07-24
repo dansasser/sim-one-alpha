@@ -84,9 +84,11 @@ sim-one
 Launches the interactive TUI connected to the running gateway. This is the primary day-to-day interface for terminal users.
 
 ### Planned install / first run
+
 ```sh
 sim-one install
 ```
+
 This is the target first-run wizard command and is not present in the current built CLI. The planned `sim-one.sh` installer will invoke it once that product-install phase ships.
 
 ### Capability management
@@ -116,6 +118,7 @@ sim-one tool remove <id>
 ```
 
 ### Planned configuration, diagnostics, and service management
+
 ```sh
 sim-one doctor          # Check install health, connectivity, model config
 sim-one config set <key> <value>  # Set runtime config values

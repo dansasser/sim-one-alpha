@@ -481,7 +481,7 @@ try {
   } finally {
     writeFileSync(configPath, originalConfig);
     rmSync(codingWorkspaceRoot, { recursive: true, force: true });
-    releaseArtifactLock();
+    await releaseArtifactLock();
   }
 }
 

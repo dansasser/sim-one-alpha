@@ -20,7 +20,7 @@
     "build:all": "pnpm run build && pnpm run build:tui:ratatui && pnpm run build:cli && node scripts/check-sim-one-product-command.mjs",
     "connect": "flue connect orchestrator local --target node --session local",
     "dev": "flue dev --target node",
-    "test:unit": "node scripts/run-unit-tests.mjs",
+    "test:unit": "node scripts/run-unit-tests.mjs && node --test scripts/product-artifact-lock.test.mjs",
     "test:http": "node scripts/test-built-http.mjs",
     "test:tui": "node scripts/test-tui-e2e.mjs",
     "test:tui:ratatui": "node scripts/test-ratatui-product.mjs",
