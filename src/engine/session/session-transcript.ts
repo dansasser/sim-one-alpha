@@ -129,12 +129,24 @@ export async function loadSessionTranscriptPage(input: {
     id: string;
     title?: string;
   };
-  sessionDatabase: Pick<GoromboSessionDatabase, 'listNormalizedMessageEventsForSession'>;
+  sessionDatabase: Pick<
+    GoromboSessionDatabase,
+    'getSessionNormalizedMessageEvent' | 'listNormalizedMessageEventsForSession'
+  >;
   eventStreamStore: EventStreamStore;
   limit: number;
   before?: string;
 }): Promise<ChatTranscriptPage> {
   const cursor = input.before ? decodeTranscriptCursor(input.before) : undefined;
+  const cursorPrompt = cursor
+    ? input.sessionDatabase.getSessionNormalizedMessageEvent({
+        sessionId: input.session.id,
+        eventId: cursor.eventId,
+      })
+    : undefined;
+  if (cursor && !cursorPrompt) {
+    throw new TranscriptCursorError();
+  }
   const promptWindow = input.sessionDatabase.listNormalizedMessageEventsForSession({
     sessionId: input.session.id,
     limit: input.limit + 1,
@@ -172,13 +184,23 @@ export async function loadSessionTranscriptPage(input: {
   const seen = new Set<string>();
   let offset = earliestPromptOffset(prompts);
   let upToDate = false;
+  const endOffset = cursorPrompt ? promptOffset(cursorPrompt) : undefined;
 
   while (!upToDate) {
     const result = await input.eventStreamStore.readEvents(streamPath, {
       offset,
       limit: EVENT_STREAM_READ_LIMIT,
     });
-    sanitizeEventsInto(result.events, events, seen);
+    const pageEvents = endOffset
+      ? result.events.filter((event) => compareOffsets(event.offset, endOffset) <= 0)
+      : result.events;
+    sanitizeEventsInto(pageEvents, events, seen);
+    if (endOffset && (pageEvents.length < result.events.length
+      || compareOffsets(result.nextOffset, endOffset) >= 0)) {
+      offset = endOffset;
+      upToDate = false;
+      break;
+    }
     upToDate = result.upToDate;
     if (!upToDate && result.nextOffset === offset) {
       throw new Error('Transcript event stream did not advance.');
@@ -217,21 +239,25 @@ function projectSanitizedSessionTranscript(
   for (const prompt of prompts) {
     const submissionId = promptMatches.get(prompt.event.id);
     const builder = submissionId ? builders.get(submissionId) : undefined;
+    const publicPrompt = toPublicTranscriptPrompt(prompt);
     if (builder) {
       entries.push({
         sortKey: prompt.event.receivedAt,
-        exchange: finalizeExchange(builder, toTranscriptPrompt(prompt)),
+        exchange: finalizeExchange(builder, publicPrompt),
       });
       continue;
     }
 
+    if (!publicPrompt) {
+      continue;
+    }
     const syntheticId = `prompt:${prompt.event.id}`;
     entries.push({
       sortKey: prompt.event.receivedAt,
       exchange: {
         id: syntheticId,
         submissionId: syntheticId,
-        prompt: toTranscriptPrompt(prompt),
+        prompt: publicPrompt,
         activities: [],
         status: 'running',
       },
@@ -279,7 +305,7 @@ function isReplayablePrompt(prompt: SessionNormalizedMessageRecord): boolean {
   return !command || !isSupportedSlashCommand(command);
 }
 
-class TranscriptCursorError extends Error {
+export class TranscriptCursorError extends Error {
   constructor() {
     super('Transcript cursor is invalid.');
     this.name = 'TranscriptCursorError';
@@ -314,7 +340,6 @@ interface SanitizedEvent {
   name?: string;
   durationMs?: number;
   isError: boolean;
-  nested: boolean;
   role?: string;
   text?: string;
 }
@@ -361,12 +386,14 @@ function sanitizeEvent(source: TranscriptSourceEvent): SanitizedEvent | null {
   }
 
   const nested = readString(source.data.parentSession) !== undefined;
+  if (nested) {
+    return null;
+  }
   const base: SanitizedEvent = {
     offset: source.offset,
     type,
     submissionId,
     isError: source.data.isError === true || source.data.error !== undefined,
-    nested,
     ...(readInteger(source.data.eventIndex) !== undefined
       ? { eventIndex: readInteger(source.data.eventIndex) }
       : {}),
@@ -394,9 +421,6 @@ function sanitizeEvent(source: TranscriptSourceEvent): SanitizedEvent | null {
     };
   }
   if (type === 'thinking_start' || type === 'thinking_delta' || type === 'thinking_end') {
-    if (nested) {
-      return null;
-    }
     return {
       ...base,
       name: 'thinking',
@@ -437,9 +461,6 @@ function sanitizeEvent(source: TranscriptSourceEvent): SanitizedEvent | null {
     return base;
   }
   if (type === 'message_end') {
-    if (nested) {
-      return null;
-    }
     const message = isRecord(source.data.message) ? source.data.message : undefined;
     const role = readString(message?.role);
     const text = role === 'assistant' ? extractMessageText(message?.content) : undefined;
@@ -450,9 +471,6 @@ function sanitizeEvent(source: TranscriptSourceEvent): SanitizedEvent | null {
     };
   }
   if (type === 'log') {
-    if (nested) {
-      return null;
-    }
     const text = boundedOptionalText(
       readString(source.data.message) ?? readString(source.data.text),
       MAX_LOG_PREVIEW_CHARS,
@@ -717,14 +735,19 @@ function finalizeExchange(
   };
 }
 
-function toTranscriptPrompt(prompt: SessionNormalizedMessageRecord): ChatTranscriptPrompt {
+function toPublicTranscriptPrompt(
+  prompt: SessionNormalizedMessageRecord,
+): ChatTranscriptPrompt | undefined {
   const internal = prompt.event.context?.workflow === 'tui.startup-preflight'
     || prompt.event.text.startsWith(LEGACY_STARTUP_PREFIX);
+  if (internal) {
+    return undefined;
+  }
   return {
     id: prompt.event.id,
     text: prompt.event.text,
     receivedAt: prompt.event.receivedAt,
-    visibility: internal ? 'internal' : 'user',
+    visibility: 'user',
   };
 }
 
@@ -760,6 +783,10 @@ function earliestPromptOffset(prompts: SessionNormalizedMessageRecord[]): string
     }
   }
   return '-1';
+}
+
+function promptOffset(prompt: SessionNormalizedMessageRecord): string | undefined {
+  return prompt.delivery.offset ?? legacyOffset(prompt.legacyDeliveryId);
 }
 
 function compareOffsets(left: string, right: string): number {

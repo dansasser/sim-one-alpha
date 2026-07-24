@@ -15,6 +15,7 @@ import {
 import {
   decodeTranscriptCursor,
   loadSessionTranscriptPage,
+  TranscriptCursorError,
 } from '../../engine/session/session-transcript.js';
 
 const NonEmptyStringSchema = v.pipe(v.string(), v.trim(), v.minLength(1));
@@ -149,6 +150,9 @@ export function registerChatSessionRoutes(
       if (error instanceof ChatSessionNotFoundError
         || isErrorNamed(error, 'ChatSessionAmbiguousError')) {
         return c.json({ error: `Session ${requestedSessionId} does not exist.` }, 404);
+      }
+      if (error instanceof TranscriptCursorError) {
+        return c.json({ error: 'before must be a valid transcript cursor.' }, 400);
       }
       console.error('[WARN] Transcript history unavailable:', errorName(error));
       return c.json({ error: 'Session history is not available.' }, 500);

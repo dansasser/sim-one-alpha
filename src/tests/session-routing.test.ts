@@ -83,6 +83,43 @@ test('scheduled-job resolutions do not inherit connector persistence', () => {
   }
 });
 
+test('web API clients can establish and then reuse an explicit session id', () => {
+  const scope = uniqueScope('web-explicit');
+  const sessionId = `web-client-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  try {
+    const first = resolveChatSession({
+      event: createEvent('web-api', scope),
+      requestedSessionId: sessionId,
+    });
+    const second = resolveChatSession({
+      event: createEvent('web-api', scope),
+      requestedSessionId: sessionId,
+    });
+
+    assert.equal(first.created, true);
+    assert.equal(first.sessionId, sessionId);
+    assert.equal(second.created, false);
+    assert.equal(second.sessionId, sessionId);
+  } finally {
+    deleteSessions([sessionId]);
+  }
+});
+
+test('TUI explicit session ids remain resume-only', () => {
+  const scope = uniqueScope('tui-explicit-missing');
+  const sessionId = `tui-missing-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  assert.throws(
+    () => resolveChatSession({
+      event: createEvent('tui', scope),
+      requestedSessionId: sessionId,
+    }),
+    ChatSessionNotFoundError,
+  );
+  assert.equal(goromboPersistenceRuntime.sessionDatabase.getChatSession(sessionId), null);
+});
+
 test('fresh lifecycle creation returns distinct TUI sessions for one identity', () => {
   const identity = uniqueIdentity('tui', 'lifecycle-fresh');
   const sessionIds: string[] = [];

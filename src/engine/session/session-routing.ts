@@ -49,11 +49,13 @@ export interface ChatSessionResolution {
 
 export function createFreshChatSession(input: {
   identity: ChatSessionIdentity;
+  sessionId?: string;
   title?: string;
   displayName?: string;
 }): ChatSessionResolution {
   const surface = surfaceForConnector(input.identity.connector);
   const session = goromboPersistenceRuntime.sessionDatabase.createChatSession({
+    sessionId: input.sessionId,
     origin: surface,
     actorId: input.identity.actorId,
     conversationId: input.identity.conversationId,
@@ -143,7 +145,20 @@ export function resolveChatSession(input: ResolveChatSessionInput): ChatSessionR
   const title = input.title ?? titleFromText(input.event.text);
 
   if (explicitSessionId && !input.forceNew) {
-    return resumeOwnedChatSession({ identity, sessionId: explicitSessionId });
+    try {
+      return resumeOwnedChatSession({ identity, sessionId: explicitSessionId });
+    } catch (error) {
+      if (!(error instanceof ChatSessionNotFoundError)
+        || !isGuiSessionManagedConnector(input.event.connector)) {
+        throw error;
+      }
+      return createFreshChatSession({
+        identity,
+        sessionId: explicitSessionId,
+        title,
+        displayName: input.displayName,
+      });
+    }
   }
 
   if (persistentConnector && !input.forceNew) {

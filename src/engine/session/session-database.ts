@@ -530,6 +530,24 @@ export class GoromboSessionDatabase {
     return row ? toNormalizedMessageEvent(row) : null;
   }
 
+  getSessionNormalizedMessageEvent(input: {
+    sessionId: string;
+    eventId: string;
+  }): SessionNormalizedMessageRecord | null {
+    const row = this.database
+      .prepare(
+        `SELECT event_id, session_id, connector, message_kind, text, received_at, actor_id,
+                actor_display_name, conversation_id, thread_id, client_id, project_id,
+                workflow, task, delivery_kind, delivery_id, delivery_submission_id,
+                delivery_stream_url, delivery_offset, accepted_at
+         FROM normalized_message_events
+         WHERE event_id = ? AND session_id = ? AND delivery_kind = 'direct-agent'`,
+      )
+      .get(input.eventId, input.sessionId) as NormalizedMessageEventRow | undefined;
+
+    return row ? toSessionNormalizedMessageRecord(row) : null;
+  }
+
   listNormalizedMessageEventsForSession(input: {
     sessionId: string;
     limit?: number;
@@ -1727,18 +1745,13 @@ function createMemoryScope(input: SessionMemorySearchInput): {
     params.push(sessionId);
   }
 
-  const accessWhere: string[] = [];
   if (actorId) {
-    accessWhere.push('c.actor_id = ?');
+    where.push('c.actor_id = ?');
     params.push(actorId);
   }
   if (conversationId) {
-    accessWhere.push('c.conversation_id = ?');
+    where.push('c.conversation_id = ?');
     params.push(conversationId);
-  }
-
-  if (accessWhere.length) {
-    where.push(`(${accessWhere.join(' OR ')})`);
   }
 
   return where.length ? { where: where.join(' AND '), params } : undefined;

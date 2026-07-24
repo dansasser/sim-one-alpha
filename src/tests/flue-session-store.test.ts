@@ -372,7 +372,7 @@ test('normalized event migration adds structured delivery columns without losing
   }
 });
 
-test('session memory retrieval is scoped to the current actor or conversation', async () => {
+test('session memory retrieval is scoped to the current actor and conversation', async () => {
   const runtime = createTestPersistenceRuntime();
 
   try {
@@ -387,8 +387,14 @@ test('session memory retrieval is scoped to the current actor or conversation', 
     runtime.sessionDatabase.ensureChatSession({
       sessionId: 'memory-user-b',
       origin: 'web',
-      actorId: 'actor-b',
+      actorId: 'actor-a',
       conversationId: 'conversation-b',
+    });
+    runtime.sessionDatabase.ensureChatSession({
+      sessionId: 'memory-user-c',
+      origin: 'web',
+      actorId: 'actor-c',
+      conversationId: 'conversation-a',
     });
 
     await store.save(
@@ -398,6 +404,10 @@ test('session memory retrieval is scoped to the current actor or conversation', 
     await store.save(
       createFlueSessionStorageKey('workflow-run-b', 'gorombo-orchestrator', 'memory-user-b'),
       createStoredSessionData('Remember the neon invoice audit for user B.'),
+    );
+    await store.save(
+      createFlueSessionStorageKey('workflow-run-c', 'gorombo-orchestrator', 'memory-user-c'),
+      createStoredSessionData('Remember the neon invoice audit for user C.'),
     );
 
     const matches = runtime.sessionDatabase.searchSessionMemory({
@@ -409,7 +419,7 @@ test('session memory retrieval is scoped to the current actor or conversation', 
 
     assert.equal(matches.length, 1);
     assert.equal(matches[0]?.sessionName, 'memory-user-a');
-    assert.doesNotMatch(matches[0]?.content ?? '', /user B/);
+    assert.doesNotMatch(matches[0]?.content ?? '', /user [BC]/);
   } finally {
     await runtime.adapter.close?.();
     runtime.cleanup();

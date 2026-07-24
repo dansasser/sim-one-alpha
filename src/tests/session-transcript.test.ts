@@ -158,6 +158,36 @@ test('projects internal greeting and user exchanges without leaking nested or to
       eventIndex: 6,
       timestamp: '2026-07-20T19:09:00.700Z',
     }),
+    streamEvent('0000000000000000_0000000000000013', {
+      type: 'operation_start',
+      operationId: 'nested-operation',
+      operationKind: 'PRIVATE_NESTED_OPERATION',
+      parentSession: 'default',
+      session: 'task:default:worker-1',
+      submissionId: 'submission-user-1',
+      eventIndex: 61,
+      timestamp: '2026-07-20T19:09:00.710Z',
+    }),
+    streamEvent('0000000000000000_0000000000000013', {
+      type: 'tool',
+      toolCallId: 'nested-tool',
+      toolName: 'PRIVATE_NESTED_TOOL',
+      parentSession: 'default',
+      session: 'task:default:worker-1',
+      submissionId: 'submission-user-1',
+      eventIndex: 62,
+      timestamp: '2026-07-20T19:09:00.720Z',
+    }),
+    streamEvent('0000000000000000_0000000000000013', {
+      type: 'task',
+      taskId: 'nested-task',
+      taskName: 'PRIVATE_NESTED_TASK',
+      parentSession: 'default',
+      session: 'task:default:worker-1',
+      submissionId: 'submission-user-1',
+      eventIndex: 63,
+      timestamp: '2026-07-20T19:09:00.730Z',
+    }),
     streamEvent('0000000000000000_0000000000000014', {
       type: 'message_end',
       message: {
@@ -241,7 +271,7 @@ test('projects internal greeting and user exchanges without leaking nested or to
       final: 'The status is ready.',
     },
   ]);
-  assert.equal(page.exchanges[0]?.prompt?.visibility, 'internal');
+  assert.equal(page.exchanges[0]?.prompt, undefined);
   assert.equal(
     page.exchanges[1]?.activities.find((item) => item.kind === 'thinking')?.preview,
     'checking the active repository context',
@@ -252,6 +282,7 @@ test('projects internal greeting and user exchanges without leaking nested or to
   );
   const serialized = JSON.stringify(page);
   assert.doesNotMatch(serialized, /PRIVATE_|NESTED_/);
+  assert.doesNotMatch(serialized, /automatic SIM-ONE Alpha local Ratatui/);
 });
 
 test('uses terminal isError and duration fields for failed activity and exchange status', () => {
@@ -599,6 +630,38 @@ test('loads transcript pages from bounded event-store reads without page overlap
     assert.equal(
       older.exchanges.some((exchange) => newest.exchanges.some((item) => item.id === exchange.id)),
       false,
+    );
+    assert.deepEqual(reads, ['-1']);
+
+    const otherSession = prompt({
+      eventId: 'prompt-other-session',
+      text: 'Other session prompt',
+      receivedAt: '2026-07-20T23:04:00.000Z',
+      submissionId: 'submission-other-session',
+    });
+    database.recordNormalizedMessageEvent({
+      event: otherSession.event,
+      sessionId: 'tui-other',
+      deliveryKind: 'direct-agent',
+      delivery: {
+        submissionId: 'submission-other-session',
+        offset: '0000000000000000_0000000000000002',
+      },
+    });
+    const foreignCursor = encodeTranscriptCursor({
+      v: 1,
+      receivedAt: otherSession.event.receivedAt,
+      eventId: otherSession.event.id,
+    });
+    await assert.rejects(
+      loadSessionTranscriptPage({
+        session: { id: 'tui-paged' },
+        sessionDatabase: database,
+        eventStreamStore: store,
+        limit: 2,
+        before: foreignCursor,
+      }),
+      /cursor/i,
     );
   } finally {
     database.close();
