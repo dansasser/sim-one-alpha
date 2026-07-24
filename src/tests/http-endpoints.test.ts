@@ -474,6 +474,31 @@ test('chat event TUI session commands create resume and rename without prompting
       assert.equal(renameBody.session?.id, sessionId);
       assert.equal(renameBody.session?.title, 'Demo Session');
 
+      const namedResumeResponse = await testApp.request('/api/chat/events', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-secret': 'test-secret',
+        },
+        body: JSON.stringify({
+          connector: 'tui',
+          text: '/resume Demo Session',
+          actorId,
+          conversationId,
+        }),
+      });
+      assert.equal(namedResumeResponse.status, 200);
+      const namedResumeBody = await namedResumeResponse.json() as {
+        result?: { command?: { name?: string }; text?: string };
+        event?: { id?: string };
+        session?: { id?: string; title?: string };
+      };
+      if (namedResumeBody.event?.id) eventIds.push(namedResumeBody.event.id);
+      assert.equal(namedResumeBody.result?.command?.name, 'resume');
+      assert.equal(namedResumeBody.result?.text, `Resumed session ${sessionId}.`);
+      assert.equal(namedResumeBody.session?.id, sessionId);
+      assert.equal(namedResumeBody.session?.title, 'Demo Session');
+
       const storedSession = goromboPersistenceRuntime.sessionDatabase.getChatSession(sessionId ?? '');
       assert.equal(storedSession?.title, 'Demo Session');
       assert.equal(storedSession?.displayName, 'Demo Session');
@@ -557,6 +582,42 @@ test('chat session lifecycle creates fresh sessions, validates resume, and scope
       assert.equal(resumedBody.session?.id, firstSessionId);
       assert.equal(resumedBody.session?.created, false);
 
+      goromboPersistenceRuntime.sessionDatabase.renameChatSession(
+        firstSessionId,
+        'Lifecycle Named Session',
+      );
+      const resumedByName = await postLifecycle(
+        testApp,
+        `/api/chat/sessions/${encodeURIComponent('Lifecycle Named Session')}/resume`,
+        {
+          connector: 'tui',
+          actorId,
+          conversationId,
+          threadId,
+        },
+      );
+      assert.equal(resumedByName.status, 200);
+      const resumedByNameBody = await resumedByName.json() as LifecycleSessionBody;
+      assert.equal(resumedByNameBody.session?.id, firstSessionId);
+      assert.equal(resumedByNameBody.session?.created, false);
+      assert.equal(resumedByNameBody.session?.title, 'Lifecycle Named Session');
+
+      goromboPersistenceRuntime.sessionDatabase.renameChatSession(
+        secondBody.session?.id ?? '',
+        'Lifecycle Named Session',
+      );
+      const ambiguousName = await postLifecycle(
+        testApp,
+        `/api/chat/sessions/${encodeURIComponent('Lifecycle Named Session')}/resume`,
+        {
+          connector: 'tui',
+          actorId,
+          conversationId,
+          threadId,
+        },
+      );
+      assert.equal(ambiguousName.status, 409);
+
       const denied = await postLifecycle(
         testApp,
         `/api/chat/sessions/${encodeURIComponent(firstSessionId)}/resume`,
@@ -580,7 +641,13 @@ test('chat session lifecycle creates fresh sessions, validates resume, and scope
           threadId,
         },
       );
-      assert.equal(missing.status, 404);
+      assert.equal(missing.status, 201);
+      const missingBody = await missing.json() as LifecycleSessionBody;
+      if (missingBody.session?.id) sessionIds.push(missingBody.session.id);
+      assert.equal(missingBody.session?.created, true);
+      assert.equal(missingBody.session?.surface, 'tui');
+      assert.match(missingBody.session?.id ?? '', /^tui-/);
+      assert.notEqual(missingBody.session?.id, missingSessionId);
       assert.equal(goromboPersistenceRuntime.sessionDatabase.getChatSession(missingSessionId), null);
 
       const telegram = createFreshChatSession({
@@ -721,7 +788,7 @@ test('chat event TUI resume and rename commands validate required arguments', as
       };
       if (resumeBody.event?.id) eventIds.push(resumeBody.event.id);
       assert.equal(resumeBody.result?.command?.name, 'resume');
-      assert.equal(resumeBody.result?.text, 'Usage: /resume <session-id>');
+      assert.equal(resumeBody.result?.text, 'Usage: /resume <session-id-or-name>');
 
       const renameResponse = await testApp.request('/api/chat/events', {
         method: 'POST',

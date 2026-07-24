@@ -21,6 +21,7 @@ import {
   type SessionBudgetReport,
 } from '../../engine/session/session-budget.js';
 import {
+  ChatSessionAmbiguousError,
   ChatSessionNotFoundError,
   isGuiSessionManagedConnector,
   resolveChatSession,
@@ -76,7 +77,7 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
       return c.json(createCommandResponse({
         eventId: event.id,
         command: slashCommand,
-        text: 'Usage: /resume <session-id>',
+        text: 'Usage: /resume <session-id-or-name>',
       }), 400);
     }
 
@@ -115,6 +116,9 @@ export function registerChatEventRoutes(app: Hono, options: ChatEventRouteOption
       }
       if (error instanceof ChatSessionNotFoundError) {
         return c.json({ error: error.message, eventId: event.id }, 404);
+      }
+      if (error instanceof ChatSessionAmbiguousError) {
+        return c.json({ error: error.message, eventId: event.id }, 409);
       }
       throw error;
     }

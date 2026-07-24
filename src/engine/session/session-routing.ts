@@ -18,6 +18,13 @@ export class ChatSessionNotFoundError extends Error {
   }
 }
 
+export class ChatSessionAmbiguousError extends Error {
+  constructor(readonly sessionName: string) {
+    super(`Multiple sessions are named ${sessionName}. Resume one by session id.`);
+    this.name = 'ChatSessionAmbiguousError';
+  }
+}
+
 export interface ChatSessionIdentity {
   connector: ConnectorKind;
   actorId: string;
@@ -74,14 +81,31 @@ export function resumeOwnedChatSession(input: {
   identity: ChatSessionIdentity;
   sessionId: string;
 }): ChatSessionResolution {
-  const sessionId = cleanSessionId(input.sessionId) ?? input.sessionId;
-  const session = goromboPersistenceRuntime.sessionDatabase.getChatSession(sessionId);
+  const sessionSelector = cleanSessionId(input.sessionId) ?? input.sessionId;
+  const surface = surfaceForConnector(input.identity.connector);
+  const sessionById = goromboPersistenceRuntime.sessionDatabase.getChatSession(sessionSelector);
+  if (sessionById) {
+    assertSessionBelongsToIdentity(sessionById, input.identity, surface);
+  }
+  const namedSessions = sessionById
+    ? []
+    : goromboPersistenceRuntime.sessionDatabase.listChatSessionsByExplicitNameForScope({
+      explicitName: sessionSelector,
+      origin: surface,
+      actorId: input.identity.actorId,
+      conversationId: input.identity.conversationId,
+      threadId: input.identity.threadId,
+      limit: 2,
+    });
+  if (namedSessions.length > 1) {
+    throw new ChatSessionAmbiguousError(sessionSelector);
+  }
+  const session = sessionById ?? namedSessions[0];
   if (!session) {
-    throw new ChatSessionNotFoundError(sessionId);
+    throw new ChatSessionNotFoundError(sessionSelector);
   }
 
-  const surface = surfaceForConnector(input.identity.connector);
-  assertSessionBelongsToIdentity(session, input.identity, surface);
+  const sessionId = session.sessionId;
 
   if (connectorUsesPersistentSession(input.identity.connector)) {
     goromboPersistenceRuntime.sessionDatabase.setActiveSession({

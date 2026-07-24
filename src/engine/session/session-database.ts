@@ -355,6 +355,41 @@ export class GoromboSessionDatabase {
     return row ? toChatSessionRecord(row) : null;
   }
 
+  listChatSessionsByExplicitNameForScope(input: {
+    explicitName: string;
+    origin: string;
+    actorId: string;
+    conversationId: string;
+    threadId?: string;
+    limit?: number;
+  }): ChatSessionRecord[] {
+    const threadId = cleanScopeValue(input.threadId) ?? null;
+    const rows = this.database
+      .prepare(
+        `SELECT session_id, origin, actor_id, conversation_id, thread_id, title, explicit_name, archived_at, created_at, updated_at
+         FROM chat_sessions
+         WHERE explicit_name = ?
+           AND origin = ?
+           AND actor_id = ?
+           AND conversation_id = ?
+           AND ((thread_id IS NULL AND ? IS NULL) OR thread_id = ?)
+           AND archived_at IS NULL
+         ORDER BY updated_at DESC
+         LIMIT ?`,
+      )
+      .all(
+        input.explicitName,
+        input.origin,
+        input.actorId,
+        input.conversationId,
+        threadId,
+        threadId,
+        Math.max(1, Math.min(100, Math.floor(input.limit ?? 2))),
+      ) as unknown as ChatSessionRow[];
+
+    return rows.map(toChatSessionRecord);
+  }
+
   deleteChatSession(sessionId: string): void {
     this.database.prepare(`DELETE FROM active_sessions WHERE session_id = ?`).run(sessionId);
     this.database.prepare(`DELETE FROM chat_sessions WHERE session_id = ?`).run(sessionId);

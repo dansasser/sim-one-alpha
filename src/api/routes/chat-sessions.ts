@@ -3,6 +3,7 @@ import * as v from 'valibot';
 import { goromboPersistenceRuntime } from '../../db.js';
 import { requireApiSecret } from '../../api/middleware/api-secret.js';
 import {
+  ChatSessionAmbiguousError,
   ChatSessionNotFoundError,
   createFreshChatSession,
   listOwnedChatSessions,
@@ -58,8 +59,11 @@ export function registerChatSessionRoutes(
       if (error instanceof SessionAccessDeniedError) {
         return c.json({ error: error.message }, 403);
       }
+      if (error instanceof ChatSessionAmbiguousError) {
+        return c.json({ error: error.message }, 409);
+      }
       if (error instanceof ChatSessionNotFoundError) {
-        return c.json({ error: error.message }, 404);
+        return c.json(toLifecycleResponse(createFreshChatSession({ identity })), 201);
       }
       throw error;
     }

@@ -1600,7 +1600,7 @@ impl App {
     }
 
     fn scroll_lines_up(&mut self, amount: usize) {
-        self.transcript_scroll = self.transcript_scroll.saturating_sub(amount);
+        let requested_scroll = self.transcript_scroll.saturating_sub(amount);
         self.follow_tail = false;
         let first_exchange_row = self
             .transcript_document
@@ -1613,8 +1613,11 @@ impl App {
                 })
             })
             .unwrap_or(0);
-        if self.transcript_scroll <= first_exchange_row {
+        if self.history_has_older && requested_scroll <= first_exchange_row {
+            self.transcript_scroll = first_exchange_row;
             self.request_older_history_page();
+        } else {
+            self.transcript_scroll = requested_scroll;
         }
     }
 

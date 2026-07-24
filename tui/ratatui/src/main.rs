@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use crossterm::event;
 use ratatui::DefaultTerminal;
 use sim_one_ratatui_tui::app::{App, AppEvent};
+use sim_one_ratatui_tui::diagnostics;
 use sim_one_ratatui_tui::gateway::{ensure_server_running, GatewayOptions};
 use sim_one_ratatui_tui::input::map_terminal_event;
 use sim_one_ratatui_tui::terminal::{
@@ -16,8 +17,11 @@ use sim_one_ratatui_tui::ui;
 fn main() -> io::Result<()> {
     let cli = CliOptions::parse(std::env::args().skip(1))
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+    diagnostics::init();
+    diagnostics::launch_started(cli.session_explicit, &cli.session_id);
 
     if let Some(base_url) = cli.base_url.clone() {
+        diagnostics::gateway_ready(None, "provided");
         return run_client(
             base_url,
             false,
@@ -28,9 +32,19 @@ fn main() -> io::Result<()> {
         );
     }
 
-    let mut gateway = ensure_server_running(&cli.gateway).map_err(io::Error::other)?;
+    let mut gateway = match ensure_server_running(&cli.gateway) {
+        Ok(gateway) => gateway,
+        Err(error) => {
+            diagnostics::gateway_failed(&error);
+            return Err(io::Error::other(error));
+        }
+    };
     let base_url = gateway.base_url.clone();
     let started = gateway.started;
+    diagnostics::gateway_ready(
+        Some(gateway.port),
+        if started { "started" } else { "reused" },
+    );
     run_client(
         base_url,
         started,
@@ -51,12 +65,14 @@ fn run_client(
 ) -> io::Result<()> {
     if smoke_startup {
         println!("gateway ready at {} (started: {})", base_url, started);
+        diagnostics::application_exited(None);
         cleanup();
         return Ok(());
     }
 
     if std::env::var("SIM_ONE_TUI_EXIT_AFTER_STARTUP").as_deref() == Ok("1") {
         println!("gateway ready at {} (started: {})", base_url, started);
+        diagnostics::application_exited(None);
         cleanup();
         return Ok(());
     }
@@ -68,6 +84,7 @@ fn run_client(
             session_id,
             session_explicit,
         );
+        diagnostics::application_exited(None);
         cleanup();
         return result;
     }
@@ -80,6 +97,7 @@ fn run_client(
             session_explicit,
             &prompts,
         );
+        diagnostics::application_exited(None);
         cleanup();
         return result;
     }
@@ -92,6 +110,7 @@ fn run_client(
             session_explicit,
             &prompt,
         );
+        diagnostics::application_exited(None);
         cleanup();
         return result;
     }
@@ -109,6 +128,12 @@ fn run_client(
     if let Ok(Some(session_id)) = &result {
         println!("Exited SIM-ONE Alpha TUI. Session: {session_id}");
     }
+    diagnostics::application_exited(
+        result
+            .as_ref()
+            .ok()
+            .and_then(|session_id| session_id.as_deref()),
+    );
     cleanup();
     result.map(|_| ())
 }
@@ -131,7 +156,9 @@ fn run(
         if let Some(app_event) = read_app_event()? {
             app.handle_event(app_event);
             if let Some(text) = app.take_clipboard_text() {
-                let _ = copy_to_clipboard(&text);
+                if let Err(error) = copy_to_clipboard(&text) {
+                    diagnostics::clipboard_failed(&error);
+                }
             }
         }
     }
@@ -325,7 +352,7 @@ impl CliOptions {
 
 fn print_help() {
     println!(
-        "SIM-ONE Alpha Ratatui TUI\n\nOptions:\n  --port <number>       Gateway port\n  --base-url <url>      Existing gateway base URL; skips server launch\n  --session <id>        Explicit existing agent session id to attach\n  --server-path <path>  Built SIM-ONE Alpha server.mjs path\n  --env-path <path>     Env file path\n  --smoke-startup       Start/connect gateway then exit\n  -h, --help            Show this help"
+        "SIM-ONE Alpha Ratatui TUI\n\nOptions:\n  --port <number>       Gateway port\n  --base-url <url>      Existing gateway base URL; skips server launch\n  --session <selector>  Existing session id or exact name to resume\n  --server-path <path>  Built SIM-ONE Alpha server.mjs path\n  --env-path <path>     Env file path\n  --smoke-startup       Start/connect gateway then exit\n  -h, --help            Show this help"
     );
 }
 

@@ -1208,6 +1208,96 @@ fn older_history_prepend_preserves_the_exact_visible_source_row() {
 }
 
 #[test]
+fn page_up_history_load_preserves_viewport_when_startup_notices_precede_exchanges() {
+    let (release_tx, release_rx) = mpsc::channel();
+    let release_rx = Arc::new(Mutex::new(release_rx));
+    let older_release = Arc::clone(&release_rx);
+    let calls = Arc::new(AtomicUsize::new(0));
+    let loader_calls = Arc::clone(&calls);
+    let mut app = App::with_agent_sender_lifecycle_and_history(
+        "",
+        "test gateway",
+        "http://127.0.0.1:3940",
+        Arc::new(|_, _, _| panic!("resume must not greet")),
+        Arc::new(|_| panic!("resume must not create")),
+        Arc::new(|_, _| {
+            Ok(SessionLifecycleReply {
+                id: "tui-page-jump-history".to_string(),
+                title: None,
+                created: false,
+            })
+        }),
+        Arc::new(move |_, _, _, before| {
+            let call = loader_calls.fetch_add(1, Ordering::SeqCst);
+            if call == 0 {
+                return Ok(history_page(
+                    "tui-page-jump-history",
+                    "0000000000000000_0000000000000042",
+                    true,
+                    Some("older-cursor"),
+                    (0..8)
+                        .map(|index| {
+                            transcript_exchange(
+                                &format!("current-{index}"),
+                                Some((
+                                    if index == 0 {
+                                        "RESTORED_INITIAL_ANCHOR"
+                                    } else {
+                                        "current prompt"
+                                    },
+                                    TranscriptPromptVisibility::User,
+                                )),
+                                Vec::new(),
+                                Some("current final"),
+                            )
+                        })
+                        .collect(),
+                ));
+            }
+            assert_eq!(before.as_deref(), Some("older-cursor"));
+            older_release
+                .lock()
+                .expect("older release should lock")
+                .recv_timeout(Duration::from_secs(5))
+                .expect("older page should be released");
+            Ok(history_page(
+                "tui-page-jump-history",
+                "0000000000000000_0000000000000042",
+                false,
+                None,
+                vec![transcript_exchange(
+                    "oldest",
+                    Some(("RESTORED_OLDEST_PROMPT", TranscriptPromptVisibility::User)),
+                    Vec::new(),
+                    Some("oldest final"),
+                )],
+            ))
+        }),
+    );
+
+    app.start_explicit_resume("tui-page-jump-history".to_string(), false);
+    wait_for_startup(&mut app);
+    app.set_transcript_viewport_size(18, 96);
+    app.jump_to_tail();
+    for _ in 0..5 {
+        app.scroll_page_up();
+    }
+    wait_until(Duration::from_secs(2), || calls.load(Ordering::SeqCst) == 2);
+    let visible_before = visible_transcript_rows(&app, 18);
+    assert!(
+        visible_before
+            .iter()
+            .any(|line| line.contains("RESTORED_INITIAL_ANCHOR")),
+        "{visible_before:?}"
+    );
+
+    release_tx.send(()).expect("older page should be released");
+    wait_for_agent(&mut app);
+
+    assert_eq!(visible_transcript_rows(&app, 18), visible_before);
+}
+
+#[test]
 fn replayed_old_final_cannot_settle_a_new_pending_prompt() {
     let (release_tx, release_rx) = mpsc::channel();
     let release_rx = Arc::new(Mutex::new(release_rx));
@@ -1222,7 +1312,7 @@ fn replayed_old_final_cannot_settle_a_new_pending_prompt() {
                 .expect("sender release should lock")
                 .recv_timeout(Duration::from_secs(5))
                 .expect("new response should be released");
-            Ok(agent_reply("new authoritative final"))
+            Ok(agent_reply("new streamed final"))
         }),
         Arc::new(|_| panic!("resume must not create")),
         Arc::new(|_, _| {
@@ -1292,14 +1382,81 @@ fn replayed_old_final_cannot_settle_a_new_pending_prompt() {
     wait_for_agent(&mut app);
     let final_transcript = app.transcript_lines().join("\n");
     assert!(final_transcript.contains("old authoritative final"));
-    assert!(final_transcript.contains("assistant: new authoritative final"));
+    assert!(!final_transcript.contains("STALE_REPLAY_FINAL"));
     assert_eq!(
         final_transcript
             .lines()
-            .filter(|line| line.starts_with("assistant: new authoritative final"))
+            .filter(|line| line.starts_with("assistant: new streamed final"))
             .count(),
         1
     );
+}
+
+#[test]
+fn reconnect_replay_keeps_one_in_flight_activity_and_final() {
+    let mut app = App::new_for_test();
+    let in_flight = vec![
+        FlueEvent::from_value(serde_json::json!({
+            "type":"operation_start",
+            "submissionId":"reconnect-submission",
+            "operationId":"reconnect-operation",
+            "operationKind":"prompt",
+            "eventIndex":0,
+            "timestamp":"2026-07-23T16:01:00.100Z"
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"text_delta",
+            "submissionId":"reconnect-submission",
+            "eventIndex":1,
+            "timestamp":"2026-07-23T16:01:00.200Z",
+            "text":"reconnect streamed text"
+        })),
+    ];
+
+    app.handle_stream_update(AgentStreamUpdate::Events(in_flight.clone()));
+    app.handle_stream_update(AgentStreamUpdate::Reconnecting(
+        "fixture disconnect".to_string(),
+    ));
+    app.handle_stream_update(AgentStreamUpdate::Events(in_flight));
+    app.handle_stream_update(AgentStreamUpdate::Events(vec![
+        FlueEvent::from_value(serde_json::json!({
+            "type":"message_end",
+            "submissionId":"reconnect-submission",
+            "eventIndex":2,
+            "timestamp":"2026-07-23T16:01:01.000Z",
+            "message":{
+                "role":"assistant",
+                "content":[{"type":"text","text":"reconnect final"}]
+            }
+        })),
+        FlueEvent::from_value(serde_json::json!({
+            "type":"operation",
+            "submissionId":"reconnect-submission",
+            "operationId":"reconnect-operation",
+            "operationKind":"prompt",
+            "eventIndex":3,
+            "timestamp":"2026-07-23T16:01:01.100Z",
+            "durationMs":1500,
+            "isError":false
+        })),
+    ]));
+
+    let transcript = app.transcript_lines().join("\n");
+    assert_eq!(
+        transcript
+            .lines()
+            .filter(|line| line == &"operation: prompt completed in 1.5s")
+            .count(),
+        1
+    );
+    assert_eq!(
+        transcript
+            .lines()
+            .filter(|line| line == &"assistant: reconnect final")
+            .count(),
+        1
+    );
+    assert!(!transcript.contains("assistant: reconnect streamed textreconnect streamed text"));
 }
 
 #[test]
@@ -2323,6 +2480,14 @@ fn wait_for_calls(calls: &AtomicUsize, expected: usize) {
         thread::sleep(Duration::from_millis(10));
     }
     assert_eq!(calls.load(Ordering::SeqCst), expected);
+}
+
+fn visible_transcript_rows(app: &App, height: usize) -> Vec<String> {
+    app.transcript_rendered_lines()
+        .into_iter()
+        .skip(app.transcript_scroll())
+        .take(height)
+        .collect()
 }
 
 fn app_with_blocked_sender(clock: &TestClock) -> (App, mpsc::Sender<()>, Arc<AtomicUsize>) {

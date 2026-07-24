@@ -10,6 +10,7 @@ import {
   type ChatSessionRecord,
 } from '../engine/session/session-database.js';
 import {
+  ChatSessionAmbiguousError,
   ChatSessionNotFoundError,
   connectorUsesPersistentSession,
   createFreshChatSession,
@@ -117,6 +118,42 @@ test('owned lifecycle resume returns the requested session without recreating it
     assert.equal(resumed.session.displayName, 'Resume name');
   } finally {
     deleteSessions([created.sessionId]);
+  }
+});
+
+test('owned lifecycle resume resolves an explicit session name to its canonical id', () => {
+  const identity = uniqueIdentity('tui', 'lifecycle-name-resume');
+  const created = createFreshChatSession({
+    identity,
+    displayName: 'Named lifecycle session',
+  });
+
+  try {
+    const resumed = resumeOwnedChatSession({
+      identity,
+      sessionId: 'Named lifecycle session',
+    });
+
+    assert.equal(resumed.sessionId, created.sessionId);
+    assert.equal(resumed.created, false);
+    assert.equal(resumed.session.displayName, 'Named lifecycle session');
+  } finally {
+    deleteSessions([created.sessionId]);
+  }
+});
+
+test('owned lifecycle resume rejects duplicate explicit names in one scope', () => {
+  const identity = uniqueIdentity('tui', 'lifecycle-name-ambiguous');
+  const first = createFreshChatSession({ identity, displayName: 'Duplicate name' });
+  const second = createFreshChatSession({ identity, displayName: 'Duplicate name' });
+
+  try {
+    assert.throws(
+      () => resumeOwnedChatSession({ identity, sessionId: 'Duplicate name' }),
+      ChatSessionAmbiguousError,
+    );
+  } finally {
+    deleteSessions([first.sessionId, second.sessionId]);
   }
 });
 
