@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "graph_id": "sim-one-alpha-lifecycle",
-  "graph_version": 8,
+  "graph_version": 9,
   "title": "SIM-ONE Alpha Development Lifecycle",
   "purpose": "Govern future SIM-ONE Alpha changes from an authorized request through grounded design, parallel domain implementation, full project verification, approval-gated release, output-level canary and production observation, and bounded repair.",
   "project": {
@@ -1094,7 +1094,7 @@
           "src/engine/schedules/",
           "src/core/telemetry/",
           "docs/operations/ files assigned exclusively to this workstream by artifact:implementation-plan",
-          "docs/architecture/tui-cli-session-flow.md when assigned to this workstream or integration",
+          "docs/architecture/tui-cli-session-flow.md when assigned exclusively to this workstream by artifact:implementation-plan",
           "src/tests/ files assigned exclusively to this workstream by artifact:implementation-plan"
         ],
         "external": [],
@@ -1179,7 +1179,7 @@
           "scripts/",
           ".github/workflows/",
           "docs/architecture/product-flow.md",
-          "docs/architecture/tui-cli-session-flow.md when assigned to this workstream or integration",
+          "docs/architecture/tui-cli-session-flow.md when assigned exclusively to this workstream by artifact:implementation-plan",
           "docs/operations/product-tui.md",
           "docs/tui/",
           "README.md",
@@ -2036,6 +2036,8 @@
         "timeout_minutes": 5,
         "completion_condition": "Every acceptance criterion has durable, independently inspectable evidence.",
         "command": [
+          "env",
+          "GOROMBO_TEST_MODE=1",
           "node",
           "scripts/check-sim-one-product-command.mjs"
         ],
@@ -2166,7 +2168,7 @@
       "state": "planned",
       "executor": {
         "kind": "deterministic",
-        "name": "Verify Ratatui Product Prompt",
+        "name": "Verify Packaged Ratatui Product",
         "instructions": "Execute the exact repository script as an argv array and retain full stdout, stderr, exit status, timing, and declared artifact digests."
       },
       "inputs": [
