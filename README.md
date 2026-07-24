@@ -220,7 +220,85 @@ Both source-build paths fetch the bundled embedding model, compile the Rust/WASM
 
 ## Configuration
 
-<!-- Required/optional environment variables and runtime config file. -->
+Onboarding creates the initial configuration. After installation, SIM-ONE Alpha keeps runtime behavior separate from secrets:
+
+| File | Purpose |
+| --- | --- |
+| `~/.gorombo/sim-one-alpha/gorombo.config.json` | Model selection, storage, memory, schedules, gateway settings, and seeded capabilities |
+| `~/.gorombo/.env` | Provider API keys, connector tokens, service credentials, and operational overrides |
+
+Keep secrets in `.env` or your deployment secret manager. Do not commit `.env` or place credentials in `gorombo.config.json`.
+
+### Select Models
+
+`models.primary` selects the active project model card. `models.backup` is optional and must select a different card.
+
+```json
+{
+  "version": 1,
+  "models": {
+    "primary": "minimax-m3-cloud",
+    "backup": "codex-brain"
+  },
+  "gateway": {
+    "port": 3940
+  }
+}
+```
+
+Available agentic-chat card keys:
+
+| Model card | Provider credentials |
+| --- | --- |
+| `minimax-m3-cloud` | `OLLAMA_API_KEY` or `OLLAMA_CLOUD_API_KEY` |
+| `deepseek-v4-pro-cloud` | `OLLAMA_API_KEY` or `OLLAMA_CLOUD_API_KEY` |
+| `qwen3-5-cloud` | `OLLAMA_API_KEY` or `OLLAMA_CLOUD_API_KEY` |
+| `kimi-k2.7-code-cloud` | `OLLAMA_API_KEY` or `OLLAMA_CLOUD_API_KEY` |
+| `codex-brain` | `CODEX_BRAIN_LOCAL_API_URL` and `CODEX_BRAIN_LOCAL_API_KEY` |
+
+Ollama Cloud uses `https://ollama.com/v1` unless `OLLAMA_CLOUD_BASE_URL` is set. A Codex Brain URL must include the OpenAI-compatible `/v1` base path.
+
+The runtime validates credentials for both selected cards at startup. The shipped primary and backup therefore require an Ollama Cloud key plus both Codex Brain values. Remove `models.backup` or select another configured backup when only one provider is available.
+
+Model selection belongs in `gorombo.config.json`. Raw provider/model specifiers and the legacy `GOROMBO_MODEL`, `GOROMBO_MODEL_BACKUP`, and `GOROMBO_CONFIG_PATH` environment variables are not supported.
+
+### Configure Services
+
+Add only the integrations you enable:
+
+| Service | Configuration |
+| --- | --- |
+| External gateway clients | Set `API_SECRET`; loopback TUI requests do not require it |
+| Telegram | Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET_TOKEN`; approved/admin user IDs and group mention settings are optional |
+| Web research | Uses Ollama Search and the configured Ollama key by default; `OLLAMA_WEB_SEARCH_BASE_URL` and `OLLAMA_WEB_SEARCH_TIMEOUT_MS` are optional |
+| Runpod image generation | Set `RUNPOD_API_KEY`; endpoint, model-catalog, and output-directory overrides are optional |
+
+Telegram remains disabled when `TELEGRAM_BOT_TOKEN` is omitted. Connector access is paired and governed from an authenticated SIM-ONE session after the local TUI is working.
+
+### Runtime Data
+
+The installed runtime keeps durable state under `~/.gorombo/`:
+
+| Data | Default location |
+| --- | --- |
+| Flue persistence and sessions | `~/.gorombo/db/flue.sqlite`, `~/.gorombo/db/sessions.sqlite` |
+| Protocols, structured memory, schedules, and capabilities | `~/.gorombo/db/` |
+| Vector retrieval data | `~/.gorombo/vector/` |
+| Installed skills, tools, workers, and MCP definitions | `~/.gorombo/capabilities/` |
+| Approval records and managed GitHub authentication | `~/.gorombo/approvals/`, `~/.gorombo/auth/github/` |
+
+Storage paths can be changed in the `storage`, `memory`, and `schedules` blocks or through their documented `GOROMBO_*` deployment overrides. These locations contain runtime-managed state; back them up as needed, but do not edit the SQLite databases directly.
+
+### Apply Changes
+
+Configuration is loaded when the gateway starts. Apply file or secret changes and verify the resulting installation with:
+
+```bash
+sim-one restart
+sim-one doctor
+```
+
+Startup fails closed for invalid JSON, unsupported configuration versions, invalid gateway values, unknown model-card keys, duplicate primary/backup selection, or missing credentials for a selected model.
 
 ## Usage
 
