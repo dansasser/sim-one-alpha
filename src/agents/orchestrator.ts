@@ -55,6 +55,7 @@ import { connectUserMcpServers } from '../engine/capabilities/mcp-broker.js';
 import { connectBuiltinMcpServers } from '../engine/capabilities/builtin-mcp.js';
 import { loadUserTools } from '../engine/capabilities/tool-loader.js';
 import { loadUserWorkers } from '../engine/capabilities/worker-loader.js';
+import greetingPreflight from '../skills/greeting-preflight/SKILL.md' with { type: 'skill' };
 
 export const route: AgentRouteHandler = async (_c, next) => next();
 
@@ -128,6 +129,7 @@ export default createAgent(async ({ id, env }) => {
     model: selectedModelCard.specifier,
     instructions: orchestratorInstructions,
     compaction: createFlueCompactionConfig(selectedModelCard),
+    skills: [greetingPreflight],
     tools: [...builtInTools, ...userTools],
     subagents: [...builtInSubagents, ...userSubagents],
   };

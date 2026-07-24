@@ -17,6 +17,7 @@ for (const target of targets) {
 }
 
 copyTestFixtures(includeTscOutput ? resolve('.tmp/tsc') : resolve('.gorombo/sim-one-alpha'));
+copySkillDirectories(includeTscOutput ? resolve('.tmp/tsc') : resolve('.gorombo/sim-one-alpha'));
 copyWorkspaceDirectories(includeTscOutput ? resolve('.tmp/tsc') : resolve('.gorombo/sim-one-alpha'));
 copyModelsYaml(includeTscOutput ? resolve('.tmp/tsc') : resolve('.gorombo/sim-one-alpha'));
 
@@ -28,6 +29,10 @@ function copyTestFixtures(outputRoot) {
   const fixturesTarget = join(outputRoot, 'tests', 'fixtures');
   mkdirSync(fixturesTarget, { recursive: true });
   cpSync(fixturesSource, fixturesTarget, { recursive: true, force: true });
+}
+
+function copySkillDirectories(outputRoot) {
+  copyDirectoryIfExists(resolve('src/skills'), join(outputRoot, 'skills'));
 }
 
 function copyWorkspaceDirectories(outputRoot) {

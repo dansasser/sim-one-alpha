@@ -84,6 +84,7 @@ test('Flue orchestrator routes research to the researcher instead of owning web 
 
   assert.equal(config.subagents?.some((agent) => agent.name === 'researcher'), true);
   assert.equal(config.subagents?.some((agent) => agent.name === 'coding-worker'), true);
+  assert.equal(config.skills?.some((skill) => skill.name === 'greeting-preflight'), true);
   const orchestratorExposedInternal = (config.subagents ?? [])
     .map((agent) => agent.name)
     .filter((name): name is string => typeof name === 'string')

@@ -96,7 +96,8 @@ src/workflows/*.ts
 src/engine/tools/*.ts
   Executable model-callable capabilities exposed only to the agents that should own them.
 
-src/engine/skills/**/SKILL.md
+src/skills/**/SKILL.md
+  Application-owned Flue Agent Skills imported by the owning agent or workflow.
   Reusable workflow knowledge and instructions, not executable capability.
 
 model cards
@@ -519,6 +520,7 @@ src/
     ingress/
     middleware/
     routes/
+  skills/
   engine/
     agents/
     approvals/
@@ -530,7 +532,6 @@ src/
     registries/
     schedules/
     session/
-    skills/
     tools/
     workers/
     workflows/

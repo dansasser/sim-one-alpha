@@ -1,6 +1,57 @@
+use std::io::{Read, Write};
+use std::net::TcpListener;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
+
 use sim_one_ratatui_tui::flue::stream::{
-    parse_catch_up_response, parse_sse_frame, SseFrame, SseParser,
+    parse_catch_up_response, parse_sse_frame, spawn_agent_stream, SseFrame, SseParser,
 };
+
+#[test]
+fn agent_stream_starts_strictly_after_the_supplied_snapshot_offset() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("test server should bind");
+    let port = listener
+        .local_addr()
+        .expect("test server should have address")
+        .port();
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("stream should connect");
+        let mut request = Vec::new();
+        let mut buffer = [0; 1024];
+        while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+            let size = stream
+                .read(&mut buffer)
+                .expect("request should be readable");
+            if size == 0 {
+                break;
+            }
+            request.extend_from_slice(&buffer[..size]);
+        }
+        tx.send(String::from_utf8(request).expect("request should be UTF-8"))
+            .expect("request should be captured");
+        write!(
+            stream,
+            "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        )
+        .expect("response should be writable");
+    });
+
+    let handle = spawn_agent_stream(
+        format!("http://127.0.0.1:{port}"),
+        "tui-snapshot".to_string(),
+        "0000000000000000_0000000000000042".to_string(),
+    );
+    let request = rx
+        .recv_timeout(Duration::from_secs(2))
+        .expect("catch-up request should arrive");
+    handle.cancel();
+
+    assert!(request.starts_with(
+        "GET /agents/orchestrator/tui-snapshot?offset=0000000000000000_0000000000000042 HTTP/1.1"
+    ));
+}
 
 #[test]
 fn parses_catch_up_json_array_and_stream_headers() {

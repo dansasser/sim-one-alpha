@@ -26,6 +26,13 @@ impl FlueEvent {
             value,
         }
     }
+
+    pub fn is_nested(&self) -> bool {
+        self.value
+            .get("parentSession")
+            .and_then(|parent| parent.as_str())
+            .is_some()
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

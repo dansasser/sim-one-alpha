@@ -3,12 +3,14 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { DatabaseSync } from 'node:sqlite';
 import type { SessionData } from '@flue/runtime/adapter';
 import orchestratorAgent from '../agents/orchestrator.js';
 import {
   createFlueSessionStorageKey,
   parseFlueSessionStorageKey,
 } from '../engine/session/flue-session-store.js';
+import { GoromboSessionDatabase } from '../engine/session/session-database.js';
 import { createGoromboPersistenceRuntime } from '../engine/session/session-persistence.js';
 
 test('Flue session storage keys can be parsed into stable logical session parts', () => {
@@ -35,6 +37,21 @@ test('GOROMBO persistence wrapper loads latest logical session across workflow r
 
     assert.deepEqual(await store.load(secondRunKey), data);
     assert.deepEqual(await runtime.getLatestSessionData('gorombo-orchestrator', 'support'), data);
+  } finally {
+    await runtime.adapter.close?.();
+    runtime.cleanup();
+  }
+});
+
+test('GOROMBO persistence runtime reuses its connected Flue event stream store', async () => {
+  const runtime = createTestPersistenceRuntime();
+
+  try {
+    await runtime.adapter.migrate?.();
+    const connected = (await runtime.adapter.connect()).eventStreamStore;
+
+    assert.equal(await runtime.getEventStreamStore(), connected);
+    assert.equal(await runtime.getEventStreamStore(), connected);
   } finally {
     await runtime.adapter.close?.();
     runtime.cleanup();
@@ -224,10 +241,23 @@ test('normalized chat event context is persisted without raw payload data', asyn
       event,
       sessionId: 'event-session',
       deliveryKind: 'direct-agent',
+    });
+    runtime.sessionDatabase.recordNormalizedMessageEvent({
+      event,
+      sessionId: 'event-session',
+      deliveryKind: 'direct-agent',
       deliveryId: 'stream#0',
+      delivery: {
+        submissionId: 'submission-1',
+        streamUrl: '/agents/orchestrator/event-session',
+        offset: '0000000000000000_0000000000000042',
+      },
     });
 
     const stored = runtime.sessionDatabase.getNormalizedMessageEvent(event.id);
+    const sessionEvents = runtime.sessionDatabase.listNormalizedMessageEventsForSession({
+      sessionId: 'event-session',
+    });
 
     assert.deepEqual(stored, {
       id: event.id,
@@ -248,13 +278,101 @@ test('normalized chat event context is persisted without raw payload data', asyn
       deliveryId: 'stream#0',
     });
     assert.equal('raw' in (stored ?? {}), false);
+    assert.equal(sessionEvents.length, 1);
+    assert.deepEqual(sessionEvents[0]?.delivery, {
+      submissionId: 'submission-1',
+      streamUrl: '/agents/orchestrator/event-session',
+      offset: '0000000000000000_0000000000000042',
+    });
+    assert.equal(sessionEvents[0]?.legacyDeliveryId, 'stream#0');
+    assert.equal('raw' in (sessionEvents[0]?.event ?? {}), false);
   } finally {
     await runtime.adapter.close?.();
     runtime.cleanup();
   }
 });
 
-test('session memory retrieval is scoped to the current actor or conversation', async () => {
+test('normalized event migration adds structured delivery columns without losing existing rows', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'gorombo-session-migration-'));
+  const databasePath = join(directory, 'sessions.sqlite');
+  const legacy = new DatabaseSync(databasePath);
+
+  try {
+    legacy.exec(`
+      CREATE TABLE normalized_message_events (
+        event_id TEXT PRIMARY KEY,
+        session_id TEXT,
+        connector TEXT NOT NULL,
+        message_kind TEXT NOT NULL,
+        text TEXT NOT NULL,
+        received_at TEXT NOT NULL,
+        actor_id TEXT NOT NULL,
+        actor_display_name TEXT,
+        conversation_id TEXT NOT NULL,
+        thread_id TEXT,
+        client_id TEXT,
+        project_id TEXT,
+        workflow TEXT,
+        task TEXT,
+        delivery_kind TEXT,
+        delivery_id TEXT,
+        accepted_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    legacy.prepare(
+      `INSERT INTO normalized_message_events
+       (event_id, session_id, connector, message_kind, text, received_at, actor_id,
+        conversation_id, delivery_kind, delivery_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      'legacy-event',
+      'legacy-session',
+      'tui',
+      'chat.message',
+      'Preserve this prompt.',
+      '2026-06-12T00:00:00.000Z',
+      'local-tui',
+      'local-tui',
+      'direct-agent',
+      'legacy-submission',
+      '2026-06-12T00:00:00.000Z',
+      '2026-06-12T00:00:00.000Z',
+    );
+  } finally {
+    legacy.close();
+  }
+
+  const migrated = new GoromboSessionDatabase(databasePath);
+  try {
+    const rows = migrated.listNormalizedMessageEventsForSession({
+      sessionId: 'legacy-session',
+    });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.event.text, 'Preserve this prompt.');
+    assert.equal(rows[0]?.legacyDeliveryId, 'legacy-submission');
+    assert.deepEqual(rows[0]?.delivery, {});
+
+    const inspected = new DatabaseSync(databasePath);
+    try {
+      const columns = new Set(
+        (inspected.prepare('PRAGMA table_info(normalized_message_events)').all() as Array<{ name: string }>)
+          .map((column) => column.name),
+      );
+      assert.equal(columns.has('delivery_submission_id'), true);
+      assert.equal(columns.has('delivery_stream_url'), true);
+      assert.equal(columns.has('delivery_offset'), true);
+    } finally {
+      inspected.close();
+    }
+  } finally {
+    migrated.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('session memory retrieval is scoped to the current actor and conversation', async () => {
   const runtime = createTestPersistenceRuntime();
 
   try {
@@ -269,8 +387,14 @@ test('session memory retrieval is scoped to the current actor or conversation', 
     runtime.sessionDatabase.ensureChatSession({
       sessionId: 'memory-user-b',
       origin: 'web',
-      actorId: 'actor-b',
+      actorId: 'actor-a',
       conversationId: 'conversation-b',
+    });
+    runtime.sessionDatabase.ensureChatSession({
+      sessionId: 'memory-user-c',
+      origin: 'web',
+      actorId: 'actor-c',
+      conversationId: 'conversation-a',
     });
 
     await store.save(
@@ -280,6 +404,10 @@ test('session memory retrieval is scoped to the current actor or conversation', 
     await store.save(
       createFlueSessionStorageKey('workflow-run-b', 'gorombo-orchestrator', 'memory-user-b'),
       createStoredSessionData('Remember the neon invoice audit for user B.'),
+    );
+    await store.save(
+      createFlueSessionStorageKey('workflow-run-c', 'gorombo-orchestrator', 'memory-user-c'),
+      createStoredSessionData('Remember the neon invoice audit for user C.'),
     );
 
     const matches = runtime.sessionDatabase.searchSessionMemory({
@@ -291,7 +419,7 @@ test('session memory retrieval is scoped to the current actor or conversation', 
 
     assert.equal(matches.length, 1);
     assert.equal(matches[0]?.sessionName, 'memory-user-a');
-    assert.doesNotMatch(matches[0]?.content ?? '', /user B/);
+    assert.doesNotMatch(matches[0]?.content ?? '', /user [BC]/);
   } finally {
     await runtime.adapter.close?.();
     runtime.cleanup();

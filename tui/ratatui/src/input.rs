@@ -4,14 +4,20 @@ use crate::app::AppEvent;
 
 pub fn map_terminal_event(event: Event) -> Option<AppEvent> {
     match event {
+        Event::Key(key) if key.kind == KeyEventKind::Repeat && key.code == KeyCode::Enter => None,
         Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
             map_key_event(key)
         }
+        Event::Mouse(mouse) => Some(AppEvent::Mouse(mouse)),
         _ => None,
     }
 }
 
 pub fn map_key_event(key: KeyEvent) -> Option<AppEvent> {
+    if key.code == KeyCode::Enter && key.modifiers.contains(KeyModifiers::SHIFT) {
+        return Some(AppEvent::Text("\n".to_string()));
+    }
+
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         return match key.code {
             KeyCode::Char('c') => Some(AppEvent::Quit),
@@ -19,6 +25,7 @@ pub fn map_key_event(key: KeyEvent) -> Option<AppEvent> {
             KeyCode::Char('e') => Some(AppEvent::MovePromptEnd),
             KeyCode::Char('u') => Some(AppEvent::ClearPrompt),
             KeyCode::Char('w') => Some(AppEvent::DeletePromptWordLeft),
+            KeyCode::Char('x') => Some(AppEvent::CutPromptSelection),
             KeyCode::Left => Some(AppEvent::MovePromptWordLeft),
             KeyCode::Right => Some(AppEvent::MovePromptWordRight),
             KeyCode::End => Some(AppEvent::JumpToTail),
@@ -31,15 +38,16 @@ pub fn map_key_event(key: KeyEvent) -> Option<AppEvent> {
         KeyCode::Backspace => Some(AppEvent::Backspace),
         KeyCode::Delete => Some(AppEvent::Delete),
         KeyCode::Enter => Some(AppEvent::Submit),
+        KeyCode::Tab => Some(AppEvent::SelectCommand),
         KeyCode::Left => Some(AppEvent::MovePromptLeft),
         KeyCode::Right => Some(AppEvent::MovePromptRight),
         KeyCode::Home => Some(AppEvent::MovePromptStart),
         KeyCode::End => Some(AppEvent::MovePromptEnd),
         KeyCode::PageUp => Some(AppEvent::ScrollPageUp),
         KeyCode::PageDown => Some(AppEvent::ScrollPageDown),
-        KeyCode::Up => Some(AppEvent::ScrollLineUp),
-        KeyCode::Down => Some(AppEvent::ScrollLineDown),
-        KeyCode::Esc => Some(AppEvent::Quit),
+        KeyCode::Up => Some(AppEvent::NavigateUp),
+        KeyCode::Down => Some(AppEvent::NavigateDown),
+        KeyCode::Esc => Some(AppEvent::Cancel),
         _ => None,
     }
 }

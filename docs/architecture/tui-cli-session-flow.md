@@ -1,0 +1,425 @@
+# TUI, CLI, And Session Flow
+
+This document is the repository-level map for the SIM-ONE Alpha terminal surface. It explains how the `sim-one` command, Ratatui TUI, gateway launcher, slash commands, durable sessions, and product smoke tests fit together.
+
+User-facing command reference lives in `docs/tui/ratatui.md` and `docs/tui/session-management.md`. Operator runbook details live in `docs/operations/product-tui.md`.
+
+Implementation decisions and the supported product behavior are maintained in this document and the linked user and operator guides.
+
+## Ownership
+
+```text
+sim-one-cli/
+  Product command wrapper.
+  Owns command routing for `sim-one`, `sim-one --help`, and capability subcommands.
+  No-argument `sim-one` launches the Ratatui binary.
+  `--ink` remains a legacy fallback path only.
+
+tui/ratatui/
+  Rust/Ratatui terminal client.
+  Owns terminal drawing, pane-aware keyboard/mouse input mapping, transcript scroll and logical selection state, prompt editing/selection, the clickable slash-command palette, scrollbar interaction, OSC52 clipboard handoff, local TUI commands, gateway launch/reuse, stream attach/restart, and packaged binary behavior.
+
+src/api/routes/chat-events.ts
+  App-owned connector-style chat ingress.
+  Owns `/api/chat/events`, trusted event persistence, prompt session resolution, pre-LLM slash command handling, and durable prompt admission to the Flue orchestrator route.
+
+src/api/routes/chat-sessions.ts
+  Product session lifecycle boundary.
+  Owns fresh TUI creation, ownership-validated explicit resume, and scope-filtered TUI session listing without creating normalized chat events.
+
+src/engine/commands/slash-commands.ts
+  Shared pre-LLM slash command parser.
+
+src/engine/session/
+  Product session catalog, access checks, Flue session persistence wrapper, compaction budget, direct-agent instance indexes, and session-memory indexing.
+
+src/skills/greeting-preflight/SKILL.md
+  Built-in Flue Agent Skill used by the main orchestrator for local startup greeting events after connector preflight.
+
+scripts/test-ratatui-product.mjs
+  Packaged product smoke for the exact built `sim-one` path.
+
+scripts/test-ratatui-visible-final.py
+  POSIX PTY regression that delivers nested worker output, a root assistant text delta, and a multiline root message_end while holding the HTTP result open. Verifies the packaged TUI keeps worker payloads internal and renders the consolidated root answer immediately.
+```
+
+The prompt editor opens a filtered command drop-up when its first token begins with `/`. The palette is capped at six visible rows and overlays the transcript above the status line, so it does not change transcript viewport height or prompt geometry. Up/Down navigate the palette while it is open, move vertically through wrapped/explicit prompt rows when prompt text is present, and retain transcript line scrolling when the prompt is empty. PgUp/PgDown always scroll transcript context. Mouse wheel events route to the palette, prompt viewport, or transcript according to the pointer location. Enter or Tab inserts the selected command; a palette click does the same. Esc or an outside click dismisses the palette before retaining normal input behavior. An unescaped trailing `\` followed by Enter inserts a prompt newline, while doubled trailing backslashes remain literal.
+
+## Mouse And Clipboard Flow
+
+```text
+Crossterm MouseEvent
+  -> input.rs preserves kind, coordinates, button, and modifiers
+  -> App routes by z-order: palette -> prompt -> scrollbar -> transcript
+  -> ui.rs publishes the current frame's hit regions and wrapped-row mappings
+  -> App updates cursor, selection, prompt viewport, or transcript scroll state
+  -> ui.rs renders selection with reversed cell styling
+  -> mouse release queues logical selected text
+  -> main.rs sends queued text through terminal.rs OSC52 clipboard output
+```
+
+Transcript selection stores logical source positions rather than scraping terminal cells. Normal word-wrapped rows retain source character ranges; rendered assistant Markdown rows retain equivalent plain rendered source ranges. Copy therefore omits borders, margins, scrollbar glyphs, Markdown markers, and synthetic wrap boundaries while preserving explicit logical newlines. Prompt selection stores UTF-8 byte boundaries derived from wrapped character/display-column mappings, so selection replacement, Backspace/Delete, and `Ctrl+X` cannot split a multibyte character.
+
+Mouse capture remains enabled because wheel, drag, scrollbar, and palette behavior all depend on it. `terminal.rs` disables capture before normal Ratatui restoration and from the panic hook. OSC52 support is a host-terminal capability; clipboard failure does not change selection state or terminate the TUI.
+
+`chat_sessions.explicit_name` stores only names explicitly supplied through `/rename`, `/new <title>`, or `/clear <title>`. It remains separate from automatic prompt-derived conversation titles. Session-management responses return that explicit name during `/session` and `/resume`, allowing Ratatui to restore `SIM-ONE Alpha - <name>` in the transcript header for a loaded named session. Fresh and unnamed sessions use `SIM-ONE Alpha`. The existing status label remains unchanged, and state synchronization never parses human-readable command response text.
+
+The TUI is a connector surface, not an agent runtime. It must not own orchestration, protocol loading, tool selection, model execution, worker behavior, or memory/RAG decisions.
+
+## Build Products
+
+```text
+pnpm run build
+  -> .gorombo/sim-one-alpha/server.mjs
+  -> .gorombo/sim-one-alpha/gorombo.config.json
+  -> .gorombo/sim-one-alpha/memory/gorombo_memory.*
+
+pnpm run build:tui:ratatui
+  -> .gorombo/sim-one-ratatui/sim-one-ratatui-tui
+  -> .gorombo/sim-one-ratatui/sim-one-ratatui-tui.exe on Windows
+
+pnpm run build:cli
+  -> .gorombo/sim-one-cli/cli.js
+  -> .gorombo/sim-one-cli/sim-one
+  -> .gorombo/sim-one-cli/sim-one.cmd on Windows
+
+pnpm run build:all
+  -> builds all of the above
+  -> verifies the product command is runnable
+```
+
+The product command used from a built worktree is:
+
+```sh
+./.gorombo/sim-one-cli/sim-one
+```
+
+## Product CLI Routing
+
+`sim-one-cli/src/cli.tsx` uses Commander for product routing:
+
+```text
+sim-one
+  -> validate TUI options
+  -> resolve .gorombo/sim-one-ratatui/sim-one-ratatui-tui
+  -> spawn the Ratatui binary with inherited stdio
+
+sim-one --ink
+  -> launch the legacy Ink fallback path
+
+sim-one skill|tool|worker|mcp ...
+  -> run capability management commands
+  -> do not launch the TUI
+```
+
+The wrapper is intentionally thin. The Rust TUI owns interactive terminal behavior and gateway lifecycle. The TypeScript CLI owns product command routing and capability subcommands.
+
+## Gateway Startup And Runtime Root
+
+The Ratatui launcher checks gateway health before starting anything:
+
+```text
+Ratatui binary starts
+-> if --base-url is provided, use that gateway
+-> otherwise resolve port from CLI/config/default
+-> probe /health
+-> if healthy, connect without spawning a server
+-> if unhealthy, resolve packaged server.mjs
+-> start Node with PORT and optional --env-file
+-> wait for /health
+-> enter terminal UI
+```
+
+When it starts the packaged server, the launcher sets the child process cwd to the owner of the `.gorombo` runtime tree. This keeps runtime data and packaged artifacts resolving from the product root even if the user launches the binary from another directory.
+
+The launcher only stops a server child that it started. It does not stop a gateway that was already running.
+
+## Local TUI Diagnostics
+
+`tui/ratatui/src/diagnostics.rs` owns a best-effort, process-local JSONL diagnostic stream. Packaged path resolution follows the executable back to its owning `.gorombo` tree, so an arbitrary caller working directory cannot redirect logs. `SIM_ONE_TUI_LOG_PATH` is the explicit override used by isolated product tests.
+
+Each entry has a timestamp, launch id, process id, elapsed time, event name, and bounded typed fields. Events cover launch mode, gateway readiness/failure category, session lifecycle start/result/failure, transcript history load/page outcomes, stream attachment, Ctrl+C copy-versus-exit behavior, clipboard failure category, and application exit. The logger records canonical session ids where useful but stores no prompt, response, selected text, session-name selector, secret, or raw error. Rotation occurs before a write would exceed 1 MiB, retaining `.1` through `.3`.
+
+## Startup Preflight And Greeting
+
+A normal no-argument TUI launch does not attach to a default `primary` session or a previous TUI session. It starts with a clean local transcript and no agent session id, creates a fresh durable session through the lifecycle API, attaches the stream to the returned id, reports preflight status, then sends an automatic greeting as the first normal prompt through `/api/chat/events`.
+
+```text
+TUI opens
+-> render clean preflight shell
+-> confirm gateway startup/reuse result
+-> POST /api/chat/sessions with connector=tui/local-tui identity
+-> gateway creates and returns a fresh durable tui-* session
+-> store returned id/title metadata
+-> attach live stream for the new session
+-> render "preflight: all systems go"
+-> POST /api/chat/events with startup report
+-> orchestrator activates built-in greeting-preflight skill
+-> assistant greeting renders from workspace identity/user context
+```
+
+The TUI owns only connector checks and transcript/status rendering. The greeting words are not hardcoded in Rust. The startup prompt instructs the main orchestrator to use the built-in Flue skill `greeting-preflight`, which lives at `src/skills/greeting-preflight/SKILL.md` and is registered in `src/agents/orchestrator.ts` through the documented `with { type: 'skill' }` import flow.
+
+Passing `--session <selector>` is an explicit resume launch. The TUI first calls `POST /api/chat/sessions/:selector/resume` with the stable local identity. The gateway checks canonical id first, then resolves an exact explicit name within the same TUI ownership scope. A successful resume returns the canonical id, restores the explicit title, attaches stream/history, and appends no startup greeting. A missing selector returns a newly created session so startup continues through the normal fresh greeting path. Cross-scope selectors return 403 and duplicate names return 409; both fail startup and leave prompt submission locked.
+
+Telegram has a separate connector policy: updates in one Telegram chat/thread reuse that connector-owned active session until a connector command changes it. TUI, Web API, scheduled-job, test, and unknown connectors do not inherit Telegram persistence.
+
+## Durable Transcript Projection And Replay
+
+The gateway owns transcript reconstruction. `GET /api/chat/sessions/:sessionId/transcript` accepts only a canonical id plus the stable TUI identity, applies the existing ownership check, and returns a display-neutral semantic page. Ratatui never opens `sessions.sqlite` or `flue.sqlite`.
+
+The projection combines two authoritative sources:
+
+```text
+normalized_message_events
+  visible connector prompt text and explicit startup-workflow visibility
+
+Flue EventStreamStore
+  root submission activity, authoritative duration/error state,
+  root assistant message_end, and durable stream offset
+```
+
+`src/engine/session/session-transcript.ts` reads the already-connected Flue `EventStreamStore` through the product persistence runtime. It correlates prompts to submissions with stored delivery metadata, sanitizes each event batch, and returns semantic exchanges. It does not execute an agent, duplicate Flue persistence, or create a second conversation source.
+
+The projection returns only visible user prompts, bounded root thinking previews, structured public operation/tool/task activity, and non-empty root-assistant finals. It excludes internal startup prompts, raw tool results, tool arguments, nested worker thinking/responses, empty assistant tool-call messages, and unknown event payloads. Events with `parentSession` cannot become assistant chat responses. TUI-local command output has no Flue submission and is not durable conversation history.
+
+Explicit resume ordering is:
+
+```text
+POST /api/chat/sessions/:selector/resume
+-> receive canonical id and explicit name
+-> GET /api/chat/sessions/:canonicalId/transcript
+-> install newest chronological exchange page
+-> read snapshot stream.nextOffset
+-> attach Flue catch-up/live stream strictly after nextOffset
+-> unlock prompt input
+```
+
+The current launch's preflight notices remain local rows around the restored snapshot. A successful resume restores the original greeting and prior conversation without sending a second greeting. Completed snapshot exchanges are immutable. Live updates share `TranscriptDocument` with replayed exchanges and use compound submission/operation/turn/tool/task identities, so reconnect replay updates the existing record instead of duplicating it or settling another pending prompt.
+
+The transcript endpoint reads newest prompt pages with an opaque `before` cursor and returns each page chronologically. When the user reaches the earliest loaded exchange, Ratatui requests the next page and prepends it. Stable source-row ids preserve the exact visible row and any logical selection across the prepend. Older-page responses never rewind the already attached live stream.
+
+The visible exchange sequence is:
+
+```text
+you: prompt
+operation/thinking/tool/task activity
+terminal operation with authoritative durationMs
+assistant: authoritative root Markdown response
+rendered-only blank tail margin
+```
+
+Root `text_delta` creates one dimmed live preview. Root `message_end` replaces that preview with one final Markdown block. Terminal operation events may arrive after `message_end`, but the semantic document orders settled activity before the final response. Repeated completed turn rows are omitted from the default transcript.
+
+## Prompt Flow
+
+Normal prompts from the Ratatui TUI use the connector-style chat path:
+
+```text
+TUI prompt submit
+-> POST /api/chat/events
+   connector: "tui"
+   actorId: "local-tui"
+   conversationId: "local-tui"
+   threadId: "local-tui"
+   session: <active-session-id> after lifecycle creation or explicit resume
+-> persist trusted normalized event context
+-> resolve product session
+-> POST /agents/orchestrator/:sessionId?wait=result
+-> Flue durable direct-agent submission
+-> response text rendered in the transcript
+```
+
+Prompt editing is local TUI state. Enter submits normally; when the character immediately before the cursor is an unescaped trailing backslash, Enter consumes that backslash and inserts a newline instead. Enter repeat events are discarded at the crossterm mapping boundary so the newline press cannot become an immediate second submit. Transcript and prompt rendering share one word-boundary row layout: a word that does not fit moves intact to the next row and is never split across rows. Prompt rows retain source character ranges while wrapping and cursor placement use Unicode terminal display columns. This keeps emoji, CJK double-width glyphs, and combining marks aligned without changing byte-safe prompt editing. The editor grows to five visible rows and then scrolls locally. Prompt-height changes recalculate the transcript viewport while preserving live-tail or scrolled-back state; they do not alter the connector session or Flue stream offset.
+
+Before drawing, canonical transcript strings are converted into semantic rendered rows (`User`, `Assistant`, `Thinking`, tool/task/activity kinds, errors, system/preflight, and fallback rows). The transcript reserves a two-column left margin and deducts it from the row-layout width before wrapping; the margin contracts only when necessary to keep one content column on extremely narrow terminals. Wrapped rows inherit the semantic kind, streaming state, and margin of their source line, including multiline user and assistant continuations. The renderer splits a recognized first-row label, including its colon, into a bold semantic `Span`; the body remains in its normal semantic style, and continuation rows do not repeat the label accent. `theme.rs` owns the terminal palette: assistant cyan, operation yellow, tool blue, task magenta, turn green, system/preflight light green, log dark gray, and error light red. Root assistant rows add the dim modifier while live text is incomplete and remove it at finalization. User rows retain a full-width gray background across the margin, the active prompt editor receives a darker gray background, and thinking uses gray italic body text with a bold gray italic label. Italics and dimming are additive terminal metadata; color and labels remain the fallback distinctions when a terminal ignores those modifiers.
+
+Live-tail is a render-time invariant, not a best-effort side effect of individual transcript mutations. After wrapping transcript lines for the current frame width, the renderer sets the scroll offset to the exact maximum whenever `follow_tail` is active. When the user has scrolled back, the renderer only clamps out-of-range offsets and does not snap to the tail.
+
+Assistant response display has two coordinated inputs:
+
+```text
+Flue live stream emits root assistant text_delta
+-> App replaces the pending spinner with one dimmed assistant range
+-> later root text_delta events replace that complete range in place
+-> nested worker/subagent text_delta and message_end remain internal
+-> Flue emits authoritative root assistant message_end
+-> App replaces the complete live range and removes dimming
+-> later activity rows are inserted before the anchored final response
+-> POST /api/chat/events settles
+-> App reconciles response/session/command metadata over the same complete range
+```
+
+The TUI accepts response text only from root-orchestrator events, identified by the absence of Flue's nested `parentSession` metadata. This preserves the connector boundary: workers return results to the orchestrator, while the orchestrator returns the chat response. The synchronous HTTP result remains authoritative for request errors and session/command metadata, but response reconciliation is idempotent across the full multiline range. Pending-row indices and the response anchor are reindexed together when activity rows are inserted, preventing late operation events, pending ticks, or HTTP settlement from overwriting the first line, orphaning continuations, or duplicating the answer.
+
+`transcript_rendered_lines()` appends one virtual blank tail-margin row after wrapping. This sentinel gives the live-tail calculation a deterministic final row and leaves visual space below the newest response. It never enters `transcript_lines`, durable session history, copied context, or Flue persistence.
+
+The stable `local-tui` actor/conversation/thread scope is intentional. The gateway uses it to prove ownership for resume and to scope `/sessions`; it is not an active-session pointer. The current session id selects the durable conversation, while the stable identity lets `/new`, `/clear`, `/resume`, `/rename`, and `/compact` operate across explicit session switches without exposing another actor's or connector's sessions.
+
+When `/new` or `/clear` changes the active session, Ratatui replaces the previous transcript document before attaching the new stream. When `/resume` changes the session, it locks input, replaces the document with the resumed session's durable transcript page, then attaches from that page's `nextOffset`. A command-driven switch therefore cannot retain or rewrite rows from the prior session.
+
+## Transcript Diagnostics
+
+The local diagnostics distinguish persistence/projection failures from rendering failures without logging conversation content:
+
+| Event | Meaning |
+| --- | --- |
+| `history.load.started` | The explicit-resume snapshot request was launched. |
+| `history.load.completed` | The snapshot was parsed and installed; fields include exchange/activity counts, elapsed time, and `hasOlder`. |
+| `history.load.failed` | The request, status, parse, session-id validation, or projection path failed; only a bounded category and elapsed time are stored. |
+| `history.page.prepended` | An older page was installed; fields include added exchange count, elapsed time, and `hasOlder`. |
+| `stream.attach.started` | Live attachment began in `fresh_tail` or `snapshot_tail` mode. |
+
+If `history.load.completed` reports zero exchanges for a session expected to have messages, investigate normalized-message persistence, Flue event persistence, and gateway projection. If it reports exchanges but the TUI shows none, investigate `TranscriptDocument`, wrapping, and viewport rendering. If `history.load.started` is followed by `history.load.failed`, use its category with the gateway warning name to isolate transport/auth/projection failure. If `hasOlder` is true but no `history.page.prepended` appears after reaching the first exchange, investigate the page trigger/cursor path. A successful resume should show `history.load.completed` before `stream.attach.started` with mode `snapshot_tail`.
+
+## Slash Commands
+
+Slash commands are parsed before prompt text reaches the LLM.
+
+Backend-owned commands:
+
+| Command | Owner | Behavior |
+| --- | --- | --- |
+| `/new [title]` | `src/api/routes/chat-events.ts` | Creates a new durable TUI session, returns its id, and the TUI switches to it. |
+| `/clear [title]` | `src/api/routes/chat-events.ts` | Replaces the current TUI conversation with a fresh durable session and preserves the old id for resume. |
+| `/resume <session-id-or-name>` | `src/api/routes/chat-events.ts` | Resolves an exact id or explicit name, validates TUI actor/conversation scope, returns the canonical session id, and switches the TUI. Missing selectors leave the current session unchanged. |
+| `/rename <title>` | `src/api/routes/chat-events.ts` | Renames the active durable session. |
+| `/compact` | `src/api/routes/chat-events.ts` | Opens the active durable Flue session and calls `session.compact()` without sending `/compact` to the model. |
+
+TUI-local commands:
+
+| Command | Owner | Behavior |
+| --- | --- | --- |
+| `/session` | `tui/ratatui/src/app.rs` | Prints the current resolved active session id inside the running TUI. |
+| `/sessions [limit]` | `tui/ratatui/src/app.rs` + `GET /api/chat/sessions` | Lists only sessions owned by the stable local TUI scope. Default limit is 10, clamped from 1 to 50. |
+| `/help` | `tui/ratatui/src/app.rs` | Prints command help without reaching the gateway model path. |
+| `/exit` | `tui/ratatui/src/app.rs` + `tui/ratatui/src/main.rs` | Quits cleanly and prints the active session id after terminal restore. |
+
+Unsupported slash commands are handled by application code. They are not sent to the model as normal prompts.
+
+## Session Switching And Streams
+
+When a backend command response includes a new session id, the TUI:
+
+```text
+receives AgentReply { text, session_id, command_name }
+-> renders the command response in the transcript
+-> updates App.session_id
+-> cancels the old stream handle if one exists
+-> clears stream-derived row mappings
+-> starts a new stream for the active session
+-> prints "system: active session <session-id>"
+```
+
+This prevents stream rows from the previous session from overwriting the new session transcript and preserves older transcript history as static text.
+
+`/exit` does not go through the model. The terminal is restored first, then `main.rs` prints:
+
+```text
+Exited SIM-ONE Alpha TUI. Session: <active-session-id>
+```
+
+That id is the recovery token for a later `/resume`.
+
+## Product Smoke Coverage
+
+`pnpm run test:tui:ratatui` runs `scripts/test-ratatui-product.mjs` against packaged artifacts, not `cargo run`.
+
+The smoke verifies:
+
+```text
+sim-one --help
+sim-one skill list
+sim-one tool list
+sim-one worker list
+sim-one mcp list
+startup preflight through the packaged Ratatui path
+two packaged default launches produce different session ids
+SQLite proves one greeting-first event per fresh session and no lifecycle slash command
+explicit --session restores the requested name/history without another greeting
+explicit --session by exact name resolves to the canonical id
+missing launch selector creates a fresh session and greeting
+diagnostics record lifecycle and Ctrl+C outcomes without private content
+clean transcript without scaffold scroll rows
+agent greeting through the built-in greeting-preflight skill path
+/new
+/clear
+/session
+/sessions
+/compact
+/resume
+/rename
+/exit
+```
+
+The smoke uses scripted prompt env vars that are intentionally scoped to tests:
+
+```text
+SIM_ONE_TUI_TEST_PROMPT
+SIM_ONE_TUI_TEST_PROMPTS
+SIM_ONE_TUI_TEST_STARTUP
+```
+
+These let the packaged TUI exercise prompt and slash-command paths without starting an interactive terminal.
+
+## Where To Change Behavior
+
+```text
+Add or change backend slash command parsing:
+  src/engine/commands/slash-commands.ts
+  src/tests/http-endpoints.test.ts
+
+Add or change backend slash command effects:
+  src/api/routes/chat-events.ts
+  src/engine/session/session-routing.ts
+  src/engine/session/session-database.ts
+  src/tests/http-endpoints.test.ts
+  scripts/test-built-http.mjs
+
+Change fresh-create, explicit-resume, or scoped-list lifecycle behavior:
+  src/api/routes/chat-sessions.ts
+  src/engine/session/session-routing.ts
+  src/engine/session/session-database.ts
+  tui/ratatui/src/agent.rs
+  tui/ratatui/src/app.rs
+
+Change TUI command handling or session switching:
+  tui/ratatui/src/app.rs
+  tui/ratatui/tests/app_state.rs
+
+Change transcript or prompt word wrapping:
+  tui/ratatui/src/text_wrap.rs
+  tui/ratatui/tests/app_state.rs
+  tui/ratatui/tests/ui_render.rs
+
+Change transcript or prompt styling:
+  tui/ratatui/src/theme.rs
+  tui/ratatui/src/app.rs
+  tui/ratatui/src/ui.rs
+  tui/ratatui/tests/ui_render.rs
+
+Change TUI request payloads or response parsing:
+  tui/ratatui/src/agent.rs
+  tui/ratatui/tests/agent_client.rs
+
+Change gateway launch/reuse behavior:
+  tui/ratatui/src/gateway.rs
+  tui/ratatui/tests/gateway_launcher.rs
+
+Change local TUI diagnostics:
+  tui/ratatui/src/diagnostics.rs
+  tui/ratatui/src/main.rs
+  tui/ratatui/src/app.rs
+  scripts/test-ratatui-product.mjs
+
+Change product CLI routing:
+  sim-one-cli/src/cli.tsx
+  scripts/check-sim-one-product-command.mjs
+  scripts/test-ratatui-product.mjs
+
+Change packaged product verification:
+  scripts/test-ratatui-product.mjs
+  package.json
+```
+
+Any change to these flows should update this document, `docs/architecture/gorombo-flue-map.md`, and the relevant user/operator docs.

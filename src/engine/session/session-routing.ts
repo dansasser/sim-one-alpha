@@ -11,11 +11,33 @@ export class SessionAccessDeniedError extends Error {
   }
 }
 
+export class ChatSessionNotFoundError extends Error {
+  constructor(readonly sessionId: string) {
+    super(`Session ${sessionId} does not exist.`);
+    this.name = 'ChatSessionNotFoundError';
+  }
+}
+
+export class ChatSessionAmbiguousError extends Error {
+  constructor(readonly sessionName: string) {
+    super(`Multiple sessions are named ${sessionName}. Resume one by session id.`);
+    this.name = 'ChatSessionAmbiguousError';
+  }
+}
+
+export interface ChatSessionIdentity {
+  connector: ConnectorKind;
+  actorId: string;
+  conversationId: string;
+  threadId?: string;
+}
+
 export interface ResolveChatSessionInput {
   event: NormalizedMessageEvent;
   requestedSessionId?: string;
   forceNew?: boolean;
   title?: string;
+  displayName?: string;
 }
 
 export interface ChatSessionResolution {
@@ -25,61 +47,26 @@ export interface ChatSessionResolution {
   created: boolean;
 }
 
-export function resolveChatSession(input: ResolveChatSessionInput): ChatSessionResolution {
-  const surface = surfaceForEvent(input.event);
-  const activeLookup = {
-    surface,
-    connector: input.event.connector,
-    actorId: input.event.actor.id,
-    conversationId: input.event.conversation.id,
-    threadId: input.event.conversation.threadId,
-  };
-  const explicitSessionId = cleanSessionId(input.requestedSessionId);
-  const existingActiveSessionId =
-    surface === 'connector' && !input.forceNew ? goromboPersistenceRuntime.sessionDatabase.getActiveSession(activeLookup) : null;
-  const sessionId = explicitSessionId ?? existingActiveSessionId ?? undefined;
-  const title = input.title ?? titleFromText(input.event.text);
-
-  if (sessionId && !input.forceNew) {
-    const existingSession = goromboPersistenceRuntime.sessionDatabase.getChatSession(sessionId);
-    if (existingSession) {
-      assertSessionBelongsToEvent(existingSession, input.event);
-    }
-    const session = goromboPersistenceRuntime.sessionDatabase.ensureChatSession({
-      sessionId,
-      origin: surface,
-      actorId: input.event.actor.id,
-      conversationId: input.event.conversation.id,
-      threadId: input.event.conversation.threadId,
-      title,
-    });
-
-    if (surface === 'connector') {
-      goromboPersistenceRuntime.sessionDatabase.setActiveSession({
-        ...activeLookup,
-        sessionId,
-      });
-    }
-
-    return {
-      sessionId,
-      surface,
-      session,
-      created: !existingSession,
-    };
-  }
-
+export function createFreshChatSession(input: {
+  identity: ChatSessionIdentity;
+  sessionId?: string;
+  title?: string;
+  displayName?: string;
+}): ChatSessionResolution {
+  const surface = surfaceForConnector(input.identity.connector);
   const session = goromboPersistenceRuntime.sessionDatabase.createChatSession({
+    sessionId: input.sessionId,
     origin: surface,
-    actorId: input.event.actor.id,
-    conversationId: input.event.conversation.id,
-    threadId: input.event.conversation.threadId,
-    title,
+    actorId: input.identity.actorId,
+    conversationId: input.identity.conversationId,
+    threadId: input.identity.threadId,
+    title: input.title,
+    displayName: input.displayName,
   });
 
-  if (surface === 'connector') {
+  if (connectorUsesPersistentSession(input.identity.connector)) {
     goromboPersistenceRuntime.sessionDatabase.setActiveSession({
-      ...activeLookup,
+      ...activeSessionLookup(input.identity, surface),
       sessionId: session.sessionId,
     });
   }
@@ -92,6 +79,107 @@ export function resolveChatSession(input: ResolveChatSessionInput): ChatSessionR
   };
 }
 
+export function resumeOwnedChatSession(input: {
+  identity: ChatSessionIdentity;
+  sessionId: string;
+}): ChatSessionResolution {
+  const sessionSelector = cleanSessionId(input.sessionId) ?? input.sessionId;
+  const surface = surfaceForConnector(input.identity.connector);
+  const sessionById = goromboPersistenceRuntime.sessionDatabase.getChatSession(sessionSelector);
+  if (sessionById) {
+    assertSessionBelongsToIdentity(sessionById, input.identity, surface);
+  }
+  const namedSessions = sessionById
+    ? []
+    : goromboPersistenceRuntime.sessionDatabase.listChatSessionsByExplicitNameForScope({
+      explicitName: sessionSelector,
+      origin: surface,
+      actorId: input.identity.actorId,
+      conversationId: input.identity.conversationId,
+      threadId: input.identity.threadId,
+      limit: 2,
+    });
+  if (namedSessions.length > 1) {
+    throw new ChatSessionAmbiguousError(sessionSelector);
+  }
+  const session = sessionById ?? namedSessions[0];
+  if (!session) {
+    throw new ChatSessionNotFoundError(sessionSelector);
+  }
+
+  const sessionId = session.sessionId;
+  goromboPersistenceRuntime.sessionDatabase.touchChatSession(sessionId);
+  const resumedSession = goromboPersistenceRuntime.sessionDatabase.getChatSession(sessionId)
+    ?? session;
+
+  if (connectorUsesPersistentSession(input.identity.connector)) {
+    goromboPersistenceRuntime.sessionDatabase.setActiveSession({
+      ...activeSessionLookup(input.identity, surface),
+      sessionId,
+    });
+  }
+
+  return {
+    sessionId,
+    surface,
+    session: resumedSession,
+    created: false,
+  };
+}
+
+export function listOwnedChatSessions(input: {
+  identity: ChatSessionIdentity;
+  limit: number;
+}): ChatSessionRecord[] {
+  return goromboPersistenceRuntime.sessionDatabase.listChatSessionsForScope({
+    origin: surfaceForConnector(input.identity.connector),
+    actorId: input.identity.actorId,
+    conversationId: input.identity.conversationId,
+    threadId: input.identity.threadId,
+    limit: input.limit,
+  });
+}
+
+export function resolveChatSession(input: ResolveChatSessionInput): ChatSessionResolution {
+  const identity = identityForEvent(input.event);
+  const surface = surfaceForConnector(identity.connector);
+  const persistentConnector = connectorUsesPersistentSession(input.event.connector);
+  const explicitSessionId = cleanSessionId(input.requestedSessionId);
+  const title = input.title ?? titleFromText(input.event.text);
+
+  if (explicitSessionId && !input.forceNew) {
+    try {
+      return resumeOwnedChatSession({ identity, sessionId: explicitSessionId });
+    } catch (error) {
+      if (!(error instanceof ChatSessionNotFoundError)
+        || !isGuiSessionManagedConnector(input.event.connector)) {
+        throw error;
+      }
+      return createFreshChatSession({
+        identity,
+        sessionId: explicitSessionId,
+        title,
+        displayName: input.displayName,
+      });
+    }
+  }
+
+  if (persistentConnector && !input.forceNew) {
+    const activeSessionId = goromboPersistenceRuntime.sessionDatabase.getActiveSession(
+      activeSessionLookup(identity, surface),
+    );
+    if (activeSessionId) {
+      return resumeOwnedChatSession({ identity, sessionId: activeSessionId });
+    }
+  }
+
+  return createFreshChatSession({
+    identity,
+    title,
+    displayName: input.displayName,
+  });
+}
+
 export function listChatSessions(limit?: number): ChatSessionRecord[] {
   return goromboPersistenceRuntime.sessionDatabase.listChatSessions(limit);
 }
@@ -100,11 +188,15 @@ export function isGuiSessionManagedConnector(connector: ConnectorKind): boolean 
   return connector === 'web-api';
 }
 
-function surfaceForEvent(event: NormalizedMessageEvent): ChatSurface {
-  if (isGuiSessionManagedConnector(event.connector)) {
+export function connectorUsesPersistentSession(connector: ConnectorKind): boolean {
+  return connector === 'telegram';
+}
+
+function surfaceForConnector(connector: ConnectorKind): ChatSurface {
+  if (isGuiSessionManagedConnector(connector)) {
     return 'web';
   }
-  if (event.connector === 'tui') {
+  if (connector === 'tui') {
     return 'tui';
   }
   return 'connector';
@@ -115,21 +207,54 @@ function cleanSessionId(value: string | undefined): string | undefined {
   return trimmed || undefined;
 }
 
-function assertSessionBelongsToEvent(session: ChatSessionRecord, event: NormalizedMessageEvent): void {
+function identityForEvent(event: NormalizedMessageEvent): ChatSessionIdentity {
+  return {
+    connector: event.connector,
+    actorId: event.actor.id,
+    conversationId: event.conversation.id,
+    threadId: event.conversation.threadId,
+  };
+}
+
+function activeSessionLookup(identity: ChatSessionIdentity, surface: ChatSurface) {
+  return {
+    surface,
+    connector: identity.connector,
+    actorId: identity.actorId,
+    conversationId: identity.conversationId,
+    threadId: identity.threadId,
+  };
+}
+
+function assertSessionBelongsToIdentity(
+  session: ChatSessionRecord,
+  identity: ChatSessionIdentity,
+  surface: ChatSurface,
+): void {
   const storedActorId = cleanScopeValue(session.actorId);
   const storedConversationId = cleanScopeValue(session.conversationId);
-  const eventActorId = cleanScopeValue(event.actor.id);
-  const eventConversationId = cleanScopeValue(event.conversation.id);
+  const storedThreadId = cleanScopeValue(session.threadId);
+  const identityActorId = cleanScopeValue(identity.actorId);
+  const identityConversationId = cleanScopeValue(identity.conversationId);
+  const identityThreadId = cleanScopeValue(identity.threadId);
 
   if (!storedActorId && !storedConversationId) {
     throw new SessionAccessDeniedError(session.sessionId);
   }
 
-  if (storedActorId && storedActorId !== eventActorId) {
+  if (session.origin !== surface) {
     throw new SessionAccessDeniedError(session.sessionId);
   }
 
-  if (storedConversationId && storedConversationId !== eventConversationId) {
+  if (storedActorId !== identityActorId) {
+    throw new SessionAccessDeniedError(session.sessionId);
+  }
+
+  if (storedConversationId !== identityConversationId) {
+    throw new SessionAccessDeniedError(session.sessionId);
+  }
+
+  if (storedThreadId !== identityThreadId) {
     throw new SessionAccessDeniedError(session.sessionId);
   }
 }

@@ -1,6 +1,7 @@
 import { sqlite } from '@flue/runtime/node';
 import type {
   AgentExecutionStore,
+  EventStreamStore,
   PersistenceAdapter,
   PersistenceStores,
   SessionData,
@@ -27,6 +28,7 @@ export interface GoromboPersistenceRuntime {
   sessionDatabase: GoromboSessionDatabase;
   vectorStore: LanceDbVectorStore;
   embeddingClient: ReturnType<typeof createEmbeddingClient>;
+  getEventStreamStore(): Promise<EventStreamStore>;
   getLatestSessionData(harnessName: string, sessionName: string): Promise<SessionData | null>;
   getLatestSessionDataForInstance(
     instanceId: string,
@@ -88,11 +90,17 @@ export function createGoromboPersistenceRuntime(config: GoromboConfig): GoromboP
     return stores.executionStore;
   }
 
+  async function getEventStreamStore(): Promise<EventStreamStore> {
+    const stores = latestStores ?? await adapter.connect();
+    return stores.eventStreamStore;
+  }
+
   return {
     adapter,
     sessionDatabase,
     vectorStore,
     embeddingClient,
+    getEventStreamStore,
     async getLatestSessionData(harnessName, sessionName) {
       const storageKey = sessionDatabase.getLatestStorageKey(harnessName, sessionName);
       if (!storageKey) {
