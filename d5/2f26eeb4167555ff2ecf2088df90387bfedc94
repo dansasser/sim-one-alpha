@@ -1,0 +1,80 @@
+tui/ratatui/src/transcript.rs
+  s_a81fff26d52223::t_0e1952d501bf81 425
+  s_a81fff26d52223::t_53adf9a39ff3da 57,79,456-461,513,527-537
+  s_a81fff26d52223::t_7c43768f2ab338 538-539
+src/tests/session-routing.test.ts
+  s_a81fff26d52223::t_686e5780202dc6 164,169,369-376
+tui/ratatui/src/http.rs
+  s_a81fff26d52223::t_288ef34be736e0 140,142
+  s_a81fff26d52223::t_effc1aaabd9118 109-139,141,143-174
+tui/ratatui/src/app.rs
+  s_a81fff26d52223::t_8156644bd153a9 23-26,28-29,2983,2987,3049,3053-3057,3062,3073-3075,3078,3082,3091
+  s_a81fff26d52223::t_2c4139d61a8637 1109,2041
+tui/ratatui/src/text_wrap.rs
+  s_a81fff26d52223::t_b0f0f156118288 1-2,20-21,25-35,48-49,52-59,61-75,79,82-83,90-91,101-102,105-110,115-128,130-134
+  s_a81fff26d52223::t_fb6cd93a506484 224,253-260
+  s_a81fff26d52223::t_d5262cd27a5b43 60,129
+  s_a81fff26d52223::t_5e1ec7d6bc965c 135
+  s_a81fff26d52223::t_bd8fcec17400d5 261-262
+tui/ratatui/src/markdown.rs
+  s_a81fff26d52223::t_8156644bd153a9 4-5,26-33,110,113,116-117,119-121,124-126,134-158
+  s_a81fff26d52223::t_fb6cd93a506484 222-225
+  s_a81fff26d52223::t_afe636b5db9fa6 217-221
+src/tests/build-script-regressions.test.ts
+  s_a81fff26d52223::t_fb6cd93a506484 24-41
+scripts/skill-md-loader.mjs
+  s_a81fff26d52223::t_53adf9a39ff3da 3,36-40,43-49,53-56
+tui/ratatui/tests/ui_render.rs
+  s_a81fff26d52223::t_5f316e73eafd39 1854-1882
+  s_a81fff26d52223::t_87c65c830ce374 1853
+tui/ratatui/src/agent.rs
+  s_a81fff26d52223::t_effc1aaabd9118 4,114,144,173,186
+  s_a81fff26d52223::t_ca62c86b917c4c 187-188,239,318
+tui/ratatui/src/diagnostics.rs
+  s_a81fff26d52223::t_2c4139d61a8637 124-140
+src/tests/session-transcript.test.ts
+  s_a81fff26d52223::t_f0c9398a4b8aa8 664,684-688
+  s_a81fff26d52223::t_80975d2ea068f4 726-881,914-962
+scripts/test-ratatui-interactive.py
+  s_a81fff26d52223::t_61d00ffe53fadd 37-40
+  s_a81fff26d52223::t_0b76b6ed56e5aa 36,41,165,456,500,512,523,543
+scripts/test-ratatui-visible-final.py
+  s_a81fff26d52223::t_686e5780202dc6 43,232-233,384-395
+tui/ratatui/tests/app_state.rs
+  s_a81fff26d52223::t_fb6cd93a506484 1900-1914
+  s_a81fff26d52223::t_792a468889c8f6 1899
+tui/ratatui/tests/event_reducer.rs
+  s_a81fff26d52223::t_fb6cd93a506484 397-434
+  s_a81fff26d52223::t_bb7d9d690e4a66 396
+src/engine/session/session-transcript.ts
+  s_a81fff26d52223::t_f0c9398a4b8aa8 774-779
+  s_a81fff26d52223::t_b294997e79af17 141-148
+  s_a81fff26d52223::t_53ec56b321aef8 151-187,189,194,199,204-239,243,245-246,250-252,254,257,260-262,266-307
+scripts/test-built-http.mjs
+  s_a81fff26d52223::t_686e5780202dc6 21,36,483-485
+tui/ratatui/tests/agent_client.rs
+  s_a81fff26d52223::t_209aba53c6c65d 5,79-114
+  s_a81fff26d52223::t_ef48710950b011 115-116
+scripts/test-ratatui-product.mjs
+  s_a81fff26d52223::t_686e5780202dc6 62,69,270-272
+tui/ratatui/Cargo.toml
+  s_a81fff26d52223::t_53adf9a39ff3da 17
+Cargo.lock
+  s_a81fff26d52223::t_2cc27f9787ce78 919
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "d52f26eeb4167555ff2ecf2088df90387bfedc94",
+  "prompts": {},
+  "sessions": {
+    "s_a81fff26d52223": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f28ea-ba13-7d73-8821-342dae1c483c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "dansasser <sasserenterprises@gmail.com>"
+    }
+  }
+}
